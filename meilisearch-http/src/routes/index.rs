@@ -3,10 +3,10 @@ use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::Data;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
+use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(list_indexes)
@@ -17,7 +17,6 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_update_status)
         .service(get_all_updates_status);
 }
-
 
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
@@ -96,7 +95,10 @@ async fn update_index(
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
-    match data.update_index(path.into_inner().index_uid, body.primary_key,  body.uid).await {
+    match data
+        .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
+        .await
+    {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -135,7 +137,9 @@ async fn get_update_status(
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = path.into_inner();
-    let result = data.get_update_status(params.index_uid, params.update_id).await;
+    let result = data
+        .get_update_status(params.index_uid, params.update_id)
+        .await;
     match result {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();

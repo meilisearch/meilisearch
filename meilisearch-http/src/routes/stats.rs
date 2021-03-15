@@ -1,8 +1,8 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 
+use actix_web::get;
 use actix_web::web;
 use actix_web::HttpResponse;
-use actix_web::get;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 

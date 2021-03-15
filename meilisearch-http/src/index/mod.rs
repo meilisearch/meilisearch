@@ -59,19 +59,17 @@ impl Index {
         })
     }
 
-    pub fn retrieve_documents<S>(
+    pub fn retrieve_documents<S: AsRef<str>>(
         &self,
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<S>>,
-    ) -> anyhow::Result<Vec<Map<String, Value>>>
-    where
-        S: AsRef<str> + Send + Sync + 'static,
-    {
+    ) -> anyhow::Result<Vec<Map<String, Value>>> {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display = self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
+        let fields_to_display =
+            self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -95,7 +93,8 @@ impl Index {
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
 
-        let fields_to_display = self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
+        let fields_to_display =
+            self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -109,11 +108,7 @@ impl Index {
             .map(|(_, d)| d);
 
         match document {
-            Some(document) => Ok(obkv_to_json(
-                &fields_to_display,
-                &fields_ids_map,
-                document,
-            )?),
+            Some(document) => Ok(obkv_to_json(&fields_to_display, &fields_ids_map, document)?),
             None => bail!("Document with id {} not found", doc_id),
         }
     }

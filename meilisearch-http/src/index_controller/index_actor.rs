@@ -12,13 +12,13 @@ use heed::EnvOpenOptions;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::fs::remove_dir_all;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::spawn_blocking;
-use tokio::fs::remove_dir_all;
 use uuid::Uuid;
 
-use super::{IndexSettings, get_arc_ownership_blocking};
 use super::update_handler::UpdateHandler;
+use super::{get_arc_ownership_blocking, IndexSettings};
 use crate::index::UpdateResult as UResult;
 use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{
@@ -49,7 +49,11 @@ impl IndexMeta {
         let created_at = index.created_at(&txn)?;
         let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
-        Ok(Self { primary_key, updated_at, created_at })
+        Ok(Self {
+            primary_key,
+            updated_at,
+            created_at,
+        })
     }
 }
 
@@ -98,7 +102,7 @@ enum IndexMsg {
         uuid: Uuid,
         index_settings: IndexSettings,
         ret: oneshot::Sender<Result<IndexMeta>>,
-    }
+    },
 }
 
 struct IndexActor<S> {
@@ -136,8 +140,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         store: S,
     ) -> Result<Self> {
         let options = IndexerOpts::default();
-        let update_handler =
-            UpdateHandler::new(&options).map_err(IndexError::Error)?;
+        let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
         let read_receiver = Some(read_receiver);
         let write_receiver = Some(write_receiver);
@@ -241,7 +244,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             GetMeta { uuid, ret } => {
                 let _ = ret.send(self.handle_get_meta(uuid).await);
             }
-            UpdateIndex { uuid, index_settings, ret } => {
+            UpdateIndex {
+                uuid,
+                index_settings,
+                ret,
+            } => {
                 let _ = ret.send(self.handle_update_index(uuid, index_settings).await);
             }
         }
@@ -366,30 +373,34 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         }
     }
 
-    async fn handle_update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
-        let index = self.store
+    async fn handle_update_index(
+        &self,
+        uuid: Uuid,
+        index_settings: IndexSettings,
+    ) -> Result<IndexMeta> {
+        let index = self
+            .store
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
 
-        spawn_blocking(move || {
-            match index_settings.primary_key {
-                Some(ref primary_key) => {
-                    let mut txn = index.write_txn()?;
-                    if index.primary_key(&txn)?.is_some() {
-                        return Err(IndexError::ExistingPrimaryKey)
-                    }
-                    index.put_primary_key(&mut txn, primary_key)?;
-                    let meta = IndexMeta::new_txn(&index, &txn)?;
-                    txn.commit()?;
-                    Ok(meta)
-                },
-                None => {
-                    let meta = IndexMeta::new(&index)?;
-                    Ok(meta)
-                },
+        spawn_blocking(move || match index_settings.primary_key {
+            Some(ref primary_key) => {
+                let mut txn = index.write_txn()?;
+                if index.primary_key(&txn)?.is_some() {
+                    return Err(IndexError::ExistingPrimaryKey);
+                }
+                index.put_primary_key(&mut txn, primary_key)?;
+                let meta = IndexMeta::new_txn(&index, &txn)?;
+                txn.commit()?;
+                Ok(meta)
             }
-        }).await
+            None => {
+                let meta = IndexMeta::new(&index)?;
+                Ok(meta)
+            }
+        })
+        .await
         .map_err(|e| IndexError::Error(e.into()))?
     }
 }
@@ -416,7 +427,8 @@ impl IndexActorHandle {
 
     pub async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::CreateIndex { ret,
+        let msg = IndexMsg::CreateIndex {
+            ret,
             uuid,
             primary_key,
         };
@@ -502,10 +514,14 @@ impl IndexActorHandle {
     pub async fn update_index(
         &self,
         uuid: Uuid,
-        index_settings: IndexSettings
+        index_settings: IndexSettings,
     ) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::UpdateIndex { uuid, index_settings, ret };
+        let msg = IndexMsg::UpdateIndex {
+            uuid,
+            index_settings,
+            ret,
+        };
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
@@ -571,10 +587,7 @@ impl IndexStore for HeedIndexStore {
                 let index = spawn_blocking(move || open_index(path, index_size))
                     .await
                     .map_err(|e| IndexError::Error(e.into()))??;
-                self.index_store
-                    .write()
-                    .await
-                    .insert(uuid, index.clone());
+                self.index_store.write().await.insert(uuid, index.clone());
                 Ok(Some(index))
             }
         }
@@ -582,7 +595,8 @@ impl IndexStore for HeedIndexStore {
 
     async fn delete(&self, uuid: Uuid) -> Result<Option<Index>> {
         let db_path = self.path.join(format!("index-{}", uuid));
-        remove_dir_all(db_path).await
+        remove_dir_all(db_path)
+            .await
             .map_err(|e| IndexError::Error(e.into()))?;
         let index = self.index_store.write().await.remove(&uuid);
         Ok(index)
@@ -590,11 +604,9 @@ impl IndexStore for HeedIndexStore {
 }
 
 fn open_index(path: impl AsRef<Path>, size: usize) -> Result<Index> {
-    create_dir_all(&path)
-        .map_err(|e| IndexError::Error(e.into()))?;
+    create_dir_all(&path).map_err(|e| IndexError::Error(e.into()))?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
-    let index = milli::Index::new(options, &path)
-        .map_err(IndexError::Error)?;
+    let index = milli::Index::new(options, &path).map_err(IndexError::Error)?;
     Ok(Index(Arc::new(index)))
 }

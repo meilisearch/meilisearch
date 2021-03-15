@@ -19,7 +19,10 @@ impl Index<'_> {
 
     pub async fn load_test_set(&self) -> u64 {
         let url = format!("/indexes/{}/documents", self.uid);
-        let (response, code) = self.service.post_str(url, include_str!("../assets/test_set.json")).await;
+        let (response, code) = self
+            .service
+            .post_str(url, include_str!("../assets/test_set.json"))
+            .await;
         assert_eq!(code, 200);
         let update_id = response["updateId"].as_i64().unwrap();
         self.wait_update_id(update_id as u64).await;
@@ -60,7 +63,11 @@ impl Index<'_> {
         self.service.post(url, documents).await
     }
 
-    pub async fn update_documents(&self, documents: Value, primary_key: Option<&str>) -> (Value, StatusCode) {
+    pub async fn update_documents(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+    ) -> (Value, StatusCode) {
         let url = match primary_key {
             Some(key) => format!("/indexes/{}/documents?primaryKey={}", self.uid, key),
             None => format!("/indexes/{}/documents", self.uid),
@@ -95,7 +102,11 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn get_document(&self, id: u64, _options: Option<GetDocumentOptions>) -> (Value, StatusCode) {
+    pub async fn get_document(
+        &self,
+        id: u64,
+        _options: Option<GetDocumentOptions>,
+    ) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/{}", self.uid, id);
         self.service.get(url).await
     }
@@ -111,7 +122,10 @@ impl Index<'_> {
         }
 
         if let Some(attributes_to_retrieve) = options.attributes_to_retrieve {
-            url.push_str(&format!("attributesToRetrieve={}&", attributes_to_retrieve.join(",")));
+            url.push_str(&format!(
+                "attributesToRetrieve={}&",
+                attributes_to_retrieve.join(",")
+            ));
         }
 
         self.service.get(url).await
@@ -129,7 +143,9 @@ impl Index<'_> {
 
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/delete-batch", self.uid);
-        self.service.post(url, serde_json::to_value(&ids).unwrap()).await
+        self.service
+            .post(url, serde_json::to_value(&ids).unwrap())
+            .await
     }
 
     pub async fn settings(&self) -> (Value, StatusCode) {

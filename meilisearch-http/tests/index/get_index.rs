@@ -52,6 +52,12 @@ async fn list_multiple_indexes() {
     assert!(response.is_array());
     let arr = response.as_array().unwrap();
     assert_eq!(arr.len(), 2);
-    assert!(arr.iter().find(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null).is_some());
-    assert!(arr.iter().find(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key").is_some());
+    assert!(arr
+        .iter()
+        .find(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null)
+        .is_some());
+    assert!(arr
+        .iter()
+        .find(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key")
+        .is_some());
 }

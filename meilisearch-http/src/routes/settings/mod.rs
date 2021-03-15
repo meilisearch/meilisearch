@@ -1,9 +1,9 @@
-use actix_web::{web, HttpResponse, delete, get, post};
+use actix_web::{delete, get, post, web, HttpResponse};
 
-use crate::Data;
 use crate::error::ResponseError;
-use crate::index::Settings;
 use crate::helpers::Authentication;
+use crate::index::Settings;
+use crate::Data;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -98,15 +98,15 @@ make_setting_route!(
 );
 
 //make_setting_route!(
-    //"/indexes/{index_uid}/settings/distinct-attribute",
-    //String,
-    //distinct_attribute
+//"/indexes/{index_uid}/settings/distinct-attribute",
+//String,
+//distinct_attribute
 //);
 
 //make_setting_route!(
-    //"/indexes/{index_uid}/settings/ranking-rules",
-    //Vec<String>,
-    //ranking_rules
+//"/indexes/{index_uid}/settings/ranking-rules",
+//Vec<String>,
+//ranking_rules
 //);
 
 macro_rules! create_services {
@@ -137,7 +137,10 @@ async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_settings(index_uid.into_inner(), body.into_inner(), true).await {
+    match data
+        .update_settings(index_uid.into_inner(), body.into_inner(), true)
+        .await
+    {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -170,7 +173,10 @@ async fn delete_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
-    match data.update_settings(index_uid.into_inner(), settings, false).await {
+    match data
+        .update_settings(index_uid.into_inner(), settings, false)
+        .await
+    {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -180,4 +186,3 @@ async fn delete_all(
         }
     }
 }
-

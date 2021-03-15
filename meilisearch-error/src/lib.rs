@@ -81,7 +81,6 @@ pub enum Code {
 }
 
 impl Code {
-
     /// ascociate a `Code` variant to the actual ErrCode
     fn err_code(&self) -> ErrCode {
         use Code::*;
@@ -94,17 +93,23 @@ impl Code {
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
-            OpenIndex => ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR),
+            OpenIndex => {
+                ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR)
+            }
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set
             MissingPrimaryKey => ErrCode::invalid("missing_primary_key", StatusCode::BAD_REQUEST),
             // error thrown when trying to set an already existing primary key
-            PrimaryKeyAlreadyPresent => ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST),
+            PrimaryKeyAlreadyPresent => {
+                ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST)
+            }
 
             // invalid document
-            MaxFieldsLimitExceeded => ErrCode::invalid("max_fields_limit_exceeded", StatusCode::BAD_REQUEST),
+            MaxFieldsLimitExceeded => {
+                ErrCode::invalid("max_fields_limit_exceeded", StatusCode::BAD_REQUEST)
+            }
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
 
             // error related to facets
@@ -117,16 +122,26 @@ impl Code {
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
             InvalidToken => ErrCode::authentication("invalid_token", StatusCode::FORBIDDEN),
-            MissingAuthorizationHeader => ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED),
+            MissingAuthorizationHeader => {
+                ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
+            }
             NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
-            RetrieveDocument => ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST),
+            RetrieveDocument => {
+                ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST)
+            }
             SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
-            UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
+            UnsupportedMediaType => {
+                ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            }
 
             // error related to dump
-            DumpAlreadyInProgress => ErrCode::invalid("dump_already_in_progress", StatusCode::CONFLICT),
-            DumpProcessFailed => ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR),
+            DumpAlreadyInProgress => {
+                ErrCode::invalid("dump_already_in_progress", StatusCode::CONFLICT)
+            }
+            DumpProcessFailed => {
+                ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 

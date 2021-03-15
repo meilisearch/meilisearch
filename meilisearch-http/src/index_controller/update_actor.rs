@@ -52,7 +52,7 @@ enum UpdateMsg<D> {
     Create {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
-    }
+    },
 }
 
 struct UpdateActor<D, S> {
@@ -213,7 +213,11 @@ impl<D> UpdateActorHandle<D>
 where
     D: AsRef<[u8]> + Sized + 'static + Sync + Send,
 {
-    pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>, update_store_size: usize) -> anyhow::Result<Self> {
+    pub fn new(
+        index_handle: IndexActorHandle,
+        path: impl AsRef<Path>,
+        update_store_size: usize,
+    ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);
         let store = MapUpdateStoreStore::new(index_handle, &path, update_store_size);
@@ -278,7 +282,11 @@ struct MapUpdateStoreStore {
 }
 
 impl MapUpdateStoreStore {
-    fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>, update_store_size: usize) -> Self {
+    fn new(
+        index_handle: IndexActorHandle,
+        path: impl AsRef<Path>,
+        update_store_size: usize,
+    ) -> Self {
         let db = Arc::new(RwLock::new(HashMap::new()));
         let path = path.as_ref().to_owned();
         Self {

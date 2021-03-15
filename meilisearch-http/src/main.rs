@@ -2,7 +2,7 @@ use std::env;
 
 use actix_web::HttpServer;
 use main_error::MainError;
-use meilisearch_http::{Data, Opt, create_app};
+use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
 
 //mod analytics;
@@ -44,29 +44,30 @@ async fn main() -> Result<(), MainError> {
             }
         }
         "development" => {
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+                .init();
         }
         _ => unreachable!(),
     }
 
     //if let Some(path) = &opt.import_snapshot {
-        //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
+    //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
     //}
 
     let data = Data::new(opt.clone())?;
 
     //if !opt.no_analytics {
-        //let analytics_data = data.clone();
-        //let analytics_opt = opt.clone();
-        //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
+    //let analytics_data = data.clone();
+    //let analytics_opt = opt.clone();
+    //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
     //}
 
     //if let Some(path) = &opt.import_dump {
-        //dump::import_dump(&data, path, opt.dump_batch_size)?;
+    //dump::import_dump(&data, path, opt.dump_batch_size)?;
     //}
 
     //if opt.schedule_snapshot {
-        //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
+    //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
     //}
 
     print_launch_resume(&opt, &data);
@@ -78,11 +79,14 @@ async fn main() -> Result<(), MainError> {
     Ok(())
 }
 
-async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box<dyn std::error::Error>> {
-
+async fn run_http(
+    data: Data,
+    opt: Opt,
+    enable_frontend: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let http_server = HttpServer::new(move || create_app!(&data, enable_frontend))
-    // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-    .disable_signals();
+        // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+        .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
@@ -94,7 +98,6 @@ async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box
     }
     Ok(())
 }
-
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
     let ascii_name = r#"

@@ -1,10 +1,9 @@
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use actix_web::web::Payload;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
-use crate::index_controller::{IndexMetadata, IndexSettings, UpdateStatus};
-use crate::index::Settings;
 use super::Data;
-
+use crate::index::Settings;
+use crate::index_controller::{IndexMetadata, IndexSettings, UpdateStatus};
 
 impl Data {
     pub async fn add_documents(
@@ -14,9 +13,11 @@ impl Data {
         format: UpdateFormat,
         stream: Payload,
         primary_key: Option<String>,
-    ) -> anyhow::Result<UpdateStatus>
-    {
-        let update_status = self.index_controller.add_documents(index, method, format, stream, primary_key).await?;
+    ) -> anyhow::Result<UpdateStatus> {
+        let update_status = self
+            .index_controller
+            .add_documents(index, method, format, stream, primary_key)
+            .await?;
         Ok(update_status)
     }
 
@@ -26,14 +27,14 @@ impl Data {
         settings: Settings,
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
-        let update = self.index_controller.update_settings(index, settings, create).await?;
+        let update = self
+            .index_controller
+            .update_settings(index, settings, create)
+            .await?;
         Ok(update)
     }
 
-    pub async fn clear_documents(
-        &self,
-        index: String,
-    ) -> anyhow::Result<UpdateStatus> {
+    pub async fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
         let update = self.index_controller.clear_documents(index).await?;
         Ok(update)
     }
@@ -43,14 +44,14 @@ impl Data {
         index: String,
         document_ids: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        let update = self.index_controller.delete_documents(index, document_ids).await?;
+        let update = self
+            .index_controller
+            .delete_documents(index, document_ids)
+            .await?;
         Ok(update)
     }
 
-    pub async fn delete_index(
-        &self,
-        index: String,
-    ) -> anyhow::Result<()> {
+    pub async fn delete_index(&self, index: String) -> anyhow::Result<()> {
         self.index_controller.delete_index(index).await?;
         Ok(())
     }
@@ -67,7 +68,7 @@ impl Data {
         &self,
         uid: String,
         primary_key: Option<String>,
-        new_uid: Option<String>
+        new_uid: Option<String>,
     ) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
             uid: new_uid,

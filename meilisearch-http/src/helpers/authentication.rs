@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
 
-use actix_web::dev::{Transform, Service, ServiceResponse, ServiceRequest};
+use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::web;
 use futures::future::{err, ok, Future, Ready};
 
@@ -70,10 +70,16 @@ where
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
-                Err(_) => return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into())),
+                Err(_) => {
+                    return Box::pin(err(
+                        ResponseError::from(Error::MissingAuthorizationHeader).into()
+                    ))
+                }
             },
             None => {
-                return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into()));
+                return Box::pin(err(
+                    ResponseError::from(Error::MissingAuthorizationHeader).into()
+                ));
             }
         };
 
@@ -93,9 +99,10 @@ where
         if authenticated {
             Box::pin(svc.call(req))
         } else {
-            Box::pin(err(
-                ResponseError::from(Error::InvalidToken(auth_header.to_string())).into()
+            Box::pin(err(ResponseError::from(Error::InvalidToken(
+                auth_header.to_string(),
             ))
+            .into()))
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use actix_web::{web, HttpResponse};
 use actix_web::{delete, get, post};
+use actix_web::{web, HttpResponse};
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;

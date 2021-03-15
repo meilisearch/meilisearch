@@ -4,8 +4,8 @@ use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
 use log::info;
-use milli::update::{UpdateFormat, IndexDocumentsMethod, UpdateBuilder, DocumentAdditionResult};
-use serde::{Serialize, Deserialize, de::Deserializer};
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use serde::{de::Deserializer, Deserialize, Serialize};
 
 use super::Index;
 
@@ -23,14 +23,14 @@ pub struct Settings {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
+        skip_serializing_if = "Option::is_none"
     )]
     pub displayed_attributes: Option<Option<Vec<String>>>,
 
     #[serde(
         default,
         deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
+        skip_serializing_if = "Option::is_none"
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,
 
@@ -40,7 +40,7 @@ pub struct Settings {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
+        skip_serializing_if = "Option::is_none"
     )]
     pub ranking_rules: Option<Option<Vec<String>>>,
 }
@@ -65,8 +65,9 @@ pub struct Facets {
 }
 
 fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where T: Deserialize<'de>,
-      D: Deserializer<'de>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
 {
     Deserialize::deserialize(deserializer).map(Some)
 }
@@ -85,7 +86,7 @@ impl Index {
         let mut wtxn = self.write_txn()?;
 
         // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(ref primary_key)) =  (self.primary_key(&wtxn)?, primary_key) {
+        if let (None, Some(ref primary_key)) = (self.primary_key(&wtxn)?, primary_key) {
             self.put_primary_key(&mut wtxn, primary_key)?;
         }
 
@@ -106,10 +107,11 @@ impl Index {
 
         info!("document addition done: {:?}", result);
 
-        result.and_then(|addition_result| wtxn
-            .commit()
-            .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
-            .map_err(Into::into))
+        result.and_then(|addition_result| {
+            wtxn.commit()
+                .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
+                .map_err(Into::into)
+        })
     }
 
     pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
@@ -210,14 +212,16 @@ impl Index {
         let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
         // We ignore unexisting document ids
-        ids.iter().for_each(|id| { builder.delete_external_id(id); });
+        ids.iter().for_each(|id| {
+            builder.delete_external_id(id);
+        });
 
         match builder.execute() {
             Ok(deleted) => txn
                 .commit()
                 .and(Ok(UpdateResult::DocumentDeletion { deleted }))
                 .map_err(Into::into),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 }

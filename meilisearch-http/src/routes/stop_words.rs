@@ -1,5 +1,5 @@
-use actix_web::{web, HttpResponse};
 use actix_web::{delete, get, post};
+use actix_web::{web, HttpResponse};
 use std::collections::BTreeSet;
 
 use crate::error::ResponseError;

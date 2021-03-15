@@ -1,6 +1,9 @@
 use std::{fs::create_dir_all, path::Path};
 
-use heed::{Database, Env, EnvOpenOptions, types::{ByteSlice, Str}};
+use heed::{
+    types::{ByteSlice, Str},
+    Database, Env, EnvOpenOptions,
+};
 use log::{info, warn};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
@@ -73,14 +76,14 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
     async fn handle_create(&self, uid: String) -> Result<Uuid> {
         if !is_index_uid_valid(&uid) {
-            return Err(UuidError::BadlyFormatted(uid))
+            return Err(UuidError::BadlyFormatted(uid));
         }
         self.store.create_uuid(uid, true).await
     }
 
     async fn handle_get_or_create(&self, uid: String) -> Result<Uuid> {
         if !is_index_uid_valid(&uid) {
-            return Err(UuidError::BadlyFormatted(uid))
+            return Err(UuidError::BadlyFormatted(uid));
         }
         self.store.create_uuid(uid, false).await
     }
@@ -106,7 +109,8 @@ impl<S: UuidStore> UuidResolverActor<S> {
 }
 
 fn is_index_uid_valid(uid: &str) -> bool {
-    uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+    uid.chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
 }
 
 #[derive(Clone)]
@@ -235,7 +239,8 @@ impl UuidStore for HeedUuidStore {
                     Ok(uuid)
                 }
             }
-        }).await?
+        })
+        .await?
     }
 
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
@@ -250,7 +255,8 @@ impl UuidStore for HeedUuidStore {
                 }
                 None => Ok(None),
             }
-        }).await?
+        })
+        .await?
     }
 
     async fn delete(&self, uid: String) -> Result<Option<Uuid>> {
@@ -265,9 +271,10 @@ impl UuidStore for HeedUuidStore {
                     txn.commit()?;
                     Ok(Some(uuid))
                 }
-                None => Ok(None)
+                None => Ok(None),
             }
-        }).await?
+        })
+        .await?
     }
 
     async fn list(&self) -> Result<Vec<(String, Uuid)>> {
@@ -282,6 +289,7 @@ impl UuidStore for HeedUuidStore {
                 entries.push((name.to_owned(), uuid))
             }
             Ok(entries)
-        }).await?
+        })
+        .await?
     }
 }

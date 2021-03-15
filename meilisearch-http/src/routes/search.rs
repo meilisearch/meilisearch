@@ -6,9 +6,9 @@ use serde::Deserialize;
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
+use crate::index::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
-use crate::index::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(search_with_post).service(search_with_url_query);
@@ -80,7 +80,9 @@ async fn search_with_url_query(
     let query: SearchQuery = match params.into_inner().try_into() {
         Ok(q) => q,
         Err(e) => {
-            return Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            return Ok(
+                HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() }))
+            )
         }
     };
     let search_result = data.search(path.into_inner().index_uid, query).await;
@@ -101,7 +103,9 @@ async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = data.search(path.into_inner().index_uid, params.into_inner()).await;
+    let search_result = data
+        .search(path.into_inner().index_uid, params.into_inner())
+        .await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();

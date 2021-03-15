@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index_controller::{IndexMetadata, IndexSettings};
-use crate::index_controller::IndexController;
 use crate::index::Settings;
+use crate::index_controller::IndexController;
+use crate::index_controller::{IndexMetadata, IndexSettings};
 use crate::option::Opt;
 
 #[derive(Clone)]
@@ -72,7 +72,11 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { index_controller, options, api_keys };
+        let inner = DataInner {
+            index_controller,
+            options,
+            api_keys,
+        };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })
@@ -90,7 +94,11 @@ impl Data {
         self.index_controller.get_index(uid).await
     }
 
-    pub async fn create_index(&self, uid: String, primary_key: Option<String>) -> anyhow::Result<IndexMetadata> {
+    pub async fn create_index(
+        &self,
+        uid: String,
+        primary_key: Option<String>,
+    ) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
             uid: Some(uid),
             primary_key,

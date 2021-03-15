@@ -1,7 +1,7 @@
 use serde_json::{Map, Value};
 
-use crate::index::{SearchQuery, SearchResult};
 use super::Data;
+use crate::index::{SearchQuery, SearchResult};
 
 impl Data {
     pub async fn search(
@@ -19,7 +19,9 @@ impl Data {
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Vec<Map<String, Value>>> {
-        self.index_controller.documents(index, offset, limit, attributes_to_retrieve).await
+        self.index_controller
+            .documents(index, offset, limit, attributes_to_retrieve)
+            .await
     }
 
     pub async fn retrieve_document(
@@ -27,8 +29,9 @@ impl Data {
         index: String,
         document_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> anyhow::Result<Map<String, Value>>
-    {
-        self.index_controller.document(index, document_id, attributes_to_retrieve).await
+    ) -> anyhow::Result<Map<String, Value>> {
+        self.index_controller
+            .document(index, document_id, attributes_to_retrieve)
+            .await
     }
 }

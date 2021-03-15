@@ -1,15 +1,15 @@
-use std::{error, fs};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::{error, fs};
 
 use byte_unit::Byte;
+use grenad::CompressionType;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
     RootCertStore,
 };
-use grenad::CompressionType;
 use structopt::StructOpt;
 
 #[derive(Debug, Clone, StructOpt)]
@@ -99,7 +99,11 @@ pub struct Opt {
     /// The Sentry DSN to use for error reporting. This defaults to the MeiliSearch Sentry project.
     /// You can disable sentry all together using the `--no-sentry` flag or `MEILI_NO_SENTRY` environment variable.
     #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(long, env = "SENTRY_DSN", default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337")]
+    #[structopt(
+        long,
+        env = "SENTRY_DSN",
+        default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337"
+    )]
     pub sentry_dsn: String,
 
     /// Disable Sentry error reporting.

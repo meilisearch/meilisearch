@@ -2,8 +2,8 @@ mod index;
 mod server;
 mod service;
 
+pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
 pub use server::Server;
-pub use index::{GetDocumentOptions, GetAllDocumentsOptions};
 
 /// Performs a search test on both post and get routes
 #[macro_export]

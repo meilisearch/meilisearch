@@ -7,10 +7,10 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::Data;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
+use crate::Data;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
@@ -19,7 +19,10 @@ macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
             if let Some(content_type) = head.headers.get("Content-Type") {
-                content_type.to_str().map(|v| v.contains($guard_value)).unwrap_or(false)
+                content_type
+                    .to_str()
+                    .map(|v| v.contains($guard_value))
+                    .unwrap_or(false)
             } else {
                 false
             }
@@ -57,7 +60,10 @@ async fn get_document(
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
-    match data.retrieve_document(index, id, None as Option<Vec<String>>).await {
+    match data
+        .retrieve_document(index, id, None as Option<Vec<String>>)
+        .await
+    {
         Ok(document) => {
             let json = serde_json::to_string(&document).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -76,7 +82,10 @@ async fn delete_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.delete_documents(path.index_uid.clone(), vec![path.document_id.clone()]).await {
+    match data
+        .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
+        .await
+    {
         Ok(result) => {
             let json = serde_json::to_string(&result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -104,16 +113,17 @@ async fn get_all_documents(
     let attributes_to_retrieve = params
         .attributes_to_retrieve
         .as_ref()
-        .map(|attrs| attrs
-            .split(',')
-            .map(String::from)
-            .collect::<Vec<_>>());
+        .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
-    match data.retrieve_documents(
-        path.index_uid.clone(),
-        params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
-        params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
-        attributes_to_retrieve).await {
+    match data
+        .retrieve_documents(
+            path.index_uid.clone(),
+            params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
+            params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
+            attributes_to_retrieve,
+        )
+        .await
+    {
         Ok(docs) => {
             let json = serde_json::to_string(&docs).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -149,7 +159,8 @@ async fn add_documents_json(
             UpdateFormat::Json,
             body,
             params.primary_key.clone(),
-        ).await;
+        )
+        .await;
 
     match addition_result {
         Ok(update) => {
@@ -162,7 +173,6 @@ async fn add_documents_json(
         }
     }
 }
-
 
 /// Default route for adding documents, this should return an error and redirect to the documentation
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
@@ -191,7 +201,7 @@ async fn update_documents_default(
 #[put(
     "/indexes/{index_uid}/documents",
     wrap = "Authentication::Private",
-    guard = "guard_json",
+    guard = "guard_json"
 )]
 async fn update_documents(
     data: web::Data<Data>,
@@ -206,7 +216,8 @@ async fn update_documents(
             UpdateFormat::Json,
             body,
             params.primary_key.clone(),
-        ).await;
+        )
+        .await;
 
     match addition_result {
         Ok(update) => {
@@ -231,7 +242,11 @@ async fn delete_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let ids = body
         .iter()
-        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+        .map(|v| {
+            v.as_str()
+                .map(String::from)
+                .unwrap_or_else(|| v.to_string())
+        })
         .collect();
 
     match data.delete_documents(path.index_uid.clone(), ids).await {

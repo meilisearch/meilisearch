@@ -5,7 +5,7 @@ use tempdir::TempDir;
 use urlencoding::encode;
 
 use meilisearch_http::data::Data;
-use meilisearch_http::option::{Opt, IndexerOpts};
+use meilisearch_http::option::{IndexerOpts, Opt};
 
 use super::index::Index;
 use super::service::Service;
@@ -55,10 +55,7 @@ impl Server {
         let data = Data::new(opt).unwrap();
         let service = Service(data);
 
-        Server {
-            service,
-            _dir: dir,
-        }
+        Server { service, _dir: dir }
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.

@@ -1,14 +1,14 @@
-use std::time::Instant;
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 use std::mem;
+use std::time::Instant;
 
-use either::Either;
 use anyhow::bail;
+use either::Either;
 use heed::RoTxn;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use milli::{FacetCondition, MatchingWords, facet::FacetValue};
-use serde::{Serialize, Deserialize};
-use serde_json::{Value, Map};
+use milli::{facet::FacetValue, FacetCondition, MatchingWords};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use super::Index;
 
@@ -78,13 +78,15 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let fields_to_display = self.fields_to_display(&rtxn, query.attributes_to_retrieve, &fields_ids_map)?;
+        let fields_to_display =
+            self.fields_to_display(&rtxn, query.attributes_to_retrieve, &fields_ids_map)?;
 
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(&stop_words);
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let mut object = milli::obkv_to_json(&fields_to_display, &fields_ids_map, obkv).unwrap();
+            let mut object =
+                milli::obkv_to_json(&fields_to_display, &fields_ids_map, obkv).unwrap();
             if let Some(ref attributes_to_highlight) = query.attributes_to_highlight {
                 highlighter.highlight_record(&mut object, &matching_words, attributes_to_highlight);
             }
@@ -183,15 +185,15 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             }
             Value::Array(values) => Value::Array(
                 values
-                .into_iter()
-                .map(|v| self.highlight_value(v, words_to_highlight))
-                .collect(),
+                    .into_iter()
+                    .map(|v| self.highlight_value(v, words_to_highlight))
+                    .collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
-                .into_iter()
-                .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
-                .collect(),
+                    .into_iter()
+                    .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
+                    .collect(),
             ),
         }
     }
@@ -221,9 +223,6 @@ fn parse_facets(
         // Disabled for now
         //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
         Value::Array(arr) => parse_facets_array(txn, index, arr),
-        v => bail!(
-            "Invalid facet expression, expected Array, found: {:?}",
-            v
-        ),
+        v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
     }
 }

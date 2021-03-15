@@ -1,14 +1,14 @@
 use std::fs::File;
 
+use crate::index::Index;
 use anyhow::Result;
 use grenad::CompressionType;
 use milli::update::UpdateBuilder;
-use crate::index::Index;
 use rayon::ThreadPool;
 
+use crate::index::UpdateResult;
 use crate::index_controller::updates::{Failed, Processed, Processing};
 use crate::index_controller::UpdateMeta;
-use crate::index::UpdateResult;
 use crate::option::IndexerOpts;
 
 pub struct UpdateHandler {
@@ -23,9 +23,7 @@ pub struct UpdateHandler {
 }
 
 impl UpdateHandler {
-    pub fn new(
-        opt: &IndexerOpts,
-    ) -> anyhow::Result<Self> {
+    pub fn new(opt: &IndexerOpts) -> anyhow::Result<Self> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(opt.indexing_jobs.unwrap_or(0))
             .build()?;
@@ -58,7 +56,6 @@ impl UpdateHandler {
         update_builder.chunk_fusing_shrink_size(self.chunk_fusing_shrink_size);
         update_builder
     }
-
 
     pub fn handle_update(
         &self,
