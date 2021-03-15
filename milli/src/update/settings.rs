@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::Context;
+use chrono::Utc;
 use grenad::CompressionType;
 use itertools::Itertools;
 use rayon::ThreadPool;
@@ -249,6 +250,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     where
         F: Fn(UpdateIndexingStep, u64) + Sync
         {
+            self.index.set_updated_at(self.wtxn, &Utc::now())?;
             let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
             self.update_displayed()?;
             let facets_updated = self.update_facets()?;

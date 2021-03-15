@@ -1,6 +1,7 @@
 use std::iter::FromIterator;
 use std::str;
 
+use chrono::Utc;
 use fst::automaton::Str;
 use fst::{Automaton, Streamer, IntoStreamer};
 use grenad::CompressionType;
@@ -68,6 +69,7 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> anyhow::Result<()> {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // Clear the words prefixes datastructures.
         self.index.word_prefix_docids.clear(self.wtxn)?;
         self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;

@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use anyhow::Context;
 use bstr::ByteSlice as _;
+use chrono::Utc;
 use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
@@ -316,6 +317,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         R: io::Read,
         F: Fn(UpdateIndexingStep, u64) + Sync,
     {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
         let before_transform = Instant::now();
         let update_id = self.update_id;
         let progress_callback = |step| progress_callback(step, update_id);

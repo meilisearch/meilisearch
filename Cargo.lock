@@ -302,6 +302,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "serde",
  "time",
  "winapi 0.3.9",
 ]
@@ -1277,6 +1278,7 @@ dependencies = [
  "anyhow",
  "bstr",
  "byteorder",
+ "chrono",
  "criterion",
  "crossbeam-channel",
  "csv",
