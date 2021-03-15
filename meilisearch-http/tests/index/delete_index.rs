@@ -14,7 +14,7 @@ async fn create_and_delete_index() {
 
     assert_eq!(code, 200);
 
-    assert_eq!(index.get().await.1, 404);
+    assert_eq!(index.get().await.1, 400);
 }
 
 #[actix_rt::test]

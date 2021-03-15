@@ -120,7 +120,7 @@ impl Index {
 fn parse_facets_array(
     txn: &RoTxn,
     index: &Index,
-    arr: &Vec<Value>,
+    arr: &[Value],
 ) -> anyhow::Result<Option<FacetCondition>> {
     let mut ands = Vec::new();
     for value in arr {

@@ -36,19 +36,19 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
     fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let attributes_to_highlight = other
             .attributes_to_highlight
-            .map(|attrs| attrs.split(",").map(String::from).collect::<HashSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
 
         let facet_distributions = other
             .facet_distributions
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let facet_filters = match other.facet_filters {
             Some(ref f) => Some(serde_json::from_str(f)?),
@@ -83,7 +83,7 @@ async fn search_with_url_query(
             return Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     };
-    let search_result = data.search(&path.index_uid, query).await;
+    let search_result = data.search(path.into_inner().index_uid, query).await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();
@@ -101,7 +101,7 @@ async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = data.search(&path.index_uid, params.into_inner()).await;
+    let search_result = data.search(path.into_inner().index_uid, params.into_inner()).await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();

@@ -4,12 +4,12 @@ use crate::index::{SearchQuery, SearchResult};
 use super::Data;
 
 impl Data {
-    pub async fn search<S: AsRef<str>>(
+    pub async fn search(
         &self,
-        index: S,
+        index: String,
         search_query: SearchQuery,
     ) -> anyhow::Result<SearchResult> {
-        self.index_controller.search(index.as_ref().to_string(), search_query).await
+        self.index_controller.search(index, search_query).await
     }
 
     pub async fn retrieve_documents(
@@ -24,11 +24,11 @@ impl Data {
 
     pub async fn retrieve_document(
         &self,
-        index: impl AsRef<str> + Sync + Send + 'static,
-        document_id: impl AsRef<str> + Sync + Send + 'static,
+        index: String,
+        document_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Map<String, Value>>
     {
-        self.index_controller.document(index.as_ref().to_string(), document_id.as_ref().to_string(), attributes_to_retrieve).await
+        self.index_controller.document(index, document_id, attributes_to_retrieve).await
     }
 }

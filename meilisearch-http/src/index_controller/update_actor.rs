@@ -25,6 +25,8 @@ pub enum UpdateError {
     Error(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Index {0} doesn't exist.")]
     UnexistingIndex(Uuid),
+    #[error("Update {0} doesn't exist.")]
+    UnexistingUpdate(u64),
 }
 
 enum UpdateMsg<D> {
@@ -40,7 +42,7 @@ enum UpdateMsg<D> {
     },
     GetUpdate {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<Option<UpdateStatus>>>,
+        ret: oneshot::Sender<Result<UpdateStatus>>,
         id: u64,
     },
     Delete {
@@ -62,8 +64,8 @@ struct UpdateActor<D, S> {
 #[async_trait::async_trait]
 trait UpdateStoreStore {
     async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<UpdateStore>>;
-    async fn delete(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>>;
-    async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>>;
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Arc<UpdateStore>>>;
+    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<UpdateStore>>>;
 }
 
 impl<D, S> UpdateActor<D, S>
@@ -145,18 +147,17 @@ where
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
 
         tokio::task::spawn_blocking(move || {
-            let result = update_store
+            update_store
                 .register_update(meta, path, uuid)
-                .map(|pending| UpdateStatus::Pending(pending))
-                .map_err(|e| UpdateError::Error(Box::new(e)));
-            result
+                .map(UpdateStatus::Pending)
+                .map_err(|e| UpdateError::Error(Box::new(e)))
         })
         .await
         .map_err(|e| UpdateError::Error(Box::new(e)))?
     }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
-        let update_store = self.store.get(&uuid).await?;
+        let update_store = self.store.get(uuid).await?;
         tokio::task::spawn_blocking(move || {
             let result = update_store
                 .ok_or(UpdateError::UnexistingIndex(uuid))?
@@ -168,20 +169,21 @@ where
         .map_err(|e| UpdateError::Error(Box::new(e)))?
     }
 
-    async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<Option<UpdateStatus>> {
+    async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let store = self
             .store
-            .get(&uuid)
+            .get(uuid)
             .await?
             .ok_or(UpdateError::UnexistingIndex(uuid))?;
         let result = store
             .meta(id)
-            .map_err(|e| UpdateError::Error(Box::new(e)))?;
+            .map_err(|e| UpdateError::Error(Box::new(e)))?
+            .ok_or(UpdateError::UnexistingUpdate(id))?;
         Ok(result)
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
-        let store = self.store.delete(&uuid).await?;
+        let store = self.store.delete(uuid).await?;
 
         if let Some(store) = store {
             tokio::task::spawn(async move {
@@ -246,7 +248,7 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    pub async fn update_status(&self, uuid: Uuid, id: u64) -> Result<Option<UpdateStatus>> {
+    pub async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::GetUpdate { uuid, id, ret };
         let _ = self.sender.send(msg).await;
@@ -310,9 +312,9 @@ impl UpdateStoreStore for MapUpdateStoreStore {
         }
     }
 
-    async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
+    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<UpdateStore>>> {
         let guard = self.db.read().await;
-        match guard.get(uuid) {
+        match guard.get(&uuid) {
             Some(uuid) => Ok(Some(uuid.clone())),
             None => {
                 // The index is not found in the found in the loaded indexes, so we attempt to load
@@ -322,7 +324,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
                 let path = self.path.clone().join(format!("updates-{}", uuid));
                 if path.exists() {
                     let mut guard = self.db.write().await;
-                    match guard.entry(uuid.clone()) {
+                    match guard.entry(uuid) {
                         Entry::Vacant(entry) => {
                             // We can safely load the index
                             let index_handle = self.index_handle.clone();
@@ -333,7 +335,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
                                 futures::executor::block_on(index_handle.update(meta, file))
                             })
                             .map_err(|e| UpdateError::Error(e.into()))?;
-                            let store = entry.insert(store.clone());
+                            let store = entry.insert(store);
                             Ok(Some(store.clone()))
                         }
                         Entry::Occupied(entry) => {
@@ -348,7 +350,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
         }
     }
 
-    async fn delete(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Arc<UpdateStore>>> {
         let store = self.db.write().await.remove(&uuid);
         let path = self.path.clone().join(format!("updates-{}", uuid));
         if store.is_some() || path.exists() {

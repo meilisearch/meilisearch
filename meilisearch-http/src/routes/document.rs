@@ -105,7 +105,7 @@ async fn get_all_documents(
         .attributes_to_retrieve
         .as_ref()
         .map(|attrs| attrs
-            .split(",")
+            .split(',')
             .map(String::from)
             .collect::<Vec<_>>());
 

@@ -69,5 +69,5 @@ async fn test_create_multiple_indexes() {
     assert_eq!(index1.get().await.1, 200);
     assert_eq!(index2.get().await.1, 200);
     assert_eq!(index3.get().await.1, 200);
-    assert_eq!(index4.get().await.1, 404);
+    assert_eq!(index4.get().await.1, 400);
 }

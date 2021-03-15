@@ -216,7 +216,7 @@ impl HeedUuidStore {
 impl UuidStore for HeedUuidStore {
     async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
         let env = self.env.clone();
-        let db = self.db.clone();
+        let db = self.db;
         tokio::task::spawn_blocking(move || {
             let mut txn = env.write_txn()?;
             match db.get(&txn, &name)? {
@@ -240,7 +240,7 @@ impl UuidStore for HeedUuidStore {
 
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
-        let db = self.db.clone();
+        let db = self.db;
         tokio::task::spawn_blocking(move || {
             let txn = env.read_txn()?;
             match db.get(&txn, &name)? {
@@ -255,7 +255,7 @@ impl UuidStore for HeedUuidStore {
 
     async fn delete(&self, uid: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
-        let db = self.db.clone();
+        let db = self.db;
         tokio::task::spawn_blocking(move || {
             let mut txn = env.write_txn()?;
             match db.get(&txn, &uid)? {
@@ -272,7 +272,7 @@ impl UuidStore for HeedUuidStore {
 
     async fn list(&self) -> Result<Vec<(String, Uuid)>> {
         let env = self.env.clone();
-        let db = self.db.clone();
+        let db = self.db;
         tokio::task::spawn_blocking(move || {
             let txn = env.read_txn()?;
             let mut entries = Vec::new();

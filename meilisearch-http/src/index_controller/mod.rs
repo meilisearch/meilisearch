@@ -127,7 +127,7 @@ impl IndexController {
             // the update is processed. This would make calls to GET index to fail until the update
             // is complete. Since this is get or create, we ignore the error when the index already
             // exists.
-            match self.index_handle.create_index(uuid.clone(), None).await {
+            match self.index_handle.create_index(uuid, None).await {
                 Ok(_) | Err(index_actor::IndexError::IndexAlreadyExists) => (),
                 Err(e) => return Err(e.into()),
             }
@@ -158,12 +158,12 @@ impl IndexController {
         let uuid = self.uuid_resolver
             .delete(uid)
             .await?;
-        self.update_handle.delete(uuid.clone()).await?;
+        self.update_handle.delete(uuid).await?;
         self.index_handle.delete(uuid).await?;
         Ok(())
     }
 
-    pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
+    pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<UpdateStatus> {
         let uuid = self.uuid_resolver
             .resolve(uid)
             .await?;
@@ -184,10 +184,9 @@ impl IndexController {
         let mut ret = Vec::new();
 
         for (uid, uuid) in uuids {
-            if let Some(meta) = self.index_handle.get_index_meta(uuid).await? {
-                let meta = IndexMetadata { uid, meta };
-                ret.push(meta);
-            }
+            let meta = self.index_handle.get_index_meta(uuid).await?;
+            let meta = IndexMetadata { uid, meta };
+            ret.push(meta);
         }
 
         Ok(ret)
@@ -247,13 +246,13 @@ impl IndexController {
         Ok(result)
     }
 
-    pub async fn get_index(&self, uid: String) -> anyhow::Result<Option<IndexMetadata>> {
+    pub async fn get_index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
         let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
-        let result = self.index_handle
+        let meta = self.index_handle
             .get_index_meta(uuid)
-            .await?
-            .map(|meta| IndexMetadata { uid, meta });
-        Ok(result)
+            .await?;
+        let meta = IndexMetadata { uid, meta };
+        Ok(meta)
     }
 }
 

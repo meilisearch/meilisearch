@@ -92,7 +92,7 @@ enum IndexMsg {
     },
     GetMeta {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<Option<IndexMeta>>>,
+        ret: oneshot::Sender<Result<IndexMeta>>,
     },
     UpdateIndex {
         uuid: Uuid,
@@ -137,7 +137,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     ) -> Result<Self> {
         let options = IndexerOpts::default();
         let update_handler =
-            UpdateHandler::new(&options).map_err(|e| IndexError::Error(e.into()))?;
+            UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
         let read_receiver = Some(read_receiver);
         let write_receiver = Some(write_receiver);
@@ -274,11 +274,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         data: File,
     ) -> Result<UpdateResult> {
         debug!("Processing update {}", meta.id());
-        let uuid = meta.index_uuid().clone();
+        let uuid = meta.index_uuid();
         let update_handler = self.update_handler.clone();
-        let index = match self.store.get(uuid.clone()).await? {
+        let index = match self.store.get(*uuid).await? {
             Some(index) => index,
-            None => self.store.create(uuid, None).await?,
+            None => self.store.create(*uuid, None).await?,
         };
         spawn_blocking(move || update_handler.handle_update(meta, data, index))
             .await
@@ -291,7 +291,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
-        spawn_blocking(move || index.settings().map_err(|e| IndexError::Error(e)))
+        spawn_blocking(move || index.settings().map_err(IndexError::Error))
             .await
             .map_err(|e| IndexError::Error(e.into()))?
     }
@@ -311,7 +311,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         spawn_blocking(move || {
             index
                 .retrieve_documents(offset, limit, attributes_to_retrieve)
-                .map_err(|e| IndexError::Error(e))
+                .map_err(IndexError::Error)
         })
         .await
         .map_err(|e| IndexError::Error(e.into()))?
@@ -331,7 +331,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         spawn_blocking(move || {
             index
                 .retrieve_document(doc_id, attributes_to_retrieve)
-                .map_err(|e| IndexError::Error(e))
+                .map_err(IndexError::Error)
         })
         .await
         .map_err(|e| IndexError::Error(e.into()))?
@@ -354,15 +354,15 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
+    async fn handle_get_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
         match self.store.get(uuid).await? {
             Some(index) => {
                 let meta = spawn_blocking(move || IndexMeta::new(&index))
                     .await
                     .map_err(|e| IndexError::Error(e.into()))??;
-                Ok(Some(meta))
+                Ok(meta)
             }
-            None => Ok(None),
+            None => Err(IndexError::UnexistingIndex),
         }
     }
 
@@ -405,7 +405,7 @@ impl IndexActorHandle {
         let (read_sender, read_receiver) = mpsc::channel(100);
         let (write_sender, write_receiver) = mpsc::channel(100);
 
-        let store = HeedIndexStore::new(path, index_size)?;
+        let store = HeedIndexStore::new(path, index_size);
         let actor = IndexActor::new(read_receiver, write_receiver, store)?;
         tokio::task::spawn(actor.run());
         Ok(Self {
@@ -492,7 +492,7 @@ impl IndexActorHandle {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    pub async fn get_index_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
+    pub async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetMeta { uuid, ret };
         let _ = self.read_sender.send(msg).await;
@@ -518,14 +518,14 @@ struct HeedIndexStore {
 }
 
 impl HeedIndexStore {
-    fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
+    fn new(path: impl AsRef<Path>, index_size: usize) -> Self {
         let path = path.as_ref().join("indexes/");
         let index_store = Arc::new(RwLock::new(HashMap::new()));
-        Ok(Self {
+        Self {
             index_store,
             path,
             index_size,
-        })
+        }
     }
 }
 
@@ -550,7 +550,7 @@ impl IndexStore for HeedIndexStore {
         .await
         .map_err(|e| IndexError::Error(e.into()))??;
 
-        self.index_store.write().await.insert(uuid.clone(), index.clone());
+        self.index_store.write().await.insert(uuid, index.clone());
 
         Ok(index)
     }
@@ -574,7 +574,7 @@ impl IndexStore for HeedIndexStore {
                 self.index_store
                     .write()
                     .await
-                    .insert(uuid.clone(), index.clone());
+                    .insert(uuid, index.clone());
                 Ok(Some(index))
             }
         }
@@ -595,6 +595,6 @@ fn open_index(path: impl AsRef<Path>, size: usize) -> Result<Index> {
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
     let index = milli::Index::new(options, &path)
-        .map_err(|e| IndexError::Error(e))?;
+        .map_err(IndexError::Error)?;
     Ok(Index(Arc::new(index)))
 }

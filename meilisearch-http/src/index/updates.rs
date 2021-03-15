@@ -85,11 +85,8 @@ impl Index {
         let mut wtxn = self.write_txn()?;
 
         // Set the primary key if not set already, ignore if already set.
-        match (self.primary_key(&wtxn)?, primary_key) {
-            (None, Some(ref primary_key)) => {
-                self.put_primary_key(&mut wtxn, primary_key)?;
-            }
-            _ => (),
+        if let (None, Some(ref primary_key)) =  (self.primary_key(&wtxn)?, primary_key) {
+            self.put_primary_key(&mut wtxn, primary_key)?;
         }
 
         let mut builder = update_builder.index_documents(&mut wtxn, self);
@@ -109,13 +106,10 @@ impl Index {
 
         info!("document addition done: {:?}", result);
 
-        match result {
-            Ok(addition_result) => wtxn
-                .commit()
-                .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
-                .map_err(Into::into),
-            Err(e) => Err(e.into()),
-        }
+        result.and_then(|addition_result| wtxn
+            .commit()
+            .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
+            .map_err(Into::into))
     }
 
     pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
@@ -128,7 +122,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -159,7 +153,7 @@ impl Index {
 
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref facet_types) = settings.attributes_for_faceting {
-            let facet_types = facet_types.clone().unwrap_or_else(|| HashMap::new());
+            let facet_types = facet_types.clone().unwrap_or_else(HashMap::new);
             builder.set_faceted_fields(facet_types);
         }
 
@@ -179,7 +173,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -202,7 +196,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -223,7 +217,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::DocumentDeletion { deleted }))
                 .map_err(Into::into),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e)
         }
     }
 }

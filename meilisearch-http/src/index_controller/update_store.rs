@@ -92,7 +92,7 @@ where
         let update_store_weak = Arc::downgrade(&update_store);
         tokio::task::spawn(async move {
             // Block and wait for something to process.
-            'outer: while let Some(_) = notification_receiver.recv().await {
+            'outer: while notification_receiver.recv().await.is_some() {
                 loop {
                     match update_store_weak.upgrade() {
                         Some(update_store) => {
@@ -276,7 +276,7 @@ where
 
         updates.extend(failed);
 
-        updates.sort_unstable_by(|a, b| a.id().cmp(&b.id()));
+        updates.sort_by_key(|u| u.id());
 
         Ok(updates)
     }

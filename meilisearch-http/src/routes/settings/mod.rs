@@ -64,7 +64,7 @@ macro_rules! make_setting_route {
                 data: actix_web::web::Data<data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                match data.settings(index_uid.as_ref()).await {
+                match data.settings(index_uid.into_inner()).await {
                     Ok(settings) => {
                         let setting = settings.$attr;
                         let json = serde_json::to_string(&setting).unwrap();
@@ -153,7 +153,7 @@ async fn get_all(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.settings(index_uid.as_ref()).await {
+    match data.settings(index_uid.into_inner()).await {
         Ok(settings) => {
             let json = serde_json::to_string(&settings).unwrap();
             Ok(HttpResponse::Ok().body(json))
