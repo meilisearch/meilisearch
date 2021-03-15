@@ -1889,6 +1889,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.1.0"
+source = "git+https://github.com/meilisearch/milli.git?rev=b7b23cd#b7b23cd4a8e62932c66c2ebedf9d89ddf089e299"
 dependencies = [
  "anyhow",
  "bstr",
