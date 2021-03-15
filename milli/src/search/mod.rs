@@ -133,7 +133,7 @@ impl<'a> Search<'a> {
             initial_candidates.union_with(&bucket_candidates);
 
             if offset != 0 {
-                candidates.by_ref().skip(offset).for_each(drop);
+                candidates.by_ref().take(offset).for_each(drop);
                 offset = offset.saturating_sub(len.min(offset));
                 len = len.saturating_sub(len.min(offset));
             }
