@@ -10,7 +10,7 @@ async fn create_and_delete_index() {
 
     let (_response, code) = index.delete().await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 204);
 
     assert_eq!(index.get().await.1, 400);
 }

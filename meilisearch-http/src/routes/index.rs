@@ -115,7 +115,7 @@ async fn delete_index(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     match data.delete_index(path.index_uid.clone()).await {
-        Ok(_) => Ok(HttpResponse::Ok().finish()),
+        Ok(_) => Ok(HttpResponse::NoContent().finish()),
         Err(e) => {
             Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
