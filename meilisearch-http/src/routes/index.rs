@@ -75,7 +75,7 @@ async fn create_index(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
-    name: Option<String>,
+    uid: Option<String>,
     primary_key: Option<String>,
 }
 
@@ -95,7 +95,7 @@ async fn update_index(
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.name.as_ref()).await {
+    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.uid.as_ref()).await {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))

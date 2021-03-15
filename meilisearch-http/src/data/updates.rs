@@ -65,15 +65,15 @@ impl Data {
 
     pub async fn update_index(
         &self,
-        name: impl AsRef<str>,
+        uid: impl AsRef<str>,
         primary_key: Option<impl AsRef<str>>,
-        new_name: Option<impl AsRef<str>>
+        new_uid: Option<impl AsRef<str>>
     ) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
-            uid: new_name.map(|s| s.as_ref().to_string()),
+            uid: new_uid.map(|s| s.as_ref().to_string()),
             primary_key: primary_key.map(|s| s.as_ref().to_string()),
         };
 
-        self.index_controller.update_index(name.as_ref().to_string(), settings).await
+        self.index_controller.update_index(uid.as_ref().to_string(), settings).await
     }
 }

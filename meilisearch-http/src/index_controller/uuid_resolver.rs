@@ -11,19 +11,19 @@ pub type Result<T> = std::result::Result<T, UuidError>;
 #[derive(Debug)]
 enum UuidResolveMsg {
     Resolve {
-        name: String,
+        uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
     GetOrCreate {
-        name: String,
+        uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
     Create {
-        name: String,
+        uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
     Delete {
-        name: String,
+        uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
     List {
@@ -48,16 +48,16 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
         loop {
             match self.inbox.recv().await {
-                Some(Create { name, ret }) => {
+                Some(Create { uid: name, ret }) => {
                     let _ = ret.send(self.handle_create(name).await);
                 }
-                Some(GetOrCreate { name, ret }) => {
+                Some(GetOrCreate { uid: name, ret }) => {
                     let _ = ret.send(self.handle_get_or_create(name).await);
                 }
-                Some(Resolve { name, ret }) => {
+                Some(Resolve { uid: name, ret }) => {
                     let _ = ret.send(self.handle_resolve(name).await);
                 }
-                Some(Delete { name, ret }) => {
+                Some(Delete { uid: name, ret }) => {
                     let _ = ret.send(self.handle_delete(name).await);
                 }
                 Some(List { ret }) => {
@@ -71,32 +71,32 @@ impl<S: UuidStore> UuidResolverActor<S> {
         warn!("exiting uuid resolver loop");
     }
 
-    async fn handle_create(&self, name: String) -> Result<Uuid> {
-        if !is_index_uid_valid(&name) {
-            return Err(UuidError::BadlyFormatted(name))
+    async fn handle_create(&self, uid: String) -> Result<Uuid> {
+        if !is_index_uid_valid(&uid) {
+            return Err(UuidError::BadlyFormatted(uid))
         }
-        self.store.create_uuid(name, true).await
+        self.store.create_uuid(uid, true).await
     }
 
-    async fn handle_get_or_create(&self, name: String) -> Result<Uuid> {
-        if !is_index_uid_valid(&name) {
-            return Err(UuidError::BadlyFormatted(name))
+    async fn handle_get_or_create(&self, uid: String) -> Result<Uuid> {
+        if !is_index_uid_valid(&uid) {
+            return Err(UuidError::BadlyFormatted(uid))
         }
-        self.store.create_uuid(name, false).await
+        self.store.create_uuid(uid, false).await
     }
 
-    async fn handle_resolve(&self, name: String) -> Result<Uuid> {
+    async fn handle_resolve(&self, uid: String) -> Result<Uuid> {
         self.store
-            .get_uuid(name.clone())
+            .get_uuid(uid.clone())
             .await?
-            .ok_or(UuidError::UnexistingIndex(name))
+            .ok_or(UuidError::UnexistingIndex(uid))
     }
 
-    async fn handle_delete(&self, name: String) -> Result<Uuid> {
+    async fn handle_delete(&self, uid: String) -> Result<Uuid> {
         self.store
-            .delete(name.clone())
+            .delete(uid.clone())
             .await?
-            .ok_or(UuidError::UnexistingIndex(name))
+            .ok_or(UuidError::UnexistingIndex(uid))
     }
 
     async fn handle_list(&self) -> Result<Vec<(String, Uuid)>> {
@@ -125,7 +125,7 @@ impl UuidResolverHandle {
 
     pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Resolve { name, ret };
+        let msg = UuidResolveMsg::Resolve { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -134,7 +134,7 @@ impl UuidResolverHandle {
 
     pub async fn get_or_create(&self, name: String) -> Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::GetOrCreate { name, ret };
+        let msg = UuidResolveMsg::GetOrCreate { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -143,7 +143,7 @@ impl UuidResolverHandle {
 
     pub async fn create(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Create { name, ret };
+        let msg = UuidResolveMsg::Create { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -152,7 +152,7 @@ impl UuidResolverHandle {
 
     pub async fn delete(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Delete { name, ret };
+        let msg = UuidResolveMsg::Delete { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -189,9 +189,9 @@ pub enum UuidError {
 trait UuidStore {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
-    async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid>;
-    async fn get_uuid(&self, name: String) -> Result<Option<Uuid>>;
-    async fn delete(&self, name: String) -> Result<Option<Uuid>>;
+    async fn create_uuid(&self, uid: String, err: bool) -> Result<Uuid>;
+    async fn get_uuid(&self, uid: String) -> Result<Option<Uuid>>;
+    async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
 }
 
@@ -253,15 +253,15 @@ impl UuidStore for HeedUuidStore {
         }).await?
     }
 
-    async fn delete(&self, name: String) -> Result<Option<Uuid>> {
+    async fn delete(&self, uid: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
         let db = self.db.clone();
         tokio::task::spawn_blocking(move || {
             let mut txn = env.write_txn()?;
-            match db.get(&txn, &name)? {
+            match db.get(&txn, &uid)? {
                 Some(uuid) => {
                     let uuid = Uuid::from_slice(uuid)?;
-                    db.delete(&mut txn, &name)?;
+                    db.delete(&mut txn, &uid)?;
                     txn.commit()?;
                     Ok(Some(uuid))
                 }

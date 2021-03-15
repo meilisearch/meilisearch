@@ -78,21 +78,21 @@ impl Data {
         Ok(Data { inner })
     }
 
-    pub async fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
-        self.index_controller.settings(index_uid.as_ref().to_string()).await
+    pub async fn settings<S: AsRef<str>>(&self, uid: S) -> anyhow::Result<Settings> {
+        self.index_controller.settings(uid.as_ref().to_string()).await
     }
 
     pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
         self.index_controller.list_indexes().await
     }
 
-    pub async fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
-        self.index_controller.get_index(name.as_ref().to_string()).await
+    pub async fn index(&self, uid: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
+        self.index_controller.get_index(uid.as_ref().to_string()).await
     }
 
-    pub async fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+    pub async fn create_index(&self, uid: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
-            uid: Some(name.as_ref().to_string()),
+            uid: Some(uid.as_ref().to_string()),
             primary_key: primary_key.map(|s| s.as_ref().to_string()),
         };
 
