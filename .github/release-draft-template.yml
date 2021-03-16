@@ -1,6 +1,8 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 version-template: '0.21.0-alpha.$PATCH'
+exclude-labels:
+  - 'skip-changelog'
 template: |
   ## Changes
 
