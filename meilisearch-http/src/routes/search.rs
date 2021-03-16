@@ -81,18 +81,15 @@ async fn search_with_url_query(
         Ok(q) => q,
         Err(e) => {
             return Ok(
-                HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() }))
+                HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() }))
             )
         }
     };
     let search_result = data.search(path.into_inner().index_uid, query).await;
     match search_result {
-        Ok(docs) => {
-            let docs = serde_json::to_string(&docs).unwrap();
-            Ok(HttpResponse::Ok().body(docs))
-        }
+        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -107,12 +104,9 @@ async fn search_with_post(
         .search(path.into_inner().index_uid, params.into_inner())
         .await;
     match search_result {
-        Ok(docs) => {
-            let docs = serde_json::to_string(&docs).unwrap();
-            Ok(HttpResponse::Ok().body(docs))
-        }
+        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
