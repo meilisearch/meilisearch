@@ -6,6 +6,7 @@ async fn test_healthyness() {
 
     // Check that the server is healthy
 
-    let (_response, status_code) = server.get_health().await;
+    let (response, status_code) = server.get_health().await;
     assert_eq!(status_code, 200);
+    assert_eq!(response["status"], "ok");
 }
