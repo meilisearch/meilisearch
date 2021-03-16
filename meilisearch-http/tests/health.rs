@@ -8,5 +8,5 @@ async fn test_healthyness() {
 
     let (response, status_code) = server.get_health().await;
     assert_eq!(status_code, 200);
-    assert_eq!(response["status"], "ok");
+    assert_eq!(response["status"], "available");
 }
