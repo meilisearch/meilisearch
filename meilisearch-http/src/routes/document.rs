@@ -17,6 +17,7 @@ const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
 
 macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
+        #[allow(dead_code)]
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
             if let Some(content_type) = head.headers.get("Content-Type") {
                 content_type
@@ -44,7 +45,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(get_document)
         .service(delete_document)
         .service(get_all_documents)
-        .service(add_documents_json)
+        .service(add_documents)
         .service(update_documents)
         .service(delete_documents)
         .service(clear_all_documents);
@@ -144,9 +145,8 @@ struct UpdateDocumentsQuery {
 #[post(
     "/indexes/{index_uid}/documents",
     wrap = "Authentication::Private",
-    guard = "guard_json"
 )]
-async fn add_documents_json(
+async fn add_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
@@ -201,7 +201,6 @@ async fn update_documents_default(
 #[put(
     "/indexes/{index_uid}/documents",
     wrap = "Authentication::Private",
-    guard = "guard_json"
 )]
 async fn update_documents(
     data: web::Data<Data>,
