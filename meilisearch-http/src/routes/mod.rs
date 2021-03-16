@@ -45,8 +45,7 @@ pub async fn load_html() -> HttpResponse {
 /// ```
 #[get("/")]
 pub async fn running() -> HttpResponse {
-    let payload = serde_json::json!({ "status": "MeiliSearch is running" }).to_string();
-    HttpResponse::Ok().body(payload)
+    HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
 #[get("/bulma.min.css")]
