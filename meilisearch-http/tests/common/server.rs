@@ -69,4 +69,8 @@ impl Server {
     pub async fn list_indexes(&self) -> (Value, StatusCode) {
         self.service.get("/indexes").await
     }
+
+    pub async fn version(&self) -> (Value, StatusCode) {
+        self.service.get("/version").await
+    }
 }
