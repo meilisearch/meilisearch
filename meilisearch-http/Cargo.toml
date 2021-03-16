@@ -61,6 +61,7 @@ tempfile = "3.1.0"
 thiserror = "1.0.24"
 tokio = { version = "1", features = ["full"] }
 uuid = "0.8.2"
+oxidized-json-checker = "0.3.2"
 
 [dependencies.sentry]
 default-features = false

@@ -1823,6 +1823,7 @@ dependencies = [
  "milli",
  "mime",
  "once_cell",
+ "oxidized-json-checker",
  "parking_lot",
  "rand 0.7.3",
  "rayon",
@@ -2121,6 +2122,12 @@ checksum = "766f840da25490628d8e63e529cd21c014f6600c6b8517add12a6fa6167a6218"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "oxidized-json-checker"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "938464aebf563f48ab86d1cfc0e2df952985c0b814d3108f41d1b85e7f5b0dac"
 
 [[package]]
 name = "page_size"
