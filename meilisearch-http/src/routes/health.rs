@@ -9,5 +9,5 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 
 #[get("/health")]
 async fn get_health() -> Result<HttpResponse, ResponseError> {
-    Ok(HttpResponse::NoContent().finish())
+    Ok(HttpResponse::Ok().finish())
 }
