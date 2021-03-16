@@ -6,7 +6,7 @@ use log::error;
 use std::fs::create_dir_all;
 use std::path::Path;
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
 use tempfile::TempDir;
 
 pub fn load_snapshot(
@@ -29,7 +29,7 @@ pub fn load_snapshot(
 }
 
 pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
-    let tmp_dir = TempDir::new()?;
+    let tmp_dir = TempDir::new_in(snapshot_path)?;
 
     data.db.copy_and_compact_to_path(tmp_dir.path())?;
 
@@ -37,14 +37,14 @@ pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
 }
 
 pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Result<(), Error> {
-    if snapshot_dir.file_name().is_none() { 
+    if snapshot_dir.file_name().is_none() {
         return Err(Error::Internal("invalid snapshot file path".to_string()));
     }
     let db_name = Path::new(&data.db_path).file_name().ok_or_else(|| Error::Internal("invalid database name".to_string()))?;
     create_dir_all(snapshot_dir)?;
     let snapshot_path = snapshot_dir.join(format!("{}.snapshot", db_name.to_str().unwrap_or("data.ms")));
-    
-    thread::spawn(move || loop { 
+
+    thread::spawn(move || loop {
         if let Err(e) = create_snapshot(&data, &snapshot_path) {
             error!("Unsuccessful snapshot creation: {}", e);
         }
@@ -72,12 +72,12 @@ mod tests {
         let file_1_relative = Path::new("file1.txt");
         let subdir_relative = Path::new("subdir/");
         let file_2_relative = Path::new("subdir/file2.txt");
-        
+
         create_dir_all(src_dir.join(subdir_relative)).unwrap();
         fs::File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
         fs::File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
 
-        
+
         assert!(compression::to_tar_gz(&src_dir, &archive_path).is_ok());
         assert!(archive_path.exists());
         assert!(load_snapshot(&dest_dir.to_str().unwrap(), &archive_path, false, false).is_ok());
@@ -89,7 +89,7 @@ mod tests {
 
         let contents = fs::read_to_string(dest_dir.join(file_1_relative)).unwrap();
         assert_eq!(contents, "Hello_file_1");
-    
+
         let contents = fs::read_to_string(dest_dir.join(file_2_relative)).unwrap();
         assert_eq!(contents, "Hello_file_2");
     }
