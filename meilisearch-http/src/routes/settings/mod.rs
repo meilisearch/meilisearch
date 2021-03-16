@@ -27,12 +27,9 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 match data.update_settings(index_uid.into_inner(), settings, false).await {
-                    Ok(update_status) => {
-                        let json = serde_json::to_string(&update_status).unwrap();
-                        Ok(HttpResponse::Ok().body(json))
-                    }
+                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
                     Err(e) => {
-                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -49,12 +46,9 @@ macro_rules! make_setting_route {
                 };
 
                 match data.update_settings(index_uid.into_inner(), settings, true).await {
-                    Ok(update_status) => {
-                        let json = serde_json::to_string(&update_status).unwrap();
-                        Ok(HttpResponse::Ok().body(json))
-                    }
+                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
                     Err(e) => {
-                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -65,13 +59,9 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 match data.settings(index_uid.into_inner()).await {
-                    Ok(settings) => {
-                        let setting = settings.$attr;
-                        let json = serde_json::to_string(&setting).unwrap();
-                        Ok(HttpResponse::Ok().body(json))
-                    }
+                    Ok(settings) => Ok(HttpResponse::Ok().json(settings.$attr)),
                     Err(e) => {
-                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -141,12 +131,9 @@ async fn update_all(
         .update_settings(index_uid.into_inner(), body.into_inner(), true)
         .await
     {
-        Ok(update_result) => {
-            let json = serde_json::to_string(&update_result).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(update_result) => Ok(HttpResponse::Ok().json(update_result)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -157,12 +144,9 @@ async fn get_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     match data.settings(index_uid.into_inner()).await {
-        Ok(settings) => {
-            let json = serde_json::to_string(&settings).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(settings) => Ok(HttpResponse::Ok().json(settings)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -177,12 +161,9 @@ async fn delete_all(
         .update_settings(index_uid.into_inner(), settings, false)
         .await
     {
-        Ok(update_result) => {
-            let json = serde_json::to_string(&update_result).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(update_result) => Ok(HttpResponse::Ok().json(update_result)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }

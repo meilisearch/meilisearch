@@ -65,12 +65,9 @@ async fn get_document(
         .retrieve_document(index, id, None as Option<Vec<String>>)
         .await
     {
-        Ok(document) => {
-            let json = serde_json::to_string(&document).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(document) => Ok(HttpResponse::Ok().json(document)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -87,12 +84,9 @@ async fn delete_document(
         .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
         .await
     {
-        Ok(result) => {
-            let json = serde_json::to_string(&result).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(result) => Ok(HttpResponse::Ok().json(result)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -125,12 +119,9 @@ async fn get_all_documents(
         )
         .await
     {
-        Ok(docs) => {
-            let json = serde_json::to_string(&docs).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -142,10 +133,7 @@ struct UpdateDocumentsQuery {
 }
 
 /// Route used when the payload type is "application/json"
-#[post(
-    "/indexes/{index_uid}/documents",
-    wrap = "Authentication::Private",
-)]
+#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
@@ -163,13 +151,9 @@ async fn add_documents(
         .await;
 
     match addition_result {
-        Ok(update) => {
-            let value = serde_json::to_string(&update).unwrap();
-            let response = HttpResponse::Ok().body(value);
-            Ok(response)
-        }
+        Ok(update) => Ok(HttpResponse::Ok().json(update)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -198,10 +182,7 @@ async fn update_documents_default(
     todo!()
 }
 
-#[put(
-    "/indexes/{index_uid}/documents",
-    wrap = "Authentication::Private",
-)]
+#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn update_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
@@ -219,13 +200,9 @@ async fn update_documents(
         .await;
 
     match addition_result {
-        Ok(update) => {
-            let value = serde_json::to_string(&update).unwrap();
-            let response = HttpResponse::Ok().body(value);
-            Ok(response)
-        }
+        Ok(update) => Ok(HttpResponse::Ok().json(update)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -249,12 +226,9 @@ async fn delete_documents(
         .collect();
 
     match data.delete_documents(path.index_uid.clone(), ids).await {
-        Ok(result) => {
-            let json = serde_json::to_string(&result).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(result) => Ok(HttpResponse::Ok().json(result)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -265,12 +239,9 @@ async fn clear_all_documents(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     match data.clear_documents(path.index_uid.clone()).await {
-        Ok(update) => {
-            let json = serde_json::to_string(&update).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(update) => Ok(HttpResponse::Ok().json(update)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }

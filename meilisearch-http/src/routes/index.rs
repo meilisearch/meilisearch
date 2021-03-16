@@ -21,12 +21,9 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     match data.list_indexes().await {
-        Ok(indexes) => {
-            let json = serde_json::to_string(&indexes).unwrap();
-            Ok(HttpResponse::Ok().body(&json))
-        }
+        Ok(indexes) => Ok(HttpResponse::Ok().json(indexes)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -37,12 +34,9 @@ async fn get_index(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     match data.index(path.index_uid.clone()).await {
-        Ok(meta) => {
-            let json = serde_json::to_string(&meta).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -61,12 +55,9 @@ async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
     match data.create_index(body.uid, body.primary_key).await {
-        Ok(meta) => {
-            let json = serde_json::to_string(&meta).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -99,12 +90,9 @@ async fn update_index(
         .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
         .await
     {
-        Ok(meta) => {
-            let json = serde_json::to_string(&meta).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -117,7 +105,7 @@ async fn delete_index(
     match data.delete_index(path.index_uid.clone()).await {
         Ok(_) => Ok(HttpResponse::NoContent().finish()),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -141,12 +129,9 @@ async fn get_update_status(
         .get_update_status(params.index_uid, params.update_id)
         .await;
     match result {
-        Ok(meta) => {
-            let json = serde_json::to_string(&meta).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -158,12 +143,9 @@ async fn get_all_updates_status(
 ) -> Result<HttpResponse, ResponseError> {
     let result = data.get_updates_status(path.into_inner().index_uid).await;
     match result {
-        Ok(metas) => {
-            let json = serde_json::to_string(&metas).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
+        Ok(metas) => Ok(HttpResponse::Ok().json(metas)),
         Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
