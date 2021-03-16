@@ -13,11 +13,12 @@ async fn create_and_get_index() {
 
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
+    assert_eq!(response["name"], "test");
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
     assert_eq!(response["createdAt"], response["updatedAt"]);
     assert_eq!(response["primaryKey"], Value::Null);
-    assert_eq!(response.as_object().unwrap().len(), 4);
+    assert_eq!(response.as_object().unwrap().len(), 5);
 }
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
