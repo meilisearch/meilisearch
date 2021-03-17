@@ -171,6 +171,8 @@ async fn write_all_and_update() {
         "synonyms": {
             "road": ["street", "avenue"],
             "street": ["avenue"],
+            "HP": ["Harry Potter"],
+            "Harry Potter": ["HP"]
         },
         "attributesForFaceting": ["title"],
     });
@@ -208,6 +210,8 @@ async fn write_all_and_update() {
         "synonyms": {
             "road": ["street", "avenue"],
             "street": ["avenue"],
+            "hp": ["harry potter"],
+            "harry potter": ["hp"]
         },
         "attributesForFaceting": ["title"],
     });
