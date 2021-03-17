@@ -4,6 +4,7 @@ mod update_handler;
 mod update_store;
 mod updates;
 mod uuid_resolver;
+mod snapshot;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +20,9 @@ use tokio::time::sleep;
 
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
+
 pub use updates::{Failed, Processed, Processing};
+use snapshot::SnapshotService;
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
@@ -65,12 +68,19 @@ impl IndexController {
         update_store_size: usize,
     ) -> anyhow::Result<Self> {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-        let index_actor = index_actor::IndexActorHandle::new(&path, index_size)?;
+        let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
         let update_handle =
-            update_actor::UpdateActorHandle::new(index_actor.clone(), &path, update_store_size)?;
+            update_actor::UpdateActorHandle::new(index_handle.clone(), &path, update_store_size)?;
+        let snapshot_service = SnapshotService::new(
+            index_handle.clone(),
+            uuid_resolver.clone(),
+            update_handle.clone(),
+            Duration::from_millis(10000),
+            "/dev/toto".into());
+        tokio::task::spawn(snapshot_service.run());
         Ok(Self {
             uuid_resolver,
-            index_handle: index_actor,
+            index_handle,
             update_handle,
         })
     }
