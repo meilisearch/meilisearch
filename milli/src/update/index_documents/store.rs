@@ -388,7 +388,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             key_buffer.push(0); // level 0
 
             for position in positions {
-                key_buffer.truncate(word.len());
+                key_buffer.truncate(word.len() + 1);
                 let position_bytes = position.to_be_bytes();
                 key_buffer.extend_from_slice(position_bytes.as_bytes());
                 key_buffer.extend_from_slice(position_bytes.as_bytes());

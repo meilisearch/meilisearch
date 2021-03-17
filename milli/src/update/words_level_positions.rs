@@ -3,7 +3,7 @@ use std::fs::File;
 use std::num::NonZeroUsize;
 
 use grenad::{CompressionType, Reader, Writer, FileFuse};
-use heed::types::DecodeIgnore;
+use heed::types::{DecodeIgnore, Str};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
@@ -56,10 +56,9 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
     pub fn execute(self) -> anyhow::Result<()> {
         debug!("Computing and writing the word levels positions docids into LMDB on disk...");
 
-        clear_non_zero_levels_positions(self.wtxn, self.index.word_level_position_docids)?;
-
         let entries = compute_positions_levels(
             self.wtxn,
+            self.index.word_docids.remap_data_type::<DecodeIgnore>(),
             self.index.word_level_position_docids,
             self.chunk_compression_type,
             self.chunk_compression_level,
@@ -74,7 +73,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
 
         write_into_lmdb_database(
             self.wtxn,
-            *self.index.facet_field_id_value_docids.as_polymorph(),
+            *self.index.word_level_position_docids.as_polymorph(),
             entries,
             |_, _| anyhow::bail!("invalid facet level merging"),
             WriteMethod::Append,
@@ -84,25 +83,11 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
     }
 }
 
-fn clear_non_zero_levels_positions(
-    wtxn: &mut heed::RwTxn,
-    db: heed::Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
-) -> heed::Result<()>
-{
-    let mut iter = db.iter_mut(wtxn)?.lazily_decode_data();
-    while let Some(result) = iter.next() {
-        let ((_, level, _, _), _) = result?;
-        if level != 0 {
-            iter.del_current()?;
-        }
-    }
-    Ok(())
-}
-
-/// Generates all the words positions levels (including the level zero).
+/// Generates all the words positions levels based on the levels zero (including the level zero).
 fn compute_positions_levels(
     rtxn: &heed::RoTxn,
-    db: heed::Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
+    words_db: heed::Database<Str, DecodeIgnore>,
+    words_positions_db: heed::Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
     shrink_size: Option<u64>,
@@ -116,11 +101,11 @@ fn compute_positions_levels(
         create_writer(compression_type, compression_level, file)
     })?;
 
-    for result in db.iter(rtxn)? {
-        let ((word, level, left, right), docids) = result?;
+    for result in words_db.iter(rtxn)? {
+        let (word, ()) = result?;
 
-        let first_level_size = db.remap_data_type::<DecodeIgnore>()
-            .prefix_iter(rtxn, &(word, level, u32::min_value(), u32::min_value()))?
+        let first_level_size = words_positions_db.remap_data_type::<DecodeIgnore>()
+            .prefix_iter(rtxn, &(word, 0, u32::min_value(), u32::min_value()))?
             .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
         let level_0_range = {
@@ -136,14 +121,17 @@ fn compute_positions_levels(
             .take_while(|(_, s)| first_level_size / *s >= min_level_size.get());
 
         // As specified in the documentation, we also write the level 0 entries.
-        write_level_entry(&mut writer, word, level, left, right, &docids)?;
+        for result in words_positions_db.range(rtxn, &level_0_range)? {
+            let ((word, level, left, right), docids) = result?;
+            write_level_entry(&mut writer, word, level, left, right, &docids)?;
+        }
 
         for (level, group_size) in group_size_iter {
             let mut left = 0;
             let mut right = 0;
             let mut group_docids = RoaringBitmap::new();
 
-            for (i, result) in db.range(rtxn, &level_0_range)?.enumerate() {
+            for (i, result) in words_positions_db.range(rtxn, &level_0_range)?.enumerate() {
                 let ((_field_id, _level, value, _right), docids) = result?;
 
                 if i == 0 {

@@ -558,7 +558,9 @@ fn words_level_positions_docids(
             left..=right
         };
         for result in index.word_level_position_docids.range(rtxn, &range)? {
-            let ((word, level, left, right), docids) = result?;
+            let ((w, level, left, right), docids) = result?;
+            if word != w { break }
+
             let level = level.to_string();
             let count = docids.len().to_string();
             let docids = if debug {
@@ -567,7 +569,7 @@ fn words_level_positions_docids(
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
             let position_range = format!("{:?}", left..=right);
-            wtr.write_record(&[word, &level, &position_range, &count, &docids])?;
+            wtr.write_record(&[w, &level, &position_range, &count, &docids])?;
         }
     }
 
