@@ -19,9 +19,10 @@ const WORD_DOCIDS_DB_NAME: &str = "word-docids";
 const WORD_PREFIX_DOCIDS_DB_NAME: &str = "word-prefix-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
-const FACET_FIELD_ID_VALUE_DOCIDS_NAME: &str = "facet-field-id-value-docids";
-const FIELD_ID_DOCID_FACET_VALUES_NAME: &str = "field-id-docid-facet-values";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
+const WORD_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-level-position-docids";
+const FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME: &str = "facet-field-id-value-docids";
+const FIELD_ID_DOCID_FACET_VALUES_DB_NAME: &str = "field-id-docid-facet-values";
 const DOCUMENTS_DB_NAME: &str = "documents";
 
 const ALL_DATABASE_NAMES: &[&str] = &[
@@ -31,8 +32,9 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
-    FACET_FIELD_ID_VALUE_DOCIDS_NAME,
-    FIELD_ID_DOCID_FACET_VALUES_NAME,
+    WORD_LEVEL_POSITION_DOCIDS_DB_NAME,
+    FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME,
+    FIELD_ID_DOCID_FACET_VALUES_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
 
@@ -112,6 +114,16 @@ enum Command {
 
         /// The field name in the document.
         field_name: String,
+    },
+
+    /// Outputs a CSV with the documents ids along with the word level positions where it appears.
+    WordsLevelPositionsDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The field name in the document.
+        words: Vec<String>,
     },
 
     /// Outputs a CSV with the documents ids, words and the positions where this word appears.
@@ -220,6 +232,9 @@ fn main() -> anyhow::Result<()> {
         },
         FacetValuesDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
+        },
+        WordsLevelPositionsDocids { full_display, words } => {
+            words_level_positions_docids(&index, &rtxn, !full_display, words)
         },
         DocidsWordsPositions { full_display, internal_documents_ids } => {
             docids_words_positions(&index, &rtxn, !full_display, internal_documents_ids)
@@ -525,6 +540,40 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
     Ok(wtr.flush()?)
 }
 
+fn words_level_positions_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    words: Vec<String>,
+) -> anyhow::Result<()>
+{
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["word", "level", "position_range", "documents_count", "documents_ids"])?;
+
+    for word in words.iter().map(AsRef::as_ref) {
+        let range = {
+            let left = (word, 0, u32::min_value(), u32::min_value());
+            let right = (word, u8::max_value(), u32::max_value(), u32::max_value());
+            left..=right
+        };
+        for result in index.word_level_position_docids.range(rtxn, &range)? {
+            let ((word, level, left, right), docids) = result?;
+            let level = level.to_string();
+            let count = docids.len().to_string();
+            let docids = if debug {
+                format!("{:?}", docids)
+            } else {
+                format!("{:?}", docids.iter().collect::<Vec<_>>())
+            };
+            let position_range = format!("{:?}", left..=right);
+            wtr.write_record(&[word, &level, &position_range, &count, &docids])?;
+        }
+    }
+
+    Ok(wtr.flush()?)
+}
+
 fn docids_words_positions(
     index: &Index,
     rtxn: &heed::RoTxn,
@@ -730,8 +779,8 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
             WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
             WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_prefix_pair_proximity_docids.as_polymorph(),
-            FACET_FIELD_ID_VALUE_DOCIDS_NAME => index.facet_field_id_value_docids.as_polymorph(),
-            FIELD_ID_DOCID_FACET_VALUES_NAME => index.field_id_docid_facet_values.as_polymorph(),
+            FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME => index.facet_field_id_value_docids.as_polymorph(),
+            FIELD_ID_DOCID_FACET_VALUES_DB_NAME => index.field_id_docid_facet_values.as_polymorph(),
             DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
             unknown => anyhow::bail!("unknown database {:?}", unknown),
         };
