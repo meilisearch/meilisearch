@@ -104,15 +104,15 @@ fn compute_positions_levels(
     for result in words_db.iter(rtxn)? {
         let (word, ()) = result?;
 
-        let first_level_size = words_positions_db.remap_data_type::<DecodeIgnore>()
-            .prefix_iter(rtxn, &(word, 0, u32::min_value(), u32::min_value()))?
-            .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
-
         let level_0_range = {
             let left = (word, 0, u32::min_value(), u32::min_value());
             let right = (word, 0, u32::max_value(), u32::max_value());
             left..=right
         };
+
+        let first_level_size = words_positions_db.remap_data_type::<DecodeIgnore>()
+            .range(rtxn, &level_0_range)?
+            .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
         // Groups sizes are always a power of the original level_group_size and therefore a group
         // always maps groups of the previous level and never splits previous levels groups in half.
@@ -132,7 +132,7 @@ fn compute_positions_levels(
             let mut group_docids = RoaringBitmap::new();
 
             for (i, result) in words_positions_db.range(rtxn, &level_0_range)?.enumerate() {
-                let ((_field_id, _level, value, _right), docids) = result?;
+                let ((_word, _level, value, _right), docids) = result?;
 
                 if i == 0 {
                     left = value;

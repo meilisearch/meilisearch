@@ -346,6 +346,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let docid_word_positions_name = "docid_word_positions";
     let word_prefix_pair_proximity_docids_name = "word_prefix_pair_proximity_docids";
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
+    let word_level_position_docids_name = "word_level_position_docids";
     let facet_field_id_value_docids_name = "facet_field_id_value_docids";
     let documents_name = "documents";
 
@@ -399,6 +400,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let ((word, prefix, prox), value) = result?;
             let key = format!("{} {} {}", word, prefix, prox);
             heap.push(Reverse((value.len(), key, word_prefix_pair_proximity_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_level_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word, level, left, right), value) = result?;
+            let key = format!("{} {} {:?}", word, level, left..=right);
+            heap.push(Reverse((value.len(), key, word_level_position_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
@@ -549,7 +557,7 @@ fn words_level_positions_docids(
 {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["word", "level", "position_range", "documents_count", "documents_ids"])?;
+    wtr.write_record(&["word", "level", "positions", "documents_count", "documents_ids"])?;
 
     for word in words.iter().map(AsRef::as_ref) {
         let range = {
@@ -561,14 +569,18 @@ fn words_level_positions_docids(
             let ((w, level, left, right), docids) = result?;
             if word != w { break }
 
-            let level = level.to_string();
             let count = docids.len().to_string();
             let docids = if debug {
                 format!("{:?}", docids)
             } else {
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
-            let position_range = format!("{:?}", left..=right);
+            let position_range = if level == 0 {
+                format!("{:?}", left)
+            } else {
+                format!("{:?}", left..=right)
+            };
+            let level = level.to_string();
             wtr.write_record(&[w, &level, &position_range, &count, &docids])?;
         }
     }
