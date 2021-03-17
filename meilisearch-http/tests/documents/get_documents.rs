@@ -33,7 +33,7 @@ async fn get_document() {
         }
     ]);
     let (_, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
     index.wait_update_id(0).await;
     let (response, code) = index.get_document(0, None).await;
     assert_eq!(code, 200);

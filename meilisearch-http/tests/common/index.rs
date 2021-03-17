@@ -23,7 +23,7 @@ impl Index<'_> {
             .service
             .post_str(url, include_str!("../assets/test_set.json"))
             .await;
-        assert_eq!(code, 200);
+        assert_eq!(code, 202);
         let update_id = response["updateId"].as_i64().unwrap();
         self.wait_update_id(update_id as u64).await;
         update_id as u64

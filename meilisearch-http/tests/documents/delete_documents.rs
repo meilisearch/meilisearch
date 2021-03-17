@@ -15,7 +15,7 @@ async fn delete_one_unexisting_document() {
     let index = server.index("test");
     index.create(None).await;
     let (_response, code) = index.delete_document(0).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
     let update = index.wait_update_id(0).await;
     assert_eq!(update["status"], "processed");
 }
@@ -29,7 +29,7 @@ async fn delete_one_document() {
         .await;
     index.wait_update_id(0).await;
     let (_response, code) = server.index("test").delete_document(0).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
     index.wait_update_id(1).await;
 
     let (_response, code) = index.get_document(0, None).await;
@@ -55,7 +55,7 @@ async fn clear_all_documents() {
         .await;
     index.wait_update_id(0).await;
     let (_response, code) = index.clear_all_documents().await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     let _update = index.wait_update_id(1).await;
     let (response, code) = index
@@ -72,7 +72,7 @@ async fn clear_all_documents_empty_index() {
     index.create(None).await;
 
     let (_response, code) = index.clear_all_documents().await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     let _update = index.wait_update_id(0).await;
     let (response, code) = index
@@ -96,7 +96,7 @@ async fn delete_batch() {
     index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
     index.wait_update_id(0).await;
     let (_response, code) = index.delete_batch(vec![1, 0]).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     let _update = index.wait_update_id(1).await;
     let (response, code) = index
@@ -114,7 +114,7 @@ async fn delete_no_document_batch() {
     index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
     index.wait_update_id(0).await;
     let (_response, code) = index.delete_batch(vec![]).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     let _update = index.wait_update_id(1).await;
     let (response, code) = index
