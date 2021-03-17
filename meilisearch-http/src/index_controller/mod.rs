@@ -20,6 +20,7 @@ use tokio::time::sleep;
 
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
+use crate::option::Opt;
 
 pub use updates::{Failed, Processed, Processing};
 use snapshot::SnapshotService;
@@ -64,20 +65,28 @@ pub struct IndexController {
 impl IndexController {
     pub fn new(
         path: impl AsRef<Path>,
-        index_size: usize,
-        update_store_size: usize,
+        options: &Opt,
     ) -> anyhow::Result<Self> {
+        let index_size = options.max_mdb_size.get_bytes() as usize;
+        let update_store_size = options.max_udb_size.get_bytes() as usize;
+
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
         let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
         let update_handle =
             update_actor::UpdateActorHandle::new(index_handle.clone(), &path, update_store_size)?;
-        let snapshot_service = SnapshotService::new(
-            index_handle.clone(),
-            uuid_resolver.clone(),
-            update_handle.clone(),
-            Duration::from_millis(10000),
-            "/dev/toto".into());
-        tokio::task::spawn(snapshot_service.run());
+
+        if options.schedule_snapshot {
+            let snapshot_service = SnapshotService::new(
+                index_handle.clone(),
+                uuid_resolver.clone(),
+                update_handle.clone(),
+                Duration::from_secs(options.snapshot_interval_sec),
+                options.snapshot_dir.clone()
+            );
+
+            tokio::task::spawn(snapshot_service.run());
+        }
+
         Ok(Self {
             uuid_resolver,
             index_handle,
