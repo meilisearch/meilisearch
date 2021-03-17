@@ -263,6 +263,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     facet_min_level_size: Option<NonZeroUsize>,
     words_prefix_threshold: Option<f64>,
     max_prefix_length: Option<usize>,
+    words_positions_level_group_size: Option<NonZeroUsize>,
+    words_positions_min_level_size: Option<NonZeroUsize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -290,6 +292,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             facet_min_level_size: None,
             words_prefix_threshold: None,
             max_prefix_length: None,
+            words_positions_level_group_size: None,
+            words_positions_min_level_size: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -737,6 +741,19 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         if let Some(value) = self.max_prefix_length {
             builder.max_prefix_length(value);
+        }
+        builder.execute()?;
+
+        // Run the words level positions update operation.
+        let mut builder = WordsLevelPositions::new(self.wtxn, self.index, self.update_id);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        if let Some(value) = self.words_positions_level_group_size {
+            builder.level_group_size(value);
+        }
+        if let Some(value) = self.words_positions_min_level_size {
+            builder.min_level_size(value);
         }
         builder.execute()?;
 
