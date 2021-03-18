@@ -366,6 +366,7 @@ pub mod test {
         word_prefix_docids: HashMap<String, RoaringBitmap>,
         word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         word_prefix_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
+        docid_words: HashMap<u32, Vec<String>>,
     }
 
     impl<'a> Context for TestContext<'a> {
@@ -399,8 +400,17 @@ pub mod test {
             self.word_prefix_docids.contains_key(&word.to_string())
         }
 
-        fn docid_words_positions(&self, _docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
-            todo!()
+        fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
+            if let Some(docid_words) = self.docid_words.get(&docid) {
+                Ok(docid_words
+                    .iter()
+                    .enumerate()
+                    .map(|(i,w)| (w.clone(), RoaringBitmap::from_sorted_iter(std::iter::once(i as u32))))
+                    .collect()
+                )
+            } else {
+                Ok(HashMap::new())
+            }
         }
     }
 
@@ -435,50 +445,58 @@ pub mod test {
                 s("morning")    => random_postings(rng,    125),
             };
 
+            let mut docid_words = HashMap::new();
+            for (word, docids) in word_docids.iter() {
+                for docid in docids {
+                    let words = docid_words.entry(docid).or_insert(vec![]);
+                    words.push(word.clone());
+                }
+            }
+
             let word_prefix_docids = hashmap!{
                 s("h")   => &word_docids[&s("hello")] | &word_docids[&s("hi")],
                 s("wor") => &word_docids[&s("word")]  | &word_docids[&s("world")],
                 s("20")  => &word_docids[&s("2020")]  | &word_docids[&s("2021")],
             };
 
-            let hello_world = &word_docids[&s("hello")] & &word_docids[&s("world")];
-            let hello_world_split = (hello_world.len() / 2) as usize;
-            let hello_world_1 = hello_world.iter().take(hello_world_split).collect();
-            let hello_world_2 = hello_world.iter().skip(hello_world_split).collect();
-
-            let hello_word = &word_docids[&s("hello")] & &word_docids[&s("word")];
-            let hello_word_split = (hello_word.len() / 2) as usize;
-            let hello_word_4 = hello_word.iter().take(hello_word_split).collect();
-            let hello_word_6 = hello_word.iter().skip(hello_word_split).take(hello_word_split/2).collect();
-            let hello_word_7 = hello_word.iter().skip(hello_word_split + hello_word_split/2).collect();
-            let word_pair_proximity_docids = hashmap!{
-                (s("good"), s("morning"), 1)   => &word_docids[&s("good")] & &word_docids[&s("morning")],
-                (s("hello"), s("world"), 1)   => hello_world_1,
-                (s("hello"), s("world"), 4)   => hello_world_2,
-                (s("this"), s("is"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")],
-                (s("is"), s("2021"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")] & &word_docids[&s("2021")],
-                (s("is"), s("2020"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")] & (&word_docids[&s("2020")] - &word_docids[&s("2021")]),
-                (s("this"), s("2021"), 2)   => &word_docids[&s("this")] & &word_docids[&s("is")] & &word_docids[&s("2021")],
-                (s("this"), s("2020"), 2)   => &word_docids[&s("this")] & &word_docids[&s("is")] & (&word_docids[&s("2020")] - &word_docids[&s("2021")]),
-                (s("word"), s("split"), 1)   => &word_docids[&s("word")] & &word_docids[&s("split")],
-                (s("world"), s("split"), 1)   => (&word_docids[&s("world")] & &word_docids[&s("split")]) - &word_docids[&s("word")],
-                (s("hello"), s("word"), 4) => hello_word_4,
-                (s("hello"), s("word"), 6) => hello_word_6,
-                (s("hello"), s("word"), 7) => hello_word_7,
-                (s("split"), s("ngrams"), 3)   => (&word_docids[&s("split")] & &word_docids[&s("ngrams")]) - &word_docids[&s("word")],
-                (s("split"), s("ngrams"), 5)   => &word_docids[&s("split")] & &word_docids[&s("ngrams")] & &word_docids[&s("word")],
-                (s("this"), s("ngrams"), 1)   => (&word_docids[&s("split")] & &word_docids[&s("this")] & &word_docids[&s("ngrams")] ) - &word_docids[&s("word")],
-                (s("this"), s("ngrams"), 2)   => &word_docids[&s("split")] & &word_docids[&s("this")] & &word_docids[&s("ngrams")] & &word_docids[&s("word")],
-            };
-
-            let word_prefix_pair_proximity_docids = hashmap!{
-                (s("hello"), s("wor"), 1) => word_pair_proximity_docids.get(&(s("hello"), s("world"), 1)).unwrap().clone(),
-                (s("hello"), s("wor"), 4) => word_pair_proximity_docids.get(&(s("hello"), s("world"), 4)).unwrap() | word_pair_proximity_docids.get(&(s("hello"), s("word"), 4)).unwrap(),
-                (s("hello"), s("wor"), 6) => word_pair_proximity_docids.get(&(s("hello"), s("word"), 6)).unwrap().clone(),
-                (s("hello"), s("wor"), 7) => word_pair_proximity_docids.get(&(s("hello"), s("word"), 7)).unwrap().clone(),
-                (s("is"), s("20"), 1) => word_pair_proximity_docids.get(&(s("is"), s("2020"), 1)).unwrap() | word_pair_proximity_docids.get(&(s("is"), s("2021"), 1)).unwrap(),
-                (s("this"), s("20"), 2) => word_pair_proximity_docids.get(&(s("this"), s("2020"), 2)).unwrap() | word_pair_proximity_docids.get(&(s("this"), s("2021"), 2)).unwrap(),
-            };
+            let mut word_pair_proximity_docids = HashMap::new();
+            let mut word_prefix_pair_proximity_docids = HashMap::new();
+            for (lword, lcandidates) in &word_docids {
+                for (rword, rcandidates) in &word_docids {
+                    if lword == rword { continue }
+                    let candidates = lcandidates & rcandidates;
+                    for candidate in candidates {
+                        if let Some(docid_words) = docid_words.get(&candidate) {
+                            let lposition = docid_words.iter().position(|w| w == lword).unwrap();
+                            let rposition = docid_words.iter().position(|w| w == rword).unwrap();
+                            let key = if lposition < rposition {
+                                (s(lword), s(rword), (rposition - lposition) as i32)
+                            } else {
+                                (s(lword), s(rword), (lposition - rposition + 1) as i32)
+                            };
+                            let docids = word_pair_proximity_docids.entry(key).or_insert(RoaringBitmap::new());
+                            docids.push(candidate);
+                        }
+                    }
+                }
+                for (pword, pcandidates) in &word_prefix_docids {
+                    if lword.starts_with(pword) { continue }
+                    let candidates = lcandidates & pcandidates;
+                    for candidate in candidates {
+                        if let Some(docid_words) = docid_words.get(&candidate) {
+                            let lposition = docid_words.iter().position(|w| w == lword).unwrap();
+                            let rposition = docid_words.iter().position(|w| w.starts_with(pword)).unwrap();
+                            let key = if lposition < rposition {
+                                (s(lword), s(pword), (rposition - lposition) as i32)
+                            } else {
+                                (s(lword), s(pword), (lposition - rposition + 1) as i32)
+                            };
+                            let docids = word_prefix_pair_proximity_docids.entry(key).or_insert(RoaringBitmap::new());
+                            docids.push(candidate);
+                        }
+                    }
+                }
+            }
 
             let mut keys = word_docids.keys().collect::<Vec<_>>();
             keys.sort_unstable();
@@ -490,6 +508,7 @@ pub mod test {
                 word_prefix_docids,
                 word_pair_proximity_docids,
                 word_prefix_pair_proximity_docids,
+                docid_words,
             }
         }
     }
