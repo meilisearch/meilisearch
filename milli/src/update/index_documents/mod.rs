@@ -718,19 +718,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         builder.execute()?;
 
-        // Run the words positions update operation.
-        let mut builder = WordsLevelPositions::new(self.wtxn, self.index, self.update_id);
-        builder.chunk_compression_type = self.chunk_compression_type;
-        builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
-        if let Some(value) = self.facet_level_group_size {
-            builder.level_group_size(value);
-        }
-        if let Some(value) = self.facet_min_level_size {
-            builder.min_level_size(value);
-        }
-        builder.execute()?;
-
         // Run the words prefixes update operation.
         let mut builder = WordsPrefixes::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
