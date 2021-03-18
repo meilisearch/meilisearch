@@ -280,7 +280,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        debug!("Processing update {}", meta.id());
+        log::info!("Processing update {}", meta.id());
         let uuid = meta.index_uuid();
         let update_handler = self.update_handler.clone();
         let index = match self.store.get(*uuid).await? {
@@ -443,7 +443,7 @@ impl IndexActorHandle {
     ) -> anyhow::Result<UpdateResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update { ret, meta, data };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.write_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -500,7 +500,7 @@ impl IndexActorHandle {
     pub async fn delete(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Delete { uuid, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.write_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
