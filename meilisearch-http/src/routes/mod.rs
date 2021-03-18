@@ -29,11 +29,23 @@ impl IndexUpdateResponse {
     }
 }
 
+/// Return the dashboard, should not be used in production. See [running]
 #[get("/")]
 pub async fn load_html() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../../public/interface.html").to_string())
+}
+
+/// Always return a 200 with:
+/// ```json
+/// {
+///     "status": "Meilisearch is running"
+/// }
+/// ```
+#[get("/")]
+pub async fn running() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
 #[get("/bulma.min.css")]

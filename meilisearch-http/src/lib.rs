@@ -63,6 +63,7 @@ pub fn create_app(
             .service(routes::load_css)
     } else {
         app
+            .service(routes::running)
     }
 }
 
