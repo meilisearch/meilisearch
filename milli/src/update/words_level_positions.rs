@@ -1,4 +1,5 @@
 use std::cmp;
+use std::convert::TryFrom;
 use std::fs::File;
 use std::num::NonZeroUsize;
 
@@ -9,9 +10,9 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::{StrLevelPositionCodec, CboRoaringBitmapCodec};
-use crate::Index;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::{Index, TreeLevel};
 
 pub struct WordsLevelPositions<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -105,8 +106,8 @@ fn compute_positions_levels(
         let (word, ()) = result?;
 
         let level_0_range = {
-            let left = (word, 0, u32::min_value(), u32::min_value());
-            let right = (word, 0, u32::max_value(), u32::max_value());
+            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
+            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
             left..=right
         };
 
@@ -117,7 +118,7 @@ fn compute_positions_levels(
         // Groups sizes are always a power of the original level_group_size and therefore a group
         // always maps groups of the previous level and never splits previous levels groups in half.
         let group_size_iter = (1u8..)
-            .map(|l| (l, level_group_size.get().pow(l as u32)))
+            .map(|l| (TreeLevel::try_from(l).unwrap(), level_group_size.get().pow(l as u32)))
             .take_while(|(_, s)| first_level_size / *s >= min_level_size.get());
 
         // As specified in the documentation, we also write the level 0 entries.
@@ -163,7 +164,7 @@ fn compute_positions_levels(
 fn write_level_entry(
     writer: &mut Writer<File>,
     word: &str,
-    level: u8,
+    level: TreeLevel,
     left: u32,
     right: u32,
     ids: &RoaringBitmap,

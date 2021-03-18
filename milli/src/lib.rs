@@ -9,6 +9,7 @@ pub mod facet;
 pub mod heed_codec;
 pub mod index;
 pub mod proximity;
+pub mod tree_level;
 pub mod update;
 
 use std::borrow::Cow;
@@ -27,6 +28,7 @@ pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringB
 pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec};
 pub use self::index::Index;
 pub use self::search::{Search, FacetDistribution, FacetCondition, SearchResult, MatchingWords};
+pub use self::tree_level::TreeLevel;
 pub use self::update_store::UpdateStore;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;

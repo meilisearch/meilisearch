@@ -5,7 +5,7 @@ use std::{str, io, fmt};
 use anyhow::Context;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
-use milli::Index;
+use milli::{Index, TreeLevel};
 use structopt::StructOpt;
 
 use Command::*;
@@ -561,13 +561,12 @@ fn words_level_positions_docids(
 
     for word in words.iter().map(AsRef::as_ref) {
         let range = {
-            let left = (word, 0, u32::min_value(), u32::min_value());
-            let right = (word, u8::max_value(), u32::max_value(), u32::max_value());
+            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
+            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
             left..=right
         };
         for result in index.word_level_position_docids.range(rtxn, &range)? {
             let ((w, level, left, right), docids) = result?;
-            if word != w { break }
 
             let count = docids.len().to_string();
             let docids = if debug {
@@ -575,7 +574,7 @@ fn words_level_positions_docids(
             } else {
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
-            let position_range = if level == 0 {
+            let position_range = if level == TreeLevel::min_value() {
                 format!("{:?}", left)
             } else {
                 format!("{:?}", left..=right)
