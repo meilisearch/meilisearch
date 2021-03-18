@@ -10,5 +10,5 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 #[get("/health")]
 async fn get_health() -> Result<HttpResponse, ResponseError> {
     let payload = serde_json::json!({ "status": "available" });
-    Ok(HttpResponse::Ok().body(payload.to_string()))
+    Ok(HttpResponse::Ok().json(payload))
 }
