@@ -131,7 +131,7 @@ async fn update_all(
         .update_settings(index_uid.into_inner(), body.into_inner(), true)
         .await
     {
-        Ok(update_result) => Ok(HttpResponse::Ok().json(update_result)),
+        Ok(update_result) => Ok(HttpResponse::Accepted().json(update_result)),
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -161,7 +161,7 @@ async fn delete_all(
         .update_settings(index_uid.into_inner(), settings, false)
         .await
     {
-        Ok(update_result) => Ok(HttpResponse::Ok().json(update_result)),
+        Ok(update_result) => Ok(HttpResponse::Accepted().json(update_result)),
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }

@@ -101,9 +101,11 @@ async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_response, code) = index.update_settings(json!({})).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
+    let (_response, code) = index.delete_settings().await;
+    assert_eq!(code, 202);
 }
 
 #[actix_rt::test]
