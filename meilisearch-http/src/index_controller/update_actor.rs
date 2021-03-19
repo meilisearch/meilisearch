@@ -55,6 +55,11 @@ enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
+    Snapshot {
+        uuids: Vec<Uuid>,
+        path: PathBuf,
+        ret: oneshot::Sender<Result<()>>,
+    }
 }
 
 struct UpdateActor<D, S> {
@@ -112,6 +117,9 @@ where
                 }
                 Some(Create { uuid, ret }) => {
                     let _ = ret.send(self.handle_create(uuid).await);
+                }
+                Some(Snapshot { uuids, path, ret }) => {
+                    let _ = ret.send(self.handle_snapshot(uuids, path).await);
                 }
                 None => break,
             }
@@ -232,6 +240,16 @@ where
         let _ = self.store.get_or_create(uuid).await?;
         Ok(())
     }
+
+    async fn handle_snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+        use tokio::time;
+        use std::time::Duration;
+
+        println!("performing update snapshot");
+        time::sleep(Duration::from_secs(2)).await;
+        println!("Update snapshot done");
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -274,7 +292,9 @@ where
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
+}
 
+impl<D> UpdateActorHandle<D> {
     pub async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::ListUpdates { uuid, ret };
@@ -299,6 +319,13 @@ where
     pub async fn create(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Create { uuid, ret };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
+
+    pub async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::Snapshot { uuids, path, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

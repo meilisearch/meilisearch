@@ -8,7 +8,7 @@ use async_stream::stream;
 use chrono::{DateTime, Utc};
 use futures::pin_mut;
 use futures::stream::StreamExt;
-use heed::EnvOpenOptions;
+use heed::{CompactionOption, EnvOpenOptions};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -103,6 +103,11 @@ enum IndexMsg {
         index_settings: IndexSettings,
         ret: oneshot::Sender<Result<IndexMeta>>,
     },
+    Snapshot {
+        uuids: Vec<Uuid>,
+        path: PathBuf,
+        ret: oneshot::Sender<Result<()>>,
+    }
 }
 
 struct IndexActor<S> {
@@ -250,6 +255,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 ret,
             } => {
                 let _ = ret.send(self.handle_update_index(uuid, index_settings).await);
+            }
+            Snapshot { uuids, path, ret } => {
+                let _ = ret.send(self.handle_snapshot(uuids, path).await);
             }
         }
     }
@@ -403,6 +411,39 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         .await
         .map_err(|e| IndexError::Error(e.into()))?
     }
+
+    async fn handle_snapshot(&self, uuids: Vec<Uuid>, mut path: PathBuf) -> Result<()> {
+        use tokio::fs::create_dir_all;
+
+        path.push("indexes");
+        println!("performing index snapshot in {:?}", path);
+        create_dir_all(&path)
+            .await
+            .map_err(|e| IndexError::Error(e.into()))?;
+
+        let mut handles = Vec::new();
+        for uuid in uuids {
+            if let Some(index) = self.store.get(uuid).await? {
+                let index_path = path.join(format!("index-{}", uuid));
+                let handle = spawn_blocking(move || -> anyhow::Result<()> {
+                    // Get write txn to wait for ongoing write transaction before snapshot.
+                    let _txn = index.write_txn()?;
+                    index.env.copy_to_path(index_path, CompactionOption::Enabled)?;
+                    Ok(())
+                });
+                handles.push(handle);
+            }
+        }
+
+        for handle in handles {
+            handle
+                .await
+                .map_err(|e| IndexError::Error(e.into()))?
+                .map_err(|e| IndexError::Error(e.into()))?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -520,6 +561,17 @@ impl IndexActorHandle {
         let msg = IndexMsg::UpdateIndex {
             uuid,
             index_settings,
+            ret,
+        };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    pub async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Snapshot {
+            uuids,
+            path,
             ret,
         };
         let _ = self.read_sender.send(msg).await;

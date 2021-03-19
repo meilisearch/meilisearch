@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
+use std::fs::create_dir_all;
 
 use tokio::time::interval;
+use uuid::Uuid;
 
 use super::index_actor::IndexActorHandle;
 use super::update_actor::UpdateActorHandle;
@@ -38,11 +40,20 @@ impl<B> SnapshotService<B> {
 
         loop {
             interval.tick().await;
-            self.perform_snapshot().await;
+            self.perform_snapshot().await.unwrap();
         }
     }
 
-    async fn perform_snapshot(&self) {
-        println!("performing snapshot in {:?}", self.snapshot_path);
+    async fn perform_snapshot(&self) -> anyhow::Result<()> {
+        let temp_snapshot_path = self
+            .snapshot_path
+            .join(format!("tmp-{}", Uuid::new_v4()));
+        create_dir_all(&temp_snapshot_path)?;
+        let uuids = self.uuid_resolver_handle.snapshot(temp_snapshot_path.clone()).await?;
+        let index_snapshot = self.index_handle.snapshot(uuids.clone(), temp_snapshot_path.clone());
+        let updates_snapshot = self.update_handle.snapshot(uuids.clone(), temp_snapshot_path.clone());
+        let (first, second) = tokio::join!(updates_snapshot, index_snapshot);
+        println!("results: {:?}, {:?}", first, second);
+        Ok(())
     }
 }

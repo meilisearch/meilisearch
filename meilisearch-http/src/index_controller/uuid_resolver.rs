@@ -1,4 +1,5 @@
-use std::{fs::create_dir_all, path::Path};
+use std::fs::create_dir_all;
+use std::path::{Path, PathBuf};
 
 use heed::{
     types::{ByteSlice, Str},
@@ -8,6 +9,7 @@ use log::{info, warn};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
+use heed::CompactionOption;
 
 pub type Result<T> = std::result::Result<T, UuidError>;
 
@@ -31,6 +33,10 @@ enum UuidResolveMsg {
     },
     List {
         ret: oneshot::Sender<Result<Vec<(String, Uuid)>>>,
+    },
+    SnapshotRequest {
+        path: PathBuf,
+        ret: oneshot::Sender<Result<Vec<Uuid>>>,
     },
 }
 
@@ -65,6 +71,9 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 }
                 Some(List { ret }) => {
                     let _ = ret.send(self.handle_list().await);
+                }
+                Some(SnapshotRequest { path, ret }) => {
+                    let _ = ret.send(self.handle_snapshot(path).await);
                 }
                 // all senders have been dropped, need to quit.
                 None => break,
@@ -105,6 +114,10 @@ impl<S: UuidStore> UuidResolverActor<S> {
     async fn handle_list(&self) -> Result<Vec<(String, Uuid)>> {
         let result = self.store.list().await?;
         Ok(result)
+    }
+
+    async fn handle_snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>> {
+        self.store.snapshot(path).await
     }
 }
 
@@ -171,6 +184,15 @@ impl UuidResolverHandle {
             .await
             .expect("Uuid resolver actor has been killed")?)
     }
+
+    pub async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::SnapshotRequest { path, ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -197,6 +219,7 @@ trait UuidStore {
     async fn get_uuid(&self, uid: String) -> Result<Option<Uuid>>;
     async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
+    async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>>;
 }
 
 struct HeedUuidStore {
@@ -242,7 +265,6 @@ impl UuidStore for HeedUuidStore {
         })
         .await?
     }
-
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
         let db = self.db;
@@ -288,6 +310,25 @@ impl UuidStore for HeedUuidStore {
                 let uuid = Uuid::from_slice(uuid)?;
                 entries.push((name.to_owned(), uuid))
             }
+            Ok(entries)
+        })
+        .await?
+    }
+
+    async fn snapshot(&self, mut path: PathBuf) -> Result<Vec<Uuid>> {
+        let env = self.env.clone();
+        let db = self.db;
+        tokio::task::spawn_blocking(move || {
+            // Write transaction to acquire a lock on the database.
+            let txn = env.write_txn()?;
+            let mut entries = Vec::new();
+            for entry in db.iter(&txn)? {
+                let (_, uuid) = entry?;
+                let uuid = Uuid::from_slice(uuid)?;
+                entries.push(uuid)
+            }
+            path.push("uuids");
+            env.copy_to_path(path, CompactionOption::Enabled)?;
             Ok(entries)
         })
         .await?
