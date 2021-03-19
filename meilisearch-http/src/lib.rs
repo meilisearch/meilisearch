@@ -44,7 +44,7 @@ macro_rules! create_app {
         let app = if $enable_frontend {
             app.service(load_html).service(load_css)
         } else {
-            app
+            app.service(running)
         };
         app.wrap(
             Cors::default()
