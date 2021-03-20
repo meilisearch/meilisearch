@@ -1,15 +1,16 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::io::SeekFrom;
 use std::fs::{create_dir_all, remove_dir_all};
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use super::index_actor::IndexActorHandle;
+use heed::CompactionOption;
 use log::info;
 use oxidized_json_checker::JsonChecker;
-use super::index_actor::IndexActorHandle;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncWriteExt, AsyncSeekExt};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
@@ -56,16 +57,17 @@ enum UpdateMsg<D> {
         ret: oneshot::Sender<Result<()>>,
     },
     Snapshot {
-        uuids: Vec<Uuid>,
+        uuid: Uuid,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
-    }
+    },
 }
 
 struct UpdateActor<D, S> {
     path: PathBuf,
     store: S,
     inbox: mpsc::Receiver<UpdateMsg<D>>,
+    index_handle: IndexActorHandle,
 }
 
 #[async_trait::async_trait]
@@ -84,11 +86,17 @@ where
         store: S,
         inbox: mpsc::Receiver<UpdateMsg<D>>,
         path: impl AsRef<Path>,
+        index_handle: IndexActorHandle,
     ) -> anyhow::Result<Self> {
-        let path = path.as_ref().to_owned().join("update_files");
-        create_dir_all(&path)?;
+        let path = path.as_ref().to_owned();
+        create_dir_all(path.join("update_files"))?;
         assert!(path.exists());
-        Ok(Self { store, inbox, path })
+        Ok(Self {
+            store,
+            inbox,
+            path,
+            index_handle,
+        })
     }
 
     async fn run(mut self) {
@@ -118,8 +126,8 @@ where
                 Some(Create { uuid, ret }) => {
                     let _ = ret.send(self.handle_create(uuid).await);
                 }
-                Some(Snapshot { uuids, path, ret }) => {
-                    let _ = ret.send(self.handle_snapshot(uuids, path).await);
+                Some(Snapshot { uuid, path, ret }) => {
+                    let _ = ret.send(self.handle_snapshot(uuid, path).await);
                 }
                 None => break,
             }
@@ -134,7 +142,9 @@ where
     ) -> Result<UpdateStatus> {
         let update_store = self.store.get_or_create(uuid).await?;
         let update_file_id = uuid::Uuid::new_v4();
-        let path = self.path.join(format!("update_{}", update_file_id));
+        let path = self
+            .path
+            .join(format!("update_files/update_{}", update_file_id));
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -167,10 +177,15 @@ where
         let mut file = file.into_std().await;
 
         tokio::task::spawn_blocking(move || {
-            use std::io::{BufReader, sink, copy, Seek};
+            use std::io::{copy, sink, BufReader, Seek};
 
             // If the payload is empty, ignore the check.
-            if file.metadata().map_err(|e| UpdateError::Error(Box::new(e)))?.len() > 0 {
+            if file
+                .metadata()
+                .map_err(|e| UpdateError::Error(Box::new(e)))?
+                .len()
+                > 0
+            {
                 // Check that the json payload is valid:
                 let reader = BufReader::new(&mut file);
                 let mut checker = JsonChecker::new(reader);
@@ -241,13 +256,32 @@ where
         Ok(())
     }
 
-    async fn handle_snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
-        use tokio::time;
-        use std::time::Duration;
+    async fn handle_snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+        use tokio::fs;
 
-        println!("performing update snapshot");
-        time::sleep(Duration::from_secs(2)).await;
-        println!("Update snapshot done");
+        let update_path = path.join("updates");
+        fs::create_dir_all(&update_path)
+            .await
+            .map_err(|e| UpdateError::Error(e.into()))?;
+
+        let index_handle = self.index_handle.clone();
+        if let Some(update_store) = self.store.get(uuid).await? {
+            let snapshot_path = update_path.join(format!("update-{}", uuid));
+            tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                let _txn = update_store.env.write_txn()?;
+                update_store
+                    .env
+                    .copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+                futures::executor::block_on(
+                    async move { index_handle.snapshot(uuid, path).await },
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| UpdateError::Error(e.into()))?
+            .map_err(|e| UpdateError::Error(e.into()))?;
+        }
+
         Ok(())
     }
 }
@@ -268,8 +302,8 @@ where
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);
-        let store = MapUpdateStoreStore::new(index_handle, &path, update_store_size);
-        let actor = UpdateActor::new(store, receiver, path)?;
+        let store = MapUpdateStoreStore::new(index_handle.clone(), &path, update_store_size);
+        let actor = UpdateActor::new(store, receiver, path, index_handle)?;
 
         tokio::task::spawn(actor.run());
 
@@ -323,9 +357,9 @@ impl<D> UpdateActorHandle<D> {
         receiver.await.expect("update actor killed.")
     }
 
-    pub async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+    pub async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Snapshot { uuids, path, ret };
+        let msg = UpdateMsg::Snapshot { uuid, path, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

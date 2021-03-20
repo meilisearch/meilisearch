@@ -50,10 +50,9 @@ impl<B> SnapshotService<B> {
             .join(format!("tmp-{}", Uuid::new_v4()));
         create_dir_all(&temp_snapshot_path)?;
         let uuids = self.uuid_resolver_handle.snapshot(temp_snapshot_path.clone()).await?;
-        let index_snapshot = self.index_handle.snapshot(uuids.clone(), temp_snapshot_path.clone());
-        let updates_snapshot = self.update_handle.snapshot(uuids.clone(), temp_snapshot_path.clone());
-        let (first, second) = tokio::join!(updates_snapshot, index_snapshot);
-        println!("results: {:?}, {:?}", first, second);
+        for uuid in uuids {
+            self.update_handle.snapshot(uuid, temp_snapshot_path.clone()).await?;
+        }
         Ok(())
     }
 }

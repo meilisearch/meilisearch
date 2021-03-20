@@ -104,7 +104,7 @@ enum IndexMsg {
         ret: oneshot::Sender<Result<IndexMeta>>,
     },
     Snapshot {
-        uuids: Vec<Uuid>,
+        uuid: Uuid,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     }
@@ -256,8 +256,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             } => {
                 let _ = ret.send(self.handle_update_index(uuid, index_settings).await);
             }
-            Snapshot { uuids, path, ret } => {
-                let _ = ret.send(self.handle_snapshot(uuids, path).await);
+            Snapshot { uuid, path, ret } => {
+                let _ = ret.send(self.handle_snapshot(uuid, path).await);
             }
         }
     }
@@ -412,7 +412,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         .map_err(|e| IndexError::Error(e.into()))?
     }
 
-    async fn handle_snapshot(&self, uuids: Vec<Uuid>, mut path: PathBuf) -> Result<()> {
+    async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> Result<()> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
@@ -421,25 +421,14 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .await
             .map_err(|e| IndexError::Error(e.into()))?;
 
-        let mut handles = Vec::new();
-        for uuid in uuids {
-            if let Some(index) = self.store.get(uuid).await? {
-                let index_path = path.join(format!("index-{}", uuid));
-                let handle = spawn_blocking(move || -> anyhow::Result<()> {
-                    // Get write txn to wait for ongoing write transaction before snapshot.
-                    let _txn = index.write_txn()?;
-                    index.env.copy_to_path(index_path, CompactionOption::Enabled)?;
-                    Ok(())
-                });
-                handles.push(handle);
-            }
-        }
-
-        for handle in handles {
-            handle
-                .await
-                .map_err(|e| IndexError::Error(e.into()))?
-                .map_err(|e| IndexError::Error(e.into()))?;
+        if let Some(index) = self.store.get(uuid).await? {
+            let index_path = path.join(format!("index-{}", uuid));
+            spawn_blocking(move || -> anyhow::Result<()> {
+                // Get write txn to wait for ongoing write transaction before snapshot.
+                let _txn = index.write_txn()?;
+                index.env.copy_to_path(index_path, CompactionOption::Enabled)?;
+                Ok(())
+            });
         }
 
         Ok(())
@@ -567,10 +556,10 @@ impl IndexActorHandle {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    pub async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+    pub async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Snapshot {
-            uuids,
+            uuid,
             path,
             ret,
         };

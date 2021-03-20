@@ -16,7 +16,7 @@ type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 #[derive(Clone)]
 pub struct UpdateStore<M, N, E> {
-    env: Env,
+    pub env: Env,
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<Pending<M>>>,
     pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
