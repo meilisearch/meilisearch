@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::index_actor::IndexActorHandle;
-use heed::CompactionOption;
 use log::info;
 use oxidized_json_checker::JsonChecker;
 use thiserror::Error;
@@ -257,21 +256,17 @@ where
     }
 
     async fn handle_snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
-        use tokio::fs;
-
-        let update_path = path.join("updates");
-        fs::create_dir_all(&update_path)
-            .await
-            .map_err(|e| UpdateError::Error(e.into()))?;
-
         let index_handle = self.index_handle.clone();
         if let Some(update_store) = self.store.get(uuid).await? {
-            let snapshot_path = update_path.join(format!("update-{}", uuid));
             tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-                let _txn = update_store.env.write_txn()?;
-                update_store
-                    .env
-                    .copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+                // acquire write lock to prevent further writes during snapshot
+                // the update lock must be acquired BEFORE the write lock to prevent dead lock
+                let _lock = update_store.update_lock.lock();
+                let mut txn = update_store.env.write_txn()?;
+
+                // create db snapshot
+                update_store.snapshot(&mut txn, &path, uuid)?;
+
                 futures::executor::block_on(
                     async move { index_handle.snapshot(uuid, path).await },
                 )?;

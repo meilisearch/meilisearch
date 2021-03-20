@@ -1,10 +1,10 @@
-use std::fs::remove_file;
+use std::fs::{remove_file, create_dir_all, copy};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
-use heed::{Database, Env, EnvOpenOptions};
-use parking_lot::RwLock;
+use heed::{Database, Env, EnvOpenOptions, CompactionOption};
+use parking_lot::{RwLock, Mutex};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use tokio::sync::mpsc;
@@ -24,6 +24,9 @@ pub struct UpdateStore<M, N, E> {
     aborted_meta: Database<OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
     processing: Arc<RwLock<Option<Processing<M>>>>,
     notification_sender: mpsc::Sender<()>,
+    /// A lock on the update loop. This is meant to prevent a snapshot to occur while an update is
+    /// processing, while not preventing writes all together during an update
+    pub update_lock: Arc<Mutex<()>>,
 }
 
 pub trait HandleUpdate<M, N, E> {
@@ -76,6 +79,8 @@ where
         // Send a first notification to trigger the process.
         let _ = notification_sender.send(());
 
+        let update_lock = Arc::new(Mutex::new(()));
+
         let update_store = Arc::new(UpdateStore {
             env,
             pending,
@@ -85,6 +90,7 @@ where
             notification_sender,
             failed_meta,
             processing,
+            update_lock,
         });
 
         // We need a weak reference so we can take ownership on the arc later when we
@@ -190,6 +196,7 @@ where
     where
         U: HandleUpdate<M, N, E>,
     {
+        let _lock = self.update_lock.lock();
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_meta.first(&rtxn)?;
@@ -370,6 +377,33 @@ where
         wtxn.commit()?;
 
         Ok(aborted_updates)
+    }
+
+    pub fn snapshot(&self, txn: &mut heed::RwTxn, path: impl AsRef<Path>, uuid: Uuid) -> anyhow::Result<()> {
+        println!("snapshoting updates in {:?}", path.as_ref());
+        let update_path = path.as_ref().join("updates");
+        create_dir_all(&update_path)?;
+
+        let snapshot_path = update_path.join(format!("update-{}", uuid));
+        // acquire write lock to prevent further writes during snapshot
+        println!("acquired lock");
+
+        // create db snapshot
+        self.env.copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+
+        let update_files_path = update_path.join("update_files");
+        create_dir_all(&update_files_path)?;
+
+        for path in self.pending.iter(&txn)? {
+            let (_, path) = path?;
+            let name = path.file_name().unwrap();
+            let to = update_files_path.join(name);
+            copy(path, to)?;
+        }
+
+        println!("done");
+
+        Ok(())
     }
 }
 

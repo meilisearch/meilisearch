@@ -52,6 +52,7 @@ impl<B> SnapshotService<B> {
         let uuids = self.uuid_resolver_handle.snapshot(temp_snapshot_path.clone()).await?;
         for uuid in uuids {
             self.update_handle.snapshot(uuid, temp_snapshot_path.clone()).await?;
+            println!("performed snapshot for index {}", uuid);
         }
         Ok(())
     }
