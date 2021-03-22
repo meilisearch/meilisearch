@@ -7,7 +7,7 @@ use tar::{Archive, Builder};
 
 use crate::error::Error;
 
-pub fn to_tar_gz(src: &Path, dest: &Path) -> Result<(), Error> {
+pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Error> {
     let f = File::create(dest)?;
     let gz_encoder = GzEncoder::new(f, Compression::default());
     let mut tar_encoder = Builder::new(gz_encoder);

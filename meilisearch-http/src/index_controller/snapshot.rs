@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
-use std::fs::create_dir_all;
 
+use anyhow::bail;
+use tokio::fs;
+use tokio::task::spawn_blocking;
 use tokio::time::interval;
-use uuid::Uuid;
 
+use crate::helpers::compression;
 use super::index_actor::IndexActorHandle;
 use super::update_actor::UpdateActorHandle;
 use super::uuid_resolver::UuidResolverHandle;
@@ -45,15 +47,28 @@ impl<B> SnapshotService<B> {
     }
 
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
-        let temp_snapshot_path = self
-            .snapshot_path
-            .join(format!("tmp-{}", Uuid::new_v4()));
-        create_dir_all(&temp_snapshot_path)?;
+        if self.snapshot_path.file_name().is_none() {
+            bail!("invalid snapshot file path");
+        }
+
+        let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
+        let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
+
+        fs::create_dir_all(&temp_snapshot_path).await?;
+
         let uuids = self.uuid_resolver_handle.snapshot(temp_snapshot_path.clone()).await?;
         for uuid in uuids {
             self.update_handle.snapshot(uuid, temp_snapshot_path.clone()).await?;
-            println!("performed snapshot for index {}", uuid);
         }
+
+        let temp_snapshot_file = temp_snapshot_path.with_extension("temp");
+
+        let temp_snapshot_file_clone = temp_snapshot_file.clone();
+        let temp_snapshot_path_clone = temp_snapshot_path.clone();
+        spawn_blocking(move || compression::to_tar_gz(temp_snapshot_path_clone, temp_snapshot_file_clone)).await??;
+
+        fs::rename(temp_snapshot_file, &self.snapshot_path).await?;
+
         Ok(())
     }
 }
