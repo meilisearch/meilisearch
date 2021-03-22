@@ -21,6 +21,7 @@ use tokio::time::sleep;
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
 use crate::option::Opt;
+use crate::helpers::compression;
 
 use snapshot::SnapshotService;
 pub use updates::{Failed, Processed, Processing};
@@ -66,6 +67,10 @@ impl IndexController {
     pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
+
+        if let Some(ref path) = options.import_snapshot {
+            compression::from_tar_gz(path, &options.db_path)?;
+        }
 
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
         let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;

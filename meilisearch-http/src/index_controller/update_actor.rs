@@ -16,7 +16,6 @@ use uuid::Uuid;
 use super::get_arc_ownership_blocking;
 use crate::index::UpdateResult;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
-use crate::helpers::compression;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;

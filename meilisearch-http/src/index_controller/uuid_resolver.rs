@@ -10,8 +10,6 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::helpers::compression;
-
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
 pub type Result<T> = std::result::Result<T, UuidError>;
@@ -330,10 +328,14 @@ impl UuidStore for HeedUuidStore {
                 let uuid = Uuid::from_slice(uuid)?;
                 entries.push(uuid)
             }
-            path.push("index_uuids");
-            create_dir_all(&path).unwrap();
-            path.push("data.mdb");
-            env.copy_to_path(path, CompactionOption::Enabled)?;
+
+            // only perform snapshot if there are indexes
+            if !entries.is_empty() {
+                path.push("index_uuids");
+                create_dir_all(&path).unwrap();
+                path.push("data.mdb");
+                env.copy_to_path(path, CompactionOption::Enabled)?;
+            }
             Ok(entries)
         })
         .await?

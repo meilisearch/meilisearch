@@ -26,7 +26,6 @@ use crate::index_controller::{
     UpdateMeta,
 };
 use crate::option::IndexerOpts;
-use crate::helpers::compression;
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
@@ -417,7 +416,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
-        println!("performing index snapshot in {:?}", path);
         create_dir_all(&path)
             .await
             .map_err(|e| IndexError::Error(e.into()))?;
@@ -435,7 +433,10 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                     .env
                     .copy_to_path(index_path, CompactionOption::Enabled)?;
                 Ok(())
-            });
+            })
+            .await
+            .map_err(|e| IndexError::Error(e.into()))?
+            .map_err(|e| IndexError::Error(e.into()))?;
         }
 
         Ok(())
