@@ -1,3 +1,10 @@
+## v0.20.0 - 2021-03-22
+
+  - Fix build on mac M1 (#1280)
+  - Server root returns 200 in production (#1292)
+  - Healthcheck returns 200 (#1291)
+  - Snapshot temporary files are not created in /tmp anymore (#1238)
+
 ## v0.19.0 - 2021-02-09
 
   - The snapshots are now created and then renamed in atomically (#1172)
