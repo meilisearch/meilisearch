@@ -85,7 +85,7 @@ impl IndexController {
         mut payload: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        let perform_udpate = |uuid| async move {
+        let perform_update = |uuid| async move {
             let meta = UpdateMeta::DocumentsAddition {
                 method,
                 format,
@@ -93,7 +93,7 @@ impl IndexController {
             };
             let (sender, receiver) = mpsc::channel(10);
 
-            // It is necessary to spawn a local task to senf the payload to the update handle to
+            // It is necessary to spawn a local task to send the payload to the update handle to
             // prevent dead_locking between the update_handle::update that waits for the update to be
             // registered and the update_actor that waits for the the payload to be sent to it.
             tokio::task::spawn_local(async move {
@@ -115,10 +115,10 @@ impl IndexController {
         };
 
         match self.uuid_resolver.get(uid).await {
-            Ok(uuid) => Ok(perform_udpate(uuid).await?),
+            Ok(uuid) => Ok(perform_update(uuid).await?),
             Err(UuidError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
-                let status = perform_udpate(uuid).await?;
+                let status = perform_update(uuid).await?;
                 self.uuid_resolver.insert(name, uuid).await?;
                 Ok(status)
             }
