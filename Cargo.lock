@@ -1639,7 +1639,7 @@ checksum = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 
 [[package]]
 name = "meilisearch-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "arc-swap",
  "assert_matches",
@@ -1686,14 +1686,14 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "actix-http",
 ]
 
 [[package]]
 name = "meilisearch-http"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -1742,7 +1742,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-schema"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "indexmap",
  "meilisearch-error",
@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "serde",
  "zerocopy",
@@ -1918,9 +1918,9 @@ checksum = "8d3b63360ec3cb337817c2dbd47ab4a0f170d285d8e5a2064600f3def1402397"
 
 [[package]]
 name = "once_cell"
-version = "1.5.2"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13bd41f508810a131401606d54ac32a467c97172d74ba7662562ebba5ad07fa0"
+checksum = "af8b08b04175473088b46763e51ee54da5f9a164bc162f615b91bc179dbf15a3"
 
 [[package]]
 name = "oorandom"
