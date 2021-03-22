@@ -162,7 +162,7 @@ impl Index {
         );
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let document = make_document(&all_attributes, &fields_ids_map, obkv.clone())?;
+            let document = make_document(&all_attributes, &fields_ids_map, obkv)?;
             let formatted = compute_formatted(
                 &fields_ids_map,
                 obkv,

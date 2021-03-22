@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::iter::FromIterator;
 
 use actix_web::get;
 use actix_web::web;
@@ -33,7 +32,7 @@ impl From<IndexStats> for IndexStatsResponse {
         Self {
             number_of_documents: stats.number_of_documents,
             is_indexing: stats.is_indexing,
-            fields_distribution: BTreeMap::from_iter(stats.fields_distribution.into_iter()),
+            fields_distribution: stats.fields_distribution.into_iter().collect(),
         }
     }
 }
