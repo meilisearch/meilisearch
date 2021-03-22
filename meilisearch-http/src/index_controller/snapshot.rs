@@ -64,9 +64,12 @@ impl<B> SnapshotService<B> {
             return Ok(())
         }
 
-        for uuid in uuids {
-            self.update_handle.snapshot(uuid, temp_snapshot_path.clone()).await?;
-        }
+        let tasks = uuids
+            .iter()
+            .map(|&uuid| self.update_handle.snapshot(uuid, temp_snapshot_path.clone()))
+            .collect::<Vec<_>>();
+
+        futures::future::try_join_all(tasks).await?;
 
         let temp_snapshot_file = temp_snapshot_path.with_extension("temp");
 
