@@ -423,7 +423,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .map_err(|e| IndexError::Error(e.into()))?;
 
         if let Some(index) = self.store.get(uuid).await? {
-            let index_path = path.join(format!("index-{}", uuid));
+            let mut index_path = path.join(format!("index-{}", uuid));
+            create_dir_all(&index_path)
+                .await
+                .map_err(|e| IndexError::Error(e.into()))?;
+            index_path.push("data.mdb");
             spawn_blocking(move || -> anyhow::Result<()> {
                 // Get write txn to wait for ongoing write transaction before snapshot.
                 let _txn = index.write_txn()?;

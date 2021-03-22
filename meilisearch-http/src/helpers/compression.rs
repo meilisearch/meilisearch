@@ -18,10 +18,12 @@ pub fn to_tar_gz(src: &Path, dest: &Path) -> Result<(), Error> {
 }
 
 pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Error> {
+    println!("inflating from {:?} to {:?}", src.as_ref(), dest.as_ref());
     let f = File::open(&src)?;
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);
     create_dir_all(&dest)?;
     ar.unpack(&dest)?;
+    println!("here");
     Ok(())
 }

@@ -253,8 +253,9 @@ impl HeedUuidStore {
     }
 
     fn from_snapshot(snapshot: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let snapshot = snapshot.as_ref().join("uuids");
-        compression::from_tar_gz(snapshot, &path)?;
+        let src = snapshot.as_ref().join("uuids");
+        let dst = path.as_ref().join("uuids");
+        compression::from_tar_gz(src, dst)?;
         Self::new(path)
     }
 }
@@ -347,7 +348,9 @@ impl UuidStore for HeedUuidStore {
                 let uuid = Uuid::from_slice(uuid)?;
                 entries.push(uuid)
             }
-            path.push("uuids");
+            path.push("index_uuids");
+            create_dir_all(&path).unwrap();
+            path.push("data.mdb");
             env.copy_to_path(path, CompactionOption::Enabled)?;
             Ok(entries)
         })

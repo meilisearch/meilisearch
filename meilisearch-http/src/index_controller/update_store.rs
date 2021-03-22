@@ -380,13 +380,13 @@ where
     }
 
     pub fn snapshot(&self, txn: &mut heed::RwTxn, path: impl AsRef<Path>, uuid: Uuid) -> anyhow::Result<()> {
-        println!("snapshoting updates in {:?}", path.as_ref());
         let update_path = path.as_ref().join("updates");
         create_dir_all(&update_path)?;
 
-        let snapshot_path = update_path.join(format!("update-{}", uuid));
+        let mut snapshot_path = update_path.join(format!("update-{}", uuid));
         // acquire write lock to prevent further writes during snapshot
-        println!("acquired lock");
+        create_dir_all(&snapshot_path)?;
+        snapshot_path.push("data.mdb");
 
         // create db snapshot
         self.env.copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
