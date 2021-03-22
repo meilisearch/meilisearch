@@ -143,17 +143,6 @@ impl UuidResolverHandle {
         Ok(Self { sender })
     }
 
-    pub fn from_snapshot(
-        db_path: impl AsRef<Path>,
-        snapshot_path: impl AsRef<Path>
-    ) -> anyhow::Result<Self> {
-        let (sender, reveiver) = mpsc::channel(100);
-        let store = HeedUuidStore::from_snapshot(snapshot_path, db_path)?;
-        let actor = UuidResolverActor::new(reveiver, store);
-        tokio::spawn(actor.run());
-        Ok(Self { sender })
-    }
-
     pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Resolve { uid: name, ret };
@@ -250,13 +239,6 @@ impl HeedUuidStore {
         let env = options.open(path)?;
         let db = env.create_database(None)?;
         Ok(Self { env, db })
-    }
-
-    fn from_snapshot(snapshot: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let src = snapshot.as_ref().join("uuids");
-        let dst = path.as_ref().join("uuids");
-        compression::from_tar_gz(src, dst)?;
-        Self::new(path)
     }
 }
 

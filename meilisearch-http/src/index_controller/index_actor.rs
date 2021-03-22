@@ -462,22 +462,6 @@ impl IndexActorHandle {
         })
     }
 
-    pub fn from_snapshot(
-        path: impl AsRef<Path>,
-        index_size: usize,
-        snapshot_path: impl AsRef<Path>,
-    ) -> anyhow::Result<Self> {
-        let snapshot_path = snapshot_path.as_ref().join("indexes");
-        let indexes_path = path.as_ref().join("indexes");
-        for entry in snapshot_path.read_dir()? {
-            let entry = entry?;
-            let src = snapshot_path.join(entry.file_name());
-            let dest = indexes_path.join(entry.file_name());
-            compression::from_tar_gz(src, dest)?;
-        }
-        Self::new(path, index_size)
-    }
-
     pub async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::CreateIndex {

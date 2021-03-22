@@ -67,36 +67,13 @@ impl IndexController {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 
-        let uuid_resolver;
-        let index_handle;
-        let update_handle;
-
-        match options.import_snapshot {
-            Some(ref snapshot_path) => {
-                uuid_resolver =
-                    uuid_resolver::UuidResolverHandle::from_snapshot(&path, &snapshot_path)?;
-                index_handle = index_actor::IndexActorHandle::from_snapshot(
-                    &path,
-                    index_size,
-                    &snapshot_path,
-                )?;
-                update_handle = update_actor::UpdateActorHandle::from_snapshot(
-                    index_handle.clone(),
-                    &path,
-                    update_store_size,
-                    &snapshot_path,
-                )?;
-            }
-            None => {
-                uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-                index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
-                update_handle = update_actor::UpdateActorHandle::new(
-                    index_handle.clone(),
-                    &path,
-                    update_store_size,
-                )?;
-            }
-        }
+        let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
+        let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
+        let update_handle = update_actor::UpdateActorHandle::new(
+            index_handle.clone(),
+            &path,
+            update_store_size,
+        )?;
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(

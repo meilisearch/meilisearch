@@ -306,41 +306,6 @@ where
         Ok(Self { sender })
     }
 
-    pub fn from_snapshot(
-        index_handle: IndexActorHandle,
-        path: impl AsRef<Path>,
-        update_store_size: usize,
-        snapshot: impl AsRef<Path>,
-    ) -> anyhow::Result<Self> {
-        let src = snapshot.as_ref().join("updates");
-        let dst = path.as_ref().join("updates");
-        fs::create_dir_all(&dst)?;
-
-        // restore the update stores
-        for entry in src.read_dir()? {
-            let entry = entry?;
-            // filter out the update_files directory.
-            if entry.file_type()?.is_file() {
-                let src = src.join(entry.file_name());
-                let dest = dst.join(entry.file_name());
-                compression::from_tar_gz(src, dest)?;
-            }
-        }
-
-        // restore the update files
-        let src = src.join("update_files");
-        let dst = dst.join("update_files");
-        fs::create_dir_all(&dst)?;
-        for entry in src.read_dir()? {
-            let entry = entry?;
-            let src = src.join(entry.file_name());
-            let dst = dst.join(entry.file_name());
-            fs::copy(src, dst)?;
-        }
-
-        Self::new(index_handle, path, update_store_size)
-    }
-
     pub async fn update(
         &self,
         meta: UpdateMeta,
