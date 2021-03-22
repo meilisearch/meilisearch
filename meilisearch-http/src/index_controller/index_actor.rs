@@ -26,6 +26,7 @@ use crate::index_controller::{
     UpdateMeta,
 };
 use crate::option::IndexerOpts;
+use crate::helpers::compression;
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
@@ -107,7 +108,7 @@ enum IndexMsg {
         uuid: Uuid,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
-    }
+    },
 }
 
 struct IndexActor<S> {
@@ -426,7 +427,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             spawn_blocking(move || -> anyhow::Result<()> {
                 // Get write txn to wait for ongoing write transaction before snapshot.
                 let _txn = index.write_txn()?;
-                index.env.copy_to_path(index_path, CompactionOption::Enabled)?;
+                index
+                    .env
+                    .copy_to_path(index_path, CompactionOption::Enabled)?;
                 Ok(())
             });
         }
@@ -453,6 +456,22 @@ impl IndexActorHandle {
             read_sender,
             write_sender,
         })
+    }
+
+    pub fn from_snapshot(
+        path: impl AsRef<Path>,
+        index_size: usize,
+        snapshot_path: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
+        let snapshot_path = snapshot_path.as_ref().join("indexes");
+        let indexes_path = path.as_ref().join("indexes");
+        for entry in snapshot_path.read_dir()? {
+            let entry = entry?;
+            let src = snapshot_path.join(entry.file_name());
+            let dest = indexes_path.join(entry.file_name());
+            compression::from_tar_gz(src, dest)?;
+        }
+        Self::new(path, index_size)
     }
 
     pub async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
@@ -558,11 +577,7 @@ impl IndexActorHandle {
 
     pub async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::Snapshot {
-            uuid,
-            path,
-            ret,
-        };
+        let msg = IndexMsg::Snapshot { uuid, path, ret };
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }

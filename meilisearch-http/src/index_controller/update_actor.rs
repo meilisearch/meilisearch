@@ -1,5 +1,5 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::fs::{create_dir_all, remove_dir_all};
+use std::fs;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,6 +16,7 @@ use uuid::Uuid;
 use super::get_arc_ownership_blocking;
 use crate::index::UpdateResult;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
+use crate::helpers::compression;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
@@ -88,7 +89,7 @@ where
         index_handle: IndexActorHandle,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned();
-        create_dir_all(path.join("update_files"))?;
+        fs::create_dir_all(path.join("update_files"))?;
         assert!(path.exists());
         Ok(Self {
             store,
@@ -305,6 +306,41 @@ where
         Ok(Self { sender })
     }
 
+    pub fn from_snapshot(
+        index_handle: IndexActorHandle,
+        path: impl AsRef<Path>,
+        update_store_size: usize,
+        snapshot: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
+        let src = snapshot.as_ref().join("updates");
+        let dst = path.as_ref().join("updates");
+        fs::create_dir_all(&dst)?;
+
+        // restore the update stores
+        for entry in src.read_dir()? {
+            let entry = entry?;
+            // filter out the update_files directory.
+            if entry.file_type()?.is_file() {
+                let src = src.join(entry.file_name());
+                let dest = dst.join(entry.file_name());
+                compression::from_tar_gz(src, dest)?;
+            }
+        }
+
+        // restore the update files
+        let src = src.join("update_files");
+        let dst = dst.join("update_files");
+        fs::create_dir_all(&dst)?;
+        for entry in src.read_dir()? {
+            let entry = entry?;
+            let src = src.join(entry.file_name());
+            let dst = dst.join(entry.file_name());
+            fs::copy(src, dst)?;
+        }
+
+        Self::new(index_handle, path, update_store_size)
+    }
+
     pub async fn update(
         &self,
         meta: UpdateMeta,
@@ -393,7 +429,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
                 let update_store_size = self.update_store_size;
                 options.map_size(update_store_size);
                 let path = self.path.clone().join(format!("updates-{}", e.key()));
-                create_dir_all(&path).unwrap();
+                fs::create_dir_all(&path).unwrap();
                 let index_handle = self.index_handle.clone();
                 let store = UpdateStore::open(options, &path, move |meta, file| {
                     futures::executor::block_on(index_handle.update(meta, file))
@@ -448,7 +484,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
         let store = self.db.write().await.remove(&uuid);
         let path = self.path.clone().join(format!("updates-{}", uuid));
         if store.is_some() || path.exists() {
-            remove_dir_all(path).unwrap();
+            fs::remove_dir_all(path).unwrap();
         }
         Ok(store)
     }

@@ -1,10 +1,10 @@
 mod index_actor;
+mod snapshot;
 mod update_actor;
 mod update_handler;
 mod update_store;
 mod updates;
 mod uuid_resolver;
-mod snapshot;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -22,8 +22,8 @@ use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
 use crate::option::Opt;
 
-pub use updates::{Failed, Processed, Processing};
 use snapshot::SnapshotService;
+pub use updates::{Failed, Processed, Processing};
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
@@ -63,17 +63,40 @@ pub struct IndexController {
 }
 
 impl IndexController {
-    pub fn new(
-        path: impl AsRef<Path>,
-        options: &Opt,
-    ) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 
-        let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-        let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
-        let update_handle =
-            update_actor::UpdateActorHandle::new(index_handle.clone(), &path, update_store_size)?;
+        let uuid_resolver;
+        let index_handle;
+        let update_handle;
+
+        match options.import_snapshot {
+            Some(ref snapshot_path) => {
+                uuid_resolver =
+                    uuid_resolver::UuidResolverHandle::from_snapshot(&path, &snapshot_path)?;
+                index_handle = index_actor::IndexActorHandle::from_snapshot(
+                    &path,
+                    index_size,
+                    &snapshot_path,
+                )?;
+                update_handle = update_actor::UpdateActorHandle::from_snapshot(
+                    index_handle.clone(),
+                    &path,
+                    update_store_size,
+                    &snapshot_path,
+                )?;
+            }
+            None => {
+                uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
+                index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
+                update_handle = update_actor::UpdateActorHandle::new(
+                    index_handle.clone(),
+                    &path,
+                    update_store_size,
+                )?;
+            }
+        }
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
@@ -81,7 +104,7 @@ impl IndexController {
                 uuid_resolver.clone(),
                 update_handle.clone(),
                 Duration::from_secs(options.snapshot_interval_sec),
-                options.snapshot_dir.clone()
+                options.snapshot_dir.clone(),
             );
 
             tokio::task::spawn(snapshot_service.run());
@@ -196,7 +219,11 @@ impl IndexController {
         let uuid = self.uuid_resolver.create(uid.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
         let _ = self.update_handle.create(uuid).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
 
         Ok(meta)
     }
@@ -227,7 +254,11 @@ impl IndexController {
 
         for (uid, uuid) in uuids {
             let meta = self.index_handle.get_index_meta(uuid).await?;
-            let meta = IndexMetadata { name: uid.clone(), uid, meta };
+            let meta = IndexMetadata {
+                name: uid.clone(),
+                uid,
+                meta,
+            };
             ret.push(meta);
         }
 
@@ -280,7 +311,11 @@ impl IndexController {
 
         let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
         let meta = self.index_handle.update_index(uuid, index_settings).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
         Ok(meta)
     }
 
@@ -293,7 +328,11 @@ impl IndexController {
     pub async fn get_index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
         let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
         let meta = self.index_handle.get_index_meta(uuid).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
         Ok(meta)
     }
 }

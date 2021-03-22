@@ -17,11 +17,11 @@ pub fn to_tar_gz(src: &Path, dest: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn from_tar_gz(src: &Path, dest: &Path) -> Result<(), Error> {
-    let f = File::open(src)?;
+pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Error> {
+    let f = File::open(&src)?;
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);
-    create_dir_all(dest)?;
-    ar.unpack(dest)?;
+    create_dir_all(&dest)?;
+    ar.unpack(&dest)?;
     Ok(())
 }

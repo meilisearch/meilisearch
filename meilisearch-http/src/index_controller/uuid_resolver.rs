@@ -3,13 +3,16 @@ use std::path::{Path, PathBuf};
 
 use heed::{
     types::{ByteSlice, Str},
-    Database, Env, EnvOpenOptions,
+    Database, Env, EnvOpenOptions,CompactionOption
 };
 use log::{info, warn};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
-use heed::CompactionOption;
+
+use crate::helpers::compression;
+
+const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
 pub type Result<T> = std::result::Result<T, UuidError>;
 
@@ -140,6 +143,17 @@ impl UuidResolverHandle {
         Ok(Self { sender })
     }
 
+    pub fn from_snapshot(
+        db_path: impl AsRef<Path>,
+        snapshot_path: impl AsRef<Path>
+    ) -> anyhow::Result<Self> {
+        let (sender, reveiver) = mpsc::channel(100);
+        let store = HeedUuidStore::from_snapshot(snapshot_path, db_path)?;
+        let actor = UuidResolverActor::new(reveiver, store);
+        tokio::spawn(actor.run());
+        Ok(Self { sender })
+    }
+
     pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Resolve { uid: name, ret };
@@ -232,10 +246,16 @@ impl HeedUuidStore {
         let path = path.as_ref().join("index_uuids");
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
-        options.map_size(1_073_741_824); // 1GB
+        options.map_size(UUID_STORE_SIZE); // 1GB
         let env = options.open(path)?;
         let db = env.create_database(None)?;
         Ok(Self { env, db })
+    }
+
+    fn from_snapshot(snapshot: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let snapshot = snapshot.as_ref().join("uuids");
+        compression::from_tar_gz(snapshot, &path)?;
+        Self::new(path)
     }
 }
 
