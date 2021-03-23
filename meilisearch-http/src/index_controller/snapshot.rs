@@ -49,7 +49,7 @@ where
 
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
         if !self.snapshot_path.is_file() {
-            bail!("invalid snapshot file path");
+            bail!("Invalid snapshot file path.");
         }
 
         let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
