@@ -1,7 +1,6 @@
 pub mod search;
 mod updates;
 
-use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -59,7 +58,6 @@ impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
 
-        create_dir_all(&path)?;
         let index_controller = IndexController::new(&path, &options)?;
 
         let mut api_keys = ApiKeys {
