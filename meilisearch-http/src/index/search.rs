@@ -108,7 +108,7 @@ impl Index {
         };
 
         let result = SearchResult {
-            exhaustive_nb_hits: false, // not implemented, we use it to be ISO
+            exhaustive_nb_hits: false, // not implemented yet
             hits: documents,
             nb_hits,
             query: query.q.clone().unwrap_or_default(),
