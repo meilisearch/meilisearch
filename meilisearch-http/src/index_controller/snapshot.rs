@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::bail;
@@ -93,9 +93,38 @@ where
     }
 }
 
+pub fn load_snapshot(
+    db_path: impl AsRef<Path>,
+    snapshot_path: impl AsRef<Path>,
+    ignore_snapshot_if_db_exists: bool,
+    ignore_missing_snapshot: bool,
+) -> anyhow::Result<()> {
+    if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
+        compression::from_tar_gz(snapshot_path, db_path)
+    } else if db_path.as_ref().exists() && !ignore_snapshot_if_db_exists {
+        bail!(
+            "database already exists at {:?}, try to delete it or rename it",
+            db_path
+                .as_ref()
+                .canonicalize()
+                .unwrap_or(db_path.as_ref().to_owned())
+        )
+    } else if !snapshot_path.as_ref().exists() && !ignore_missing_snapshot {
+        bail!(
+            "snapshot doesn't exist at {:?}",
+            snapshot_path
+                .as_ref()
+                .canonicalize()
+                .unwrap_or(snapshot_path.as_ref().to_owned())
+        )
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use futures::future::{ok, err};
+    use futures::future::{err, ok};
     use rand::Rng;
     use tokio::time::timeout;
     use uuid::Uuid;

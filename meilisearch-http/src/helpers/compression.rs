@@ -5,9 +5,7 @@ use std::path::Path;
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
 use tar::{Archive, Builder};
 
-use crate::error::Error;
-
-pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Error> {
+pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
     let mut f = File::create(dest)?;
     let gz_encoder = GzEncoder::new(&mut f, Compression::default());
     let mut tar_encoder = Builder::new(gz_encoder);
@@ -18,7 +16,7 @@ pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Er
     Ok(())
 }
 
-pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<(), Error> {
+pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
     let f = File::open(&src)?;
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);
