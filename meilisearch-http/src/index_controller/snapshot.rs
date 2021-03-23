@@ -8,29 +8,29 @@ use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 
 use crate::helpers::compression;
-use super::index_actor::IndexActorHandle;
 use super::update_actor::UpdateActorHandle;
 use super::uuid_resolver::UuidResolverHandle;
 
 #[allow(dead_code)]
-pub struct SnapshotService<B> {
-    index_handle: IndexActorHandle,
-    uuid_resolver_handle: UuidResolverHandle,
-    update_handle: UpdateActorHandle<B>,
+pub struct SnapshotService<U, R> {
+    uuid_resolver_handle: R,
+    update_handle: U,
     snapshot_period: Duration,
     snapshot_path: PathBuf,
 }
 
-impl<B> SnapshotService<B> {
+impl<U, R> SnapshotService<U, R>
+where
+    U: UpdateActorHandle,
+    R: UuidResolverHandle
+{
     pub fn new(
-        index_handle: IndexActorHandle,
-        uuid_resolver_handle: UuidResolverHandle,
-        update_handle: UpdateActorHandle<B>,
+        uuid_resolver_handle: R,
+        update_handle: U,
         snapshot_period: Duration,
         snapshot_path: PathBuf,
     ) -> Self {
         Self {
-            index_handle,
             uuid_resolver_handle,
             update_handle,
             snapshot_period,

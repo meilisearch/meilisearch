@@ -43,7 +43,7 @@ impl Server {
             ignore_snapshot_if_db_exists: false,
             snapshot_dir: ".".into(),
             schedule_snapshot: false,
-            snapshot_interval_sec: None,
+            snapshot_interval_sec: 0,
             import_dump: None,
             indexer_options: IndexerOpts::default(),
             #[cfg(all(not(debug_assertions), feature = "sentry"))]

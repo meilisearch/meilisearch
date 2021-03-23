@@ -2,7 +2,6 @@ mod index_actor;
 mod snapshot;
 mod update_actor;
 mod update_handler;
-mod update_store;
 mod updates;
 mod uuid_resolver;
 
@@ -22,6 +21,9 @@ use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
 use crate::option::Opt;
 use crate::helpers::compression;
+use index_actor::IndexActorHandle;
+use update_actor::UpdateActorHandle;
+use uuid_resolver::UuidResolverHandle;
 
 use snapshot::SnapshotService;
 pub use updates::{Failed, Processed, Processing};
@@ -58,9 +60,9 @@ pub struct IndexSettings {
 }
 
 pub struct IndexController {
-    uuid_resolver: uuid_resolver::UuidResolverHandle,
-    index_handle: index_actor::IndexActorHandle,
-    update_handle: update_actor::UpdateActorHandle<Bytes>,
+    uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
+    index_handle: index_actor::IndexActorHandleImpl,
+    update_handle: update_actor::UpdateActorHandleImpl<Bytes>,
 }
 
 impl IndexController {
@@ -72,9 +74,9 @@ impl IndexController {
             compression::from_tar_gz(path, &options.db_path)?;
         }
 
-        let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-        let index_handle = index_actor::IndexActorHandle::new(&path, index_size)?;
-        let update_handle = update_actor::UpdateActorHandle::new(
+        let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&path)?;
+        let index_handle = index_actor::IndexActorHandleImpl::new(&path, index_size)?;
+        let update_handle = update_actor::UpdateActorHandleImpl::new(
             index_handle.clone(),
             &path,
             update_store_size,
@@ -82,7 +84,6 @@ impl IndexController {
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
-                index_handle.clone(),
                 uuid_resolver.clone(),
                 update_handle.clone(),
                 Duration::from_secs(options.snapshot_interval_sec),
