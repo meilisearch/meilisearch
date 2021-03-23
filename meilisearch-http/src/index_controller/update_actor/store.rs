@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use uuid::Uuid;
-use tokio::sync::RwLock;
 use tokio::fs;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
+use super::{Result, UpdateError, UpdateStore};
 use crate::index_controller::IndexActorHandle;
-use super::{UpdateStore, UpdateError, Result};
 
 #[async_trait::async_trait]
 pub trait UpdateStoreStore {
@@ -25,11 +25,7 @@ pub struct MapUpdateStoreStore<I> {
 }
 
 impl<I: IndexActorHandle> MapUpdateStoreStore<I> {
-    pub fn new(
-        index_handle: I,
-        path: impl AsRef<Path>,
-        update_store_size: usize,
-    ) -> Self {
+    pub fn new(index_handle: I, path: impl AsRef<Path>, update_store_size: usize) -> Self {
         let db = Arc::new(RwLock::new(HashMap::new()));
         let path = path.as_ref().to_owned();
         Self {
@@ -42,7 +38,10 @@ impl<I: IndexActorHandle> MapUpdateStoreStore<I> {
 }
 
 #[async_trait::async_trait]
-impl<I: IndexActorHandle + 'static> UpdateStoreStore for MapUpdateStoreStore<I> {
+impl<I> UpdateStoreStore for MapUpdateStoreStore<I>
+where
+    I: IndexActorHandle + Clone + Send + Sync + 'static,
+{
     async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<UpdateStore>> {
         match self.db.write().await.entry(uuid) {
             Entry::Vacant(e) => {

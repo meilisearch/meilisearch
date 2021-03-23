@@ -24,7 +24,7 @@ where
         update_store_size: usize,
     ) -> anyhow::Result<Self>
     where
-        I: IndexActorHandle + 'static,
+        I: IndexActorHandle + Clone + Send + Sync + 'static,
     {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);

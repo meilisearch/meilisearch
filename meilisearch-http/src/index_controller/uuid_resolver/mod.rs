@@ -12,6 +12,9 @@ use actor::UuidResolverActor;
 use message::UuidResolveMsg;
 use store::{HeedUuidStore, UuidStore};
 
+#[cfg(test)]
+use mockall::automock;
+
 pub use handle_impl::UuidResolverHandleImpl;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
@@ -19,6 +22,7 @@ const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 pub type Result<T> = std::result::Result<T, UuidError>;
 
 #[async_trait::async_trait]
+#[cfg_attr(test, automock)]
 pub trait UuidResolverHandle {
     async fn resolve(&self, name: String) -> anyhow::Result<Uuid>;
     async fn get_or_create(&self, name: String) -> Result<Uuid>;

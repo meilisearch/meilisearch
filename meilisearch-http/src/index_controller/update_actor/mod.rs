@@ -23,6 +23,9 @@ pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
 type PayloadData<D> = std::result::Result<D, Box<dyn std::error::Error + Sync + Send + 'static>>;
 
+#[cfg(test)]
+use mockall::automock;
+
 #[derive(Debug, Error)]
 pub enum UpdateError {
     #[error("error with update: {0}")]
@@ -34,6 +37,7 @@ pub enum UpdateError {
 }
 
 #[async_trait::async_trait]
+#[cfg_attr(test, automock(type Data=Vec<u8>;))]
 pub trait UpdateActorHandle {
     type Data: AsRef<[u8]> + Sized + 'static + Sync + Send;
 

@@ -23,7 +23,7 @@ impl<D, S, I> UpdateActor<D, S, I>
 where
     D: AsRef<[u8]> + Sized + 'static,
     S: UpdateStoreStore,
-    I: IndexActorHandle + 'static,
+    I: IndexActorHandle + Clone + Send + Sync + 'static,
 {
     pub fn new(
         store: S,

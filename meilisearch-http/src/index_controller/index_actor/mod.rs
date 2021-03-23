@@ -23,6 +23,9 @@ use actor::IndexActor;
 
 pub use handle_impl::IndexActorHandleImpl;
 
+#[cfg(test)]
+use mockall::automock;
+
 pub type Result<T> = std::result::Result<T, IndexError>;
 type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<UpdateMeta, String>>;
 
@@ -68,7 +71,8 @@ pub enum IndexError {
 
 
 #[async_trait::async_trait]
-pub trait IndexActorHandle: Sync + Send + Clone {
+#[cfg_attr(test, automock)]
+pub trait IndexActorHandle {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn update(
         &self,
