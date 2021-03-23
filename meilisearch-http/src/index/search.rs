@@ -41,7 +41,7 @@ pub struct SearchQuery {
 pub struct SearchResult {
     pub hits: Vec<Map<String, Value>>,
     pub nb_hits: u64,
-    pub exhaustive_nb_hits: bool, // currently this field only exist to be ISO and is always false
+    pub exhaustive_nb_hits: bool,
     pub query: String,
     pub limit: usize,
     pub offset: usize,
