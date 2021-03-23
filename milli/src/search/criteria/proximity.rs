@@ -8,48 +8,29 @@ use log::debug;
 use crate::{DocumentId, Position, search::{query_tree::QueryKind}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::{build_dfa, WordDerivationsCache};
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
+use super::{Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
 
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context,
-    query_tree: Option<(usize, Operation)>,
+    /// ((max_proximity, query_tree), allowed_candidates)
+    state: Option<(Option<(usize, Operation)>, RoaringBitmap)>,
     proximity: u8,
-    candidates: Candidates,
     bucket_candidates: RoaringBitmap,
-    parent: Option<Box<dyn Criterion + 't>>,
+    parent: Box<dyn Criterion + 't>,
     candidates_cache: Cache,
     plane_sweep_cache: Option<btree_map::IntoIter<u8, RoaringBitmap>>,
 }
 
 impl<'t> Proximity<'t> {
-    pub fn initial(
-        ctx: &'t dyn Context,
-        query_tree: Option<Operation>,
-        candidates: Option<RoaringBitmap>,
-    ) -> Self
-    {
-        Proximity {
-            ctx,
-            query_tree: query_tree.map(|op| (maximum_proximity(&op), op)),
-            proximity: 0,
-            candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
-            bucket_candidates: RoaringBitmap::new(),
-            parent: None,
-            candidates_cache: Cache::new(),
-            plane_sweep_cache: None,
-        }
-    }
-
     pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
         Proximity {
             ctx,
-            query_tree: None,
+            state: None,
             proximity: 0,
-            candidates: Candidates::default(),
             bucket_candidates: RoaringBitmap::new(),
-            parent: Some(parent),
+            parent: parent,
             candidates_cache: Cache::new(),
             plane_sweep_cache: None,
         }
@@ -59,27 +40,20 @@ impl<'t> Proximity<'t> {
 impl<'t> Criterion for Proximity<'t> {
     #[logging_timer::time("Proximity::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
-        use Candidates::{Allowed, Forbidden};
         loop {
-            debug!("Proximity at iteration {} (max {:?}) ({:?})",
+            debug!("Proximity at iteration {} (max prox {:?}) ({:?})",
                 self.proximity,
-                self.query_tree.as_ref().map(|(mp, _)| mp),
-                self.candidates,
+                self.state.as_ref().map(|(qt, _)| qt.as_ref().map(|(mp, _)| mp)),
+                self.state.as_ref().map(|(_, cd)| cd),
             );
 
-            match (&mut self.query_tree, &mut self.candidates) {
-                (_, Allowed(candidates)) if candidates.is_empty() => {
-                    return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: Some(take(&mut self.candidates).into_inner()),
-                        bucket_candidates: take(&mut self.bucket_candidates),
-                    }));
+            match &mut self.state {
+                Some((_, candidates)) if candidates.is_empty() => {
+                    self.state = None; // reset state
                 },
-                (Some((max_prox, query_tree)), Allowed(candidates)) => {
+                Some((Some((max_prox, query_tree)), candidates)) => {
                     if self.proximity as usize > *max_prox {
-                        // reset state to (None, Forbidden(_))
-                        self.query_tree = None;
-                        self.candidates = Candidates::default();
+                        self.state = None; // reset state
                     } else {
                         let mut new_candidates = if candidates.len() <= 1000 {
                             if let Some(cache) = self.plane_sweep_cache.as_mut() {
@@ -89,9 +63,7 @@ impl<'t> Criterion for Proximity<'t> {
                                         candidates
                                     },
                                     None => {
-                                        // reset state to (None, Forbidden(_))
-                                        self.query_tree = None;
-                                        self.candidates = Candidates::default();
+                                        self.state = None; // reset state
                                         continue
                                     },
                                 }
@@ -120,79 +92,54 @@ impl<'t> Criterion for Proximity<'t> {
                         candidates.difference_with(&new_candidates);
                         self.proximity += 1;
 
-                        let bucket_candidates = match self.parent {
-                            Some(_) => take(&mut self.bucket_candidates),
-                            None => new_candidates.clone(),
-                        };
-
                         return Ok(Some(CriterionResult {
                             query_tree: Some(query_tree.clone()),
                             candidates: Some(new_candidates),
-                            bucket_candidates,
+                            bucket_candidates: take(&mut self.bucket_candidates),
                         }));
                     }
                 },
-                (Some((max_prox, query_tree)), Forbidden(candidates)) => {
-                    if self.proximity as usize > *max_prox {
-                        self.query_tree = None;
-                        self.candidates = Candidates::default();
-                    } else {
-                        let mut new_candidates = resolve_candidates(
-                            self.ctx,
-                            &query_tree,
-                            self.proximity,
-                            &mut self.candidates_cache,
-                            wdcache,
-                        )?;
-
-                        new_candidates.difference_with(&candidates);
-                        candidates.union_with(&new_candidates);
-                        self.proximity += 1;
-
-                        let bucket_candidates = match self.parent {
-                            Some(_) => take(&mut self.bucket_candidates),
-                            None => new_candidates.clone(),
-                        };
-
-                        return Ok(Some(CriterionResult {
-                            query_tree: Some(query_tree.clone()),
-                            candidates: Some(new_candidates),
-                            bucket_candidates,
-                        }));
-                    }
-                },
-                (None, Allowed(_)) => {
-                    let candidates = take(&mut self.candidates).into_inner();
+                Some((None, candidates)) => {
+                    let candidates = take(candidates);
+                    self.state = None; // reset state
                     return Ok(Some(CriterionResult {
                         query_tree: None,
                         candidates: Some(candidates.clone()),
                         bucket_candidates: candidates,
                     }));
                 },
-                (None, Forbidden(_)) => {
-                    match self.parent.as_mut() {
-                        Some(parent) => {
-                            match parent.next(wdcache)? {
-                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                                    let candidates = match (&query_tree, candidates) {
-                                        (_, Some(candidates)) => candidates,
-                                        (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
-                                        (None, None) => RoaringBitmap::new(),
-                                    };
+                None => {
+                    match self.parent.next(wdcache)? {
+                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: None,
+                                candidates: None,
+                                bucket_candidates,
+                            }));
+                        },
+                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                            let candidates_is_some = candidates.is_some();
+                            let candidates = match (&query_tree, candidates) {
+                                (_, Some(candidates)) => candidates,
+                                (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
+                                (None, None) => RoaringBitmap::new(),
+                            };
 
-                                    if bucket_candidates.is_empty() {
-                                        self.bucket_candidates.union_with(&candidates);
-                                    } else {
-                                        self.bucket_candidates.union_with(&bucket_candidates);
-                                    }
-
-                                    self.query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
-                                    self.proximity = 0;
-                                    self.candidates = Candidates::Allowed(candidates);
-                                    self.plane_sweep_cache = None;
-                                },
-                                None => return Ok(None),
+                            // If our parent returns candidates it means that the bucket
+                            // candidates were already computed before and we can use them.
+                            //
+                            // If not, we must use the just computed candidates as our bucket
+                            // candidates.
+                            if candidates_is_some {
+                                self.bucket_candidates.union_with(&bucket_candidates);
+                            } else {
+                                self.bucket_candidates.union_with(&candidates);
                             }
+
+                            let query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
+                            self.state = Some((query_tree, candidates));
+                            self.proximity = 0;
+                            self.plane_sweep_cache = None;
                         },
                         None => return Ok(None),
                     }

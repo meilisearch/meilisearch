@@ -13,9 +13,8 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use distinct::{Distinct, DocIter, FacetDistinct, MapDistinct, NoopDistinct};
-
-use crate::search::criteria::fetcher::{Fetcher, FetcherResult};
-use crate::{DocumentId, Index};
+use crate::search::criteria::r#final::{Final, FinalResult};
+use crate::{Index, DocumentId};
 
 pub use self::facet::{
     FacetCondition, FacetDistribution, FacetIter, FacetNumberOperator, FacetStringOperator,
@@ -162,14 +161,14 @@ impl<'a> Search<'a> {
         &self,
         mut distinct: impl for<'c> Distinct<'c>,
         matching_words: MatchingWords,
-        mut criteria: Fetcher,
+        mut criteria: Final,
     ) -> anyhow::Result<SearchResult> {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
         let mut excluded_documents = RoaringBitmap::new();
         let mut documents_ids = Vec::with_capacity(self.limit);
 
-        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next()? {
+        while let Some(FinalResult { candidates, bucket_candidates, .. }) = criteria.next()? {
             debug!("Number of candidates found {}", candidates.len());
 
             let excluded = take(&mut excluded_documents);

@@ -8,19 +8,21 @@ use crate::search::{word_derivations, WordDerivationsCache};
 use crate::{Index, DocumentId};
 
 use super::query_tree::{Operation, Query, QueryKind};
+use self::asc_desc::AscDesc;
+use self::attribute::Attribute;
+use self::r#final::Final;
+use self::initial::Initial;
+use self::proximity::Proximity;
 use self::typo::Typo;
 use self::words::Words;
-use self::asc_desc::AscDesc;
-use self::proximity::Proximity;
-use self::attribute::Attribute;
-use self::fetcher::Fetcher;
 
+mod asc_desc;
+mod attribute;
+mod initial;
+mod proximity;
 mod typo;
 mod words;
-mod asc_desc;
-mod proximity;
-mod attribute;
-pub mod fetcher;
+pub mod r#final;
 
 pub trait Criterion {
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>>;
@@ -61,6 +63,7 @@ impl Default for Candidates {
         Self::Forbidden(RoaringBitmap::new())
     }
 }
+
 pub trait Context {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap>;
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
@@ -128,44 +131,26 @@ impl<'t> CriteriaBuilder<'t> {
 
     pub fn build(
         &'t self,
-        mut query_tree: Option<Operation>,
-        mut facet_candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Fetcher<'t>>
+        query_tree: Option<Operation>,
+        facet_candidates: Option<RoaringBitmap>,
+    ) -> anyhow::Result<Final<'t>>
     {
         use crate::criterion::Criterion as Name;
 
-        let mut criterion = None as Option<Box<dyn Criterion>>;
+        let mut criterion = Box::new(Initial::new(query_tree, facet_candidates)) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
-            criterion = Some(match criterion.take() {
-                Some(father) => match name {
-                    Name::Typo => Box::new(Typo::new(self, father)),
-                    Name::Words => Box::new(Words::new(self, father)),
-                    Name::Proximity => Box::new(Proximity::new(self, father)),
-                    Name::Attribute => Box::new(Attribute::new(self, father)),
-                    Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, father, field)?),
-                    Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, father, field)?),
-                    _otherwise => father,
-                },
-                None => match name {
-                    Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Attribute => Box::new(Attribute::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Asc(field) => {
-                        Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
-                    },
-                    Name::Desc(field) => {
-                        Box::new(AscDesc::initial_desc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
-                    },
-                    _otherwise => continue,
-                },
-            });
+            criterion = match name {
+                Name::Typo => Box::new(Typo::new(self, criterion)),
+                Name::Words => Box::new(Words::new(self, criterion)),
+                Name::Proximity => Box::new(Proximity::new(self, criterion)),
+                Name::Attribute => Box::new(Attribute::new(self, criterion)),
+                Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?),
+                Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?),
+                _otherwise => criterion,
+            };
         }
 
-        match criterion {
-            Some(criterion) => Ok(Fetcher::new(self, criterion)),
-            None => Ok(Fetcher::initial(self, query_tree, facet_candidates)),
-        }
+        Ok(Final::new(self, criterion))
     }
 }
 

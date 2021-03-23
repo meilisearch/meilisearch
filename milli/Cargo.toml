@@ -57,9 +57,6 @@ criterion = "0.3.4"
 maplit = "1.0.2"
 rand = "0.8.3"
 
-[build-dependencies]
-fst = "0.4.5"
-
 [features]
 default = []
 

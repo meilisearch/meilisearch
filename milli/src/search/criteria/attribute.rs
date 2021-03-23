@@ -14,36 +14,19 @@ pub struct Attribute<'t> {
     query_tree: Option<Operation>,
     candidates: Option<RoaringBitmap>,
     bucket_candidates: RoaringBitmap,
-    parent: Option<Box<dyn Criterion + 't>>,
+    parent: Box<dyn Criterion + 't>,
     flattened_query_tree: Option<Vec<Vec<Query>>>,
     current_buckets: Option<btree_map::IntoIter<u64, RoaringBitmap>>,
 }
 
 impl<'t> Attribute<'t> {
-    pub fn initial(
-        ctx: &'t dyn Context,
-        query_tree: Option<Operation>,
-        candidates: Option<RoaringBitmap>,
-    ) -> Self
-    {
-        Attribute {
-            ctx,
-            query_tree,
-            candidates,
-            bucket_candidates: RoaringBitmap::new(),
-            parent: None,
-            flattened_query_tree: None,
-            current_buckets: None,
-        }
-    }
-
     pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
         Attribute {
             ctx,
             query_tree: None,
             candidates: None,
             bucket_candidates: RoaringBitmap::new(),
-            parent: Some(parent),
+            parent,
             flattened_query_tree: None,
             current_buckets: None,
         }
@@ -63,34 +46,35 @@ impl<'t> Criterion for Attribute<'t> {
                     }));
                 },
                 (Some(qt), Some(candidates)) => {
-                    let flattened_query_tree = self.flattened_query_tree.get_or_insert_with(|| flatten_query_tree(&qt));
-                    let current_buckets = if let Some(current_buckets) = self.current_buckets.as_mut() {
-                        current_buckets
-                    } else {
-                        let new_buckets = linear_compute_candidates(self.ctx, flattened_query_tree, candidates)?;
-                        self.current_buckets.get_or_insert(new_buckets.into_iter())
+                    let flattened_query_tree = self.flattened_query_tree.get_or_insert_with(|| {
+                        flatten_query_tree(&qt)
+                    });
+
+                    let current_buckets = match self.current_buckets.as_mut() {
+                        Some(current_buckets) => current_buckets,
+                        None => {
+                            let new_buckets = linear_compute_candidates(self.ctx, flattened_query_tree, candidates)?;
+                            self.current_buckets.get_or_insert(new_buckets.into_iter())
+                        },
                     };
 
-                    let found_candidates = if let Some((_score, candidates)) = current_buckets.next() {
-                        candidates
-                    } else {
-                        return Ok(Some(CriterionResult {
-                            query_tree: self.query_tree.take(),
-                            candidates: self.candidates.take(),
-                            bucket_candidates: take(&mut self.bucket_candidates),
-                        }));
+                    let found_candidates = match current_buckets.next() {
+                        Some((_score, candidates)) => candidates,
+                        None => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: self.query_tree.take(),
+                                candidates: self.candidates.take(),
+                                bucket_candidates: take(&mut self.bucket_candidates),
+                            }));
+                        },
                     };
+
                     candidates.difference_with(&found_candidates);
-
-                    let bucket_candidates = match self.parent {
-                        Some(_) => take(&mut self.bucket_candidates),
-                        None => found_candidates.clone(),
-                    };
 
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(found_candidates),
-                        bucket_candidates: bucket_candidates,
+                        bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
                 (Some(qt), None) => {
@@ -106,18 +90,20 @@ impl<'t> Criterion for Attribute<'t> {
                     }));
                 },
                 (None, None) => {
-                    match self.parent.as_mut() {
-                        Some(parent) => {
-                            match parent.next(wdcache)? {
-                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                                    self.query_tree = query_tree;
-                                    self.candidates = candidates;
-                                    self.bucket_candidates.union_with(&bucket_candidates);
-                                    self.flattened_query_tree = None;
-                                    self.current_buckets = None;
-                                },
-                                None => return Ok(None),
-                            }
+                    match self.parent.next(wdcache)? {
+                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: None,
+                                candidates: None,
+                                bucket_candidates,
+                            }));
+                        },
+                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                            self.query_tree = query_tree;
+                            self.candidates = candidates;
+                            self.bucket_candidates.union_with(&bucket_candidates);
+                            self.flattened_query_tree = None;
+                            self.current_buckets = None;
                         },
                         None => return Ok(None),
                     }

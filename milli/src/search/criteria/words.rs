@@ -12,34 +12,18 @@ pub struct Words<'t> {
     query_trees: Vec<Operation>,
     candidates: Option<RoaringBitmap>,
     bucket_candidates: RoaringBitmap,
-    parent: Option<Box<dyn Criterion + 't>>,
+    parent: Box<dyn Criterion + 't>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
 }
 
 impl<'t> Words<'t> {
-    pub fn initial(
-        ctx: &'t dyn Context,
-        query_tree: Option<Operation>,
-        candidates: Option<RoaringBitmap>,
-    ) -> Self
-    {
-        Words {
-            ctx,
-            query_trees: query_tree.map(explode_query_tree).unwrap_or_default(),
-            candidates,
-            bucket_candidates: RoaringBitmap::new(),
-            parent: None,
-            candidates_cache: HashMap::default(),
-        }
-    }
-
     pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
         Words {
             ctx,
             query_trees: Vec::default(),
             candidates: None,
             bucket_candidates: RoaringBitmap::new(),
-            parent: Some(parent),
+            parent,
             candidates_cache: HashMap::default(),
         }
     }
@@ -65,27 +49,17 @@ impl<'t> Criterion for Words<'t> {
                     found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
 
-                    let bucket_candidates = match self.parent {
-                        Some(_) => take(&mut self.bucket_candidates),
-                        None => found_candidates.clone(),
-                    };
-
                     return Ok(Some(CriterionResult {
                         query_tree: Some(qt),
                         candidates: Some(found_candidates),
-                        bucket_candidates,
+                        bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
                 (Some(qt), None) => {
-                    let bucket_candidates = match self.parent {
-                        Some(_) => take(&mut self.bucket_candidates),
-                        None => RoaringBitmap::new(),
-                    };
-
                     return Ok(Some(CriterionResult {
                         query_tree: Some(qt),
                         candidates: None,
-                        bucket_candidates,
+                        bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
                 (None, Some(_)) => {
@@ -97,16 +71,18 @@ impl<'t> Criterion for Words<'t> {
                     }));
                 },
                 (None, None) => {
-                    match self.parent.as_mut() {
-                        Some(parent) => {
-                            match parent.next(wdcache)? {
-                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                                    self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
-                                    self.candidates = candidates;
-                                    self.bucket_candidates.union_with(&bucket_candidates);
-                                },
-                                None => return Ok(None),
-                            }
+                    match self.parent.next(wdcache)? {
+                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: None,
+                                candidates: None,
+                                bucket_candidates,
+                            }));
+                        },
+                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                            self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
+                            self.candidates = candidates;
+                            self.bucket_candidates.union_with(&bucket_candidates);
                         },
                         None => return Ok(None),
                     }
