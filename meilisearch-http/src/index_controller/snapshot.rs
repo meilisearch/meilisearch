@@ -166,21 +166,6 @@ mod test {
     }
 
     #[actix_rt::test]
-    async fn bad_file_name() {
-        let uuid_resolver = MockUuidResolverHandle::new();
-        let update_handle = MockUpdateActorHandle::new();
-
-        let snapshot_service = SnapshotService::new(
-            uuid_resolver,
-            update_handle,
-            Duration::from_millis(100),
-            "directory/".into(),
-        );
-
-        assert!(snapshot_service.perform_snapshot().await.is_err());
-    }
-
-    #[actix_rt::test]
     async fn error_performing_uuid_snapshot() {
         let mut uuid_resolver = MockUuidResolverHandle::new();
         uuid_resolver
