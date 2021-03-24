@@ -122,7 +122,8 @@ fn linear_compute_candidates(
     fn compute_candidate_rank(branches: &Vec<Vec<Query>>, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
         let mut min_rank = u64::max_value();
         for branch in branches {
-            let mut branch_rank = 0;
+            let branch_len = branch.len();
+            let mut branch_rank = Vec::with_capacity(branch_len);
             for Query { prefix, kind } in branch {
                 // find the best position of the current word in the document.
                 let position =  match kind {
@@ -145,13 +146,21 @@ fn linear_compute_candidates(
                 // if a position is found, we add it to the branch score,
                 // otherwise the branch is considered as unfindable in this document and we break.
                 if let Some(position) = position {
-                    branch_rank += position as u64;
+                    branch_rank.push(position as u64);
                 } else {
-                    branch_rank = u64::max_value();
+                    branch_rank.clear();
                     break;
                 }
             }
-            min_rank = min_rank.min(branch_rank);
+
+            if !branch_rank.is_empty() {
+                branch_rank.sort_unstable();
+                // because several words in same query can't match all a the position 0,
+                // we substract the word index to the position.
+                let branch_rank: u64 = branch_rank.into_iter().enumerate().map(|(i, r)| r - i as u64).sum();
+                // here we do the means of the words of the branch
+                min_rank = min_rank.min(branch_rank / branch_len as u64);
+            }
         }
 
         min_rank
