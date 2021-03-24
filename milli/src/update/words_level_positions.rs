@@ -121,7 +121,7 @@ fn compute_positions_levels(
 
         let level_0_range = {
             let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
-            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
+            let right = (word, TreeLevel::min_value(), u32::max_value(), u32::max_value());
             left..=right
         };
 
