@@ -323,7 +323,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             })
             .await
             .map_err(|e| IndexError::Error(e.into()))?
-            .map_err(|e| IndexError::Error(e.into()))?;
+            .map_err(IndexError::Error)?;
         }
 
         Ok(())

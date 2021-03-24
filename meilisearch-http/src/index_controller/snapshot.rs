@@ -107,7 +107,7 @@ pub fn load_snapshot(
             db_path
                 .as_ref()
                 .canonicalize()
-                .unwrap_or(db_path.as_ref().to_owned())
+                .unwrap_or_else(|_| db_path.as_ref().to_owned())
         )
     } else if !snapshot_path.as_ref().exists() && !ignore_missing_snapshot {
         bail!(
@@ -115,7 +115,7 @@ pub fn load_snapshot(
             snapshot_path
                 .as_ref()
                 .canonicalize()
-                .unwrap_or(snapshot_path.as_ref().to_owned())
+                .unwrap_or_else(|_| snapshot_path.as_ref().to_owned())
         )
     } else {
         Ok(())
