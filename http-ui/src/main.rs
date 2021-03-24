@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{create_dir_all, File};
 use std::net::SocketAddr;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -286,8 +286,8 @@ struct WordsPrefixes {
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 struct WordsLevelPositions {
-    level_group_size: Option<NonZeroUsize>,
-    min_level_size: Option<NonZeroUsize>,
+    level_group_size: Option<NonZeroU32>,
+    min_level_size: Option<NonZeroU32>,
 }
 
 // Any value that is present is considered Some value, including null.

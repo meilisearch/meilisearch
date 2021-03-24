@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
@@ -263,8 +263,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     facet_min_level_size: Option<NonZeroUsize>,
     words_prefix_threshold: Option<f64>,
     max_prefix_length: Option<usize>,
-    words_positions_level_group_size: Option<NonZeroUsize>,
-    words_positions_min_level_size: Option<NonZeroUsize>,
+    words_positions_level_group_size: Option<NonZeroU32>,
+    words_positions_min_level_size: Option<NonZeroU32>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,

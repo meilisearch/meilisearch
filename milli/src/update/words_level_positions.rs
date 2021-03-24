@@ -1,7 +1,7 @@
 use std::cmp;
 use std::convert::TryFrom;
 use std::fs::File;
-use std::num::NonZeroUsize;
+use std::num::NonZeroU32;
 
 use grenad::{CompressionType, Reader, Writer, FileFuse};
 use heed::types::{DecodeIgnore, Str};
@@ -20,8 +20,8 @@ pub struct WordsLevelPositions<'t, 'u, 'i> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
-    level_group_size: NonZeroUsize,
-    min_level_size: NonZeroUsize,
+    level_group_size: NonZeroU32,
+    min_level_size: NonZeroU32,
     _update_id: u64,
 }
 
@@ -38,18 +38,18 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
-            level_group_size: NonZeroUsize::new(4).unwrap(),
-            min_level_size: NonZeroUsize::new(5).unwrap(),
+            level_group_size: NonZeroU32::new(4).unwrap(),
+            min_level_size: NonZeroU32::new(5).unwrap(),
             _update_id: update_id,
         }
     }
 
-    pub fn level_group_size(&mut self, value: NonZeroUsize) -> &mut Self {
-        self.level_group_size = NonZeroUsize::new(cmp::max(value.get(), 2)).unwrap();
+    pub fn level_group_size(&mut self, value: NonZeroU32) -> &mut Self {
+        self.level_group_size = NonZeroU32::new(cmp::max(value.get(), 2)).unwrap();
         self
     }
 
-    pub fn min_level_size(&mut self, value: NonZeroUsize) -> &mut Self {
+    pub fn min_level_size(&mut self, value: NonZeroU32) -> &mut Self {
         self.min_level_size = value;
         self
     }
@@ -84,6 +84,20 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
     }
 }
 
+/// Returns the next number after or equal to `x` that is divisible by `d`.
+fn next_divisible(x: u32, d: u32) -> u32 {
+    (x.saturating_sub(1) | (d - 1)) + 1
+}
+
+/// Returns the previous number after or equal to `x` that is divisible by `d`,
+/// saturates on zero.
+fn previous_divisible(x: u32, d: u32) -> u32 {
+    match x.checked_sub(d - 1) {
+        Some(0) | None => 0,
+        Some(x) => next_divisible(x, d),
+    }
+}
+
 /// Generates all the words positions levels based on the levels zero (including the level zero).
 fn compute_positions_levels(
     rtxn: &heed::RoTxn,
@@ -92,8 +106,8 @@ fn compute_positions_levels(
     compression_type: CompressionType,
     compression_level: Option<u32>,
     shrink_size: Option<u64>,
-    level_group_size: NonZeroUsize,
-    min_level_size: NonZeroUsize,
+    level_group_size: NonZeroU32,
+    min_level_size: NonZeroU32,
 ) -> anyhow::Result<Reader<FileFuse>>
 {
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
@@ -113,7 +127,7 @@ fn compute_positions_levels(
 
         let first_level_size = words_positions_db.remap_data_type::<DecodeIgnore>()
             .range(rtxn, &level_0_range)?
-            .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
+            .fold(Ok(0u32), |count, result| result.and(count).map(|c| c + 1))?;
 
         // Groups sizes are always a power of the original level_group_size and therefore a group
         // always maps groups of the previous level and never splits previous levels groups in half.
@@ -136,20 +150,23 @@ fn compute_positions_levels(
                 let ((_word, _level, value, _right), docids) = result?;
 
                 if i == 0 {
-                    left = value;
-                } else if i % group_size == 0 {
+                    left = previous_divisible(value, group_size);
+                    right = left + (group_size - 1);
+                }
+
+                if value > right {
                     // we found the first bound of the next group, we must store the left
                     // and right bounds associated with the docids.
                     write_level_entry(&mut writer, word, level, left, right, &group_docids)?;
 
                     // We save the left bound for the new group and also reset the docids.
                     group_docids = RoaringBitmap::new();
-                    left = value;
+                    left = previous_divisible(value, group_size);
+                    right = left + (group_size - 1);
                 }
 
                 // The right bound is always the bound we run through.
                 group_docids.union_with(&docids);
-                right = value;
             }
 
             if !group_docids.is_empty() {
