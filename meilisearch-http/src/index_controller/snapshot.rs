@@ -39,6 +39,7 @@ where
     }
 
     pub async fn run(self) {
+        info!("Snashot scheduled every {}s.", self.snapshot_period.as_secs());
         loop {
             sleep(self.snapshot_period).await;
             if let Err(e) = self.perform_snapshot().await {
@@ -51,6 +52,8 @@ where
         if !self.snapshot_path.is_file() {
             bail!("Invalid snapshot file path.");
         }
+
+        info!("Performing snapshot.");
 
         let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
         let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
