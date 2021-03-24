@@ -16,10 +16,12 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
+use uuid::Uuid;
 
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
 pub use updates::{Failed, Processed, Processing};
+use uuid_resolver::UuidError;
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
@@ -80,41 +82,51 @@ impl IndexController {
         uid: String,
         method: milli::update::IndexDocumentsMethod,
         format: milli::update::UpdateFormat,
-        mut payload: Payload,
+        payload: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.get_or_create(uid).await?;
-        let meta = UpdateMeta::DocumentsAddition {
-            method,
-            format,
-            primary_key,
+        let perform_update = |uuid| async move {
+            let meta = UpdateMeta::DocumentsAddition {
+                method,
+                format,
+                primary_key,
+            };
+            let (sender, receiver) = mpsc::channel(10);
+
+            // It is necessary to spawn a local task to send the payload to the update handle to
+            // prevent dead_locking between the update_handle::update that waits for the update to be
+            // registered and the update_actor that waits for the the payload to be sent to it.
+            tokio::task::spawn_local(async move {
+                payload
+                    .map(|bytes| {
+                        bytes.map_err(|e| {
+                            Box::new(e) as Box<dyn std::error::Error + Sync + Send + 'static>
+                        })
+                    })
+                    .for_each(|r| async {
+                        let _ = sender.send(r).await;
+                    })
+                    .await
+            });
+
+            // This must be done *AFTER* spawning the task.
+            self.update_handle.update(meta, receiver, uuid).await
         };
-        let (sender, receiver) = mpsc::channel(10);
 
-        // It is necessary to spawn a local task to senf the payload to the update handle to
-        // prevent dead_locking between the update_handle::update that waits for the update to be
-        // registered and the update_actor that waits for the the payload to be sent to it.
-        tokio::task::spawn_local(async move {
-            while let Some(bytes) = payload.next().await {
-                match bytes {
-                    Ok(bytes) => {
-                        let _ = sender.send(Ok(bytes)).await;
-                    }
-                    Err(e) => {
-                        let error: Box<dyn std::error::Error + Sync + Send + 'static> = Box::new(e);
-                        let _ = sender.send(Err(error)).await;
-                    }
-                }
+        match self.uuid_resolver.get(uid).await {
+            Ok(uuid) => Ok(perform_update(uuid).await?),
+            Err(UuidError::UnexistingIndex(name)) => {
+                let uuid = Uuid::new_v4();
+                let status = perform_update(uuid).await?;
+                self.uuid_resolver.insert(name, uuid).await?;
+                Ok(status)
             }
-        });
-
-        // This must be done *AFTER* spawning the task.
-        let status = self.update_handle.update(meta, receiver, uuid).await?;
-        Ok(status)
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub async fn clear_documents(&self, uid: String) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let uuid = self.uuid_resolver.get(uid).await?;
         let meta = UpdateMeta::ClearDocuments;
         let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
@@ -126,7 +138,7 @@ impl IndexController {
         uid: String,
         document_ids: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let uuid = self.uuid_resolver.get(uid).await?;
         let meta = UpdateMeta::DeleteDocuments;
         let (sender, receiver) = mpsc::channel(10);
 
@@ -146,26 +158,23 @@ impl IndexController {
         settings: Settings,
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
-        let uuid = if create {
-            let uuid = self.uuid_resolver.get_or_create(uid).await?;
-            // We need to create the index upfront, since it would otherwise only be created when
-            // the update is processed. This would make calls to GET index to fail until the update
-            // is complete. Since this is get or create, we ignore the error when the index already
-            // exists.
-            match self.index_handle.create_index(uuid, None).await {
-                Ok(_) | Err(index_actor::IndexError::IndexAlreadyExists) => (),
-                Err(e) => return Err(e.into()),
-            }
-            uuid
-        } else {
-            self.uuid_resolver.resolve(uid).await?
+        let perform_udpate = |uuid| async move {
+            let meta = UpdateMeta::Settings(settings);
+            // Nothing so send, drop the sender right away, as not to block the update actor.
+            let (_, receiver) = mpsc::channel(1);
+            self.update_handle.update(meta, receiver, uuid).await
         };
-        let meta = UpdateMeta::Settings(settings);
-        // Nothing so send, drop the sender right away, as not to block the update actor.
-        let (_, receiver) = mpsc::channel(1);
 
-        let status = self.update_handle.update(meta, receiver, uuid).await?;
-        Ok(status)
+        match self.uuid_resolver.get(uid).await {
+            Ok(uuid) => Ok(perform_udpate(uuid).await?),
+            Err(UuidError::UnexistingIndex(name)) if create => {
+                let uuid = Uuid::new_v4();
+                let status = perform_udpate(uuid).await?;
+                self.uuid_resolver.insert(name, uuid).await?;
+                Ok(status)
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub async fn create_index(
@@ -177,7 +186,11 @@ impl IndexController {
         let uuid = self.uuid_resolver.create(uid.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
         let _ = self.update_handle.create(uuid).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
 
         Ok(meta)
     }
@@ -190,13 +203,13 @@ impl IndexController {
     }
 
     pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.update_handle.update_status(uuid, id).await?;
         Ok(result)
     }
 
     pub async fn all_update_status(&self, uid: String) -> anyhow::Result<Vec<UpdateStatus>> {
-        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.update_handle.get_all_updates_status(uuid).await?;
         Ok(result)
     }
@@ -208,7 +221,11 @@ impl IndexController {
 
         for (uid, uuid) in uuids {
             let meta = self.index_handle.get_index_meta(uuid).await?;
-            let meta = IndexMetadata { name: uid.clone(), uid, meta };
+            let meta = IndexMetadata {
+                name: uid.clone(),
+                uid,
+                meta,
+            };
             ret.push(meta);
         }
 
@@ -216,7 +233,7 @@ impl IndexController {
     }
 
     pub async fn settings(&self, uid: String) -> anyhow::Result<Settings> {
-        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
     }
@@ -228,7 +245,7 @@ impl IndexController {
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Vec<Document>> {
-        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let documents = self
             .index_handle
             .documents(uuid, offset, limit, attributes_to_retrieve)
@@ -242,7 +259,7 @@ impl IndexController {
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Document> {
-        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let document = self
             .index_handle
             .document(uuid, doc_id, attributes_to_retrieve)
@@ -259,22 +276,30 @@ impl IndexController {
             bail!("Can't change the index uid.")
         }
 
-        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let meta = self.index_handle.update_index(uuid, index_settings).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
         Ok(meta)
     }
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
-        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
 
     pub async fn get_index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
-        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let meta = self.index_handle.get_index_meta(uuid).await?;
-        let meta = IndexMetadata { name: uid.clone(), uid, meta };
+        let meta = IndexMetadata {
+            name: uid.clone(),
+            uid,
+            meta,
+        };
         Ok(meta)
     }
 }

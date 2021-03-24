@@ -13,11 +13,7 @@ pub type Result<T> = std::result::Result<T, UuidError>;
 
 #[derive(Debug)]
 enum UuidResolveMsg {
-    Resolve {
-        uid: String,
-        ret: oneshot::Sender<Result<Uuid>>,
-    },
-    GetOrCreate {
+    Get {
         uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
@@ -32,6 +28,11 @@ enum UuidResolveMsg {
     List {
         ret: oneshot::Sender<Result<Vec<(String, Uuid)>>>,
     },
+    Insert {
+        uuid: Uuid,
+        name: String,
+        ret: oneshot::Sender<Result<()>>,
+    }
 }
 
 struct UuidResolverActor<S> {
@@ -54,17 +55,17 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(Create { uid: name, ret }) => {
                     let _ = ret.send(self.handle_create(name).await);
                 }
-                Some(GetOrCreate { uid: name, ret }) => {
-                    let _ = ret.send(self.handle_get_or_create(name).await);
-                }
-                Some(Resolve { uid: name, ret }) => {
-                    let _ = ret.send(self.handle_resolve(name).await);
+                Some(Get { uid: name, ret }) => {
+                    let _ = ret.send(self.handle_get(name).await);
                 }
                 Some(Delete { uid: name, ret }) => {
                     let _ = ret.send(self.handle_delete(name).await);
                 }
                 Some(List { ret }) => {
                     let _ = ret.send(self.handle_list().await);
+                }
+                Some(Insert { ret, uuid, name }) => {
+                    let _ = ret.send(self.handle_insert(name, uuid).await);
                 }
                 // all senders have been dropped, need to quit.
                 None => break,
@@ -81,14 +82,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
         self.store.create_uuid(uid, true).await
     }
 
-    async fn handle_get_or_create(&self, uid: String) -> Result<Uuid> {
-        if !is_index_uid_valid(&uid) {
-            return Err(UuidError::BadlyFormatted(uid));
-        }
-        self.store.create_uuid(uid, false).await
-    }
-
-    async fn handle_resolve(&self, uid: String) -> Result<Uuid> {
+    async fn handle_get(&self, uid: String) -> Result<Uuid> {
         self.store
             .get_uuid(uid.clone())
             .await?
@@ -105,6 +99,14 @@ impl<S: UuidStore> UuidResolverActor<S> {
     async fn handle_list(&self) -> Result<Vec<(String, Uuid)>> {
         let result = self.store.list().await?;
         Ok(result)
+    }
+
+    async fn handle_insert(&self, uid: String, uuid: Uuid) -> Result<()> {
+        if !is_index_uid_valid(&uid) {
+            return Err(UuidError::BadlyFormatted(uid));
+        }
+        self.store.insert(uid, uuid).await?;
+        Ok(())
     }
 }
 
@@ -127,18 +129,9 @@ impl UuidResolverHandle {
         Ok(Self { sender })
     }
 
-    pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
+    pub async fn get(&self, name: String) -> Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Resolve { uid: name, ret };
-        let _ = self.sender.send(msg).await;
-        Ok(receiver
-            .await
-            .expect("Uuid resolver actor has been killed")?)
-    }
-
-    pub async fn get_or_create(&self, name: String) -> Result<Uuid> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::GetOrCreate { uid: name, ret };
+        let msg = UuidResolveMsg::Get { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -171,6 +164,15 @@ impl UuidResolverHandle {
             .await
             .expect("Uuid resolver actor has been killed")?)
     }
+
+    pub async fn insert(&self, name: String, uuid: Uuid) -> anyhow::Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::Insert { ret, name, uuid };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -197,6 +199,7 @@ trait UuidStore {
     async fn get_uuid(&self, uid: String) -> Result<Option<Uuid>>;
     async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
 }
 
 struct HeedUuidStore {
@@ -289,6 +292,18 @@ impl UuidStore for HeedUuidStore {
                 entries.push((name.to_owned(), uuid))
             }
             Ok(entries)
+        })
+        .await?
+    }
+
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()> {
+        let env = self.env.clone();
+        let db = self.db;
+        tokio::task::spawn_blocking(move || {
+            let mut txn = env.write_txn()?;
+            db.put(&mut txn, &name, uuid.as_bytes())?;
+            txn.commit()?;
+            Ok(())
         })
         .await?
     }
