@@ -4,7 +4,7 @@ use log::{info, warn};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::{UuidResolveMsg, UuidStore, Result, UuidError};
+use super::{Result, UuidError, UuidResolveMsg, UuidStore};
 
 pub struct UuidResolverActor<S> {
     inbox: mpsc::Receiver<UuidResolveMsg>,
@@ -91,4 +91,3 @@ fn is_index_uid_valid(uid: &str) -> bool {
     uid.chars()
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
 }
-

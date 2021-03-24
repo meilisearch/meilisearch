@@ -12,11 +12,11 @@ use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
+use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::update_handler::UpdateHandler;
-use crate::index_controller::{updates::Processing, UpdateMeta, get_arc_ownership_blocking};
+use crate::index_controller::{get_arc_ownership_blocking, updates::Processing, UpdateMeta};
 use crate::option::IndexerOpts;
-use super::{IndexSettings, Result, IndexMsg, IndexStore, IndexError, UpdateResult, IndexMeta};
 
 pub struct IndexActor<S> {
     read_receiver: Option<mpsc::Receiver<IndexMsg>>,

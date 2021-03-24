@@ -1,10 +1,10 @@
-use std::fs::{remove_file, create_dir_all, copy};
+use std::fs::{copy, create_dir_all, remove_file};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
-use heed::{Database, Env, EnvOpenOptions, CompactionOption};
-use parking_lot::{RwLock, Mutex};
+use heed::{CompactionOption, Database, Env, EnvOpenOptions};
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use tokio::sync::mpsc;
@@ -379,7 +379,12 @@ where
         Ok(aborted_updates)
     }
 
-    pub fn snapshot(&self, txn: &mut heed::RwTxn, path: impl AsRef<Path>, uuid: Uuid) -> anyhow::Result<()> {
+    pub fn snapshot(
+        &self,
+        txn: &mut heed::RwTxn,
+        path: impl AsRef<Path>,
+        uuid: Uuid,
+    ) -> anyhow::Result<()> {
         let update_path = path.as_ref().join("updates");
         create_dir_all(&update_path)?;
 
@@ -389,7 +394,8 @@ where
         snapshot_path.push("data.mdb");
 
         // create db snapshot
-        self.env.copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+        self.env
+            .copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
 
         let update_files_path = update_path.join("update_files");
         create_dir_all(&update_files_path)?;

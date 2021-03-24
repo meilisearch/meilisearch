@@ -1,7 +1,7 @@
 mod actor;
-mod store;
-mod message;
 mod handle_impl;
+mod message;
+mod store;
 mod update_store;
 
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ use crate::index_controller::{UpdateMeta, UpdateStatus};
 
 use actor::UpdateActor;
 use message::UpdateMsg;
-use store::{UpdateStoreStore, MapUpdateStoreStore};
+use store::{MapUpdateStoreStore, UpdateStoreStore};
 
 pub use handle_impl::UpdateActorHandleImpl;
 
@@ -51,5 +51,5 @@ pub trait UpdateActorHandle {
         meta: UpdateMeta,
         data: mpsc::Receiver<PayloadData<Self::Data>>,
         uuid: Uuid,
-    ) -> Result<UpdateStatus> ;
+    ) -> Result<UpdateStatus>;
 }

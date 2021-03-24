@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 
 use heed::{
     types::{ByteSlice, Str},
-    Database, Env, EnvOpenOptions,CompactionOption
+    CompactionOption, Database, Env, EnvOpenOptions,
 };
 use uuid::Uuid;
 
-use super::{UUID_STORE_SIZE, UuidError, Result};
+use super::{Result, UuidError, UUID_STORE_SIZE};
 
 #[async_trait::async_trait]
 pub trait UuidStore {

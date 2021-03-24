@@ -2,15 +2,15 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 use log::info;
-use tokio::sync::mpsc;
-use uuid::Uuid;
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
-use super::{PayloadData, UpdateError, UpdateMsg, UpdateStoreStore, Result};
+use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStoreStore};
 use crate::index_controller::index_actor::IndexActorHandle;
-use crate::index_controller::{UpdateMeta, UpdateStatus, get_arc_ownership_blocking};
+use crate::index_controller::{get_arc_ownership_blocking, UpdateMeta, UpdateStatus};
 
 pub struct UpdateActor<D, S, I> {
     path: PathBuf,

@@ -1,12 +1,12 @@
-use std::path::{PathBuf, Path};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use uuid::Uuid;
+use heed::EnvOpenOptions;
+use tokio::fs;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
-use tokio::fs;
-use heed::EnvOpenOptions;
+use uuid::Uuid;
 
 use super::{IndexError, Result};
 use crate::index::Index;

@@ -39,7 +39,10 @@ where
     }
 
     pub async fn run(self) {
-        info!("Snashot scheduled every {}s.", self.snapshot_period.as_secs());
+        info!(
+            "Snashot scheduled every {}s.",
+            self.snapshot_period.as_secs()
+        );
         loop {
             sleep(self.snapshot_period).await;
             if let Err(e) = self.perform_snapshot().await {
@@ -49,16 +52,10 @@ where
     }
 
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
-        if !self.snapshot_path.is_file() {
-            bail!("Invalid snapshot file path.");
-        }
-
         info!("Performing snapshot.");
 
         let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
         let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
-
-        fs::create_dir_all(&temp_snapshot_path).await?;
 
         let uuids = self
             .uuid_resolver_handle

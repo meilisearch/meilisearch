@@ -12,6 +12,7 @@ use std::time::Duration;
 use actix_web::web::{Bytes, Payload};
 use anyhow::bail;
 use futures::stream::StreamExt;
+use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -22,9 +23,9 @@ use crate::index::{Facets, Settings, UpdateResult};
 use crate::option::Opt;
 
 use index_actor::IndexActorHandle;
+use snapshot::load_snapshot;
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
-use snapshot::load_snapshot;
 
 use snapshot::SnapshotService;
 pub use updates::{Failed, Processed, Processing};
@@ -72,6 +73,7 @@ impl IndexController {
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 
         if let Some(ref path) = options.import_snapshot {
+            info!("Loading from snapshot {:?}", path);
             load_snapshot(
                 &options.db_path,
                 path,

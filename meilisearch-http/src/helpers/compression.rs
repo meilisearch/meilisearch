@@ -2,7 +2,7 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
-use flate2::{Compression, write::GzEncoder, read::GzDecoder};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use tar::{Archive, Builder};
 
 pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {

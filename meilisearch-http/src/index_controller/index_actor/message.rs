@@ -3,12 +3,9 @@ use std::path::PathBuf;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+use super::{IndexMeta, IndexSettings, Result, UpdateResult};
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{
-    updates::Processing,
-    UpdateMeta,
-};
-use super::{IndexSettings, IndexMeta, UpdateResult, Result};
+use crate::index_controller::{updates::Processing, UpdateMeta};
 
 pub enum IndexMsg {
     CreateIndex {

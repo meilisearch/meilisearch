@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
-use tokio::sync::{oneshot, mpsc};
 
-use super::{Result, PayloadData, UpdateStatus, UpdateMeta};
+use super::{PayloadData, Result, UpdateMeta, UpdateStatus};
 
 pub enum UpdateMsg<D> {
     Update {

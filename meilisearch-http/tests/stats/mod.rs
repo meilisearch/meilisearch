@@ -18,4 +18,4 @@ async fn test_healthyness() {
     let (response, status_code) = server.service.get("/health").await;
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "available");
- }
+}

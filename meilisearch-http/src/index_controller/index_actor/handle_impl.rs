@@ -1,12 +1,14 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use super::{
+    IndexActor, IndexActorHandle, IndexMeta, IndexMsg, MapIndexStore, Result, UpdateResult,
+};
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::IndexSettings;
 use crate::index_controller::{updates::Processing, UpdateMeta};
-use super::{IndexActorHandle, IndexMsg, IndexMeta, UpdateResult, Result, IndexActor, MapIndexStore};
 
 #[derive(Clone)]
 pub struct IndexActorHandleImpl {
@@ -102,11 +104,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> Result<IndexMeta> {
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::UpdateIndex {
             uuid,

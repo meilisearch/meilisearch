@@ -17,9 +17,9 @@ use crate::index_controller::{
     updates::{Failed, Processed, Processing},
     UpdateMeta,
 };
+use actor::IndexActor;
 use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
-use actor::IndexActor;
 
 pub use handle_impl::IndexActorHandleImpl;
 
@@ -69,7 +69,6 @@ pub enum IndexError {
     ExistingPrimaryKey,
 }
 
-
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait IndexActorHandle {
@@ -97,11 +96,6 @@ pub trait IndexActorHandle {
     ) -> Result<Document>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta>;
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> Result<IndexMeta>;
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
 }
-

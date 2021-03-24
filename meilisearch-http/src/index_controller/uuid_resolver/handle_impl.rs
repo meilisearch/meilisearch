@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use super::{HeedUuidStore, UuidResolverActor, UuidResolveMsg, UuidResolverHandle, Result};
+use super::{HeedUuidStore, Result, UuidResolveMsg, UuidResolverActor, UuidResolverHandle};
 
 #[derive(Clone)]
 pub struct UuidResolverHandleImpl {
@@ -21,7 +21,7 @@ impl UuidResolverHandleImpl {
 }
 
 #[async_trait::async_trait]
-impl UuidResolverHandle  for UuidResolverHandleImpl {
+impl UuidResolverHandle for UuidResolverHandleImpl {
     async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Resolve { uid: name, ret };

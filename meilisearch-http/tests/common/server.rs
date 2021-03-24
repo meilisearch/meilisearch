@@ -27,14 +27,20 @@ impl Server {
         let data = Data::new(opt).unwrap();
         let service = Service(data);
 
-        Server { service, _dir: Some(dir) }
+        Server {
+            service,
+            _dir: Some(dir),
+        }
     }
 
     pub async fn new_with_options(opt: Opt) -> Self {
         let data = Data::new(opt).unwrap();
         let service = Service(data);
 
-        Server { service, _dir: None }
+        Server {
+            service,
+            _dir: None,
+        }
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
