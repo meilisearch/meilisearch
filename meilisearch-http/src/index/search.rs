@@ -41,6 +41,7 @@ pub struct SearchQuery {
 pub struct SearchResult {
     pub hits: Vec<Map<String, Value>>,
     pub nb_hits: u64,
+    pub exhaustive_nb_hits: bool,
     pub query: String,
     pub limit: usize,
     pub offset: usize,
@@ -107,6 +108,7 @@ impl Index {
         };
 
         let result = SearchResult {
+            exhaustive_nb_hits: false, // not implemented yet
             hits: documents,
             nb_hits,
             query: query.q.clone().unwrap_or_default(),
