@@ -52,6 +52,10 @@ pub fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -
     cbo_roaring_bitmap_merge(values)
 }
 
+pub fn word_prefix_level_positions_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    cbo_roaring_bitmap_merge(values)
+}
+
 pub fn word_level_position_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     cbo_roaring_bitmap_merge(values)
 }

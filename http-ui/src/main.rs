@@ -228,8 +228,6 @@ enum UpdateMeta {
     ClearDocuments,
     Settings(Settings),
     Facets(Facets),
-    WordsPrefixes(WordsPrefixes),
-    WordsLevelPositions(WordsLevelPositions),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,14 +286,6 @@ struct WordsPrefixes {
 struct WordsLevelPositions {
     level_group_size: Option<NonZeroU32>,
     min_level_size: Option<NonZeroU32>,
-}
-
-// Any value that is present is considered Some value, including null.
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where T: Deserialize<'de>,
-      D: Deserializer<'de>
-{
-    Deserialize::deserialize(deserializer).map(Some)
 }
 
 #[tokio::main]
@@ -494,36 +484,6 @@ async fn main() -> anyhow::Result<()> {
                     match builder.execute() {
                         Ok(()) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e)
-                    }
-                }
-                UpdateMeta::WordsPrefixes(settings) => {
-                    // We must use the write transaction of the update here.
-                    let mut wtxn = index_cloned.write_txn()?;
-                    let mut builder = update_builder.words_prefixes(&mut wtxn, &index_cloned);
-                    if let Some(value) = settings.threshold {
-                        builder.threshold(value);
-                    }
-                    if let Some(value) = settings.max_prefix_length {
-                        builder.max_prefix_length(value);
-                    }
-                    match builder.execute() {
-                        Ok(()) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e)
-                    }
-                },
-                UpdateMeta::WordsLevelPositions(levels) => {
-                    // We must use the write transaction of the update here.
-                    let mut wtxn = index_cloned.write_txn()?;
-                    let mut builder = update_builder.words_level_positions(&mut wtxn, &index_cloned);
-                    if let Some(value) = levels.level_group_size {
-                        builder.level_group_size(value);
-                    }
-                    if let Some(value) = levels.min_level_size {
-                        builder.min_level_size(value);
-                    }
-                    match builder.execute() {
-                        Ok(()) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
                     }
                 }
             };
@@ -944,32 +904,6 @@ async fn main() -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let change_words_prefixes_route = warp::filters::method::post()
-        .and(warp::path!("words-prefixes"))
-        .and(warp::body::json())
-        .map(move |settings: WordsPrefixes| {
-            let meta = UpdateMeta::WordsPrefixes(settings);
-            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
-            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
-            eprintln!("update {} registered", update_id);
-            warp::reply()
-        });
-
-    let update_store_cloned = update_store.clone();
-    let update_status_sender_cloned = update_status_sender.clone();
-    let change_words_level_positions_route = warp::filters::method::post()
-        .and(warp::path!("words-level-positions"))
-        .and(warp::body::json())
-        .map(move |levels: WordsLevelPositions| {
-            let meta = UpdateMeta::WordsLevelPositions(levels);
-            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
-            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
-            eprintln!("update {} registered", update_id);
-            warp::reply()
-        });
-
-    let update_store_cloned = update_store.clone();
-    let update_status_sender_cloned = update_status_sender.clone();
     let abort_update_id_route = warp::filters::method::delete()
         .and(warp::path!("update" / u64))
         .map(move |update_id: u64| {
@@ -1042,8 +976,6 @@ async fn main() -> anyhow::Result<()> {
         .or(clearing_route)
         .or(change_settings_route)
         .or(change_facet_levels_route)
-        .or(change_words_prefixes_route)
-        .or(change_words_level_positions_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;

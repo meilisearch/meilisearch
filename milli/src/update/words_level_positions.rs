@@ -1,17 +1,22 @@
-use std::cmp;
+use std::{cmp, str};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::num::NonZeroU32;
 
+use fst::automaton::{self, Automaton};
+use fst::{Streamer, IntoStreamer};
 use grenad::{CompressionType, Reader, Writer, FileFuse};
-use heed::types::{DecodeIgnore, Str};
+use heed::types::{ByteSlice, DecodeIgnore, Str};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::{StrLevelPositionCodec, CboRoaringBitmapCodec};
 use crate::update::index_documents::WriteMethod;
-use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::update::index_documents::{
+    create_writer, create_sorter, writer_into_reader, write_into_lmdb_database,
+    word_prefix_level_positions_docids_merge, sorter_into_lmdb_database
+};
 use crate::{Index, TreeLevel};
 
 pub struct WordsLevelPositions<'t, 'u, 'i> {
@@ -20,27 +25,24 @@ pub struct WordsLevelPositions<'t, 'u, 'i> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
+    pub(crate) max_nb_chunks: Option<usize>,
+    pub(crate) max_memory: Option<usize>,
     level_group_size: NonZeroU32,
     min_level_size: NonZeroU32,
-    _update_id: u64,
 }
 
 impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
-    pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        index: &'i Index,
-        update_id: u64,
-    ) -> WordsLevelPositions<'t, 'u, 'i>
-    {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> WordsLevelPositions<'t, 'u, 'i> {
         WordsLevelPositions {
             wtxn,
             index,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
+            max_nb_chunks: None,
+            max_memory: None,
             level_group_size: NonZeroU32::new(4).unwrap(),
             min_level_size: NonZeroU32::new(5).unwrap(),
-            _update_id: update_id,
         }
     }
 
@@ -76,7 +78,71 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_level_position_docids.as_polymorph(),
             entries,
-            |_, _| anyhow::bail!("invalid facet level merging"),
+            |_, _| anyhow::bail!("invalid word level position merging"),
+            WriteMethod::Append,
+        )?;
+
+        // We compute the word prefix level positions database.
+        self.index.word_prefix_level_position_docids.clear(self.wtxn)?;
+
+        let mut word_prefix_level_positions_docids_sorter = create_sorter(
+            word_prefix_level_positions_docids_merge,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.max_nb_chunks,
+            self.max_memory,
+        );
+
+        // We insert the word prefix level positions where the level is equal to 0 and
+        // corresponds to the word-prefix level positions where the prefixes appears
+        // in the prefix FST previously constructed.
+        let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
+        let db = self.index.word_level_position_docids.remap_data_type::<ByteSlice>();
+        for result in db.iter(self.wtxn)? {
+            let ((word, level, left, right), data) = result?;
+            if level == TreeLevel::min_value() {
+                let automaton = automaton::Str::new(word).starts_with();
+                let mut matching_prefixes = prefix_fst.search(automaton).into_stream();
+                while let Some(prefix) = matching_prefixes.next() {
+                    let prefix = str::from_utf8(prefix)?;
+                    let key = (prefix, level, left, right);
+                    let bytes = StrLevelPositionCodec::bytes_encode(&key).unwrap();
+                    word_prefix_level_positions_docids_sorter.insert(bytes, data)?;
+                }
+            }
+        }
+
+        // We finally write all the word prefix level positions docids with
+        // a level equal to 0 into the LMDB database.
+        sorter_into_lmdb_database(
+            self.wtxn,
+            *self.index.word_prefix_level_position_docids.as_polymorph(),
+            word_prefix_level_positions_docids_sorter,
+            word_prefix_level_positions_docids_merge,
+            WriteMethod::Append,
+        )?;
+
+        let entries = compute_positions_levels(
+            self.wtxn,
+            self.index.word_prefix_docids.remap_data_type::<DecodeIgnore>(),
+            self.index.word_prefix_level_position_docids,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.level_group_size,
+            self.min_level_size,
+        )?;
+
+        // The previously computed entries also defines the level 0 entries
+        // so we can clear the database and append all of these entries.
+        self.index.word_prefix_level_position_docids.clear(self.wtxn)?;
+
+        write_into_lmdb_database(
+            self.wtxn,
+            *self.index.word_prefix_level_position_docids.as_polymorph(),
+            entries,
+            |_, _| anyhow::bail!("invalid word prefix level position merging"),
             WriteMethod::Append,
         )?;
 

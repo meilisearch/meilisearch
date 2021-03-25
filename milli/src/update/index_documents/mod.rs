@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::str;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
@@ -13,18 +14,21 @@ use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionTy
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use memmap::Mmap;
-use rayon::ThreadPool;
 use rayon::prelude::*;
+use rayon::ThreadPool;
 use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
-use crate::update::{Facets, WordsLevelPositions, WordsPrefixes, UpdateIndexingStep};
+use crate::update::{
+    Facets, WordsLevelPositions, WordPrefixDocids, WordsPrefixesFst, UpdateIndexingStep,
+    WordPrefixPairProximityDocids,
+};
 use self::store::{Store, Readers};
 pub use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     docid_word_positions_merge, documents_merge,
-    word_level_position_docids_merge, facet_field_value_docids_merge,
-    field_id_docid_facet_values_merge,
+    word_level_position_docids_merge, word_prefix_level_positions_docids_merge,
+    facet_field_value_docids_merge, field_id_docid_facet_values_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -719,10 +723,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         builder.execute()?;
 
         // Run the words prefixes update operation.
-        let mut builder = WordsPrefixes::new(self.wtxn, self.index, self.update_id);
-        builder.chunk_compression_type = self.chunk_compression_type;
-        builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        let mut builder = WordsPrefixesFst::new(self.wtxn, self.index, self.update_id);
         if let Some(value) = self.words_prefix_threshold {
             builder.threshold(value);
         }
@@ -731,8 +732,26 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         builder.execute()?;
 
+        // Run the word prefix docids update operation.
+        let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        builder.max_nb_chunks = self.max_nb_chunks;
+        builder.max_memory = self.max_memory;
+        builder.execute()?;
+
+        // Run the word prefix pair proximity docids update operation.
+        let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        builder.max_nb_chunks = self.max_nb_chunks;
+        builder.max_memory = self.max_memory;
+        builder.execute()?;
+
         // Run the words level positions update operation.
-        let mut builder = WordsLevelPositions::new(self.wtxn, self.index, self.update_id);
+        let mut builder = WordsLevelPositions::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;

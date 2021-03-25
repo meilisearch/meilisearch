@@ -338,6 +338,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         facet_field_id_value_docids,
         field_id_docid_facet_values: _,
         documents,
+        ..
     } = index;
 
     let main_name = "main";

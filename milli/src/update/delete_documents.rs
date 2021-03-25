@@ -89,6 +89,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_pair_proximity_docids,
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
+            word_prefix_level_position_docids,
             facet_field_id_value_docids,
             field_id_docid_facet_values,
             documents,
@@ -332,6 +333,21 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // We delete the documents ids that are under the word level position docids.
         let mut iter = word_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
+        while let Some(result) = iter.next() {
+            let (bytes, mut docids) = result?;
+            let previous_len = docids.len();
+            docids.difference_with(&self.documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+            } else if docids.len() != previous_len {
+                iter.put_current(bytes, &docids)?;
+            }
+        }
+
+        drop(iter);
+
+        // We delete the documents ids that are under the word prefix level position docids.
+        let mut iter = word_prefix_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
