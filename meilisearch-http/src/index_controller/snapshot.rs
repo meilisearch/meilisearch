@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use anyhow::bail;
 use log::{error, info};
-use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
+use tokio::fs;
 
 use super::update_actor::UpdateActorHandle;
 use super::uuid_resolver::UuidResolverHandle;
@@ -17,6 +17,7 @@ pub struct SnapshotService<U, R> {
     update_handle: U,
     snapshot_period: Duration,
     snapshot_path: PathBuf,
+    db_name: String,
 }
 
 impl<U, R> SnapshotService<U, R>
@@ -29,12 +30,14 @@ where
         update_handle: U,
         snapshot_period: Duration,
         snapshot_path: PathBuf,
+        db_name: String,
     ) -> Self {
         Self {
             uuid_resolver_handle,
             update_handle,
             snapshot_period,
             snapshot_path,
+            db_name,
         }
     }
 
@@ -53,6 +56,8 @@ where
 
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
         info!("Performing snapshot.");
+
+        fs::create_dir_all(&self.snapshot_path).await?;
 
         let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
         let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
@@ -76,18 +81,20 @@ where
 
         futures::future::try_join_all(tasks).await?;
 
-        let temp_snapshot_file = temp_snapshot_path.with_extension("temp");
-
-        let temp_snapshot_file_clone = temp_snapshot_file.clone();
         let temp_snapshot_path_clone = temp_snapshot_path.clone();
-        spawn_blocking(move || {
-            compression::to_tar_gz(temp_snapshot_path_clone, temp_snapshot_file_clone)
+
+        let snapshot_dir = self.snapshot_path.clone();
+        let snapshot_path = self.snapshot_path.join(format!("{}.snapshot", self.db_name));
+        let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
+            let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
+            let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
+            compression::to_tar_gz(temp_snapshot_path_clone, temp_snapshot_file_path)?;
+            temp_snapshot_file.persist(&snapshot_path)?;
+            Ok(snapshot_path)
         })
         .await??;
 
-        fs::rename(temp_snapshot_file, &self.snapshot_path).await?;
-
-        info!("Created snapshot in {:?}.", self.snapshot_path);
+        info!("Created snapshot in {:?}.", snapshot_path);
 
         Ok(())
     }

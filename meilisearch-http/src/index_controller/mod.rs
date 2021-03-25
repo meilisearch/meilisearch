@@ -98,6 +98,10 @@ impl IndexController {
                 update_handle.clone(),
                 Duration::from_secs(options.snapshot_interval_sec),
                 options.snapshot_dir.clone(),
+                options.db_path
+                .file_name()
+                .map(|n| n.to_owned().into_string().expect("invalid path"))
+                .unwrap_or_else(|| String::from("data.ms")),
             );
 
             tokio::task::spawn(snapshot_service.run());
