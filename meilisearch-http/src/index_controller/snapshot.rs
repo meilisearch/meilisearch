@@ -40,14 +40,14 @@ where
 
     pub async fn run(self) {
         info!(
-            "Snashot scheduled every {}s.",
+            "Snapshot scheduled every {}s.",
             self.snapshot_period.as_secs()
         );
         loop {
-            sleep(self.snapshot_period).await;
             if let Err(e) = self.perform_snapshot().await {
                 error!("{}", e);
             }
+            sleep(self.snapshot_period).await;
         }
     }
 
