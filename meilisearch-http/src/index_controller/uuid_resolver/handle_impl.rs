@@ -22,18 +22,9 @@ impl UuidResolverHandleImpl {
 
 #[async_trait::async_trait]
 impl UuidResolverHandle for UuidResolverHandleImpl {
-    async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
+    async fn get(&self, name: String) -> Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Resolve { uid: name, ret };
-        let _ = self.sender.send(msg).await;
-        Ok(receiver
-            .await
-            .expect("Uuid resolver actor has been killed")?)
-    }
-
-    async fn get_or_create(&self, name: String) -> Result<Uuid> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::GetOrCreate { uid: name, ret };
+        let msg = UuidResolveMsg::Get { uid: name, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await
@@ -61,6 +52,15 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
     async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::List { ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
+    }
+
+    async fn insert(&self, name: String, uuid: Uuid) -> anyhow::Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::Insert { ret, name, uuid };
         let _ = self.sender.send(msg).await;
         Ok(receiver
             .await

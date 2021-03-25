@@ -4,14 +4,8 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::Result;
-
-#[derive(Debug)]
 pub enum UuidResolveMsg {
-    Resolve {
-        uid: String,
-        ret: oneshot::Sender<Result<Uuid>>,
-    },
-    GetOrCreate {
+    Get {
         uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
@@ -25,6 +19,11 @@ pub enum UuidResolveMsg {
     },
     List {
         ret: oneshot::Sender<Result<Vec<(String, Uuid)>>>,
+    },
+    Insert {
+        uuid: Uuid,
+        name: String,
+        ret: oneshot::Sender<Result<()>>,
     },
     SnapshotRequest {
         path: PathBuf,

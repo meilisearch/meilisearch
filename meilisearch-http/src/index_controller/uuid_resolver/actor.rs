@@ -26,17 +26,17 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(Create { uid: name, ret }) => {
                     let _ = ret.send(self.handle_create(name).await);
                 }
-                Some(GetOrCreate { uid: name, ret }) => {
-                    let _ = ret.send(self.handle_get_or_create(name).await);
-                }
-                Some(Resolve { uid: name, ret }) => {
-                    let _ = ret.send(self.handle_resolve(name).await);
+                Some(Get { uid: name, ret }) => {
+                    let _ = ret.send(self.handle_get(name).await);
                 }
                 Some(Delete { uid: name, ret }) => {
                     let _ = ret.send(self.handle_delete(name).await);
                 }
                 Some(List { ret }) => {
                     let _ = ret.send(self.handle_list().await);
+                }
+                Some(Insert { ret, uuid, name }) => {
+                    let _ = ret.send(self.handle_insert(name, uuid).await);
                 }
                 Some(SnapshotRequest { path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(path).await);
@@ -56,14 +56,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
         self.store.create_uuid(uid, true).await
     }
 
-    async fn handle_get_or_create(&self, uid: String) -> Result<Uuid> {
-        if !is_index_uid_valid(&uid) {
-            return Err(UuidError::BadlyFormatted(uid));
-        }
-        self.store.create_uuid(uid, false).await
-    }
-
-    async fn handle_resolve(&self, uid: String) -> Result<Uuid> {
+    async fn handle_get(&self, uid: String) -> Result<Uuid> {
         self.store
             .get_uuid(uid.clone())
             .await?
@@ -84,6 +77,14 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
     async fn handle_snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>> {
         self.store.snapshot(path).await
+    }
+
+    async fn handle_insert(&self, uid: String, uuid: Uuid) -> Result<()> {
+        if !is_index_uid_valid(&uid) {
+            return Err(UuidError::BadlyFormatted(uid));
+        }
+        self.store.insert(uid, uuid).await?;
+        Ok(())
     }
 }
 

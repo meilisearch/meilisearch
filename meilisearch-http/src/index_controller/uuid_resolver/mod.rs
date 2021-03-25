@@ -24,8 +24,8 @@ pub type Result<T> = std::result::Result<T, UuidError>;
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait UuidResolverHandle {
-    async fn resolve(&self, name: String) -> anyhow::Result<Uuid>;
-    async fn get_or_create(&self, name: String) -> Result<Uuid>;
+    async fn get(&self, name: String) -> Result<Uuid>;
+    async fn insert(&self, name: String, uuid: Uuid) -> anyhow::Result<()>;
     async fn create(&self, name: String) -> anyhow::Result<Uuid>;
     async fn delete(&self, name: String) -> anyhow::Result<Uuid>;
     async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>>;

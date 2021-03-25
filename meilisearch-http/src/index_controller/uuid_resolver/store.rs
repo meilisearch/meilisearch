@@ -17,6 +17,7 @@ pub trait UuidStore {
     async fn get_uuid(&self, uid: String) -> Result<Option<Uuid>>;
     async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>>;
 }
 
@@ -63,6 +64,7 @@ impl UuidStore for HeedUuidStore {
         })
         .await?
     }
+
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
         let db = self.db;
@@ -109,6 +111,18 @@ impl UuidStore for HeedUuidStore {
                 entries.push((name.to_owned(), uuid))
             }
             Ok(entries)
+        })
+        .await?
+    }
+
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()> {
+        let env = self.env.clone();
+        let db = self.db;
+        tokio::task::spawn_blocking(move || {
+            let mut txn = env.write_txn()?;
+            db.put(&mut txn, &name, uuid.as_bytes())?;
+            txn.commit()?;
+            Ok(())
         })
         .await?
     }
