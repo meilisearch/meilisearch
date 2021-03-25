@@ -57,9 +57,9 @@ where
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
         info!("Performing snapshot.");
 
-        fs::create_dir_all(&self.snapshot_path).await?;
-
-        let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(".")).await??;
+        let snapshot_dir = self.snapshot_path.clone();
+        fs::create_dir_all(&snapshot_dir).await?;
+        let temp_snapshot_dir = spawn_blocking(move || tempfile::tempdir_in(snapshot_dir)).await??;
         let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
 
         let uuids = self
@@ -81,14 +81,12 @@ where
 
         futures::future::try_join_all(tasks).await?;
 
-        let temp_snapshot_path_clone = temp_snapshot_path.clone();
-
         let snapshot_dir = self.snapshot_path.clone();
         let snapshot_path = self.snapshot_path.join(format!("{}.snapshot", self.db_name));
         let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
             let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
             let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
-            compression::to_tar_gz(temp_snapshot_path_clone, temp_snapshot_file_path)?;
+            compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
             temp_snapshot_file.persist(&snapshot_path)?;
             Ok(snapshot_path)
         })
@@ -161,12 +159,13 @@ mod test {
             .times(uuids_num)
             .returning(move |_, _| Box::pin(ok(())));
 
-        let snapshot_path = tempfile::NamedTempFile::new_in(".").unwrap();
+        let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(
             uuid_resolver,
             update_handle,
             Duration::from_millis(100),
             snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
         );
 
         snapshot_service.perform_snapshot().await.unwrap();
@@ -183,17 +182,18 @@ mod test {
 
         let update_handle = MockUpdateActorHandle::new();
 
-        let snapshot_path = tempfile::NamedTempFile::new_in(".").unwrap();
+        let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(
             uuid_resolver,
             update_handle,
             Duration::from_millis(100),
             snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
         );
 
         assert!(snapshot_service.perform_snapshot().await.is_err());
         // Nothing was written to the file
-        assert_eq!(snapshot_path.as_file().metadata().unwrap().len(), 0);
+        assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
     }
 
     #[actix_rt::test]
@@ -211,17 +211,18 @@ mod test {
             // abitrary error
             .returning(|_, _| Box::pin(err(UpdateError::UnexistingUpdate(0))));
 
-        let snapshot_path = tempfile::NamedTempFile::new_in(".").unwrap();
+        let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(
             uuid_resolver,
             update_handle,
             Duration::from_millis(100),
             snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
         );
 
         assert!(snapshot_service.perform_snapshot().await.is_err());
         // Nothing was written to the file
-        assert_eq!(snapshot_path.as_file().metadata().unwrap().len(), 0);
+        assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
     }
 
     #[actix_rt::test]
@@ -236,12 +237,13 @@ mod test {
 
         let update_handle = MockUpdateActorHandle::new();
 
-        let snapshot_path = tempfile::NamedTempFile::new_in(".").unwrap();
+        let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(
             uuid_resolver,
             update_handle,
             Duration::from_millis(100),
             snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
         );
 
         let _ = timeout(Duration::from_millis(300), snapshot_service.run()).await;
