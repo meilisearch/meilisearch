@@ -882,16 +882,19 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
 
         let mut key_size: u64 = 0;
         let mut val_size: u64 = 0;
+        let mut number_entries: u64 = 0;
         for result in database.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
             let (k, v) = result?;
             key_size += k.len() as u64;
             val_size += v.len() as u64;
+            number_entries += 1;
         }
 
         println!("The {} database weigh:", name);
         println!("\ttotal key size: {}", Byte::from(key_size).get_appropriate_unit(true));
         println!("\ttotal val size: {}", Byte::from(val_size).get_appropriate_unit(true));
         println!("\ttotal size: {}", Byte::from(key_size + val_size).get_appropriate_unit(true));
+        println!("\tnumber of entries: {}", number_entries);
     }
 
     Ok(())
