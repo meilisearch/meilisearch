@@ -10,7 +10,7 @@ anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = "0.10.6"
-meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", branch = "main" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.1.4" }
 memmap = "0.7.0"
 milli = { path = "../milli" }
 once_cell = "1.5.2"
