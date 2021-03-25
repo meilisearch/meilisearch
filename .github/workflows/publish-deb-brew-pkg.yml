@@ -7,7 +7,7 @@ on:
 jobs:
   debian:
     name: Publish debian packagge
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
     - uses: hecrj/setup-rust-action@master
       with:
@@ -29,7 +29,7 @@ jobs:
 
   homebrew:
     name: Bump Homebrew formula
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Create PR to Homebrew
         uses: mislav/bump-homebrew-formula-action@v1
