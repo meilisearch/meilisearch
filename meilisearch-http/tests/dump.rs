@@ -116,7 +116,7 @@ async fn get_dump_status_early_should_return_in_progress() {
 
     assert_eq!(status_code, 200);
 
-    assert_json_eq!(expected, value, ordered: false);
+    assert_json_include!(actual: value, expected: expected);
 }
 
 #[actix_rt::test]
@@ -141,7 +141,7 @@ async fn get_dump_status_should_return_done() {
 
     assert_eq!(status_code, 200);
 
-    assert_json_eq!(expected, value, ordered: false);
+    assert_json_include!(actual: value, expected: expected);
 }
 
 #[actix_rt::test]
@@ -173,7 +173,7 @@ async fn get_dump_status_should_return_error_provoking_it() {
 
     assert_eq!(status_code, 200);
 
-    assert_json_eq!(expected, value, ordered: false);
+    assert_json_include!(actual: value, expected: expected);
 }
 
 #[actix_rt::test]

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 
 use actix_web::web;
+use chrono::DateTime;
 use chrono::offset::Utc;
 use indexmap::IndexMap;
 use log::{error, info};
@@ -204,14 +205,25 @@ pub enum DumpStatus {
 pub struct DumpInfo {
     pub uid: String,
     pub status: DumpStatus,
+    pub enqueued_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none", flatten)]
     pub error: Option<serde_json::Value>,
-
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<i64>,
 }
 
 impl DumpInfo {
     pub fn new(uid: String, status: DumpStatus) -> Self {
-        Self { uid, status, error: None }
+        Self { 
+            uid,
+            status,
+            enqueued_at: Utc::now(),
+            error: None, 
+            processed_at: None,
+            duration: None
+        }
     }
 
     pub fn with_error(mut self, error: ResponseError) -> Self {
@@ -223,6 +235,14 @@ impl DumpInfo {
 
     pub fn dump_already_in_progress(&self) -> bool {
         self.status == DumpStatus::InProgress
+    }
+
+    pub fn complete(mut self) -> Self {
+        self.processed_at = Some(Utc::now());
+        self.duration = Some(Utc::now().signed_duration_since(self.enqueued_at).num_seconds());
+        self.status = DumpStatus::Done;
+
+        self
     }
 }
 
@@ -373,13 +393,9 @@ fn dump_process(data: web::Data<Data>, dumps_dir: PathBuf, dump_info: DumpInfo) 
         return ;
     }
 
-    // update dump info to `done`
-    let resume = DumpInfo::new(
-        dump_info.uid,
-        DumpStatus::Done
-    );
+    let complete = dump_info.complete();
 
-    data.set_current_dump_info(resume);
+    data.set_current_dump_info(complete);
 }
 
 pub fn init_dump_process(data: &web::Data<Data>, dumps_dir: &Path) -> Result<DumpInfo, Error> {
@@ -395,7 +411,7 @@ pub fn init_dump_process(data: &web::Data<Data>, dumps_dir: &Path) -> Result<Dum
     // generate a new dump info
     let info = DumpInfo::new(
         generate_uid(),
-        DumpStatus::InProgress
+        DumpStatus::InProgress,
     );
 
     data.set_current_dump_info(info.clone());
