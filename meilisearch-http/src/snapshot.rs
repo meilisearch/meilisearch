@@ -7,7 +7,6 @@ use std::fs::create_dir_all;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use tempfile::TempDir;
 
 pub fn load_snapshot(
     db_path: &str,
@@ -28,12 +27,22 @@ pub fn load_snapshot(
     }
 }
 
-pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
-    let tmp_dir = TempDir::new_in(snapshot_path)?;
+pub fn create_snapshot(data: &Data, snapshot_dir: impl AsRef<Path>, snapshot_name: impl AsRef<str>) -> Result<(), Error> {
+    create_dir_all(&snapshot_dir)?;
+    let tmp_dir = tempfile::tempdir_in(&snapshot_dir)?;
 
     data.db.copy_and_compact_to_path(tmp_dir.path())?;
 
-    compression::to_tar_gz(tmp_dir.path(), snapshot_path).map_err(|e| Error::Internal(format!("something went wrong during snapshot compression: {}", e)))
+    let temp_snapshot_file = tempfile::NamedTempFile::new_in(&snapshot_dir)?;
+
+    compression::to_tar_gz(tmp_dir.path(), temp_snapshot_file.path())
+        .map_err(|e| Error::Internal(format!("something went wrong during snapshot compression: {}", e)))?;
+
+    let snapshot_path = snapshot_dir.as_ref().join(snapshot_name.as_ref());
+
+    temp_snapshot_file.persist(snapshot_path).map_err(|e| Error::Internal(e.to_string()))?;
+
+    Ok(())
 }
 
 pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Result<(), Error> {
@@ -42,10 +51,11 @@ pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Re
     }
     let db_name = Path::new(&data.db_path).file_name().ok_or_else(|| Error::Internal("invalid database name".to_string()))?;
     create_dir_all(snapshot_dir)?;
-    let snapshot_path = snapshot_dir.join(format!("{}.snapshot", db_name.to_str().unwrap_or("data.ms")));
+    let snapshot_name = format!("{}.snapshot", db_name.to_str().unwrap_or("data.ms"));
+    let snapshot_dir = snapshot_dir.to_owned();
 
     thread::spawn(move || loop {
-        if let Err(e) = create_snapshot(&data, &snapshot_path) {
+        if let Err(e) = create_snapshot(&data, &snapshot_dir, &snapshot_name) {
             error!("Unsuccessful snapshot creation: {}", e);
         }
         thread::sleep(Duration::from_secs(time_gap_s));
