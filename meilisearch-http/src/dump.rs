@@ -2,6 +2,7 @@ use std::fs::{create_dir_all, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::thread;
+use std::time::Instant;
 
 use actix_web::web;
 use chrono::DateTime;
@@ -211,7 +212,7 @@ pub struct DumpInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub processed_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration: Option<i64>,
+    pub duration: Option<f64>,
 }
 
 impl DumpInfo {
@@ -237,10 +238,10 @@ impl DumpInfo {
         self.status == DumpStatus::InProgress
     }
 
-    pub fn complete(mut self) -> Self {
+    pub fn complete(mut self, duration: f64) -> Self {
         self.processed_at = Some(Utc::now());
-        self.duration = Some(Utc::now().signed_duration_since(self.enqueued_at).num_seconds());
         self.status = DumpStatus::Done;
+        self.duration = Some(duration);
 
         self
     }
@@ -315,6 +316,8 @@ fn fail_dump_process<E: std::error::Error>(data: &web::Data<Data>, dump_info: Du
 
 /// Main function of dump.
 fn dump_process(data: web::Data<Data>, dumps_dir: PathBuf, dump_info: DumpInfo) {
+    let start = Instant::now();
+
     // open read transaction on Update
     let update_reader = match data.db.update_read_txn() {
         Ok(r) => r,
@@ -393,7 +396,7 @@ fn dump_process(data: web::Data<Data>, dumps_dir: PathBuf, dump_info: DumpInfo) 
         return ;
     }
 
-    let complete = dump_info.complete();
+    let complete = dump_info.complete(start.elapsed().as_secs_f64());
 
     data.set_current_dump_info(complete);
 }
