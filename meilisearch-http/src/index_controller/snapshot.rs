@@ -11,7 +11,6 @@ use super::update_actor::UpdateActorHandle;
 use super::uuid_resolver::UuidResolverHandle;
 use crate::helpers::compression;
 
-#[allow(dead_code)]
 pub struct SnapshotService<U, R> {
     uuid_resolver_handle: R,
     update_handle: U,
