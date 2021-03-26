@@ -20,7 +20,6 @@ const fn default_search_limit() -> usize {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct SearchQuery {
     pub q: Option<String>,
     pub offset: Option<usize>,

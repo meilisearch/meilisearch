@@ -96,7 +96,6 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    #[allow(dead_code)]
     pub async fn list_updates(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/updates", self.uid);
         self.service.get(url).await
