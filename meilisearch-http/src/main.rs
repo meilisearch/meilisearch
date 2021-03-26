@@ -114,7 +114,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!("{}", ascii_name);
 
     eprintln!("Database path:\t\t{:?}", opt.db_path);
-    eprintln!("Server listening on:\t{:?}", opt.http_addr);
+    eprintln!("Server listening on:\t\"http://{}\"", opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", env!("VERGEN_SHA").to_string());
     eprintln!(
@@ -137,7 +137,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     );
 
     eprintln!(
-        "Amplitude Analytics:\t{:?}",
+        "Anonymous telemetry:\t{:?}",
         if !opt.no_analytics {
             "Enabled"
         } else {
