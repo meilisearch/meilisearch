@@ -9,10 +9,23 @@ RUN     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 WORKDIR /meilisearch
 
-COPY    . .
+COPY    Cargo.lock .
+COPY    Cargo.toml .
+
+COPY    meilisearch-core/Cargo.toml meilisearch-core/
+COPY    meilisearch-error/Cargo.toml meilisearch-error/
+COPY    meilisearch-http/Cargo.toml meilisearch-http/
+COPY    meilisearch-schema/Cargo.toml meilisearch-schema/
+COPY    meilisearch-tokenizer/Cargo.toml meilisearch-tokenizer/
+COPY    meilisearch-types/Cargo.toml meilisearch-types/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
+RUN     find . -type d | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
+RUN     $HOME/.cargo/bin/cargo build --release
+RUN     find . -path "*/src/main.rs" -delete
+
+COPY    . .
 RUN     $HOME/.cargo/bin/cargo build --release
 
 # Run
