@@ -59,6 +59,9 @@ impl Index {
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
+        let distinct_attribute = self
+            .distinct_attribute(&txn)?
+            .map(String::from);
 
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
@@ -66,6 +69,7 @@ impl Index {
             attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
+            distinct_attribute: Some(distinct_attribute),
         })
     }
 
