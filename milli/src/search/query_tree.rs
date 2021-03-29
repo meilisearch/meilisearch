@@ -543,7 +543,6 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 mod test {
     use std::collections::HashMap;
 
-    use fst::Set;
     use maplit::{hashmap, hashset};
     use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
     use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -646,8 +645,7 @@ mod test {
     #[test]
     fn prefix() {
         let query = "hey friends";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -667,8 +665,7 @@ mod test {
     #[test]
     fn no_prefix() {
         let query = "hey friends ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -688,8 +685,7 @@ mod test {
     #[test]
     fn synonyms() {
         let query = "hello world ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -720,8 +716,7 @@ mod test {
     #[test]
     fn complex_synonyms() {
         let query = "new york city ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -766,8 +761,7 @@ mod test {
     #[test]
     fn ngrams() {
         let query = "n grams ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -787,8 +781,7 @@ mod test {
     #[test]
     fn word_split() {
         let query = "wordsplit fish ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -814,8 +807,7 @@ mod test {
     #[test]
     fn phrase() {
         let query = "\"hey friends\" \" \" \"wooop";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -835,8 +827,7 @@ mod test {
     #[test]
     fn optional_word() {
         let query = "hey my friend ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -875,8 +866,7 @@ mod test {
     #[test]
     fn optional_word_phrase() {
         let query = "\"hey my\"";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -892,8 +882,7 @@ mod test {
     #[test]
     fn optional_word_multiple_phrases() {
         let query = r#""hey" my good "friend""#;
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -927,8 +916,7 @@ mod test {
     #[test]
     fn no_typo() {
         let query = "hey friends ";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
@@ -947,8 +935,7 @@ mod test {
     #[test]
     fn fetching_words() {
         let query = "wordsplit nyc world";
-        let stop_words = &Set::default();
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 

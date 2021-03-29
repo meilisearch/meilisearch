@@ -410,6 +410,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
         };
 
+        let stop_words = self.index.stop_words(self.wtxn)?;
+        let stop_words = stop_words.as_ref();
         let linked_hash_map_size = self.linked_hash_map_size;
         let max_nb_chunks = self.max_nb_chunks;
         let max_memory = self.max_memory;
@@ -436,7 +438,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let readers = rayon::iter::repeatn(documents, num_threads)
                 .enumerate()
                 .map(|(i, documents)| {
-                    let stop_words = fst::Set::default();
                     let store = Store::new(
                         searchable_fields.clone(),
                         faceted_fields.clone(),
@@ -446,7 +447,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         chunk_compression_type,
                         chunk_compression_level,
                         chunk_fusing_shrink_size,
-                        &stop_words,
+                        stop_words,
                     )?;
                     store.index(
                         documents,

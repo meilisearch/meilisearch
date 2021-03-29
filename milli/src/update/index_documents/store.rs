@@ -86,7 +86,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         chunk_compression_type: CompressionType,
         chunk_compression_level: Option<u32>,
         chunk_fusing_shrink_size: Option<u64>,
-        stop_words: &'s Set<A>,
+        stop_words: Option<&'s Set<A>>,
     ) -> anyhow::Result<Self>
     {
         // We divide the max memory by the number of sorter the Store have.
@@ -141,7 +141,11 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             create_writer(chunk_compression_type, chunk_compression_level, f)
         })?;
 
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let mut config = AnalyzerConfig::default();
+        if let Some(stop_words) = stop_words {
+            config.stop_words(stop_words);
+        }
+        let analyzer = Analyzer::new(config);
 
         Ok(Store {
             // Indexing parameters.

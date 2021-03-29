@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
@@ -128,7 +128,10 @@ struct Highlighter<'a, A> {
 
 impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
     fn new(stop_words: &'a fst::Set<A>) -> Self {
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(stop_words);
+        let analyzer = Analyzer::new(config);
+
         Self { analyzer }
     }
 
@@ -266,6 +269,13 @@ struct Settings {
         skip_serializing_if = "Option::is_none",
     )]
     criteria: Option<Option<Vec<String>>>,
+
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    stop_words: Option<Option<BTreeSet<String>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -436,6 +446,14 @@ async fn main() -> anyhow::Result<()> {
                         match criteria {
                             Some(criteria) => builder.set_criteria(criteria),
                             None => builder.reset_criteria(),
+                        }
+                    }
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(stop_words) = settings.stop_words {
+                        match stop_words {
+                            Some(stop_words) => builder.set_stop_words(stop_words),
+                            None => builder.reset_stop_words(),
                         }
                     }
 

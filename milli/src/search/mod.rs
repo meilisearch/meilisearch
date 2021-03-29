@@ -4,7 +4,7 @@ use std::fmt;
 use std::str::Utf8Error;
 use std::time::Instant;
 
-use fst::{IntoStreamer, Streamer, Set};
+use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{DFA, LevenshteinAutomatonBuilder as LevBuilder};
 use log::debug;
 use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
@@ -91,8 +91,7 @@ impl<'a> Search<'a> {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
                 builder.authorize_typos(self.authorize_typos);
-                let stop_words = &Set::default();
-                let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+                let analyzer = Analyzer::<Vec<u8>>::new(AnalyzerConfig::default());
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
                 builder.build(tokens)?
