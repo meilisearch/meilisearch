@@ -34,7 +34,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: --all-targets -- --deny warnings
+        args: --all-targets
 
   build-image:
     name: Test the build of Docker image
