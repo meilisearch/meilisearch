@@ -1,3 +1,4 @@
+use std::cmp;
 use std::collections::{BTreeMap, HashMap, btree_map};
 use std::mem::take;
 
@@ -15,7 +16,7 @@ pub struct Attribute<'t> {
     candidates: Option<RoaringBitmap>,
     bucket_candidates: RoaringBitmap,
     parent: Box<dyn Criterion + 't>,
-    flattened_query_tree: Option<Vec<Vec<Query>>>,
+    flattened_query_tree: Option<Vec<Vec<Vec<Query>>>>,
     current_buckets: Option<btree_map::IntoIter<u64, RoaringBitmap>>,
 }
 
@@ -115,33 +116,43 @@ impl<'t> Criterion for Attribute<'t> {
 
 fn linear_compute_candidates(
     ctx: &dyn Context,
-    branches: &Vec<Vec<Query>>,
+    branches: &Vec<Vec<Vec<Query>>>,
     allowed_candidates: &RoaringBitmap,
 ) -> anyhow::Result<BTreeMap<u64, RoaringBitmap>>
 {
-    fn compute_candidate_rank(branches: &Vec<Vec<Query>>, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
+    fn compute_candidate_rank(branches: &Vec<Vec<Vec<Query>>>, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
         let mut min_rank = u64::max_value();
         for branch in branches {
+
             let branch_len = branch.len();
             let mut branch_rank = Vec::with_capacity(branch_len);
-            for Query { prefix, kind } in branch {
-                // find the best position of the current word in the document.
-                let position =  match kind {
-                    QueryKind::Exact { word, .. } => {
-                        if *prefix {
-                            word_derivations(word, true, 0, &words_positions)
-                            .flat_map(|positions| positions.iter().next()).min()
-                        } else {
-                            words_positions.get(word)
-                                .map(|positions| positions.iter().next())
-                                .flatten()
-                        }
-                    },
-                    QueryKind::Tolerant { typo, word } => {
-                        word_derivations(word, *prefix, *typo, &words_positions)
-                            .flat_map(|positions| positions.iter().next()).min()
-                    },
-                };
+            for derivates in branch {
+                let mut position = None;
+                for Query { prefix, kind } in derivates {
+                    // find the best position of the current word in the document.
+                    let current_position = match kind {
+                        QueryKind::Exact { word, .. } => {
+                            if *prefix {
+                                word_derivations(word, true, 0, &words_positions)
+                                .flat_map(|positions| positions.iter().next()).min()
+                            } else {
+                                words_positions.get(word)
+                                    .map(|positions| positions.iter().next())
+                                    .flatten()
+                            }
+                        },
+                        QueryKind::Tolerant { typo, word } => {
+                            word_derivations(word, *prefix, *typo, &words_positions)
+                                .flat_map(|positions| positions.iter().next()).min()
+                        },
+                    };
+
+                    match (position, current_position) {
+                        (Some(p), Some(cp)) => position = Some(cmp::min(p, cp)),
+                        (None, Some(cp)) => position = Some(cp),
+                        _ => (),
+                    }
+                }
 
                 // if a position is found, we add it to the branch score,
                 // otherwise the branch is considered as unfindable in this document and we break.
@@ -194,10 +205,10 @@ fn linear_compute_candidates(
 }
 
 // TODO can we keep refs of Query
-fn flatten_query_tree(query_tree: &Operation) -> Vec<Vec<Query>> {
+fn flatten_query_tree(query_tree: &Operation) -> Vec<Vec<Vec<Query>>> {
     use crate::search::criteria::Operation::{And, Or, Consecutive};
 
-    fn and_recurse(head: &Operation, tail: &[Operation]) -> Vec<Vec<Query>> {
+    fn and_recurse(head: &Operation, tail: &[Operation]) -> Vec<Vec<Vec<Query>>> {
         match tail.split_first() {
             Some((thead, tail)) => {
                 let tail = and_recurse(thead, tail);
@@ -215,13 +226,17 @@ fn flatten_query_tree(query_tree: &Operation) -> Vec<Vec<Query>> {
         }
     }
 
-    fn recurse(op: &Operation) -> Vec<Vec<Query>> {
+    fn recurse(op: &Operation) -> Vec<Vec<Vec<Query>>> {
         match op {
             And(ops) | Consecutive(ops) => {
                 ops.split_first().map_or_else(Vec::new, |(h, t)| and_recurse(h, t))
             },
-            Or(_, ops) => ops.into_iter().map(recurse).flatten().collect(),
-            Operation::Query(query) => vec![vec![query.clone()]],
+            Or(_, ops) => if ops.iter().all(|op| op.query().is_some()) {
+                vec![vec![ops.iter().flat_map(|op| op.query()).cloned().collect()]]
+            } else {
+                ops.into_iter().map(recurse).flatten().collect()
+            },
+            Operation::Query(query) => vec![vec![vec![query.clone()]]],
         }
     }
 
@@ -256,19 +271,19 @@ mod tests {
         ]);
 
         let expected = vec![
-            vec![Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }],
+            vec![vec![Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }]],
             vec![
-                Query { prefix: false, kind: QueryKind::exact(S("manythe")) },
-                Query { prefix: false, kind: QueryKind::exact(S("fish")) },
+                vec![Query { prefix: false, kind: QueryKind::exact(S("manythe")) }],
+                vec![Query { prefix: false, kind: QueryKind::exact(S("fish")) }],
             ],
             vec![
-                Query { prefix: false, kind: QueryKind::exact(S("many")) },
-                Query { prefix: false, kind: QueryKind::exact(S("thefish")) },
+                vec![Query { prefix: false, kind: QueryKind::exact(S("many")) }],
+                vec![Query { prefix: false, kind: QueryKind::exact(S("thefish")) }],
             ],
             vec![
-                Query { prefix: false, kind: QueryKind::exact(S("many")) },
-                Query { prefix: false, kind: QueryKind::exact(S("the")) },
-                Query { prefix: false, kind: QueryKind::exact(S("fish")) },
+                vec![Query { prefix: false, kind: QueryKind::exact(S("many")) }],
+                vec![Query { prefix: false, kind: QueryKind::exact(S("the")) }],
+                vec![Query { prefix: false, kind: QueryKind::exact(S("fish")) }],
             ],
         ];
 
