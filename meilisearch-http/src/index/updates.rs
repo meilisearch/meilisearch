@@ -43,6 +43,9 @@ pub struct Settings {
         skip_serializing_if = "Option::is_none"
     )]
     pub ranking_rules: Option<Option<Vec<String>>>,
+
+    // TODO we are missing the stopWords, synonyms and distinctAttribute for the GET settings
+    // request
 }
 
 impl Settings {
