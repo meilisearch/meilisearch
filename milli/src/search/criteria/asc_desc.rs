@@ -256,7 +256,7 @@ fn facet_ordered<'t>(
 
     match facet_type {
         FacetType::Float => {
-            if candidates.len() / number_of_documents * 100 <= CANDIDATES_THRESHOLD {
+            if candidates.len() as f64 / number_of_documents * 100.0 <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetF64Codec, f64, OrderedFloat<f64>>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
@@ -272,7 +272,7 @@ fn facet_ordered<'t>(
             }
         },
         FacetType::Integer => {
-            if candidates.len() / number_of_documents * 100 <= CANDIDATES_THRESHOLD {
+            if candidates.len() as f64 / number_of_documents * 100.0 <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetI64Codec, i64, i64>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
