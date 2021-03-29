@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_pack_unpack() {
-        let tempdir = TempDir::new().unwrap();
+        let tempdir = tempfile::tempdir().unwrap();
 
         let test_dir = tempdir.path();
         let src_dir = test_dir.join("src");
