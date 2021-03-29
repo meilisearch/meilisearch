@@ -21,8 +21,11 @@ COPY    meilisearch-types/Cargo.toml meilisearch-types/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
-RUN     find . -type d | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
+# Create dummy main.rs files for each workspace member to be able to compile all the dependencies
+RUN     find . -type d -name "meilisearch-*" | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
+# Use `cargo build` instead of `cargo vendor` because we need to not only download but compile dependencies too
 RUN     $HOME/.cargo/bin/cargo build --release
+# Cleanup dummy main.rs files
 RUN     find . -path "*/src/main.rs" -delete
 
 COPY    . .
