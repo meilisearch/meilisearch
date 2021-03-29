@@ -48,10 +48,10 @@ impl<'a> BytesDecode<'a> for FacetData {
         let mut size_buf = [0; LEN];
         size_buf.copy_from_slice(bytes.get(0..LEN)?);
         // decode size of the first item from the bytes
-        let first_size = usize::from_be_bytes(size_buf);
+        let first_size = u64::from_be_bytes(size_buf);
         // decode first and second items
-        let first_item = Str::bytes_decode(bytes.get(LEN..(LEN + first_size))?)?;
-        let second_item = CowSet::bytes_decode(bytes.get((LEN + first_size)..)?)?;
+        let first_item = Str::bytes_decode(bytes.get(LEN..(LEN + first_size as usize))?)?;
+        let second_item = CowSet::bytes_decode(bytes.get((LEN + first_size as usize)..)?)?;
         Some((first_item, second_item))
     }
 }
