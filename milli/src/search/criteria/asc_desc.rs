@@ -19,9 +19,9 @@ use crate::search::WordDerivationsCache;
 use crate::{FieldsIdsMap, FieldId, Index};
 use super::{Criterion, CriterionResult};
 
-/// If the number of candidates is lower or equal to the specified % of total number of documents,
-/// use simple sort. Otherwise, use facet database.
-const CANDIDATES_THRESHOLD: f64 = 0.1;
+/// Threshold on the number of candidates that will make
+/// the system to choose between one algorithm or another.
+const CANDIDATES_THRESHOLD: u64 = 1000;
 
 pub struct AscDesc<'t> {
     index: &'t Index,
@@ -252,11 +252,9 @@ fn facet_ordered<'t>(
     candidates: RoaringBitmap,
 ) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>>
 {
-    let number_of_documents = index.number_of_documents(&rtxn)? as f64;
-
     match facet_type {
         FacetType::Float => {
-            if candidates.len() as f64 / number_of_documents * 100.0 <= CANDIDATES_THRESHOLD {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetF64Codec, f64, OrderedFloat<f64>>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
@@ -272,7 +270,7 @@ fn facet_ordered<'t>(
             }
         },
         FacetType::Integer => {
-            if candidates.len() as f64 / number_of_documents * 100.0 <= CANDIDATES_THRESHOLD {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetI64Codec, i64, i64>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
