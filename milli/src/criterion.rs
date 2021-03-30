@@ -4,8 +4,13 @@ use std::fmt;
 use anyhow::{Context, bail};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
+use once_cell::sync::Lazy;
 
 use crate::facet::FacetType;
+
+static ASC_DESC_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap()
+});
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
@@ -39,8 +44,7 @@ impl Criterion {
             "wordsposition" => Ok(Criterion::WordsPosition),
             "exactness" => Ok(Criterion::Exactness),
             text => {
-                let re = Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#)?;
-                let caps = re.captures(text).with_context(|| format!("unknown criterion name: {}", text))?;
+                let caps = ASC_DESC_REGEX.captures(text).with_context(|| format!("unknown criterion name: {}", text))?;
                 let order = caps.get(1).unwrap().as_str();
                 let field_name = caps.get(2).unwrap().as_str();
                 faceted_attributes.get(field_name).with_context(|| format!("Can't use {:?} as a criterion as it isn't a faceted field.", field_name))?;
