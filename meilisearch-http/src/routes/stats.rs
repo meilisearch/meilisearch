@@ -56,9 +56,18 @@ struct VersionResponse {
 
 #[get("/version", wrap = "Authentication::Private")]
 async fn get_version() -> HttpResponse {
-   HttpResponse::Ok().json(VersionResponse {
-        commit_sha: env!("VERGEN_SHA").to_string(),
-        build_date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
+    let commit_sha = match option_env!("COMMIT_SHA") {
+        Some("") | None => env!("VERGEN_SHA"),
+        Some(commit_sha) => commit_sha
+    };
+    let commit_date = match option_env!("COMMIT_DATE") {
+        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some(commit_date) => commit_date
+    };
+
+    HttpResponse::Ok().json(VersionResponse {
+        commit_sha: commit_sha.to_string(),
+        build_date: commit_date.to_string(),
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
