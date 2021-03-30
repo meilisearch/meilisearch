@@ -19,6 +19,10 @@ use crate::search::WordDerivationsCache;
 use crate::{FieldsIdsMap, FieldId, Index};
 use super::{Criterion, CriterionResult};
 
+/// Threshold on the number of candidates that will make
+/// the system to choose between one algorithm or another.
+const CANDIDATES_THRESHOLD: u64 = 1000;
+
 pub struct AscDesc<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
@@ -237,7 +241,7 @@ fn field_id_facet_type(
 
 /// Returns an iterator over groups of the given candidates in ascending or descending order.
 ///
-/// It will either use an iterative or a recusrsive method on the whole facet database depending
+/// It will either use an iterative or a recursive method on the whole facet database depending
 /// on the number of candidates to rank.
 fn facet_ordered<'t>(
     index: &'t Index,
@@ -250,7 +254,7 @@ fn facet_ordered<'t>(
 {
     match facet_type {
         FacetType::Float => {
-            if candidates.len() <= 1000 {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetF64Codec, f64, OrderedFloat<f64>>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
@@ -266,7 +270,7 @@ fn facet_ordered<'t>(
             }
         },
         FacetType::Integer => {
-            if candidates.len() <= 1000 {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
                 let iter = iterative_facet_ordered_iter::<FieldDocIdFacetI64Codec, i64, i64>(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
