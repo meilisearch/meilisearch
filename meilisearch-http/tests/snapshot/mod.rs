@@ -7,6 +7,7 @@ use tokio::time::sleep;
 
 use meilisearch_http::Opt;
 
+#[ignore]
 #[actix_rt::test]
 async fn perform_snapshot() {
     let temp = tempfile::tempdir_in(".").unwrap();
