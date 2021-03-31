@@ -19,13 +19,13 @@ pub struct FinalResult {
 }
 
 pub struct Final<'t> {
-    ctx: &'t dyn Context,
+    ctx: &'t dyn Context<'t>,
     parent: Box<dyn Criterion + 't>,
     wdcache: WordDerivationsCache,
 }
 
 impl<'t> Final<'t> {
-    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Final<'t> {
+    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Final<'t> {
         Final { ctx, parent, wdcache: WordDerivationsCache::new() }
     }
 

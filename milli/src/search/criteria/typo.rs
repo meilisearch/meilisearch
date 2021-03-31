@@ -9,7 +9,7 @@ use crate::search::{word_derivations, WordDerivationsCache};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
 pub struct Typo<'t> {
-    ctx: &'t dyn Context,
+    ctx: &'t dyn Context<'t>,
     query_tree: Option<(usize, Operation)>,
     number_typos: u8,
     candidates: Candidates,
@@ -19,7 +19,7 @@ pub struct Typo<'t> {
 }
 
 impl<'t> Typo<'t> {
-    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
         Typo {
             ctx,
             query_tree: None,

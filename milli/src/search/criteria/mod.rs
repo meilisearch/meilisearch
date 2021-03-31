@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::search::{word_derivations, WordDerivationsCache};
+use crate::{TreeLevel, search::{word_derivations, WordDerivationsCache}};
 use crate::{Index, DocumentId};
 
 use super::query_tree::{Operation, Query, QueryKind};
@@ -64,7 +64,7 @@ impl Default for Candidates {
     }
 }
 
-pub trait Context {
+pub trait Context<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap>;
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
@@ -73,6 +73,8 @@ pub trait Context {
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
     fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>>;
+    fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>;
+    fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -81,7 +83,7 @@ pub struct CriteriaBuilder<'t> {
     words_prefixes_fst: fst::Set<Cow<'t, [u8]>>,
 }
 
-impl<'a> Context for CriteriaBuilder<'a> {
+impl<'c> Context<'c> for CriteriaBuilder<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
         self.index.documents_ids(self.rtxn)
     }
@@ -119,6 +121,40 @@ impl<'a> Context for CriteriaBuilder<'a> {
             words_positions.insert(word.to_string(), positions);
         }
         Ok(words_positions)
+    }
+
+    fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>> {
+        let range = {
+            let left = left.unwrap_or(u32::min_value());
+            let right = right.unwrap_or(u32::max_value());
+            let left = (word, level, left, left);
+            let right = (word, level, right, right);
+            left..=right
+        };
+        let db = match in_prefix_cache {
+            true => self.index.word_prefix_level_position_docids,
+            false => self.index.word_level_position_docids,
+        };
+
+        Ok(Box::new(db.range(self.rtxn, &range)?))
+    }
+
+    fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>> {
+        let range = {
+            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
+            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
+            left..=right
+        };
+        let db = match in_prefix_cache {
+            true => self.index.word_prefix_level_position_docids,
+            false => self.index.word_level_position_docids,
+        };
+        let last_level = db
+            .remap_data_type::<heed::types::DecodeIgnore>()
+            .range(self.rtxn, &range)?.last().transpose()?
+            .map(|((_, level, _, _), _)| level);
+
+        Ok(last_level)
     }
 }
 
@@ -354,7 +390,7 @@ pub mod test {
         docid_words: HashMap<u32, Vec<String>>,
     }
 
-    impl<'a> Context for TestContext<'a> {
+    impl<'c> Context<'c> for TestContext<'c> {
         fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
             Ok(self.word_docids.iter().fold(RoaringBitmap::new(), |acc, (_, docids)| acc | docids))
         }
@@ -396,6 +432,14 @@ pub mod test {
             } else {
                 Ok(HashMap::new())
             }
+        }
+
+        fn word_position_iterator(&self, _word: &str, _level: TreeLevel, _in_prefix_cache: bool, _left: Option<u32>, _right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>> {
+            todo!()
+        }
+
+        fn word_position_last_level(&self, _word: &str, _in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>> {
+            todo!()
         }
     }
 

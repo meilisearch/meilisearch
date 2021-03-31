@@ -21,6 +21,10 @@ impl TreeLevel {
     pub const fn min_value() -> TreeLevel {
         TreeLevel(0)
     }
+
+    pub fn saturating_sub(&self, lhs: u8) -> TreeLevel {
+        TreeLevel(self.0.saturating_sub(lhs))
+    }
 }
 
 impl Into<u8> for TreeLevel {

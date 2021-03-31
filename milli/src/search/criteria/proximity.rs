@@ -13,7 +13,7 @@ use super::{Criterion, CriterionResult, Context, query_docids, query_pair_proxim
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
 
 pub struct Proximity<'t> {
-    ctx: &'t dyn Context,
+    ctx: &'t dyn Context<'t>,
     /// ((max_proximity, query_tree), allowed_candidates)
     state: Option<(Option<(usize, Operation)>, RoaringBitmap)>,
     proximity: u8,
@@ -24,7 +24,7 @@ pub struct Proximity<'t> {
 }
 
 impl<'t> Proximity<'t> {
-    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
         Proximity {
             ctx,
             state: None,
