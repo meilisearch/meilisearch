@@ -1,5 +1,6 @@
 var request = null;
 var timeoutID = null;
+var display_facets = false;
 
 $('#query, #filters').on('input', function () {
   var query = $('#query').val();
@@ -18,7 +19,7 @@ $('#query, #filters').on('input', function () {
       data: JSON.stringify({
         'query': query,
         'filters': filters,
-        "facetDistribution": true,
+        "facetDistribution": display_facets,
       }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
@@ -114,7 +115,6 @@ function selectedFacetsToArray(facets_obj) {
   return array;
 }
 
-display_facets = false;
 $('#display_facets').click(function() {
   if (display_facets) {
     display_facets = false;
