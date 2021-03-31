@@ -925,7 +925,7 @@ mod tests {
         // one sent and that an UUID has been generated.
         assert_eq!(doc.get(0), Some(&br#""updated kevin""#[..]));
         // This is an UUID, it must be 36 bytes long plus the 2 surrounding string quotes (").
-        assert!(doc.get(1).unwrap().len() == 36 + 2);
+        assert_eq!(doc.get(1).unwrap().len(), 36 + 2);
         drop(rtxn);
     }
 
