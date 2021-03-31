@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-18.04, macos-latest]
     steps:
     - uses: actions/checkout@v1
     - uses: actions-rs/toolchain@v1
@@ -34,11 +34,11 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: --all-targets -- --deny warnings
+        args: --all-targets
 
   build-image:
     name: Test the build of Docker image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
     - uses: actions/checkout@v1
     - run: docker build . --file Dockerfile -t meilisearch
@@ -49,7 +49,7 @@ jobs:
     name: create prerelease
     needs: [check, build-image]
     if: ${{ contains(github.ref, 'release-') && github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -76,13 +76,13 @@ jobs:
     name: create release
     needs: [check, build-image]
     if:  ${{ contains(github.ref, 'tags/v') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Get version number
         id: version-number
-        run: echo "##[set-output name=number;]$(echo ${{ github.ref }} | sed 's/.*\(v.*\)/\1/')" 
+        run: echo "##[set-output name=number;]$(echo ${{ github.ref }} | sed 's/.*\(v.*\)/\1/')"
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
