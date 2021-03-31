@@ -203,6 +203,25 @@ impl Index {
         Ok(self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)?.unwrap_or_default())
     }
 
+    /* fields ids distribution */
+
+    /// Returns the fields ids distribution which associate the internal field ids
+    /// with the number of times it occurs in the obkv documents.
+    // TODO store in the index itself and change only within updates that modify the documents
+    pub fn fields_ids_distribution(&self, rtxn: &RoTxn) -> anyhow::Result<HashMap<FieldId, u64>> {
+        let mut distribution = HashMap::new();
+
+        for document in self.documents.iter(rtxn)? {
+            let (_, obkv) = document?;
+
+            for (field_id, _) in obkv.iter() {
+                *distribution.entry(field_id).or_default() += 1;
+            }
+        }
+
+        Ok(distribution)
+    }
+
     /* displayed fields */
 
     /// Writes the fields that must be displayed in the defined order.
@@ -427,5 +446,46 @@ impl Index {
 
     pub(crate) fn set_updated_at(&self, wtxn: &mut RwTxn, time: &DateTime<Utc>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<DateTime<Utc>>>(wtxn, UPDATED_AT_KEY, &time)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use heed::EnvOpenOptions;
+
+    use crate::Index;
+    use crate::update::{IndexDocuments, UpdateFormat};
+
+    fn prepare_index() -> Index {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"
+        { "name": "kevin" }
+        { "name": "bob", "age": 20 }
+        "#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::JsonStream);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        index
+    }
+
+    #[test]
+    fn fields_ids_distribution() {
+        let index = prepare_index();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let fields_ids_distribution = index.fields_ids_distribution(&rtxn).unwrap();
+        assert_eq!(fields_ids_distribution.len(), 2);
+        assert_eq!(fields_ids_distribution.get(&fields_ids_map.id("age").unwrap()), Some(&1));
+        assert_eq!(fields_ids_distribution.get(&fields_ids_map.id("name").unwrap()), Some(&2));
     }
 }
