@@ -114,6 +114,23 @@ function selectedFacetsToArray(facets_obj) {
   return array;
 }
 
+display_facets = false;
+$('#display_facets').click(function() {
+  if (display_facets) {
+    display_facets = false;
+    $('#display_facets').html("Display facets")
+    $('#display_facets').removeClass("is-danger");
+    $('#display_facets').addClass("is-success");
+    $('#facets').hide();
+  } else {
+    display_facets = true;
+    $('#display_facets').html("Hide facets")
+    $('#display_facets').addClass("is-danger");
+    $('#display_facets').removeClass("is-success");
+    $('#facets').show();
+  }
+});
+
 // Make the number of document a little bit prettier
 $('#docs-count').text(function(index, text) {
   return parseInt(text).toLocaleString()

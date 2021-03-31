@@ -10,11 +10,19 @@
 }
 
 #facets {
+    display: none;
     max-width: 900px;
     margin: 20px auto 0 auto;
     padding: 0;
     max-height: 16em;
-  overflow: scroll;
+    overflow: scroll;
+}
+
+#display_facets {
+    margin: 20px auto 0 auto;
+    padding: 5px;
+    max-height: 16em;
+    overflow: scroll;
 }
 
 #facets .tag:hover {
