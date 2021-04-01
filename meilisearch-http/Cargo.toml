@@ -80,10 +80,11 @@ version = "0.18.1"
 
 
 [dev-dependencies]
+actix-rt = "2.1.0"
+assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
+mockall = "0.9.1"
 serde_url_params = "0.2.0"
 tempdir = "0.3.7"
-assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
-actix-rt = "2.1.0"
 urlencoding = "1.1.1"
 
 [features]

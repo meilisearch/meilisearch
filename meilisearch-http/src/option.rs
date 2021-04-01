@@ -191,8 +191,8 @@ pub struct Opt {
     pub schedule_snapshot: bool,
 
     /// Defines time interval, in seconds, between each snapshot creation.
-    #[structopt(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
-    pub snapshot_interval_sec: Option<u64>,
+    #[structopt(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC", default_value = "86400")] // 24h
+    pub snapshot_interval_sec: u64,
 
     /// Folder where dumps are created when the dump route is called.
     #[structopt(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]

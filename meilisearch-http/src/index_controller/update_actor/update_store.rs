@@ -1,10 +1,10 @@
-use std::fs::remove_file;
+use std::fs::{copy, create_dir_all, remove_file};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
-use heed::{Database, Env, EnvOpenOptions};
-use parking_lot::RwLock;
+use heed::{CompactionOption, Database, Env, EnvOpenOptions};
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use tokio::sync::mpsc;
@@ -16,7 +16,7 @@ type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 #[derive(Clone)]
 pub struct UpdateStore<M, N, E> {
-    env: Env,
+    pub env: Env,
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<Pending<M>>>,
     pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
@@ -24,6 +24,9 @@ pub struct UpdateStore<M, N, E> {
     aborted_meta: Database<OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
     processing: Arc<RwLock<Option<Processing<M>>>>,
     notification_sender: mpsc::Sender<()>,
+    /// A lock on the update loop. This is meant to prevent a snapshot to occur while an update is
+    /// processing, while not preventing writes all together during an update
+    pub update_lock: Arc<Mutex<()>>,
 }
 
 pub trait HandleUpdate<M, N, E> {
@@ -76,6 +79,8 @@ where
         // Send a first notification to trigger the process.
         let _ = notification_sender.send(());
 
+        let update_lock = Arc::new(Mutex::new(()));
+
         let update_store = Arc::new(UpdateStore {
             env,
             pending,
@@ -85,6 +90,7 @@ where
             notification_sender,
             failed_meta,
             processing,
+            update_lock,
         });
 
         // We need a weak reference so we can take ownership on the arc later when we
@@ -190,6 +196,7 @@ where
     where
         U: HandleUpdate<M, N, E>,
     {
+        let _lock = self.update_lock.lock();
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_meta.first(&rtxn)?;
@@ -371,94 +378,35 @@ where
 
         Ok(aborted_updates)
     }
+
+    pub fn snapshot(
+        &self,
+        txn: &mut heed::RwTxn,
+        path: impl AsRef<Path>,
+        uuid: Uuid,
+    ) -> anyhow::Result<()> {
+        let update_path = path.as_ref().join("updates");
+        create_dir_all(&update_path)?;
+
+        let mut snapshot_path = update_path.join(format!("update-{}", uuid));
+        // acquire write lock to prevent further writes during snapshot
+        create_dir_all(&snapshot_path)?;
+        snapshot_path.push("data.mdb");
+
+        // create db snapshot
+        self.env
+            .copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+
+        let update_files_path = update_path.join("update_files");
+        create_dir_all(&update_files_path)?;
+
+        for path in self.pending.iter(&txn)? {
+            let (_, path) = path?;
+            let name = path.file_name().unwrap();
+            let to = update_files_path.join(name);
+            copy(path, to)?;
+        }
+
+        Ok(())
+    }
 }
-
-//#[cfg(test)]
-//mod tests {
-//use super::*;
-//use std::thread;
-//use std::time::{Duration, Instant};
-
-//#[test]
-//fn simple() {
-//let dir = tempfile::tempdir().unwrap();
-//let mut options = EnvOpenOptions::new();
-//options.map_size(4096 * 100);
-//let update_store = UpdateStore::open(
-//options,
-//dir,
-//|meta: Processing<String>, _content: &_| -> Result<_, Failed<_, ()>> {
-//let new_meta = meta.meta().to_string() + " processed";
-//let processed = meta.process(new_meta);
-//Ok(processed)
-//},
-//)
-//.unwrap();
-
-//let meta = String::from("kiki");
-//let update = update_store.register_update(meta, &[]).unwrap();
-//thread::sleep(Duration::from_millis(100));
-//let meta = update_store.meta(update.id()).unwrap().unwrap();
-//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-//assert_eq!(success, "kiki processed");
-//} else {
-//panic!()
-//}
-//}
-
-//#[test]
-//#[ignore]
-//fn long_running_update() {
-//let dir = tempfile::tempdir().unwrap();
-//let mut options = EnvOpenOptions::new();
-//options.map_size(4096 * 100);
-//let update_store = UpdateStore::open(
-//options,
-//dir,
-//|meta: Processing<String>, _content: &_| -> Result<_, Failed<_, ()>> {
-//thread::sleep(Duration::from_millis(400));
-//let new_meta = meta.meta().to_string() + "processed";
-//let processed = meta.process(new_meta);
-//Ok(processed)
-//},
-//)
-//.unwrap();
-
-//let before_register = Instant::now();
-
-//let meta = String::from("kiki");
-//let update_kiki = update_store.register_update(meta, &[]).unwrap();
-//assert!(before_register.elapsed() < Duration::from_millis(200));
-
-//let meta = String::from("coco");
-//let update_coco = update_store.register_update(meta, &[]).unwrap();
-//assert!(before_register.elapsed() < Duration::from_millis(200));
-
-//let meta = String::from("cucu");
-//let update_cucu = update_store.register_update(meta, &[]).unwrap();
-//assert!(before_register.elapsed() < Duration::from_millis(200));
-
-//thread::sleep(Duration::from_millis(400 * 3 + 100));
-
-//let meta = update_store.meta(update_kiki.id()).unwrap().unwrap();
-//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-//assert_eq!(success, "kiki processed");
-//} else {
-//panic!()
-//}
-
-//let meta = update_store.meta(update_coco.id()).unwrap().unwrap();
-//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-//assert_eq!(success, "coco processed");
-//} else {
-//panic!()
-//}
-
-//let meta = update_store.meta(update_cucu.id()).unwrap().unwrap();
-//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-//assert_eq!(success, "cucu processed");
-//} else {
-//panic!()
-//}
-//}
-//}

@@ -1,7 +1,7 @@
 mod index_actor;
+mod snapshot;
 mod update_actor;
 mod update_handler;
-mod update_store;
 mod updates;
 mod uuid_resolver;
 
@@ -12,6 +12,7 @@ use std::time::Duration;
 use actix_web::web::{Bytes, Payload};
 use anyhow::bail;
 use futures::stream::StreamExt;
+use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -20,6 +21,14 @@ use uuid::Uuid;
 
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
+use crate::option::Opt;
+
+use index_actor::IndexActorHandle;
+use snapshot::load_snapshot;
+use update_actor::UpdateActorHandle;
+use uuid_resolver::UuidResolverHandle;
+
+use snapshot::SnapshotService;
 pub use updates::{Failed, Processed, Processing};
 use uuid_resolver::UuidError;
 
@@ -55,24 +64,54 @@ pub struct IndexSettings {
 }
 
 pub struct IndexController {
-    uuid_resolver: uuid_resolver::UuidResolverHandle,
-    index_handle: index_actor::IndexActorHandle,
-    update_handle: update_actor::UpdateActorHandle<Bytes>,
+    uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
+    index_handle: index_actor::IndexActorHandleImpl,
+    update_handle: update_actor::UpdateActorHandleImpl<Bytes>,
 }
 
 impl IndexController {
-    pub fn new(
-        path: impl AsRef<Path>,
-        index_size: usize,
-        update_store_size: usize,
-    ) -> anyhow::Result<Self> {
-        let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-        let index_actor = index_actor::IndexActorHandle::new(&path, index_size)?;
-        let update_handle =
-            update_actor::UpdateActorHandle::new(index_actor.clone(), &path, update_store_size)?;
+    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
+        let index_size = options.max_mdb_size.get_bytes() as usize;
+        let update_store_size = options.max_udb_size.get_bytes() as usize;
+
+        if let Some(ref path) = options.import_snapshot {
+            info!("Loading from snapshot {:?}", path);
+            load_snapshot(
+                &options.db_path,
+                path,
+                options.ignore_snapshot_if_db_exists,
+                options.ignore_missing_snapshot,
+            )?;
+        }
+
+        std::fs::create_dir_all(&path)?;
+
+        let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&path)?;
+        let index_handle = index_actor::IndexActorHandleImpl::new(&path, index_size)?;
+        let update_handle = update_actor::UpdateActorHandleImpl::new(
+            index_handle.clone(),
+            &path,
+            update_store_size,
+        )?;
+
+        if options.schedule_snapshot {
+            let snapshot_service = SnapshotService::new(
+                uuid_resolver.clone(),
+                update_handle.clone(),
+                Duration::from_secs(options.snapshot_interval_sec),
+                options.snapshot_dir.clone(),
+                options.db_path
+                .file_name()
+                .map(|n| n.to_owned().into_string().expect("invalid path"))
+                .unwrap_or_else(|| String::from("data.ms")),
+            );
+
+            tokio::task::spawn(snapshot_service.run());
+        }
+
         Ok(Self {
             uuid_resolver,
-            index_handle: index_actor,
+            index_handle,
             update_handle,
         })
     }

@@ -1,6 +1,6 @@
-mod index;
-mod server;
-mod service;
+pub mod index;
+pub mod server;
+pub mod service;
 
 pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
 pub use server::Server;
