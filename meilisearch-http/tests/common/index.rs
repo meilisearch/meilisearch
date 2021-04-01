@@ -161,6 +161,11 @@ impl Index<'_> {
         let url = format!("/indexes/{}/settings", self.uid);
         self.service.delete(url).await
     }
+
+    pub async fn stats(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/stats", self.uid);
+        self.service.get(url).await
+    }
 }
 
 pub struct GetDocumentOptions;
