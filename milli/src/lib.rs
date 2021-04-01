@@ -41,6 +41,7 @@ pub type Attribute = u32;
 pub type DocumentId = u32;
 pub type FieldId = u8;
 pub type Position = u32;
+pub type FieldsDistribution = HashMap<String, u64>;
 
 type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
 

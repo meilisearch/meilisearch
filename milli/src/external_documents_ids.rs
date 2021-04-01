@@ -19,6 +19,11 @@ impl<'a> ExternalDocumentsIds<'a> {
         }
     }
 
+    /// Returns `true` if hard and soft external documents lists are empty.
+    pub fn is_empty(&self) -> bool {
+        self.hard.is_empty() && self.soft.is_empty()
+    }
+
     pub fn get<A: AsRef<[u8]>>(&self, external_id: A) -> Option<u32> {
         let external_id = external_id.as_ref();
         match self.soft.get(external_id).or_else(|| self.hard.get(external_id)) {

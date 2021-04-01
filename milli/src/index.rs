@@ -10,7 +10,7 @@ use chrono::{Utc, DateTime};
 
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::{default_criteria, Criterion, Search, FacetDistribution};
+use crate::{default_criteria, Criterion, Search, FacetDistribution, FieldsDistribution};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, RoaringBitmapLenCodec, BEU32StrCodec,
@@ -23,6 +23,7 @@ pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
 pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
+pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
 pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
@@ -204,23 +205,18 @@ impl Index {
         Ok(self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)?.unwrap_or_default())
     }
 
-    /* fields ids distribution */
+    /* fields distribution */
 
-    /// Returns the fields ids distribution which associate the internal field ids
-    /// with the number of times it occurs in the obkv documents.
-    // TODO store in the index itself and change only within updates that modify the documents
-    pub fn fields_ids_distribution(&self, rtxn: &RoTxn) -> anyhow::Result<HashMap<FieldId, u64>> {
-        let mut distribution = HashMap::new();
+    /// Writes the fields distribution which associates every field name with
+    /// the number of times it occurs in the documents.
+    pub fn put_fields_distribution(&self, wtxn: &mut RwTxn, distribution: &FieldsDistribution) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(wtxn, FIELDS_DISTRIBUTION_KEY, distribution)
+    }
 
-        for document in self.documents.iter(rtxn)? {
-            let (_, obkv) = document?;
-
-            for (field_id, _) in obkv.iter() {
-                *distribution.entry(field_id).or_default() += 1;
-            }
-        }
-
-        Ok(distribution)
+    /// Returns the fields distribution which associates every field name with
+    /// the number of times it occurs in the documents.
+    pub fn fields_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
+        Ok(self.main.get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, FIELDS_DISTRIBUTION_KEY)?.unwrap_or_default())
     }
 
     /* displayed fields */
@@ -469,40 +465,34 @@ impl Index {
 #[cfg(test)]
 mod tests {
     use heed::EnvOpenOptions;
+    use maplit::hashmap;
 
     use crate::Index;
     use crate::update::{IndexDocuments, UpdateFormat};
 
-    fn prepare_index() -> Index {
+    #[test]
+    fn initial_fields_distribution() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = &br#"
-        { "name": "kevin" }
-        { "name": "bob", "age": 20 }
-        "#[..];
+        let content = &br#"[
+            { "name": "kevin" },
+            { "name": "bob", "age": 20 }
+        ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::JsonStream);
+        builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
-        index
-    }
-
-    #[test]
-    fn fields_ids_distribution() {
-        let index = prepare_index();
-
         let rtxn = index.read_txn().unwrap();
 
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-
-        let fields_ids_distribution = index.fields_ids_distribution(&rtxn).unwrap();
-        assert_eq!(fields_ids_distribution.len(), 2);
-        assert_eq!(fields_ids_distribution.get(&fields_ids_map.id("age").unwrap()), Some(&1));
-        assert_eq!(fields_ids_distribution.get(&fields_ids_map.id("name").unwrap()), Some(&2));
+        let fields_distribution = index.fields_distribution(&rtxn).unwrap();
+        assert_eq!(fields_distribution, hashmap!{
+            "name".to_string() => 2,
+            "age".to_string() => 1,
+        });
     }
 }

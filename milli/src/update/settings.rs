@@ -183,7 +183,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(true)
     }
 
-    /// Udpates the index's searchable attributes. This causes the field map to be recomputed to
+    /// Updates the index's searchable attributes. This causes the field map to be recomputed to
     /// reflect the order of the searchable attributes.
     fn update_searchable(&mut self) -> anyhow::Result<bool> {
         match self.searchable_fields {

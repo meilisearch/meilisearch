@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use anyhow::anyhow;
 use chrono::Utc;
 use fst::IntoStreamer;
@@ -90,6 +93,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             documents,
         } = self.index;
 
+        // Number of fields for each document that has been deleted.
+        let mut fields_ids_distribution_diff = HashMap::new();
+
         // Retrieve the words and the external documents ids contained in the documents.
         let mut words = Vec::new();
         let mut external_ids = Vec::new();
@@ -100,6 +106,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let key = BEU32::new(docid);
             let mut iter = documents.range_mut(self.wtxn, &(key..=key))?;
             if let Some((_key, obkv)) = iter.next().transpose()? {
+                for (field_id, _) in obkv.iter() {
+                    *fields_ids_distribution_diff.entry(field_id).or_default() += 1;
+                }
+
                 if let Some(content) = obkv.get(id_field) {
                     let external_id = match serde_json::from_slice(content).unwrap() {
                         Value::String(string) => SmallString32::from(string.as_str()),
@@ -112,7 +122,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
             drop(iter);
 
-            // We iterate througt the words positions of the document id,
+            // We iterate through the words positions of the document id,
             // retrieve the word and delete the positions.
             let mut iter = docid_word_positions.prefix_iter_mut(self.wtxn, &(docid, ""))?;
             while let Some(result) = iter.next() {
@@ -122,6 +132,24 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 iter.del_current()?;
             }
         }
+
+        let mut fields_distribution = self.index.fields_distribution(self.wtxn)?;
+
+        // We use pre-calculated number of fields occurrences that needs to be deleted
+        // to reflect deleted documents.
+        // If all field occurrences are removed, delete the entry from distribution.
+        // Otherwise, insert new number of occurrences (current_count - count_diff).
+        for (field_id, count_diff) in fields_ids_distribution_diff {
+            let field_name = fields_ids_map.name(field_id).unwrap();
+            if let Entry::Occupied(mut entry) = fields_distribution.entry(field_name.to_string()) {
+                match entry.get().checked_sub(count_diff) {
+                    Some(0) | None => entry.remove(),
+                    Some(count) => entry.insert(count)
+                };
+            }
+        }
+
+        self.index.put_fields_distribution(self.wtxn, &fields_distribution)?;
 
         // We create the FST map of the external ids that we must delete.
         external_ids.sort_unstable();
@@ -347,5 +375,9 @@ mod tests {
         builder.execute().unwrap();
 
         wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        assert!(index.fields_distribution(&rtxn).unwrap().is_empty());
     }
 }

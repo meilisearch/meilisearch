@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
@@ -10,7 +11,7 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId};
+use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
@@ -20,6 +21,7 @@ const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 pub struct TransformOutput {
     pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
+    pub fields_distribution: FieldsDistribution,
     pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
@@ -74,6 +76,7 @@ impl Transform<'_, '_> {
         F: Fn(UpdateIndexingStep) + Sync,
     {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let mut fields_distribution = self.index.fields_distribution(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
 
         // Deserialize the whole batch of documents in memory.
@@ -103,6 +106,7 @@ impl Transform<'_, '_> {
             return Ok(TransformOutput {
                 primary_key,
                 fields_ids_map,
+                fields_distribution,
                 external_documents_ids: ExternalDocumentsIds::default(),
                 new_documents_ids: RoaringBitmap::new(),
                 replaced_documents_ids: RoaringBitmap::new(),
@@ -133,6 +137,8 @@ impl Transform<'_, '_> {
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut documents_count = 0;
 
+        let mut fields_ids_distribution = HashMap::new();
+
         for result in documents {
             let document = result?;
 
@@ -147,7 +153,9 @@ impl Transform<'_, '_> {
 
             // We prepare the fields ids map with the documents keys.
             for (key, _value) in &document {
-                fields_ids_map.insert(&key).context("field id limit reached")?;
+                let field_id = fields_ids_map.insert(&key).context("field id limit reached")?;
+
+                *fields_ids_distribution.entry(field_id).or_insert(0) += 1;
             }
 
             // We retrieve the user id from the document based on the primary key name,
@@ -190,6 +198,11 @@ impl Transform<'_, '_> {
             documents_count += 1;
         }
 
+        for (field_id, count) in fields_ids_distribution {
+            let field_name = fields_ids_map.name(field_id).unwrap();
+            *fields_distribution.entry(field_name.to_string()).or_default() += count;
+        }
+
         progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
             documents_seen: documents_count,
         });
@@ -200,6 +213,7 @@ impl Transform<'_, '_> {
             sorter,
             primary_key,
             fields_ids_map,
+            fields_distribution,
             documents_count,
             external_documents_ids,
             progress_callback,
@@ -212,6 +226,7 @@ impl Transform<'_, '_> {
         F: Fn(UpdateIndexingStep) + Sync,
     {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let mut fields_distribution = self.index.fields_distribution(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
 
         let mut csv = csv::Reader::from_reader(reader);
@@ -269,6 +284,8 @@ impl Transform<'_, '_> {
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut documents_count = 0;
 
+        let mut fields_ids_distribution = HashMap::new();
+
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record)? {
             obkv_buffer.clear();
@@ -307,11 +324,18 @@ impl Transform<'_, '_> {
                 json_buffer.clear();
                 serde_json::to_writer(&mut json_buffer, &field)?;
                 writer.insert(*field_id, &json_buffer)?;
+
+                *fields_ids_distribution.entry(*field_id).or_insert(0) += 1;
             }
 
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(external_id, &obkv_buffer)?;
             documents_count += 1;
+        }
+
+        for (field_id, count) in fields_ids_distribution {
+            let field_name = fields_ids_map.name(field_id).unwrap();
+            *fields_distribution.entry(field_name.to_string()).or_default() += count;
         }
 
         progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
@@ -328,6 +352,7 @@ impl Transform<'_, '_> {
             sorter,
             primary_key_name,
             fields_ids_map,
+            fields_distribution,
             documents_count,
             external_documents_ids,
             progress_callback,
@@ -342,6 +367,7 @@ impl Transform<'_, '_> {
         sorter: grenad::Sorter<MergeFn>,
         primary_key: String,
         fields_ids_map: FieldsIdsMap,
+        fields_distribution: FieldsDistribution,
         approximate_number_of_documents: usize,
         mut external_documents_ids: ExternalDocumentsIds<'_>,
         progress_callback: F,
@@ -439,6 +465,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
+            fields_distribution,
             external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids,
             replaced_documents_ids,
@@ -457,6 +484,7 @@ impl Transform<'_, '_> {
         new_fields_ids_map: FieldsIdsMap,
     ) -> anyhow::Result<TransformOutput>
     {
+        let fields_distribution = self.index.fields_distribution(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let documents_count = documents_ids.len() as usize;
@@ -492,6 +520,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map: new_fields_ids_map,
+            fields_distribution,
             external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
