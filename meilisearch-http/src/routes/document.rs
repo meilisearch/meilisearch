@@ -84,7 +84,9 @@ async fn delete_document(
         .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
         .await
     {
-        Ok(result) => Ok(HttpResponse::Ok().json(result)),
+        Ok(update_status) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -119,7 +121,7 @@ async fn get_all_documents(
         )
         .await
     {
-        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
+        Ok(documents) => Ok(HttpResponse::Ok().json(documents)),
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -133,6 +135,7 @@ struct UpdateDocumentsQuery {
 }
 
 /// Route used when the payload type is "application/json"
+/// Used to add or replace documents
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents(
     data: web::Data<Data>,
@@ -151,7 +154,9 @@ async fn add_documents(
         .await;
 
     match addition_result {
-        Ok(update) => Ok(HttpResponse::Ok().json(update)),
+        Ok(update_status) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -200,7 +205,9 @@ async fn update_documents(
         .await;
 
     match addition_result {
-        Ok(update) => Ok(HttpResponse::Ok().json(update)),
+        Ok(update) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -226,20 +233,25 @@ async fn delete_documents(
         .collect();
 
     match data.delete_documents(path.index_uid.clone(), ids).await {
-        Ok(result) => Ok(HttpResponse::Ok().json(result)),
+        Ok(update_status) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
 
+/// delete all documents
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     match data.clear_documents(path.index_uid.clone()).await {
-        Ok(update) => Ok(HttpResponse::Ok().json(update)),
+        Ok(update_status) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }

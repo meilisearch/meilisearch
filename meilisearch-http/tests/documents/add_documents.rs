@@ -16,13 +16,16 @@ async fn add_documents_no_index_creation() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "pending");
+    assert_eq!(code, 202);
     assert_eq!(response["updateId"], 0);
-    assert_eq!(response["meta"]["type"], "DocumentsAddition");
-    assert_eq!(response["meta"]["format"], "Json");
-    assert_eq!(response["meta"]["primaryKey"], Value::Null);
-    assert!(response.get("enqueuedAt").is_some());
+    /*
+     * currently we don’t check these field to stay ISO with meilisearch
+     * assert_eq!(response["status"], "pending");
+     * assert_eq!(response["meta"]["type"], "DocumentsAddition");
+     * assert_eq!(response["meta"]["format"], "Json");
+     * assert_eq!(response["meta"]["primaryKey"], Value::Null);
+     * assert!(response.get("enqueuedAt").is_some());
+     */
 
     index.wait_update_id(0).await;
 
@@ -75,7 +78,7 @@ async fn document_addition_with_primary_key() {
         }
     ]);
     let (_response, code) = index.add_documents(documents, Some("primary")).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
 
@@ -102,7 +105,7 @@ async fn document_update_with_primary_key() {
         }
     ]);
     let (_response, code) = index.update_documents(documents, Some("primary")).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
 
@@ -131,7 +134,7 @@ async fn add_documents_with_primary_key_and_primary_key_already_exists() {
     ]);
 
     let (_response, code) = index.add_documents(documents, Some("id")).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
 
@@ -160,7 +163,7 @@ async fn update_documents_with_primary_key_and_primary_key_already_exists() {
     ]);
 
     let (_response, code) = index.update_documents(documents, Some("id")).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
     let (response, code) = index.get_update(0).await;
@@ -187,7 +190,7 @@ async fn replace_document() {
     ]);
 
     let (_response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
 
@@ -199,7 +202,7 @@ async fn replace_document() {
     ]);
 
     let (_response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(1).await;
 
@@ -246,7 +249,7 @@ async fn update_document() {
     ]);
 
     let (_response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(0).await;
 
@@ -258,7 +261,7 @@ async fn update_document() {
     ]);
 
     let (_response, code) = index.update_documents(documents, None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 202);
 
     index.wait_update_id(1).await;
 

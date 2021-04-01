@@ -27,7 +27,9 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 match data.update_settings(index_uid.into_inner(), settings, false).await {
-                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
+                    Ok(update_status) => {
+                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                    }
                     Err(e) => {
                         Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
@@ -46,7 +48,9 @@ macro_rules! make_setting_route {
                 };
 
                 match data.update_settings(index_uid.into_inner(), settings, true).await {
-                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
+                    Ok(update_status) => {
+                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                    }
                     Err(e) => {
                         Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
@@ -131,7 +135,9 @@ async fn update_all(
         .update_settings(index_uid.into_inner(), body.into_inner(), true)
         .await
     {
-        Ok(update_result) => Ok(HttpResponse::Accepted().json(update_result)),
+        Ok(update_result) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_result.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -161,7 +167,9 @@ async fn delete_all(
         .update_settings(index_uid.into_inner(), settings, false)
         .await
     {
-        Ok(update_result) => Ok(HttpResponse::Accepted().json(update_result)),
+        Ok(update_result) => {
+            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_result.id() })))
+        }
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
