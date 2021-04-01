@@ -4,7 +4,7 @@ description = "MeiliSearch HTTP server"
 edition = "2018"
 license = "MIT"
 name = "meilisearch-http"
-version = "0.21.0-alpha.1"
+version = "0.21.0-alpha.2"
 [[bin]]
 name = "meilisearch"
 path = "src/main.rs"
