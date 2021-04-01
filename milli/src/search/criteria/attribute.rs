@@ -51,7 +51,7 @@ impl<'t> Criterion for Attribute<'t> {
                         flatten_query_tree(&qt)
                     });
 
-                    let found_candidates = if candidates.len() < 1000 {
+                    let found_candidates = if candidates.len() < 1_000 {
                         let current_buckets = match self.current_buckets.as_mut() {
                             Some(current_buckets) => current_buckets,
                             None => {
@@ -322,10 +322,10 @@ struct Branch<'t, 'q> {
 
 impl<'t, 'q> Branch<'t, 'q> {
     fn cmp(&self, other: &Self) -> Ordering {
-        fn compute_rank(left: u32, branch_size: u32) -> u32 { left.saturating_sub((1..branch_size).sum()) / branch_size }
+        fn compute_rank(left: u32, branch_size: u32) -> u32 { left.saturating_sub((0..branch_size).sum()) / branch_size }
         match (&self.last_result, &other.last_result) {
             (Some((s_left, _, _)), Some((o_left, _, _))) => {
-                // we compute a rank form the left interval.
+                // we compute a rank from the left interval.
                 let self_rank = compute_rank(*s_left, self.branch_size);
                 let other_rank = compute_rank(*o_left, other.branch_size);
                 let left_cmp = self_rank.cmp(&other_rank).reverse();
@@ -371,8 +371,8 @@ fn initialize_query_level_iterators<'t, 'q>(
     let mut positions = BinaryHeap::with_capacity(branches.len());
     for branch in branches {
         let mut branch_positions = Vec::with_capacity(branch.len());
-        for query in  branch {
-            match QueryLevelIterator::new(ctx, query, wdcache)? {
+        for queries in  branch {
+            match QueryLevelIterator::new(ctx, queries, wdcache)? {
                 Some(qli) => branch_positions.push(qli),
                 None => {
                     // the branch seems to be invalid, so we skip it.
@@ -386,10 +386,10 @@ fn initialize_query_level_iterators<'t, 'q>(
         let folded_query_level_iterators =  branch_positions
             .into_iter()
             .rev()
-            .fold(None, |fold: Option<QueryLevelIterator>, qli| match fold {
-                Some(mut fold) => {
-                    fold.previous(qli);
-                    Some(fold)
+            .fold(None, |fold: Option<QueryLevelIterator>, mut qli| match fold {
+                Some(fold) => {
+                    qli.previous(fold);
+                    Some(qli)
                 },
                 None => Some(qli),
         });
@@ -418,6 +418,7 @@ fn set_compute_candidates<'t>(
 {
     let mut branches_heap = initialize_query_level_iterators(ctx, branches, wdcache)?;
     let lowest_level = TreeLevel::min_value();
+    let mut final_candidates = RoaringBitmap::new();
 
     while let Some(mut branch) = branches_heap.peek_mut() {
         let is_lowest_level = branch.tree_level == lowest_level;
@@ -426,7 +427,8 @@ fn set_compute_candidates<'t>(
                 candidates.intersect_with(&allowed_candidates);
                 if candidates.len() > 0 && is_lowest_level {
                     // we have candidates, but we can't dig deeper, return candidates.
-                    return Ok(std::mem::take(candidates));
+                    final_candidates = std::mem::take(candidates);
+                    break;
                 } else if candidates.len() > 0 {
                     // we have candidates, lets dig deeper in levels.
                     let mut query_level_iterator = branch.query_level_iterator.dig(ctx)?;
@@ -441,12 +443,12 @@ fn set_compute_candidates<'t>(
                 }
             },
             // None = no candidates to find.
-            None => return Ok(RoaringBitmap::new()),
+            None => break,
         }
+
     }
 
-    // we made all iterations without finding anything.
-    Ok(RoaringBitmap::new())
+    Ok(final_candidates)
 }
 
 fn linear_compute_candidates(
