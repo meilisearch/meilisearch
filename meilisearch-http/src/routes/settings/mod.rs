@@ -27,7 +27,9 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 match data.update_settings(index_uid.into_inner(), settings, false).await {
-                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
+                    Ok(update_status) => {
+                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                    }
                     Err(e) => {
                         Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
@@ -46,7 +48,9 @@ macro_rules! make_setting_route {
                 };
 
                 match data.update_settings(index_uid.into_inner(), settings, true).await {
-                    Ok(update_status) => Ok(HttpResponse::Ok().json(update_status)),
+                    Ok(update_status) => {
+                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                    }
                     Err(e) => {
                         Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
                     }
