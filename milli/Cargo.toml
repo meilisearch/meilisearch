@@ -61,5 +61,5 @@ rand = "0.8.3"
 default = []
 
 [[bench]]
-name = "search"
+name = "typo"
 harness = false

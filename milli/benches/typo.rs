@@ -1,22 +1,27 @@
-use std::time::Duration;
+mod utils;
 
-use heed::EnvOpenOptions;
-use milli::Index;
+use std::time::Duration;
 use criterion::{criterion_group, criterion_main, BenchmarkId};
 
-fn bench_search(c: &mut criterion::Criterion) {
-    let database = "books-4cpu.mmdb";
+fn bench_typo(c: &mut criterion::Criterion) {
+    let index = utils::base_setup(Some(vec!["typo".to_string()]));
+
     let queries = [
-        "minogue kylie",
-        "minogue kylie live",
+        "mongus ",
+        "thelonius monk ",
+        "Disnaylande ",
+        "the white striper ",
+        "indochie ",
+        "indochien ",
+        "klub des loopers ",
+        "fear of the duck ",
+        "michel depech ",
+        "stromal ",
+        "dire straights ",
+        "Arethla Franklin ",
     ];
 
-    let mut options = EnvOpenOptions::new();
-    options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
-    options.max_readers(10);
-    let index = Index::new(options, database).unwrap();
-
-    let mut group = c.benchmark_group("search");
+    let mut group = c.benchmark_group("typo");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(12));
 
@@ -32,5 +37,5 @@ fn bench_search(c: &mut criterion::Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_search);
+criterion_group!(benches, bench_typo);
 criterion_main!(benches);
