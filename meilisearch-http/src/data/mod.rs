@@ -1,6 +1,3 @@
-pub mod search;
-mod updates;
-
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -10,6 +7,9 @@ use crate::index::Settings;
 use crate::index_controller::IndexController;
 use crate::index_controller::{IndexMetadata, IndexSettings};
 use crate::option::Opt;
+
+pub mod search;
+mod updates;
 
 #[derive(Clone)]
 pub struct Data {

@@ -12,11 +12,14 @@ use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::update_handler::UpdateHandler;
-use crate::index_controller::{get_arc_ownership_blocking, updates::Processing, UpdateMeta};
+use crate::index_controller::{
+    get_arc_ownership_blocking, updates::Processing, IndexStats, UpdateMeta,
+};
 use crate::option::IndexerOpts;
+
+use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 
 pub struct IndexActor<S> {
     read_receiver: Option<mpsc::Receiver<IndexMsg>>,
@@ -145,6 +148,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
             Snapshot { uuid, path, ret } => {
                 let _ = ret.send(self.handle_snapshot(uuid, path).await);
+            }
+            GetStats { uuid, ret } => {
+                let _ = ret.send(self.handle_get_stats(uuid).await);
             }
         }
     }
@@ -327,5 +333,26 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         }
 
         Ok(())
+    }
+
+    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+        let index = self
+            .store
+            .get(uuid)
+            .await?
+            .ok_or(IndexError::UnexistingIndex)?;
+
+        spawn_blocking(move || {
+            let rtxn = index.read_txn()?;
+
+            Ok(IndexStats {
+                size: index.size()?,
+                number_of_documents: index.number_of_documents(&rtxn)?,
+                is_indexing: false, // TODO check actual is_indexing
+                fields_distribution: index.fields_distribution(&rtxn)?,
+            })
+        })
+        .await
+        .map_err(|e| IndexError::Error(e.into()))?
     }
 }

@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::index::{Document, SearchQuery, SearchResult, Settings};
+use crate::index_controller::{updates::Processing, UpdateMeta};
+use crate::index_controller::{IndexSettings, IndexStats};
+
 use super::{
     IndexActor, IndexActorHandle, IndexMeta, IndexMsg, MapIndexStore, Result, UpdateResult,
 };
-use crate::index::{Document, SearchQuery, SearchResult, Settings};
-use crate::index_controller::IndexSettings;
-use crate::index_controller::{updates::Processing, UpdateMeta};
 
 #[derive(Clone)]
 pub struct IndexActorHandleImpl {
@@ -118,6 +119,13 @@ impl IndexActorHandle for IndexActorHandleImpl {
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Snapshot { uuid, path, ret };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::GetStats { uuid, ret };
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }

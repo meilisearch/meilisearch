@@ -1,30 +1,30 @@
-mod actor;
-mod handle_impl;
-mod message;
-mod store;
-
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+#[cfg(test)]
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::IndexSettings;
+use actor::IndexActor;
+pub use handle_impl::IndexActorHandleImpl;
+use message::IndexMsg;
+use store::{IndexStore, MapIndexStore};
+
 use crate::index::UpdateResult as UResult;
 use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{
     updates::{Failed, Processed, Processing},
-    UpdateMeta,
+    IndexStats, UpdateMeta,
 };
-use actor::IndexActor;
-use message::IndexMsg;
-use store::{IndexStore, MapIndexStore};
 
-pub use handle_impl::IndexActorHandleImpl;
+use super::IndexSettings;
 
-#[cfg(test)]
-use mockall::automock;
+mod actor;
+mod handle_impl;
+mod message;
+mod store;
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<UpdateMeta, String>>;
@@ -33,7 +33,7 @@ type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<U
 #[serde(rename_all = "camelCase")]
 pub struct IndexMeta {
     created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     primary_key: Option<String>,
 }
 
@@ -98,4 +98,5 @@ pub trait IndexActorHandle {
     async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta>;
     async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats>;
 }

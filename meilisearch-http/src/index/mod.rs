@@ -1,6 +1,3 @@
-mod search;
-mod updates;
-
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -8,9 +5,13 @@ use std::sync::Arc;
 use anyhow::{bail, Context};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
+use walkdir::WalkDir;
 
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Facets, Settings, UpdateResult};
+
+mod search;
+mod updates;
 
 pub type Document = Map<String, Value>;
 
@@ -124,6 +125,15 @@ impl Index {
             Some(document) => Ok(obkv_to_json(&fields_to_display, &fields_ids_map, document)?),
             None => bail!("Document with id {} not found", doc_id),
         }
+    }
+
+    pub fn size(&self) -> anyhow::Result<u64> {
+        Ok(WalkDir::new(self.env.path())
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|metadata| metadata.is_file())
+            .fold(0, |acc, m| acc + m.len()))
     }
 
     fn fields_to_display<S: AsRef<str>>(
