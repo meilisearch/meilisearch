@@ -28,6 +28,7 @@ pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
 pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
 pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
+pub const STOP_WORDS_KEY: &str = "stop-words";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 const CREATED_AT_KEY: &str = "created-at";
 const UPDATED_AT_KEY: &str = "updated-at";
@@ -374,6 +375,22 @@ impl Index {
         match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+        }
+    }
+
+    /* stop words */
+
+    pub fn put_stop_words<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, STOP_WORDS_KEY, fst.as_fst().as_bytes())
+    }
+
+    pub fn delete_stop_words(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, STOP_WORDS_KEY)
+    }
+    pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, STOP_WORDS_KEY)? {
+            Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
+            None => Ok(None),
         }
     }
 

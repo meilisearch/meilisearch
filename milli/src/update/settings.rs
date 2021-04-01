@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -32,6 +32,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     displayed_fields: Option<Option<Vec<String>>>,
     faceted_fields: Option<Option<HashMap<String, String>>>,
     criteria: Option<Option<Vec<String>>>,
+    stop_words: Option<Option<BTreeSet<String>>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -55,6 +56,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             displayed_fields: None,
             faceted_fields: None,
             criteria: None,
+            stop_words: None,
             update_id,
         }
     }
@@ -89,6 +91,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn set_criteria(&mut self, criteria: Vec<String>) {
         self.criteria = Some(Some(criteria));
+    }
+
+    pub fn reset_stop_words(&mut self) {
+        self.stop_words = Some(None);
+    }
+
+    pub fn set_stop_words(&mut self, stop_words: BTreeSet<String>) {
+        self.stop_words = if stop_words.is_empty() {
+            Some(None)
+        } else {
+            Some(Some(stop_words))
+        }
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
@@ -210,6 +224,28 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(true)
     }
 
+    fn update_stop_words(&mut self) -> anyhow::Result<bool> {
+        match self.stop_words {
+            Some(Some(ref stop_words)) => {
+                let current = self.index.stop_words(self.wtxn)?;
+                // since we can't compare a BTreeSet with an FST we are going to convert the
+                // BTreeSet to an FST and then compare bytes per bytes the two FSTs.
+                let fst = fst::Set::from_iter(&*stop_words)?;
+
+                // Does the new FST differ from the previous one?
+                if current.map_or(true, |current| current.as_fst().as_bytes() != fst.as_fst().as_bytes()) {
+                    // we want to re-create our FST.
+                    self.index.put_stop_words(self.wtxn, &fst)?;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            Some(None) => Ok(self.index.delete_stop_words(self.wtxn)?),
+            None => Ok(false),
+        }
+    }
+
     fn update_facets(&mut self) -> anyhow::Result<bool> {
         match self.faceted_fields {
             Some(Some(ref fields)) => {
@@ -248,22 +284,23 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn execute<F>(mut self, progress_callback: F) -> anyhow::Result<()>
     where
-        F: Fn(UpdateIndexingStep, u64) + Sync
-        {
-            self.index.set_updated_at(self.wtxn, &Utc::now())?;
-            let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
-            self.update_displayed()?;
-            let facets_updated = self.update_facets()?;
-            // update_criteria MUST be called after update_facets, since criterion fields must be set
-            // as facets.
-            self.update_criteria()?;
-            let searchable_updated = self.update_searchable()?;
+    F: Fn(UpdateIndexingStep, u64) + Sync
+    {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
+        let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
+        self.update_displayed()?;
+        let stop_words_updated = self.update_stop_words()?;
+        let facets_updated = self.update_facets()?;
+        // update_criteria MUST be called after update_facets, since criterion fields must be set
+        // as facets.
+        self.update_criteria()?;
+        let searchable_updated = self.update_searchable()?;
 
-            if facets_updated || searchable_updated {
-                self.reindex(&progress_callback, old_fields_ids_map)?;
-            }
-            Ok(())
+        if facets_updated || searchable_updated || stop_words_updated {
+            self.reindex(&progress_callback, old_fields_ids_map)?;
         }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -271,7 +308,7 @@ mod tests {
     use super::*;
 
     use heed::EnvOpenOptions;
-    use maplit::hashmap;
+    use maplit::{hashmap, btreeset};
 
     use crate::facet::FacetType;
     use crate::update::{IndexDocuments, UpdateFormat};
@@ -328,7 +365,6 @@ mod tests {
         assert_eq!(result.documents_ids.len(), 1);
         let documents = index.documents(&rtxn, result.documents_ids).unwrap();
         assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
-        drop(rtxn);
     }
 
     #[test]
@@ -372,7 +408,6 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.displayed_fields(&rtxn).unwrap();
         assert_eq!(fields_ids.unwrap(), &["age"][..]);
-        drop(rtxn);
     }
 
     #[test]
@@ -394,7 +429,6 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.displayed_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, None);
-        drop(rtxn);
     }
 
     #[test]
@@ -434,7 +468,6 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.displayed_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, None);
-        drop(rtxn);
     }
 
     #[test]
@@ -478,7 +511,96 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 4);
-        drop(rtxn);
+    }
+
+    #[test]
+    fn default_stop_words() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure there is no stop_words by default
+        let rtxn = index.read_txn().unwrap();
+        let stop_words = index.stop_words(&rtxn).unwrap();
+        assert!(stop_words.is_none());
+    }
+
+    #[test]
+    fn set_and_reset_stop_words() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // In the same transaction we provide some stop_words
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let set = btreeset!{ "i".to_string(), "the".to_string(), "are".to_string() };
+        builder.set_stop_words(set.clone());
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure stop_words are effectively stored
+        let rtxn = index.read_txn().unwrap();
+        let stop_words = index.stop_words(&rtxn).unwrap();
+        assert!(stop_words.is_some()); // at this point the index should return something
+
+        let stop_words = stop_words.unwrap();
+        let expected = fst::Set::from_iter(&set).unwrap();
+        assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
+
+        // when we search for something that is a non prefix stop_words it should be ignored
+        let result = index.search(&rtxn).query("the ").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+        let result = index.search(&rtxn).query("i ").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+        let result = index.search(&rtxn).query("are ").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+
+        let result = index.search(&rtxn).query("dog").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
+        let result = index.search(&rtxn).query("benoît").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
+
+        // now we'll reset the stop_words and ensure it's None
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.reset_stop_words();
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let stop_words = index.stop_words(&rtxn).unwrap();
+        assert!(stop_words.is_none());
+
+        // now we can search for the stop words
+        let result = index.search(&rtxn).query("the").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
+        let result = index.search(&rtxn).query("i").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1);
+        let result = index.search(&rtxn).query("are").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
+
+        // the rest of the search is still not impacted
+        let result = index.search(&rtxn).query("dog").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
+        let result = index.search(&rtxn).query("benoît").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
     }
 
     #[test]
@@ -519,6 +641,5 @@ mod tests {
         assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
         assert!(index.primary_key(&rtxn).unwrap().is_none());
         assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
-        drop(rtxn);
     }
 }

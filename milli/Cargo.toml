@@ -20,7 +20,7 @@ heed = { version = "0.10.6", default-features = false, features = ["lmdb", "sync
 human_format = "1.0.3"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.4"
-meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.1.4" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.2.0" }
 memmap = "0.7.0"
 num-traits = "0.2.14"
 obkv = "0.1.1"
