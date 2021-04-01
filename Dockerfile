@@ -9,10 +9,28 @@ RUN     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 WORKDIR /meilisearch
 
-COPY    . .
+COPY    Cargo.lock .
+COPY    Cargo.toml .
+
+COPY    meilisearch-error/Cargo.toml meilisearch-error/
+COPY    meilisearch-http/Cargo.lock meilisearch-http/
+COPY    meilisearch-http/Cargo.toml meilisearch-http/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
+# Create dummy main.rs files for each workspace member to be able to compile all the dependencies
+RUN     find . -type d -name "meilisearch-*" | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
+# Use `cargo build` instead of `cargo vendor` because we need to not only download but compile dependencies too
+RUN     $HOME/.cargo/bin/cargo build --release
+# Cleanup dummy main.rs files
+RUN     find . -path "*/src/main.rs" -delete
+
+ARG     COMMIT_SHA
+ARG     COMMIT_DATE
+ENV     COMMIT_SHA=${COMMIT_SHA}
+ENV     COMMIT_DATE=${COMMIT_DATE}
+
+COPY    . .
 RUN     $HOME/.cargo/bin/cargo build --release
 
 # Run
