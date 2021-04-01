@@ -1,6 +1,6 @@
 use chrono::Utc;
 use roaring::RoaringBitmap;
-use crate::{ExternalDocumentsIds, Index};
+use crate::{ExternalDocumentsIds, Index, FieldsDistribution};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -42,6 +42,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
+        self.index.put_fields_distribution(self.wtxn, &FieldsDistribution::default())?;
 
         // We clean all the faceted documents ids.
         for (field_id, _) in faceted_fields {
@@ -59,5 +60,56 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         documents.clear(self.wtxn)?;
 
         Ok(number_of_documents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use heed::EnvOpenOptions;
+
+    use crate::update::{IndexDocuments, UpdateFormat};
+    use super::*;
+
+    #[test]
+    fn clear_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "id": 0, "name": "kevin", "age": 20 },
+            { "id": 1, "name": "kevina" },
+            { "id": 2, "name": "benoit", "country": "France" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // Clear all documents from the database.
+        let builder = ClearDocuments::new(&mut wtxn, &index, 1);
+        assert_eq!(builder.execute().unwrap(), 3);
+
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 4);
+
+        assert!(index.words_fst(&rtxn).unwrap().is_empty());
+        assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
+        assert!(index.external_documents_ids(&rtxn).unwrap().is_empty());
+        assert!(index.documents_ids(&rtxn).unwrap().is_empty());
+        assert!(index.fields_distribution(&rtxn).unwrap().is_empty());
+
+        assert!(index.word_docids.is_empty(&rtxn).unwrap());
+        assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
+        assert!(index.docid_word_positions.is_empty(&rtxn).unwrap());
+        assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
+        assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
+        assert!(index.facet_field_id_value_docids.is_empty(&rtxn).unwrap());
+        assert!(index.field_id_docid_facet_values.is_empty(&rtxn).unwrap());
+        assert!(index.documents.is_empty(&rtxn).unwrap());
     }
 }

@@ -10,7 +10,7 @@ use chrono::{Utc, DateTime};
 
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::{default_criteria, Criterion, Search, FacetDistribution};
+use crate::{default_criteria, Criterion, Search, FacetDistribution, FieldsDistribution};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, RoaringBitmapLenCodec, BEU32StrCodec,
@@ -33,8 +33,6 @@ pub const STOP_WORDS_KEY: &str = "stop-words";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 const CREATED_AT_KEY: &str = "created-at";
 const UPDATED_AT_KEY: &str = "updated-at";
-
-pub type FieldsDistribution = HashMap<String, u64>;
 
 #[derive(Clone)]
 pub struct Index {
@@ -209,14 +207,14 @@ impl Index {
 
     /* fields distribution */
 
-    /// Writes the fields distribution which associate the field with the number of times
-    /// it occurs in the obkv documents.
+    /// Writes the fields distribution which associates every field name with
+    /// the number of times it occurs in the documents.
     pub fn put_fields_distribution(&self, wtxn: &mut RwTxn, distribution: &FieldsDistribution) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(wtxn, FIELDS_DISTRIBUTION_KEY, &distribution)
+        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(wtxn, FIELDS_DISTRIBUTION_KEY, distribution)
     }
 
-    /// Returns the fields distribution which associate the field with the number of times
-    /// it occurs in the obkv documents.
+    /// Returns the fields distribution which associates every field name with
+    /// the number of times it occurs in the documents.
     pub fn fields_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
         Ok(self.main.get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, FIELDS_DISTRIBUTION_KEY)?.unwrap_or_default())
     }
@@ -472,35 +470,29 @@ mod tests {
     use crate::Index;
     use crate::update::{IndexDocuments, UpdateFormat};
 
-    fn prepare_index() -> Index {
+    #[test]
+    fn initial_fields_distribution() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = &br#"
-        { "name": "kevin" }
-        { "name": "bob", "age": 20 }
-        "#[..];
+        let content = &br#"[
+            { "name": "kevin" },
+            { "name": "bob", "age": 20 }
+        ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::JsonStream);
+        builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
-
-        index
-    }
-
-    #[test]
-    fn initial_fields_distribution() {
-        let index = prepare_index();
 
         let rtxn = index.read_txn().unwrap();
 
         let fields_distribution = index.fields_distribution(&rtxn).unwrap();
         assert_eq!(fields_distribution, hashmap!{
+            "name".to_string() => 2,
             "age".to_string() => 1,
-            "name".to_string() => 2
         });
     }
 }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
@@ -10,11 +11,10 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId};
+use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
-use crate::index::FieldsDistribution;
 
 const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 
@@ -137,6 +137,8 @@ impl Transform<'_, '_> {
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut documents_count = 0;
 
+        let mut fields_ids_distribution = HashMap::new();
+
         for result in documents {
             let document = result?;
 
@@ -151,9 +153,9 @@ impl Transform<'_, '_> {
 
             // We prepare the fields ids map with the documents keys.
             for (key, _value) in &document {
-                fields_ids_map.insert(&key).context("field id limit reached")?;
+                let field_id = fields_ids_map.insert(&key).context("field id limit reached")?;
 
-                *fields_distribution.entry(key.to_owned()).or_default() += 1;
+                *fields_ids_distribution.entry(field_id).or_insert(0) += 1;
             }
 
             // We retrieve the user id from the document based on the primary key name,
@@ -194,6 +196,11 @@ impl Transform<'_, '_> {
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(external_id.as_bytes(), &obkv_buffer)?;
             documents_count += 1;
+        }
+
+        for (field_id, count) in fields_ids_distribution {
+            let field_name = fields_ids_map.name(field_id).unwrap();
+            *fields_distribution.entry(field_name.to_string()).or_default() += count;
         }
 
         progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
@@ -277,6 +284,8 @@ impl Transform<'_, '_> {
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut documents_count = 0;
 
+        let mut fields_ids_distribution = HashMap::new();
+
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record)? {
             obkv_buffer.clear();
@@ -316,14 +325,17 @@ impl Transform<'_, '_> {
                 serde_json::to_writer(&mut json_buffer, &field)?;
                 writer.insert(*field_id, &json_buffer)?;
 
-                let field_name = fields_ids_map.name(*field_id).unwrap();
-
-                *fields_distribution.entry(field_name.to_string()).or_default() += 1;
+                *fields_ids_distribution.entry(*field_id).or_insert(0) += 1;
             }
 
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(external_id, &obkv_buffer)?;
             documents_count += 1;
+        }
+
+        for (field_id, count) in fields_ids_distribution {
+            let field_name = fields_ids_map.name(field_id).unwrap();
+            *fields_distribution.entry(field_name.to_string()).or_default() += count;
         }
 
         progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
