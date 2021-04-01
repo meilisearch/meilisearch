@@ -22,8 +22,7 @@ fn bench_typo(c: &mut criterion::Criterion) {
     ];
 
     let mut group = c.benchmark_group("typo");
-    group.sample_size(10);
-    group.measurement_time(Duration::from_secs(12));
+    group.measurement_time(Duration::from_secs(10));
 
     for query in &queries {
         group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
