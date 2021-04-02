@@ -354,7 +354,13 @@ impl IndexController {
     pub async fn get_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
 
-        Ok(self.index_handle.get_index_stats(uuid).await?)
+        let stats = self.index_handle.get_index_stats(uuid);
+        let is_indexing = self.update_handle.is_locked(uuid);
+
+        Ok(IndexStats {
+            is_indexing: is_indexing.await?,
+            ..stats.await?
+        })
     }
 }
 

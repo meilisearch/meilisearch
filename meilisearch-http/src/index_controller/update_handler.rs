@@ -39,7 +39,7 @@ impl UpdateHandler {
         })
     }
 
-    fn update_buidler(&self, update_id: u64) -> UpdateBuilder {
+    fn update_builder(&self, update_id: u64) -> UpdateBuilder {
         // We prepare the update by using the update builder.
         let mut update_builder = UpdateBuilder::new(update_id);
         if let Some(max_nb_chunks) = self.max_nb_chunks {
@@ -67,7 +67,7 @@ impl UpdateHandler {
 
         let update_id = meta.id();
 
-        let update_builder = self.update_buidler(update_id);
+        let update_builder = self.update_builder(update_id);
 
         let result = match meta.meta() {
             DocumentsAddition {

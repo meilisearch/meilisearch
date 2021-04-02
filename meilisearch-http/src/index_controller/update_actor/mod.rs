@@ -52,4 +52,5 @@ pub trait UpdateActorHandle {
         data: mpsc::Receiver<PayloadData<Self::Data>>,
         uuid: Uuid,
     ) -> Result<UpdateStatus>;
+    async fn is_locked(&self, uuid: Uuid) -> Result<bool>;
 }

@@ -348,7 +348,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Ok(IndexStats {
                 size: index.size()?,
                 number_of_documents: index.number_of_documents(&rtxn)?,
-                is_indexing: false, // TODO check actual is_indexing
+                is_indexing: false, // We set this field in src/index_controller/mod.rs get_stats
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })

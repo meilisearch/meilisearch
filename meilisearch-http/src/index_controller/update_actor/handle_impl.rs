@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::index_controller::IndexActorHandle;
+
 use super::{
     MapUpdateStoreStore, PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta,
     UpdateMsg, UpdateStatus,
 };
-use crate::index_controller::IndexActorHandle;
 
 #[derive(Clone)]
 pub struct UpdateActorHandleImpl<D> {
@@ -36,6 +37,7 @@ where
         Ok(Self { sender })
     }
 }
+
 #[async_trait::async_trait]
 impl<D> UpdateActorHandle for UpdateActorHandleImpl<D>
 where
@@ -43,29 +45,12 @@ where
 {
     type Data = D;
 
-    async fn update(
-        &self,
-        meta: UpdateMeta,
-        data: mpsc::Receiver<PayloadData<Self::Data>>,
-        uuid: Uuid,
-    ) -> Result<UpdateStatus> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Update {
-            uuid,
-            data,
-            meta,
-            ret,
-        };
-        let _ = self.sender.send(msg).await;
-        receiver.await.expect("update actor killed.")
-    }
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::ListUpdates { uuid, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
-
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::GetUpdate { uuid, id, ret };
@@ -90,6 +75,30 @@ where
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Snapshot { uuid, path, ret };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
+
+    async fn update(
+        &self,
+        meta: UpdateMeta,
+        data: mpsc::Receiver<PayloadData<Self::Data>>,
+        uuid: Uuid,
+    ) -> Result<UpdateStatus> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::Update {
+            uuid,
+            data,
+            meta,
+            ret,
+        };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
+
+    async fn is_locked(&self, uuid: Uuid) -> Result<bool> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::IsLocked { uuid, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
