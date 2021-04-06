@@ -30,7 +30,7 @@ async fn get_settings() {
             "exactness"
         ])
     );
-    assert_eq!(settings["stopWords"], json!(null));
+    assert_eq!(settings["stopWords"], json!([]));
 }
 
 #[actix_rt::test]
