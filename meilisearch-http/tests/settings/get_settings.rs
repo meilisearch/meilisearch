@@ -78,13 +78,14 @@ async fn reset_all_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     index
-        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"]}))
+        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"] }))
         .await;
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["bar"]));
+    assert_eq!(response["stopWords"], json!(["the"]));
 
     index.delete_settings().await;
     index.wait_update_id(1).await;
@@ -93,6 +94,7 @@ async fn reset_all_settings() {
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["*"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
+    assert_eq!(response["stopWords"], json!([]));
 }
 
 #[actix_rt::test]
@@ -166,5 +168,6 @@ macro_rules! test_setting_routes {
 test_setting_routes!(
     attributes_for_faceting,
     displayed_attributes,
-    searchable_attributes
+    searchable_attributes,
+    stop_words
 );
