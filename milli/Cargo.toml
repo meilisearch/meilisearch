@@ -63,3 +63,7 @@ default = []
 [[bench]]
 name = "typo"
 harness = false
+
+[[bench]]
+name = "words"
+harness = false
