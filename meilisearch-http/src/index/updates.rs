@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io;
 use std::num::NonZeroUsize;
 
@@ -44,8 +44,12 @@ pub struct Settings {
     )]
     pub ranking_rules: Option<Option<Vec<String>>>,
 
-    // TODO we are missing the stopWords, synonyms and distinctAttribute for the GET settings
-    // request
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stop_words: Option<Option<BTreeSet<String>>>,
 }
 
 impl Settings {
@@ -55,6 +59,7 @@ impl Settings {
             searchable_attributes: Some(None),
             attributes_for_faceting: Some(None),
             ranking_rules: Some(None),
+            stop_words: Some(None),
         }
     }
 }
@@ -167,6 +172,14 @@ impl Index {
             match criteria {
                 Some(criteria) => builder.set_criteria(criteria.clone()),
                 None => builder.reset_criteria(),
+            }
+        }
+
+        // We transpose the settings JSON struct into a real setting update.
+        if let Some(ref stop_words) = settings.stop_words {
+            match stop_words {
+                Some(stop_words) => builder.set_stop_words(stop_words.clone()),
+                _ => builder.reset_stop_words(),
             }
         }
 

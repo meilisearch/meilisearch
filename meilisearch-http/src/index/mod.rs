@@ -1,7 +1,7 @@
 mod search;
 mod updates;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -51,11 +51,24 @@ impl Index {
             .map(|c| c.to_string())
             .collect();
 
+        let stop_words = self
+            .stop_words(&txn)?
+            .map(|stop_words| -> anyhow::Result<BTreeSet<_>> {
+                Ok(stop_words
+                .stream()
+                .into_strs()?
+                .into_iter()
+                .collect())
+            })
+            .transpose()?
+            .unwrap_or_else(BTreeSet::new);
+
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
             searchable_attributes: Some(Some(searchable_attributes)),
             attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
+            stop_words: Some(Some(stop_words)),
         })
     }
 
