@@ -71,7 +71,18 @@ impl<'t> Criterion for Attribute<'t> {
                             },
                         }
                     } else {
-                        set_compute_candidates(self.ctx, flattened_query_tree, candidates, wdcache)?
+                        let found_candidates = set_compute_candidates(self.ctx, flattened_query_tree, candidates, wdcache)?;
+
+                        match found_candidates {
+                            Some(candidates) => candidates,
+                            None => {
+                                return Ok(Some(CriterionResult {
+                                    query_tree: self.query_tree.take(),
+                                    candidates: self.candidates.take(),
+                                    bucket_candidates: take(&mut self.bucket_candidates),
+                                }));
+                            },
+                        }
                     };
 
                     candidates.difference_with(&found_candidates);
@@ -414,11 +425,11 @@ fn set_compute_candidates<'t>(
     branches: &Vec<Vec<Vec<Query>>>,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> anyhow::Result<Option<RoaringBitmap>>
 {
     let mut branches_heap = initialize_query_level_iterators(ctx, branches, wdcache)?;
     let lowest_level = TreeLevel::min_value();
-    let mut final_candidates = RoaringBitmap::new();
+    let mut final_candidates = None;
 
     while let Some(mut branch) = branches_heap.peek_mut() {
         let is_lowest_level = branch.tree_level == lowest_level;
@@ -427,7 +438,7 @@ fn set_compute_candidates<'t>(
                 candidates.intersect_with(&allowed_candidates);
                 if candidates.len() > 0 && is_lowest_level {
                     // we have candidates, but we can't dig deeper, return candidates.
-                    final_candidates = std::mem::take(candidates);
+                    final_candidates = Some(std::mem::take(candidates));
                     break;
                 } else if candidates.len() > 0 {
                     // we have candidates, lets dig deeper in levels.
