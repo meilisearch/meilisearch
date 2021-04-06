@@ -20,6 +20,7 @@ async fn get_settings() {
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["attributesForFaceting"], json!({}));
+    assert_eq!(settings["distinctAttribute"], serde_json::Value::Null);
     assert_eq!(
         settings["rankingRules"],
         json!([
