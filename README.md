@@ -174,7 +174,7 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 
 ## Contributing
 
-Hey! We're glad you're thinking about contributing to MeiliSearch! If you think something is missing or could be improved, please open issues and pull requests. If you'd like to help this project grow, we'd love to have you! To start contributing, checking [issues tagged as "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) is a good start!
+Hey! We're glad you're thinking about contributing to MeiliSearch! However, we are currently working on a huge refactor and accepting PRs on this repository wouldn't be productive. We are sorry about this! Be sure we are doing our best so that you can contribute to MeiliSearch again as soon as possible ❤️
 
 ## Telemetry
 
