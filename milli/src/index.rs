@@ -3,19 +3,19 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Context;
+use chrono::{DateTime, Utc};
+use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use heed::types::*;
-use heed::{PolyDatabase, Database, RwTxn, RoTxn};
 use roaring::RoaringBitmap;
-use chrono::{Utc, DateTime};
 
+use crate::{Criterion, default_criteria, FacetDistribution, FieldsDistribution, Search};
+use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId};
+use crate::{
+    BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
+    ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrStrU8Codec,
+};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::{default_criteria, Criterion, Search, FacetDistribution, FieldsDistribution};
-use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
-use crate::{
-    RoaringBitmapCodec, RoaringBitmapLenCodec, BEU32StrCodec,
-    StrStrU8Codec, ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
-};
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
@@ -31,6 +31,7 @@ pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
 pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 pub const STOP_WORDS_KEY: &str = "stop-words";
+pub const SYNONYMS_KEY: &str = "synonyms";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 const CREATED_AT_KEY: &str = "created-at";
 const UPDATED_AT_KEY: &str = "updated-at";
@@ -376,12 +377,12 @@ impl Index {
 
     /* words fst */
 
-    /// Writes the FST which is the words dictionnary of the engine.
+    /// Writes the FST which is the words dictionary of the engine.
     pub fn put_words_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, WORDS_FST_KEY, fst.as_fst().as_bytes())
     }
 
-    /// Returns the FST which is the words dictionnary of the engine.
+    /// Returns the FST which is the words dictionary of the engine.
     pub fn words_fst<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
@@ -398,10 +399,39 @@ impl Index {
     pub fn delete_stop_words(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, STOP_WORDS_KEY)
     }
+
     pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, STOP_WORDS_KEY)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
             None => Ok(None),
+        }
+    }
+
+    /* synonyms */
+
+    pub fn put_synonyms(&self, wtxn: &mut RwTxn, synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<_>>(wtxn, SYNONYMS_KEY, synonyms)
+    }
+
+    pub fn delete_synonyms(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, SYNONYMS_KEY)
+    }
+
+    pub fn synonyms(&self, rtxn: &RoTxn) -> anyhow::Result<Option<HashMap<Vec<String>, Vec<Vec<String>>>>> {
+        match self.main.get::<_, Str, SerdeBincode<HashMap<Vec<String>, Vec<Vec<String>>>>>(rtxn, SYNONYMS_KEY)? {
+            Some(synonyms) => Ok(Some(synonyms)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn words_synonyms<S: AsRef<str>>(&self, rtxn: &RoTxn, words: &[S]) -> anyhow::Result<Option<Vec<Vec<String>>>> {
+        let words: Vec<_> = words.iter().map(|s| s.as_ref().to_string()).collect();
+
+        match self.synonyms(rtxn)? {
+            Some(synonyms) => Ok(Some(
+                synonyms.get(&words).cloned().unwrap_or(Vec::default())
+            )),
+            None => Ok(None)
         }
     }
 
@@ -536,7 +566,7 @@ pub(crate) mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let fields_distribution = index.fields_distribution(&rtxn).unwrap();
-        assert_eq!(fields_distribution, hashmap!{
+        assert_eq!(fields_distribution, hashmap! {
             "name".to_string() => 2,
             "age".to_string() => 1,
         });
