@@ -37,3 +37,6 @@ fst = "0.4.5"
 
 # Temporary fix for bitvec, remove once fixed. (https://github.com/bitvecto-rs/bitvec/issues/105)
 funty = "=1.1"
+
+[dev-dependencies]
+serde_test = "1.0.125"

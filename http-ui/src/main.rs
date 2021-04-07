@@ -242,7 +242,7 @@ enum UpdateMetaProgress {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 struct Settings {
@@ -992,4 +992,63 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
     Ok(warp::serve(routes).run(addr).await)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_test::{assert_de_tokens, assert_ser_tokens, Token};
+
+    use milli::update::Setting;
+
+    use crate::Settings;
+
+    #[test]
+    fn serialize_settings() {
+        let settings = Settings {
+            displayed_attributes: Setting::Set(vec!["name".to_string()]),
+            searchable_attributes: Setting::Reset,
+            faceted_attributes: Setting::NotSet,
+            criteria: Setting::NotSet,
+            stop_words: Default::default(),
+        };
+
+        assert_ser_tokens(&settings, &[
+            Token::Struct { name: "Settings", len: 3 },
+            Token::Str("displayedAttributes"),
+            Token::Some,
+            Token::Seq { len: Some(1) },
+            Token::Str("name"),
+            Token::SeqEnd,
+            Token::Str("searchableAttributes"),
+            Token::None,
+            Token::Str("facetedAttributes"),
+            Token::None,
+            Token::StructEnd,
+        ]);
+    }
+
+    #[test]
+    fn deserialize_settings() {
+        let settings = Settings {
+            displayed_attributes: Setting::Set(vec!["name".to_string()]),
+            searchable_attributes: Setting::Reset,
+            faceted_attributes: Setting::Reset,
+            criteria: Setting::NotSet,
+            stop_words: Setting::NotSet,
+        };
+
+        assert_de_tokens(&settings, &[
+            Token::Struct { name: "Settings", len: 3 },
+            Token::Str("displayedAttributes"),
+            Token::Some,
+            Token::Seq { len: Some(1) },
+            Token::Str("name"),
+            Token::SeqEnd,
+            Token::Str("searchableAttributes"),
+            Token::None,
+            Token::Str("facetedAttributes"),
+            Token::None,
+            Token::StructEnd,
+        ]);
+    }
 }

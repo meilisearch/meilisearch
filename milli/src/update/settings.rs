@@ -14,11 +14,11 @@ use crate::facet::FacetType;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Setting<T> {
     Set(T),
-    NotSet,
     Reset,
+    NotSet,
 }
 
 impl<T> Default for Setting<T> {
