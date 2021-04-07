@@ -3,7 +3,6 @@ use std::ops::Bound::{self, Included, Excluded, Unbounded};
 use either::Either::{self, Left, Right};
 use heed::types::{DecodeIgnore, ByteSlice};
 use heed::{Database, RoRange, RoRevRange, LazyDecode};
-use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
@@ -223,7 +222,6 @@ impl<'t> Iterator for FacetIter<'t> {
                             }
 
                             if level == 0 {
-                                debug!("found {:?} at {:?}",  docids, left);
                                 return Some(Ok((left, docids)));
                             }
 
@@ -232,10 +230,6 @@ impl<'t> Iterator for FacetIter<'t> {
                             let fid = self.field_id;
                             let left = Included(left);
                             let right = Included(right);
-
-                            debug!("calling with {:?} to {:?} (level {}) to find {:?}",
-                                left, right, level - 1, docids,
-                            );
 
                             let result = if is_ascending {
                                 FacetRange::new(rtxn, db, fid, level - 1, left, right).map(Left)
