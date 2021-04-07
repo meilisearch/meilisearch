@@ -4,8 +4,7 @@ use serde::{Serialize, Serializer};
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum FacetValue {
     String(String),
-    Float(OrderedFloat<f64>),
-    Integer(i64),
+    Number(OrderedFloat<f64>),
 }
 
 impl From<String> for FacetValue {
@@ -22,24 +21,25 @@ impl From<&str> for FacetValue {
 
 impl From<f64> for FacetValue {
     fn from(float: f64) -> FacetValue {
-        FacetValue::Float(OrderedFloat(float))
+        FacetValue::Number(OrderedFloat(float))
     }
 }
 
 impl From<OrderedFloat<f64>> for FacetValue {
     fn from(float: OrderedFloat<f64>) -> FacetValue {
-        FacetValue::Float(float)
+        FacetValue::Number(float)
     }
 }
 
 impl From<i64> for FacetValue {
     fn from(integer: i64) -> FacetValue {
-        FacetValue::Integer(integer)
+        FacetValue::Number(integer as f64)
     }
 }
 
 /// We implement Serialize ourselves because we need to always serialize it as a string,
 /// JSON object keys must be strings not numbers.
+// TODO remove this impl and convert them into string, by hand, when required.
 impl Serialize for FacetValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -47,12 +47,8 @@ impl Serialize for FacetValue {
     {
         match self {
             FacetValue::String(string) => serializer.serialize_str(string),
-            FacetValue::Float(float) => {
-                let string = float.to_string();
-                serializer.serialize_str(&string)
-            },
-            FacetValue::Integer(integer) => {
-                let string = integer.to_string();
+            FacetValue::Number(number) => {
+                let string = number.to_string();
                 serializer.serialize_str(&string)
             },
         }
