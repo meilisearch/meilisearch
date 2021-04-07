@@ -67,3 +67,7 @@ harness = false
 [[bench]]
 name = "words"
 harness = false
+
+[[bench]]
+name = "proximity"
+harness = false
