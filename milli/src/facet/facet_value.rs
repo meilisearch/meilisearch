@@ -33,7 +33,7 @@ impl From<OrderedFloat<f64>> for FacetValue {
 
 impl From<i64> for FacetValue {
     fn from(integer: i64) -> FacetValue {
-        FacetValue::Number(integer as f64)
+        FacetValue::Number(OrderedFloat(integer as f64))
     }
 }
 

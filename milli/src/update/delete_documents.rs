@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::facet::FacetType;
 use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
-use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
+use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -302,17 +302,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                         }
                     }
                 },
-                FacetType::Float => {
+                FacetType::Number => {
                     let mut iter = iter.remap_key_type::<FieldDocIdFacetF64Codec>();
-                    while let Some(result) = iter.next() {
-                        let ((_fid, docid, _value), ()) = result?;
-                        if self.documents_ids.contains(docid) {
-                            iter.del_current()?;
-                        }
-                    }
-                },
-                FacetType::Integer => {
-                    let mut iter = iter.remap_key_type::<FieldDocIdFacetI64Codec>();
                     while let Some(result) = iter.next() {
                         let ((_fid, docid, _value), ()) = result?;
                         if self.documents_ids.contains(docid) {

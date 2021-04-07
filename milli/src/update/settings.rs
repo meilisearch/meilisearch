@@ -619,7 +619,7 @@ mod tests {
         // Set the faceted fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap! { "age".into() => "integer".into() });
+        builder.set_faceted_fields(hashmap!{ "age".into() => "number".into() });
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -632,7 +632,7 @@ mod tests {
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.faceted_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashmap! { "age".to_string() => FacetType::Integer });
+        assert_eq!(fields_ids, hashmap!{ "age".to_string() => FacetType::Number });
         // Only count the field_id 0 and level 0 facet values.
         let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 3);
@@ -812,9 +812,9 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
-        builder.set_faceted_fields(hashmap! {
-            "age".into() => "integer".into(),
-            "toto".into() => "integer".into(),
+        builder.set_faceted_fields(hashmap!{
+            "age".into() => "number".into(),
+            "toto".into() => "number".into(),
         });
         builder.set_criteria(vec!["asc(toto)".to_string()]);
         builder.execute(|_, _| ()).unwrap();

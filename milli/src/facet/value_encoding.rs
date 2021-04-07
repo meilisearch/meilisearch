@@ -14,16 +14,6 @@ pub fn f64_into_bytes(float: f64) -> Option<[u8; 8]> {
 }
 
 #[inline]
-pub fn i64_into_bytes(int: i64) -> [u8; 8] {
-    xor_first_bit(int.to_be_bytes())
-}
-
-#[inline]
-pub fn i64_from_bytes(bytes: [u8; 8]) -> i64 {
-    i64::from_be_bytes(xor_first_bit(bytes))
-}
-
-#[inline]
 fn xor_first_bit(mut x: [u8; 8]) -> [u8; 8] {
     x[0] ^= 0x80;
     x
@@ -53,17 +43,6 @@ mod tests {
         let e =  43.0;
 
         let vec: Vec<_> = [a, b, c, d, e].iter().cloned().map(f64_into_bytes).collect();
-        assert!(is_sorted(&vec), "{:?}", vec);
-    }
-
-    #[test]
-    fn ordered_i64_bytes() {
-        let a = -10_i64;
-        let b = -0_i64;
-        let c =  1_i64;
-        let d =  43_i64;
-
-        let vec: Vec<_> = [a, b, c, d].iter().cloned().map(i64_into_bytes).collect();
         assert!(is_sorted(&vec), "{:?}", vec);
     }
 }

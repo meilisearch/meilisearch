@@ -19,12 +19,12 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 use tempfile::tempfile;
 
-use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
-use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
+use crate::facet::{FacetType, FacetValue};
+use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
+use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId, FieldId};
+use crate::{json_to_string, SmallVec8, SmallVec32, Position, DocumentId, FieldId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
@@ -365,8 +365,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         for ((field_id, value), docids) in iter {
             let result = match value {
                 String(s) => FacetValueStringCodec::bytes_encode(&(field_id, &s)).map(Cow::into_owned),
-                Float(f) => FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *f, *f)).map(Cow::into_owned),
-                Integer(i) => FacetLevelValueI64Codec::bytes_encode(&(field_id, 0, i, i)).map(Cow::into_owned),
+                Number(f) => FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *f, *f)).map(Cow::into_owned),
             };
             let key = result.context("could not serialize facet key")?;
             let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)
@@ -390,8 +389,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         let result = match value {
             String(s) => FieldDocIdFacetStringCodec::bytes_encode(&(field_id, document_id, s)).map(Cow::into_owned),
-            Float(f) => FieldDocIdFacetF64Codec::bytes_encode(&(field_id, document_id, **f)).map(Cow::into_owned),
-            Integer(i) => FieldDocIdFacetI64Codec::bytes_encode(&(field_id, document_id, *i)).map(Cow::into_owned),
+            Number(f) => FieldDocIdFacetF64Codec::bytes_encode(&(field_id, document_id, **f)).map(Cow::into_owned),
         };
 
         let key = result.context("could not serialize facet key")?;
@@ -605,13 +603,6 @@ fn lmdb_key_valid_size(key: &[u8]) -> bool {
     !key.is_empty() && key.len() <= LMDB_MAX_KEY_LENGTH
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum FacetValue {
-    String(SmallString32),
-    Float(OrderedFloat<f64>),
-    Integer(i64),
-}
-
 /// take an iterator on tokens and compute their relative position depending on separator kinds
 /// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
 /// else we keep the standart proximity of 1 between words.
@@ -654,54 +645,40 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
     {
         match value {
             Value::Null => Ok(()),
-            Value::Bool(b) => {
-                output.push(Integer(*b as i64));
-                Ok(())
+            Value::Bool(b) => match ftype {
+                FacetType::String => {
+                    output.push(String(b.to_string()));
+                    Ok(())
+                },
+                FacetType::Number => {
+                    output.push(Number(OrderedFloat(if *b { 1.0 } else { 0.0 })));
+                    Ok(())
+                },
             },
             Value::Number(number) => match ftype {
                 FacetType::String => {
-                    let string = SmallString32::from(number.to_string());
-                    output.push(String(string));
+                    output.push(String(number.to_string()));
                     Ok(())
                 },
-                FacetType::Float => match number.as_f64() {
+                FacetType::Number => match number.as_f64() {
                     Some(float) => {
-                        output.push(Float(OrderedFloat(float)));
+                        output.push(Number(OrderedFloat(float)));
                         Ok(())
                     },
-                    None => bail!("invalid facet type, expecting {} found integer", ftype),
-                },
-                FacetType::Integer => match number.as_i64() {
-                    Some(integer) => {
-                        output.push(Integer(integer));
-                        Ok(())
-                    },
-                    None => if number.is_f64() {
-                        bail!("invalid facet type, expecting {} found float", ftype)
-                    } else {
-                        bail!("invalid facet type, expecting {} found out-of-bound integer (64bit)", ftype)
-                    },
+                    None => bail!("invalid facet type, expecting {} found number", ftype),
                 },
             },
             Value::String(string) => {
+                // TODO must be normalized and not only lowercased.
                 let string = string.trim().to_lowercase();
-                if string.is_empty() { return Ok(()) }
                 match ftype {
                     FacetType::String => {
-                        let string = SmallString32::from(string);
                         output.push(String(string));
                         Ok(())
                     },
-                    FacetType::Float => match string.parse() {
+                    FacetType::Number => match string.parse() {
                         Ok(float) => {
-                            output.push(Float(OrderedFloat(float)));
-                            Ok(())
-                        },
-                        Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
-                    },
-                    FacetType::Integer => match string.parse() {
-                        Ok(integer) => {
-                            output.push(Integer(integer));
+                            output.push(Number(OrderedFloat(float)));
                             Ok(())
                         },
                         Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
@@ -711,7 +688,10 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
             Value::Array(values) => if can_recurse {
                 values.iter().map(|v| inner_parse_facet_value(ftype, v, false, output)).collect()
             } else {
-                bail!("invalid facet type, expecting {} found sub-array ()", ftype)
+                bail!(
+                    "invalid facet type, expecting {} found array (recursive arrays are not supported)",
+                    ftype,
+                );
             },
             Value::Object(_) => bail!("invalid facet type, expecting {} found object", ftype),
         }

@@ -274,15 +274,12 @@ fn facet_values_iter<'txn, DC: 'txn, T>(
     facet_type: milli::facet::FacetType,
     string_fn: impl Fn(&str) -> T + 'txn,
     float_fn: impl Fn(u8, f64, f64) -> T + 'txn,
-    integer_fn: impl Fn(u8, i64, i64) -> T + 'txn,
 ) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(T, DC::DItem)>> + 'txn>>
 where
     DC: heed::BytesDecode<'txn>,
 {
     use milli::facet::FacetType;
-    use milli::heed_codec::facet::{
-        FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
-    };
+    use milli::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 
     let iter = db.prefix_iter(&rtxn, &[field_id])?;
     match facet_type {
@@ -291,17 +288,10 @@ where
                 .map(move |r| r.map(|((_, key), value)| (string_fn(key), value)));
             Ok(Box::new(iter) as Box<dyn Iterator<Item=_>>)
         },
-        FacetType::Float => {
+        FacetType::Number => {
             let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
                 .map(move |r| r.map(|((_, level, left, right), value)| {
                     (float_fn(level, left, right), value)
-                }));
-            Ok(Box::new(iter))
-        },
-        FacetType::Integer => {
-            let iter = iter.remap_key_type::<FacetLevelValueI64Codec>()
-                .map(move |r| r.map(|((_, level, left, right), value)| {
-                    (integer_fn(level, left, right), value)
                 }));
             Ok(Box::new(iter))
         },
@@ -413,11 +403,6 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
                     let _ = write!(&mut output, " (level {})", level);
                     output
                 },
-                |level, left, right| {
-                    let mut output = facet_number_value_to_string(level, left, right).1;
-                    let _ = write!(&mut output, " (level {})", level);
-                    output
-                },
             )?;
 
             for result in iter {
@@ -523,7 +508,6 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
         *field_type,
         |key| (0, key.to_owned()),
         facet_number_value_to_string,
-        facet_number_value_to_string,
     )?;
 
     for result in iter {
@@ -589,7 +573,6 @@ fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow:
         field_id,
         *field_type,
         |_key| 0u8,
-        |level, _left, _right| level,
         |level, _left, _right| level,
     )?;
 

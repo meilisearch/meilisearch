@@ -1,15 +1,13 @@
-use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded, Unbounded};
 
 use either::Either::{self, Left, Right};
 use heed::types::{DecodeIgnore, ByteSlice};
-use heed::{BytesEncode, BytesDecode};
 use heed::{Database, RoRange, RoRevRange, LazyDecode};
 use log::debug;
-use num_traits::Bounded;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::{Index, FieldId};
 
 pub use self::facet_condition::{FacetCondition, FacetNumberOperator, FacetStringOperator};
@@ -19,43 +17,34 @@ mod facet_condition;
 mod facet_distribution;
 mod parser;
 
-pub struct FacetRange<'t, T: 't, KC> {
-    iter: RoRange<'t, KC, LazyDecode<CboRoaringBitmapCodec>>,
-    end: Bound<T>,
+pub struct FacetRange<'t> {
+    iter: RoRange<'t, FacetLevelValueF64Codec, LazyDecode<CboRoaringBitmapCodec>>,
+    end: Bound<f64>,
 }
 
-impl<'t, T: 't, KC> FacetRange<'t, T, KC>
-where
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy + Bounded,
-{
+impl<'t> FacetRange<'t> {
     pub fn new(
         rtxn: &'t heed::RoTxn,
-        db: Database<KC, CboRoaringBitmapCodec>,
+        db: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         level: u8,
-        left: Bound<T>,
-        right: Bound<T>,
-    ) -> heed::Result<FacetRange<'t, T, KC>>
+        left: Bound<f64>,
+        right: Bound<f64>,
+    ) -> heed::Result<FacetRange<'t>>
     {
         let left_bound = match left {
-            Included(left) => Included((field_id, level, left, T::min_value())),
-            Excluded(left) => Excluded((field_id, level, left, T::min_value())),
-            Unbounded => Included((field_id, level, T::min_value(), T::min_value())),
+            Included(left) => Included((field_id, level, left, f64::MIN)),
+            Excluded(left) => Excluded((field_id, level, left, f64::MIN)),
+            Unbounded => Included((field_id, level, f64::MIN, f64::MIN)),
         };
-        let right_bound = Included((field_id, level, T::max_value(), T::max_value()));
+        let right_bound = Included((field_id, level, f64::MAX, f64::MAX));
         let iter = db.lazily_decode_data().range(rtxn, &(left_bound, right_bound))?;
         Ok(FacetRange { iter, end: right })
     }
 }
 
-impl<'t, T, KC> Iterator for FacetRange<'t, T, KC>
-where
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
-    KC: BytesDecode<'t, DItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy,
-{
-    type Item = heed::Result<((FieldId, u8, T, T), RoaringBitmap)>;
+impl<'t> Iterator for FacetRange<'t> {
+    type Item = heed::Result<((FieldId, u8, f64, f64), RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
@@ -80,43 +69,34 @@ where
     }
 }
 
-pub struct FacetRevRange<'t, T: 't, KC> {
-    iter: RoRevRange<'t, KC, LazyDecode<CboRoaringBitmapCodec>>,
-    end: Bound<T>,
+pub struct FacetRevRange<'t> {
+    iter: RoRevRange<'t, FacetLevelValueF64Codec, LazyDecode<CboRoaringBitmapCodec>>,
+    end: Bound<f64>,
 }
 
-impl<'t, T: 't, KC> FacetRevRange<'t, T, KC>
-where
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy + Bounded,
-{
+impl<'t> FacetRevRange<'t> {
     pub fn new(
         rtxn: &'t heed::RoTxn,
-        db: Database<KC, CboRoaringBitmapCodec>,
+        db: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         level: u8,
-        left: Bound<T>,
-        right: Bound<T>,
-    ) -> heed::Result<FacetRevRange<'t, T, KC>>
+        left: Bound<f64>,
+        right: Bound<f64>,
+    ) -> heed::Result<FacetRevRange<'t>>
     {
         let left_bound = match left {
-            Included(left) => Included((field_id, level, left, T::min_value())),
-            Excluded(left) => Excluded((field_id, level, left, T::min_value())),
-            Unbounded => Included((field_id, level, T::min_value(), T::min_value())),
+            Included(left) => Included((field_id, level, left, f64::MIN)),
+            Excluded(left) => Excluded((field_id, level, left, f64::MIN)),
+            Unbounded => Included((field_id, level, f64::MIN, f64::MIN)),
         };
-        let right_bound = Included((field_id, level, T::max_value(), T::max_value()));
+        let right_bound = Included((field_id, level, f64::MAX, f64::MAX));
         let iter = db.lazily_decode_data().rev_range(rtxn, &(left_bound, right_bound))?;
         Ok(FacetRevRange { iter, end: right })
     }
 }
 
-impl<'t, T, KC> Iterator for FacetRevRange<'t, T, KC>
-where
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
-    KC: BytesDecode<'t, DItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy,
-{
-    type Item = heed::Result<((FieldId, u8, T, T), RoaringBitmap)>;
+impl<'t> Iterator for FacetRevRange<'t> {
+    type Item = heed::Result<((FieldId, u8, f64, f64), RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -142,20 +122,15 @@ where
     }
 }
 
-pub struct FacetIter<'t, T: 't, KC> {
+pub struct FacetIter<'t> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: Database<KC, CboRoaringBitmapCodec>,
+    db: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     field_id: FieldId,
-    level_iters: Vec<(RoaringBitmap, Either<FacetRange<'t, T, KC>, FacetRevRange<'t, T, KC>>)>,
+    level_iters: Vec<(RoaringBitmap, Either<FacetRange<'t>, FacetRevRange<'t>>)>,
     must_reduce: bool,
 }
 
-impl<'t, T, KC> FacetIter<'t, T, KC>
-where
-    KC: heed::BytesDecode<'t, DItem = (FieldId, u8, T, T)>,
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy + Bounded,
-{
+impl<'t> FacetIter<'t> {
     /// Create a `FacetIter` that will iterate on the different facet entries
     /// (facet value + documents ids) and that will reduce the given documents ids
     /// while iterating on the different facet levels.
@@ -164,9 +139,9 @@ where
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t, T, KC>>
+    ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<KC>();
+        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
@@ -181,9 +156,9 @@ where
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t, T, KC>>
+    ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<KC>();
+        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRevRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Right(highest_iter))];
@@ -199,32 +174,32 @@ where
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t, T, KC>>
+    ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<KC>();
+        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
         Ok(FacetIter { rtxn, db, field_id, level_iters, must_reduce: false })
     }
 
-    fn highest_level<X>(rtxn: &'t heed::RoTxn, db: Database<KC, X>, fid: FieldId) -> heed::Result<Option<u8>> {
+    fn highest_level<X>(
+        rtxn: &'t heed::RoTxn,
+        db: Database<FacetLevelValueF64Codec, X>,
+        fid: FieldId,
+    ) -> heed::Result<Option<u8>>
+    {
         let level = db.remap_types::<ByteSlice, DecodeIgnore>()
             .prefix_iter(rtxn, &[fid][..])?
-            .remap_key_type::<KC>()
+            .remap_key_type::<FacetLevelValueF64Codec>()
             .last().transpose()?
             .map(|((_, level, _, _), _)| level);
         Ok(level)
     }
 }
 
-impl<'t, T: 't, KC> Iterator for FacetIter<'t, T, KC>
-where
-    KC: heed::BytesDecode<'t, DItem = (FieldId, u8, T, T)>,
-    KC: for<'x> heed::BytesEncode<'x, EItem = (FieldId, u8, T, T)>,
-    T: PartialOrd + Copy + Bounded + Debug,
-{
-    type Item = heed::Result<(T, RoaringBitmap)>;
+impl<'t> Iterator for FacetIter<'t> {
+    type Item = heed::Result<(f64, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {

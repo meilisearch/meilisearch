@@ -1272,7 +1272,6 @@ dependencies = [
  "maplit",
  "meilisearch-tokenizer",
  "memmap",
- "num-traits",
  "obkv",
  "once_cell",
  "ordered-float",

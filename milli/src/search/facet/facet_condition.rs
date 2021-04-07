@@ -5,17 +5,15 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use either::Either;
-use heed::types::{ByteSlice, DecodeIgnore};
+use heed::types::DecodeIgnore;
 use log::debug;
-use num_traits::Bounded;
 use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::facet::FacetValueStringCodec;
-use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
+use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec};
 
 use super::FacetRange;
@@ -26,17 +24,17 @@ use self::FacetCondition::*;
 use self::FacetNumberOperator::*;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FacetNumberOperator<T> {
-    GreaterThan(T),
-    GreaterThanOrEqual(T),
-    Equal(T),
-    NotEqual(T),
-    LowerThan(T),
-    LowerThanOrEqual(T),
-    Between(T, T),
+pub enum FacetNumberOperator {
+    GreaterThan(f64),
+    GreaterThanOrEqual(f64),
+    Equal(f64),
+    NotEqual(f64),
+    LowerThan(f64),
+    LowerThanOrEqual(f64),
+    Between(f64, f64),
 }
 
-impl<T> FacetNumberOperator<T> {
+impl FacetNumberOperator {
     /// This method can return two operations in case it must express
     /// an OR operation for the between case (i.e. `TO`).
     fn negate(self) -> (Self, Option<Self>) {
@@ -78,9 +76,8 @@ impl FacetStringOperator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FacetCondition {
-    OperatorI64(FieldId, FacetNumberOperator<i64>),
-    OperatorF64(FieldId, FacetNumberOperator<f64>),
     OperatorString(FieldId, FacetStringOperator),
+    OperatorNumber(FieldId, FacetNumberOperator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 }
@@ -173,8 +170,7 @@ impl FacetCondition {
 
             let operator = match ftype {
                 FacetType::String => OperatorString(fid, FacetStringOperator::equal(value)),
-                FacetType::Float => OperatorF64(fid, FacetNumberOperator::Equal(value.parse()?)),
-                FacetType::Integer => OperatorI64(fid, FacetNumberOperator::Equal(value.parse()?)),
+                FacetType::Number => OperatorNumber(fid, FacetNumberOperator::Equal(value.parse()?)),
             };
 
             if neg { Ok(operator.negate()) } else { Ok(operator) }
@@ -267,15 +263,11 @@ impl FacetCondition {
 
     fn negate(self) -> FacetCondition {
         match self {
-            OperatorI64(fid, op) => match op.negate() {
-                (op, None) => OperatorI64(fid, op),
-                (a, Some(b)) => Or(Box::new(OperatorI64(fid, a)), Box::new(OperatorI64(fid, b))),
-            },
-            OperatorF64(fid, op) => match op.negate() {
-                (op, None) => OperatorF64(fid, op),
-                (a, Some(b)) => Or(Box::new(OperatorF64(fid, a)), Box::new(OperatorF64(fid, b))),
-            },
             OperatorString(fid, op) => OperatorString(fid, op.negate()),
+            OperatorNumber(fid, op) => match op.negate() {
+                (op, None) => OperatorNumber(fid, op),
+                (a, Some(b)) => Or(Box::new(OperatorNumber(fid, a)), Box::new(OperatorNumber(fid, b))),
+            },
             Or(a, b) => And(Box::new(a.negate()), Box::new(b.negate())),
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
         }
@@ -293,16 +285,6 @@ impl FacetCondition {
         let lvalue = items.next().unwrap();
         let rvalue = items.next().unwrap();
         match ftype {
-            FacetType::Integer => {
-                let lvalue = pest_parse(lvalue)?;
-                let rvalue = pest_parse(rvalue)?;
-                Ok(OperatorI64(fid, Between(lvalue, rvalue)))
-            },
-            FacetType::Float => {
-                let lvalue = pest_parse(lvalue)?;
-                let rvalue = pest_parse(rvalue)?;
-                Ok(OperatorF64(fid, Between(lvalue, rvalue)))
-            },
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -310,6 +292,11 @@ impl FacetCondition {
                     },
                     item_span,
                 ).into())
+            },
+            FacetType::Number => {
+                let lvalue = pest_parse(lvalue)?;
+                let rvalue = pest_parse(rvalue)?;
+                Ok(OperatorNumber(fid, Between(lvalue, rvalue)))
             },
         }
     }
@@ -324,9 +311,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, Equal(pest_parse(value)?))),
-            FacetType::Float => Ok(OperatorF64(fid, Equal(pest_parse(value)?))),
             FacetType::String => Ok(OperatorString(fid, FacetStringOperator::equal(value.as_str()))),
+            FacetType::Number => Ok(OperatorNumber(fid, Equal(pest_parse(value)?))),
         }
     }
 
@@ -341,8 +327,6 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, GreaterThan(pest_parse(value)?))),
-            FacetType::Float => Ok(OperatorF64(fid, GreaterThan(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -351,6 +335,7 @@ impl FacetCondition {
                     item_span,
                 ).into())
             },
+            FacetType::Number => Ok(OperatorNumber(fid, GreaterThan(pest_parse(value)?))),
         }
     }
 
@@ -365,8 +350,6 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, GreaterThanOrEqual(pest_parse(value)?))),
-            FacetType::Float => Ok(OperatorF64(fid, GreaterThanOrEqual(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -375,6 +358,7 @@ impl FacetCondition {
                     item_span,
                 ).into())
             },
+            FacetType::Number => Ok(OperatorNumber(fid, GreaterThanOrEqual(pest_parse(value)?))),
         }
     }
 
@@ -389,8 +373,6 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, LowerThan(pest_parse(value)?))),
-            FacetType::Float => Ok(OperatorF64(fid, LowerThan(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -399,6 +381,7 @@ impl FacetCondition {
                     item_span,
                 ).into())
             },
+            FacetType::Number => Ok(OperatorNumber(fid, LowerThan(pest_parse(value)?))),
         }
     }
 
@@ -413,8 +396,6 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, LowerThanOrEqual(pest_parse(value)?))),
-            FacetType::Float => Ok(OperatorF64(fid, LowerThanOrEqual(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -423,6 +404,7 @@ impl FacetCondition {
                     item_span,
                 ).into())
             },
+            FacetType::Number => Ok(OperatorNumber(fid, LowerThanOrEqual(pest_parse(value)?))),
         }
     }
 }
@@ -430,24 +412,20 @@ impl FacetCondition {
 impl FacetCondition {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
-    fn explore_facet_levels<'t, T: 't, KC>(
-        rtxn: &'t heed::RoTxn,
-        db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
+    fn explore_facet_number_levels(
+        rtxn: &heed::RoTxn,
+        db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         level: u8,
-        left: Bound<T>,
-        right: Bound<T>,
+        left: Bound<f64>,
+        right: Bound<f64>,
         output: &mut RoaringBitmap,
     ) -> anyhow::Result<()>
-    where
-        T: Copy + PartialEq + PartialOrd + Bounded + Debug,
-        KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
-        KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
     {
         match (left, right) {
             // If the request is an exact value we must go directly to the deepest level.
             (Included(l), Included(r)) if l == r && level > 0 => {
-                return Self::explore_facet_levels::<T, KC>(rtxn, db, field_id, 0, left, right, output);
+                return Self::explore_facet_number_levels(rtxn, db, field_id, 0, left, right, output);
             },
             // lower TO upper when lower > upper must return no result
             (Included(l), Included(r)) if l > r => return Ok(()),
@@ -462,7 +440,7 @@ impl FacetCondition {
 
         // We must create a custom iterator to be able to iterate over the
         // requested range as the range iterator cannot express some conditions.
-        let iter = FacetRange::new(rtxn, db.remap_key_type::<KC>(), field_id, level, left, right)?;
+        let iter = FacetRange::new(rtxn, db, field_id, level, left, right)?;
 
         debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
 
@@ -489,64 +467,60 @@ impl FacetCondition {
                 if !matches!(left, Included(l) if l == left_found) {
                     let sub_right = Excluded(left_found);
                     debug!("calling left with {:?} to {:?} (level {})",  left, sub_right, deeper_level);
-                    Self::explore_facet_levels::<T, KC>(rtxn, db, field_id, deeper_level, left, sub_right, output)?;
+                    Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, left, sub_right, output)?;
                 }
                 if !matches!(right, Included(r) if r == right_found) {
                     let sub_left = Excluded(right_found);
                     debug!("calling right with {:?} to {:?} (level {})", sub_left, right, deeper_level);
-                    Self::explore_facet_levels::<T, KC>(rtxn, db, field_id, deeper_level, sub_left, right, output)?;
+                    Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, sub_left, right, output)?;
                 }
             },
             None => {
                 // If we found nothing at this level it means that we must find
                 // the same bounds but at a deeper, more precise level.
-                Self::explore_facet_levels::<T, KC>(rtxn, db, field_id, deeper_level, left, right, output)?;
+                Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, left, right, output)?;
             },
         }
 
         Ok(())
     }
 
-    fn evaluate_number_operator<'t, T: 't, KC>(
-        rtxn: &'t heed::RoTxn,
+    fn evaluate_number_operator<>(
+        rtxn: &heed::RoTxn,
         index: &Index,
-        db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
+        db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
         field_id: FieldId,
-        operator: FacetNumberOperator<T>,
+        operator: FacetNumberOperator,
     ) -> anyhow::Result<RoaringBitmap>
-    where
-        T: Copy + PartialEq + PartialOrd + Bounded + Debug,
-        KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
-        KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
     {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
         let (left, right) = match operator {
-            GreaterThan(val)        => (Excluded(val),            Included(T::max_value())),
-            GreaterThanOrEqual(val) => (Included(val),            Included(T::max_value())),
-            Equal(val)              => (Included(val),            Included(val)),
+            GreaterThan(val)        => (Excluded(val),      Included(f64::MAX)),
+            GreaterThanOrEqual(val) => (Included(val),      Included(f64::MAX)),
+            Equal(val)              => (Included(val),      Included(val)),
             NotEqual(val)           => {
                 let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
-                let docids = Self::evaluate_number_operator::<T, KC>(rtxn, index, db, field_id, Equal(val))?;
+                let docids = Self::evaluate_number_operator(rtxn, index, db, field_id, Equal(val))?;
                 return Ok(all_documents_ids - docids);
             },
-            LowerThan(val)          => (Included(T::min_value()), Excluded(val)),
-            LowerThanOrEqual(val)   => (Included(T::min_value()), Included(val)),
-            Between(left, right)    => (Included(left),           Included(right)),
+            LowerThan(val)          => (Included(f64::MIN), Excluded(val)),
+            LowerThanOrEqual(val)   => (Included(f64::MIN), Included(val)),
+            Between(left, right)    => (Included(left),     Included(right)),
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
         // that's fine if it don't, the value just before will be returned instead.
         let biggest_level = db
-            .remap_types::<KC, DecodeIgnore>()
-            .get_lower_than_or_equal_to(rtxn, &(field_id, u8::MAX, T::max_value(), T::max_value()))?
+            .remap_data_type::<DecodeIgnore>()
+            .get_lower_than_or_equal_to(rtxn, &(field_id, u8::MAX, f64::MAX, f64::MAX))?
             .and_then(|((id, level, _, _), _)| if id == field_id { Some(level) } else { None });
 
         match biggest_level {
             Some(level) => {
                 let mut output = RoaringBitmap::new();
-                Self::explore_facet_levels::<T, KC>(rtxn, db, field_id, level, left, right, &mut output)?;
+                Self::explore_facet_number_levels(rtxn, db, field_id, level, left, right, &mut output)?;
                 Ok(output)
             },
             None => Ok(RoaringBitmap::new()),
@@ -585,15 +559,13 @@ impl FacetCondition {
     {
         let db = index.facet_field_id_value_docids;
         match self {
-            OperatorI64(fid, op) => {
-                Self::evaluate_number_operator::<i64, FacetLevelValueI64Codec>(rtxn, index, db, *fid, *op)
-            },
-            OperatorF64(fid, op) => {
-                Self::evaluate_number_operator::<f64, FacetLevelValueF64Codec>(rtxn, index, db, *fid, *op)
-            },
             OperatorString(fid, op) => {
                 let db = db.remap_key_type::<FacetValueStringCodec>();
                 Self::evaluate_string_operator(rtxn, index, db, *fid, op)
+            },
+            OperatorNumber(fid, op) => {
+                let db = db.remap_key_type::<FacetLevelValueF64Codec>();
+                Self::evaluate_number_operator(rtxn, index, db, *fid, *op)
             },
             Or(lhs, rhs) => {
                 let lhs = lhs.evaluate(rtxn, index)?;
@@ -646,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn i64() {
+    fn number() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
@@ -655,20 +627,20 @@ mod tests {
         // Set the faceted fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap!{ "timestamp".into() => "integer".into() });
+        builder.set_faceted_fields(hashmap!{ "timestamp".into() => "number".into() });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
-        let expected = OperatorI64(0, Between(22, 44));
+        let expected = OperatorNumber(0, Between(22.0, 44.0));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected = Or(
-            Box::new(OperatorI64(0, LowerThan(22))),
-            Box::new(OperatorI64(0, GreaterThan(44))),
+            Box::new(OperatorNumber(0, LowerThan(22.0))),
+            Box::new(OperatorNumber(0, GreaterThan(44.0))),
         );
         assert_eq!(condition, expected);
     }
@@ -686,7 +658,7 @@ mod tests {
         builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
         builder.set_faceted_fields(hashmap!{
             "channel".into() => "string".into(),
-            "timestamp".into() => "integer".into(),
+            "timestamp".into() => "number".into(),
         });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -700,7 +672,7 @@ mod tests {
         let expected = Or(
             Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
             Box::new(And(
-                Box::new(OperatorI64(1, Between(22, 44))),
+                Box::new(OperatorNumber(1, Between(22.0, 44.0))),
                 Box::new(OperatorString(0, FacetStringOperator::not_equal("ponce"))),
             ))
         );
@@ -714,8 +686,8 @@ mod tests {
             Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
             Box::new(Or(
                 Box::new(Or(
-                    Box::new(OperatorI64(1, LowerThan(22))),
-                    Box::new(OperatorI64(1, GreaterThan(44))),
+                    Box::new(OperatorNumber(1, LowerThan(22.0))),
+                    Box::new(OperatorNumber(1, GreaterThan(44.0))),
                 )),
                 Box::new(OperatorString(0, FacetStringOperator::equal("ponce"))),
             )),
@@ -736,7 +708,7 @@ mod tests {
         builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
         builder.set_faceted_fields(hashmap!{
             "channel".into() => "string".into(),
-            "timestamp".into() => "integer".into(),
+            "timestamp".into() => "number".into(),
         });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
