@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
+use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, CriterionContext};
 
 pub struct Typo<'t> {
     ctx: &'t dyn Context,
@@ -51,8 +51,9 @@ impl<'t> Typo<'t> {
 
 impl<'t> Criterion for Typo<'t> {
     #[logging_timer::time("Typo::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, context: CriterionContext) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
+        let CriterionContext { word_cache, exclude } = context;
         loop {
             debug!("Typo at iteration {} ({:?})", self.number_typos, self.candidates);
 
@@ -71,9 +72,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, word_cache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, word_cache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -84,7 +85,7 @@ impl<'t> Criterion for Typo<'t> {
                             &new_query_tree,
                             self.number_typos,
                             &mut self.candidates_cache,
-                            wdcache,
+                            word_cache,
                         )?;
                         new_candidates.intersect_with(&candidates);
                         candidates.difference_with(&new_candidates);
@@ -109,9 +110,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, word_cache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, word_cache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -122,7 +123,7 @@ impl<'t> Criterion for Typo<'t> {
                             &new_query_tree,
                             self.number_typos,
                             &mut self.candidates_cache,
-                            wdcache,
+                            word_cache,
                         )?;
                         new_candidates.difference_with(&candidates);
                         candidates.union_with(&new_candidates);
@@ -147,7 +148,7 @@ impl<'t> Criterion for Typo<'t> {
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next(wdcache)? {
+                            match parent.next(CriterionContext { exclude, word_cache })? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
                                     self.number_typos = 0;
@@ -346,8 +347,12 @@ mod test {
 
         let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, query_tree, facet_candidates);
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
 
-        assert!(criteria.next(&mut wdcache).unwrap().is_none());
+        assert!(criteria.next(sort_context).unwrap().is_none());
     }
 
     #[test]
@@ -381,7 +386,12 @@ mod test {
             bucket_candidates: candidates_1,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
+
+        assert_eq!(criteria.next(sort_context).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -403,7 +413,12 @@ mod test {
             bucket_candidates: candidates_2,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
+
+        assert_eq!(criteria.next(sort_context).unwrap(), Some(expected_2));
     }
 
     #[test]
@@ -421,11 +436,19 @@ mod test {
             bucket_candidates: facet_candidates,
         };
 
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
         // first iteration, returns the facet candidates
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected));
+        assert_eq!(criteria.next(sort_context).unwrap(), Some(expected));
 
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
         // second iteration, returns None because there is no more things to do
-        assert!(criteria.next(&mut wdcache).unwrap().is_none());
+        assert!(criteria.next(sort_context ).unwrap().is_none());
     }
 
     #[test]
@@ -459,7 +482,12 @@ mod test {
             bucket_candidates: candidates_1 & &facet_candidates,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
+
+        assert_eq!(criteria.next(sort_context).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -481,7 +509,12 @@ mod test {
             bucket_candidates: candidates_2 & &facet_candidates,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
+        let sort_context = CriterionContext {
+            word_cache: &mut wdcache,
+            exclude: &RoaringBitmap::new(),
+        };
+
+        assert_eq!(criteria.next(sort_context).unwrap(), Some(expected_2));
     }
 
 }

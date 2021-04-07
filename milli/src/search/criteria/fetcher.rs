@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
-use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context};
+use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context, CriterionContext};
 
 /// The result of a call to the fetcher.
 #[derive(Debug, Clone, PartialEq)]
@@ -61,7 +61,7 @@ impl<'t> Fetcher<'t> {
     }
 
     #[logging_timer::time("Fetcher::{}")]
-    pub fn next(&mut self) -> anyhow::Result<Option<FetcherResult>> {
+    pub fn next(&mut self, exclude: &RoaringBitmap) -> anyhow::Result<Option<FetcherResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
             debug!("Fetcher iteration (should_get_documents_ids: {}) ({:?})",
@@ -90,7 +90,11 @@ impl<'t> Fetcher<'t> {
                 Forbidden(_) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next(&mut self.wdcache)? {
+                            let context = CriterionContext {
+                                word_cache: &mut self.wdcache,
+                                exclude
+                            };
+                            match parent.next(context)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     let candidates = match (&query_tree, candidates) {
                                         (_, Some(candidates)) => candidates,

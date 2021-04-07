@@ -19,6 +19,7 @@ use crate::{
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
+pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
 pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
@@ -459,6 +460,18 @@ impl Index {
 
     pub(crate) fn set_updated_at(&self, wtxn: &mut RwTxn, time: &DateTime<Utc>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<DateTime<Utc>>>(wtxn, UPDATED_AT_KEY, &time)
+    }
+
+    pub(crate) fn put_distinct_attribute(&self, wtxn: &mut RwTxn, distinct_attribute: &str) -> heed::Result<()> {
+        self.main.put::<_, Str, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY, distinct_attribute)
+    }
+
+    pub fn distinct_attribute<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
+        self.main.get::<_, Str, Str>(rtxn, DISTINCT_ATTRIBUTE_KEY)
+    }
+
+    pub(crate) fn delete_distinct_attribute(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY)
     }
 }
 

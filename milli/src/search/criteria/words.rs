@@ -5,8 +5,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
-use crate::search::WordDerivationsCache;
-use super::{resolve_query_tree, Criterion, CriterionResult, Context};
+use super::{resolve_query_tree, Criterion, CriterionResult, Context, CriterionContext};
 
 pub struct Words<'t> {
     ctx: &'t dyn Context,
@@ -48,7 +47,8 @@ impl<'t> Words<'t> {
 
 impl<'t> Criterion for Words<'t> {
     #[logging_timer::time("Words::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, context: CriterionContext) -> anyhow::Result<Option<CriterionResult>> {
+        let CriterionContext { word_cache, exclude } = context;
         loop {
             debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
 
@@ -62,7 +62,7 @@ impl<'t> Criterion for Words<'t> {
                     }));
                 },
                 (Some(qt), Some(candidates)) => {
-                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, wdcache)?;
+                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, word_cache)?;
                     found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
 
@@ -100,7 +100,7 @@ impl<'t> Criterion for Words<'t> {
                 (None, None) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next(wdcache)? {
+                            match parent.next(CriterionContext { word_cache, exclude })? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
                                     self.candidates = candidates;

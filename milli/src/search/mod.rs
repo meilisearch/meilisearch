@@ -11,22 +11,24 @@ use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use crate::search::criteria::fetcher::FetcherResult;
+use crate::search::criteria::fetcher::{FetcherResult, Fetcher};
 use crate::{Index, DocumentId};
+use distinct::{MapDistinct, FacetDistinct, Distinct, DocIter, NoopDistinct};
+use self::query_tree::QueryTreeBuilder;
 
 pub use self::facet::FacetIter;
 pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
 pub use self::query_tree::MatchingWords;
-use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
+mod criteria;
+mod distinct;
 mod facet;
 mod query_tree;
-mod criteria;
 
 pub struct Search<'a> {
     query: Option<String>,
@@ -123,33 +125,60 @@ impl<'a> Search<'a> {
         };
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let mut criteria = criteria_builder.build(query_tree, facet_candidates)?;
+        let criteria = criteria_builder.build(query_tree, facet_candidates)?;
+
+        match self.index.distinct_attribute(self.rtxn)? {
+            None => self.perform_sort(NoopDistinct, matching_words, criteria),
+            Some(name) => {
+                let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
+                let id = field_ids_map.id(name).expect("distinct not present in field map");
+                let faceted_fields = self.index.faceted_fields(self.rtxn)?;
+                match faceted_fields.get(name) {
+                    Some(facet_type) => {
+                        let distinct = FacetDistinct::new(id, self.index, self.rtxn, *facet_type);
+                        self.perform_sort(distinct, matching_words, criteria)
+                    }
+                    None => {
+                        let distinct = MapDistinct::new(id, self.index, self.rtxn);
+                        self.perform_sort(distinct, matching_words, criteria)
+                    }
+                }
+            }
+        }
+    }
+
+    fn perform_sort(
+        &self,
+        mut distinct: impl for<'c> Distinct<'c>,
+        matching_words: MatchingWords,
+        mut criteria: Fetcher,
+    ) -> anyhow::Result<SearchResult> {
 
         let mut offset = self.offset;
-        let mut limit = self.limit;
-        let mut documents_ids = Vec::new();
         let mut initial_candidates = RoaringBitmap::new();
-        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next()? {
+        let mut excluded_documents = RoaringBitmap::new();
+        let mut documents_ids = Vec::with_capacity(self.limit);
+
+        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next(&excluded_documents)? {
 
             debug!("Number of candidates found {}", candidates.len());
 
-            let mut len = candidates.len() as usize;
-            let mut candidates = candidates.into_iter();
+            let excluded = std::mem::take(&mut excluded_documents);
+
+            let mut candidates = distinct.distinct(candidates, excluded);
 
             initial_candidates.union_with(&bucket_candidates);
 
             if offset != 0 {
-                candidates.by_ref().take(offset).for_each(drop);
-                offset = offset.saturating_sub(len.min(offset));
-                len = len.saturating_sub(len.min(offset));
+                let discarded = candidates.by_ref().take(offset).count();
+                offset = offset.saturating_sub(discarded);
             }
 
-            if len != 0 {
-                documents_ids.extend(candidates.take(limit));
-                limit = limit.saturating_sub(len.min(limit));
+            for candidate in candidates.by_ref().take(self.limit - documents_ids.len()) {
+                documents_ids.push(candidate?);
             }
-
-            if limit == 0 { break }
+            if documents_ids.len() == self.limit { break }
+            excluded_documents = candidates.into_excluded();
         }
 
         Ok(SearchResult { matching_words, candidates: initial_candidates, documents_ids })
