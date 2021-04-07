@@ -145,7 +145,7 @@ where
             // The payload is valid, we can register it to the update store.
             update_store
                 .register_update(meta, path, uuid)
-                .map(UpdateStatus::Pending)
+                .map(UpdateStatus::Enqueued)
                 .map_err(|e| UpdateError::Error(Box::new(e)))
         })
         .await
