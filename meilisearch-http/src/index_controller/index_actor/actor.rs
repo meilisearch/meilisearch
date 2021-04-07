@@ -8,7 +8,7 @@ use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
@@ -25,6 +25,7 @@ pub struct IndexActor<S> {
     read_receiver: Option<mpsc::Receiver<IndexMsg>>,
     write_receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
+    processing: RwLock<Option<Uuid>>,
     store: S,
 }
 
@@ -42,8 +43,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(Self {
             read_receiver,
             write_receiver,
-            store,
             update_handler,
+            processing: RwLock::new(Default::default()),
+            store,
         })
     }
 
@@ -181,16 +183,26 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        debug!("Processing update {}", meta.id());
-        let uuid = meta.index_uuid();
-        let update_handler = self.update_handler.clone();
-        let index = match self.store.get(*uuid).await? {
-            Some(index) => index,
-            None => self.store.create(*uuid, None).await?,
+        let uuid = meta.index_uuid().clone();
+
+        *self.processing.write().await = Some(uuid);
+
+        let result = {
+            debug!("Processing update {}", meta.id());
+            let update_handler = self.update_handler.clone();
+            let index = match self.store.get(uuid).await? {
+                Some(index) => index,
+                None => self.store.create(uuid, None).await?,
+            };
+
+            spawn_blocking(move || update_handler.handle_update(meta, data, index))
+                .await
+                .map_err(|e| IndexError::Error(e.into()))
         };
-        spawn_blocking(move || update_handler.handle_update(meta, data, index))
-            .await
-            .map_err(|e| IndexError::Error(e.into()))
+
+        *self.processing.write().await = None;
+
+        result
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings> {
@@ -342,13 +354,16 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
 
+        let processing = self.processing.read().await;
+        let is_indexing = *processing == Some(uuid);
+
         spawn_blocking(move || {
             let rtxn = index.read_txn()?;
 
             Ok(IndexStats {
                 size: index.size()?,
                 number_of_documents: index.number_of_documents(&rtxn)?,
-                is_indexing: false, // We set this field in src/index_controller/mod.rs get_stats
+                is_indexing,
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })
