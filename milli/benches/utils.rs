@@ -1,9 +1,17 @@
-use std::{fs::{File, create_dir_all}};
+use std::{fs::{File, create_dir_all}, time::Duration};
 
 use heed::EnvOpenOptions;
+use criterion::BenchmarkId;
 use milli::{Index, update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
 
-pub fn base_setup(criteria: Option<Vec<String>>) -> Index {
+pub struct Conf<'a> {
+    pub group_name: &'a str,
+    pub queries: &'a[&'a str],
+    pub criterion: Option<&'a [&'a str]>,
+    pub optional_words: bool,
+}
+
+pub fn base_setup(criterion: Option<Vec<String>>) -> Index {
     let database = "songs.mmdb";
     create_dir_all(&database).unwrap();
 
@@ -16,12 +24,12 @@ pub fn base_setup(criteria: Option<Vec<String>>) -> Index {
     let mut wtxn = index.write_txn().unwrap();
     let mut builder = update_builder.settings(&mut wtxn, &index);
 
-    if let Some(criteria) = criteria {
+    if let Some(criterion) = criterion {
         builder.reset_faceted_fields();
         builder.reset_criteria();
         builder.reset_stop_words();
 
-        builder.set_criteria(criteria);
+        builder.set_criteria(criterion);
     }
 
     builder.execute(|_, _| ()).unwrap();
@@ -38,4 +46,24 @@ pub fn base_setup(criteria: Option<Vec<String>>) -> Index {
     wtxn.commit().unwrap();
 
     index
+}
+
+pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
+    for conf in confs {
+        let criterion = conf.criterion.map(|s| s.iter().map(|s| s.to_string()).collect());
+        let index = base_setup(criterion);
+
+        let mut group = c.benchmark_group(conf.group_name);
+        group.measurement_time(Duration::from_secs(10));
+
+        for &query in conf.queries {
+            group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
+                b.iter(|| {
+                    let rtxn = index.read_txn().unwrap();
+                    let _documents_ids = index.search(&rtxn).query(query).optional_words(conf.optional_words).execute().unwrap();
+                });
+            });
+        }
+        group.finish();
+    }
 }

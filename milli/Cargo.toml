@@ -61,13 +61,5 @@ rand = "0.8.3"
 default = []
 
 [[bench]]
-name = "typo"
-harness = false
-
-[[bench]]
-name = "words"
-harness = false
-
-[[bench]]
-name = "proximity"
+name = "criterion"
 harness = false
