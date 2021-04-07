@@ -28,7 +28,7 @@ fn bench_typo(c: &mut criterion::Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
             b.iter(|| {
                 let rtxn = index.read_txn().unwrap();
-                let _documents_ids = index.search(&rtxn).query(*query).execute().unwrap();
+                let _documents_ids = index.search(&rtxn).query(*query).optional_words(false).execute().unwrap();
             });
         });
     }
