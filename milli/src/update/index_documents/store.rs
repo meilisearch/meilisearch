@@ -12,7 +12,7 @@ use fst::Set;
 use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
-use log::{debug, info};
+use log::{debug, info, warn};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind, token::SeparatorKind};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
@@ -24,7 +24,7 @@ use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec8, SmallVec32, Position, DocumentId, FieldId};
+use crate::{json_to_string, SmallVec8, SmallVec32, Position, DocumentId, FieldId, FieldsIdsMap};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
@@ -50,6 +50,8 @@ pub struct Readers {
 
 pub struct Store<'s, A> {
     // Indexing parameters
+    primary_key: String,
+    fields_ids_map: FieldsIdsMap,
     searchable_fields: HashSet<FieldId>,
     faceted_fields: HashMap<FieldId, FacetType>,
     // Caches
@@ -78,6 +80,8 @@ pub struct Store<'s, A> {
 
 impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     pub fn new(
+        primary_key: String,
+        fields_ids_map: FieldsIdsMap,
         searchable_fields: HashSet<FieldId>,
         faceted_fields: HashMap<FieldId, FacetType>,
         linked_hash_map_size: Option<usize>,
@@ -149,6 +153,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         Ok(Store {
             // Indexing parameters.
+            primary_key,
+            fields_ids_map,
             searchable_fields,
             faceted_fields,
             // Caches
@@ -462,9 +468,26 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                         let value = serde_json::from_slice(content)?;
 
                         if let Some(ftype) = self.faceted_fields.get(&attr) {
-                            let mut values = parse_facet_value(*ftype, &value).with_context(|| {
-                                format!("extracting facets from the value {}", value)
-                            })?;
+                            let mut values = match parse_facet_value(*ftype, &value) {
+                                Ok(values) => values,
+                                Err(e) => {
+                                    // We extract the name of the attribute and the document id
+                                    // to help users debug a facet type conversion.
+                                    let attr_name = self.fields_ids_map.name(attr).unwrap();
+                                    let document_id: Value = self.fields_ids_map.id(&self.primary_key)
+                                        .and_then(|fid| document.get(fid))
+                                        .map(serde_json::from_slice)
+                                        .unwrap()?;
+
+                                    let context = format!(
+                                        "while extracting facet from the {:?} attribute in the {} document",
+                                        attr_name, document_id,
+                                    );
+                                    warn!("{}", e.context(context));
+
+                                    SmallVec8::default()
+                                },
+                            };
                             facet_values.entry(attr).or_insert_with(SmallVec8::new).extend(values.drain(..));
                         }
 

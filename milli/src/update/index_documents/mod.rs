@@ -440,6 +440,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .enumerate()
                 .map(|(i, documents)| {
                     let store = Store::new(
+                        primary_key.clone(),
+                        fields_ids_map.clone(),
                         searchable_fields.clone(),
                         faceted_fields.clone(),
                         linked_hash_map_size,
