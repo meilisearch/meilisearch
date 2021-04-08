@@ -72,9 +72,6 @@ where
                 Some(Snapshot { uuid, path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(uuid, path).await);
                 }
-                Some(IsLocked { uuid, ret }) => {
-                    let _ = ret.send(self.handle_is_locked(uuid).await);
-                }
                 None => break,
             }
         }
@@ -225,15 +222,5 @@ where
         }
 
         Ok(())
-    }
-
-    async fn handle_is_locked(&self, uuid: Uuid) -> Result<bool> {
-        let store = self
-            .store
-            .get(uuid)
-            .await?
-            .ok_or(UpdateError::UnexistingIndex(uuid))?;
-
-        Ok(store.update_lock.is_locked())
     }
 }

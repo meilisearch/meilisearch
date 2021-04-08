@@ -95,11 +95,4 @@ where
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
-
-    async fn is_locked(&self, uuid: Uuid) -> Result<bool> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::IsLocked { uuid, ret };
-        let _ = self.sender.send(msg).await;
-        receiver.await.expect("update actor killed.")
-    }
 }

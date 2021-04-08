@@ -34,8 +34,4 @@ pub enum UpdateMsg<D> {
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
-    IsLocked {
-        uuid: Uuid,
-        ret: oneshot::Sender<Result<bool>>,
-    },
 }

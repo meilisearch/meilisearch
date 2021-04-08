@@ -44,7 +44,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             read_receiver,
             write_receiver,
             update_handler,
-            processing: RwLock::new(Default::default()),
+            processing: RwLock::new(None),
             store,
         })
     }
@@ -183,23 +183,22 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        let uuid = meta.index_uuid().clone();
-
-        *self.processing.write().await = Some(uuid);
-
-        let result = {
+        async fn get_result<S: IndexStore>(actor: &IndexActor<S>, meta: Processing<UpdateMeta>, data: File) -> Result<UpdateResult> {
             debug!("Processing update {}", meta.id());
-            let update_handler = self.update_handler.clone();
-            let index = match self.store.get(uuid).await? {
+            let uuid = *meta.index_uuid();
+            let update_handler = actor.update_handler.clone();
+            let index = match actor.store.get(uuid).await? {
                 Some(index) => index,
-                None => self.store.create(uuid, None).await?,
+                None => actor.store.create(uuid, None).await?,
             };
 
             spawn_blocking(move || update_handler.handle_update(meta, data, index))
                 .await
                 .map_err(|e| IndexError::Error(e.into()))
-        };
+        }
 
+        *self.processing.write().await = Some(meta.index_uuid().clone());
+        let result = get_result(self, meta, data).await;
         *self.processing.write().await = None;
 
         result
