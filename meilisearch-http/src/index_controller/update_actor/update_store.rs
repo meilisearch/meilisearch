@@ -17,7 +17,7 @@ type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 #[derive(Clone)]
 pub struct UpdateStore<M, N, E> {
     pub env: Env,
-    pending_meta: Database<OwnedType<BEU64>, SerdeJson<Pending<M>>>,
+    pending_meta: Database<OwnedType<BEU64>, SerdeJson<Enqueued<M>>>,
     pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
     failed_meta: Database<OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
@@ -167,7 +167,7 @@ where
         meta: M,
         content: impl AsRef<Path>,
         index_uuid: Uuid,
-    ) -> heed::Result<Pending<M>> {
+    ) -> heed::Result<Enqueued<M>> {
         let mut wtxn = self.env.write_txn()?;
 
         // We ask the update store to give us a new update id, this is safe,
@@ -177,7 +177,7 @@ where
         let update_id = self.new_update_id(&wtxn)?;
         let update_key = BEU64::new(update_id);
 
-        let meta = Pending::new(meta, update_id, index_uuid);
+        let meta = Enqueued::new(meta, update_id, index_uuid);
         self.pending_meta.put(&mut wtxn, &update_key, &meta)?;
         self.pending
             .put(&mut wtxn, &update_key, &content.as_ref().to_owned())?;
@@ -303,7 +303,7 @@ where
         }
 
         if let Some(meta) = self.pending_meta.get(&rtxn, &key)? {
-            return Ok(Some(UpdateStatus::Pending(meta)));
+            return Ok(Some(UpdateStatus::Enqueued(meta)));
         }
 
         if let Some(meta) = self.processed_meta.get(&rtxn, &key)? {
