@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::{fmt, cmp, mem};
 
+use fst::Set;
 use levenshtein_automata::{DFA, Distance};
 use meilisearch_tokenizer::{TokenKind, tokenizer::TokenStream};
 use roaring::RoaringBitmap;
@@ -220,7 +221,8 @@ impl<'a> QueryTreeBuilder<'a> {
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
     pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<Operation>> {
-        let primitive_query = create_primitive_query(query);
+        let stop_words = self.index.stop_words(self.rtxn)?;
+        let primitive_query = create_primitive_query(query, stop_words);
         if !primitive_query.is_empty() {
             create_query_tree(self, self.optional_words, self.authorize_typos, primitive_query).map(Some)
         } else {
@@ -370,7 +372,7 @@ fn create_query_tree(
         const MAX_NGRAM: usize = 3;
         let mut op_children = Vec::new();
 
-        for sub_query in query.linear_group_by(|a, b| !(a.is_phrase() || b.is_phrase()) ) {
+        for sub_query in query.linear_group_by(|a, b| !(a.is_phrase() || b.is_phrase())) {
             let mut or_op_children = Vec::new();
 
             for ngram in 1..=MAX_NGRAM.min(sub_query.len()) {
@@ -385,8 +387,8 @@ fn create_query_tree(
                             and_op_children.push(operation);
                         },
                         words => {
-                            let is_prefix = words.last().map(|part| part.is_prefix()).unwrap_or(false);
-                            let words: Vec<_> = words.iter().filter_map(| part| {
+                            let is_prefix = words.last().map_or(false, |part| part.is_prefix());
+                            let words: Vec<_> = words.iter().filter_map(|part| {
                                 if let PrimitiveQueryPart::Word(word, _) = part {
                                     Some(word.as_str())
                                 } else {
@@ -474,7 +476,7 @@ impl PrimitiveQueryPart {
 
 /// Create primitive query from tokenized query string,
 /// the primitive query is an intermediate state to build the query tree.
-fn create_primitive_query(query: TokenStream) -> PrimitiveQuery {
+fn create_primitive_query(query: TokenStream, stop_words: Option<Set<&[u8]>>) -> PrimitiveQuery {
     let mut primitive_query = Vec::new();
     let mut phrase = Vec::new();
     let mut quoted = false;
@@ -482,14 +484,16 @@ fn create_primitive_query(query: TokenStream) -> PrimitiveQuery {
     let mut peekable = query.peekable();
     while let Some(token) = peekable.next() {
         match token.kind {
-            TokenKind::Word => {
+            TokenKind::Word | TokenKind::StopWord  => {
                 // 1. if the word is quoted we push it in a phrase-buffer waiting for the ending quote,
-                // 2. if the word is not the last token of the query we push it as a non-prefix word,
+                // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if quoted {
                     phrase.push(token.word.to_string());
                 } else if peekable.peek().is_some() {
-                    primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), false));
+                     if !stop_words.as_ref().map_or(false, |swords| swords.contains(token.word.as_ref())) {
+                         primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), false));
+                     }
                 } else {
                     primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), true));
                 }
@@ -563,7 +567,7 @@ mod test {
             query: TokenStream,
         ) -> anyhow::Result<Option<Operation>>
         {
-            let primitive_query = create_primitive_query(query);
+            let primitive_query = create_primitive_query(query, None);
             if !primitive_query.is_empty() {
                 create_query_tree(self, optional_words, authorize_typos, primitive_query).map(Some)
             } else {

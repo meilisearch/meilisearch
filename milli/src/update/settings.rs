@@ -602,12 +602,13 @@ mod tests {
         assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
 
         // when we search for something that is a non prefix stop_words it should be ignored
+        // thus we should get a placeholder search (all the results = 3)
         let result = index.search(&rtxn).query("the ").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
+        assert_eq!(result.documents_ids.len(), 3);
         let result = index.search(&rtxn).query("i ").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
+        assert_eq!(result.documents_ids.len(), 3);
         let result = index.search(&rtxn).query("are ").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
+        assert_eq!(result.documents_ids.len(), 3);
 
         let result = index.search(&rtxn).query("dog").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
