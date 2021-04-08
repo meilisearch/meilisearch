@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::{fmt, cmp, mem};
 
-use fst::Set;
 use levenshtein_automata::{DFA, Distance};
 use meilisearch_tokenizer::{TokenKind, tokenizer::TokenStream};
 use roaring::RoaringBitmap;
@@ -155,10 +154,6 @@ impl fmt::Debug for Query {
 
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
-    fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>>;
-    fn is_stop_word(&self, word: &str) -> anyhow::Result<bool> {
-        Ok(self.stop_words()?.map_or(false, |s| s.contains(word)))
-    }
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
         match self.word_docids(word)? {
@@ -187,10 +182,6 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn synonyms<S: AsRef<str>>(&self, _words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
         Ok(None)
-    }
-
-    fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>> {
-        self.index.stop_words(self.rtxn)
     }
 }
 
@@ -340,7 +331,8 @@ fn create_query_tree(
     optional_words: bool,
     authorize_typos: bool,
     query: PrimitiveQuery,
-) -> anyhow::Result<Operation> {
+) -> anyhow::Result<Operation>
+{
     /// Matches on the `PrimitiveQueryPart` and create an operation from it.
     fn resolve_primitive_part(
         ctx: &impl Context,
@@ -358,12 +350,7 @@ fn create_query_tree(
                 if let Some(child) = split_best_frequency(ctx, &word)? {
                     children.push(child);
                 }
-
-                let is_stop_word = ctx.is_stop_word(&word)?;
-                let query = Query { prefix, kind: typos(word, authorize_typos) };
-                if query.prefix || query.kind.is_tolerant() || !is_stop_word {
-                    children.push(Operation::Query(query));
-                }
+                children.push(Operation::Query(Query { prefix, kind: typos(word, authorize_typos) }));
                 Ok(Operation::or(false, children))
             },
             // create a CONSECUTIVE operation wrapping all word in the phrase
@@ -378,11 +365,12 @@ fn create_query_tree(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
-    ) -> anyhow::Result<Operation> {
+    ) -> anyhow::Result<Operation>
+    {
         const MAX_NGRAM: usize = 3;
         let mut op_children = Vec::new();
 
-        for sub_query in query.linear_group_by(|a, b| !(a.is_phrase() || b.is_phrase())) {
+        for sub_query in query.linear_group_by(|a, b| !(a.is_phrase() || b.is_phrase()) ) {
             let mut or_op_children = Vec::new();
 
             for ngram in 1..=MAX_NGRAM.min(sub_query.len()) {
@@ -393,31 +381,23 @@ fn create_query_tree(
 
                     match group {
                         [part] => {
-                            let operation =
-                                resolve_primitive_part(ctx, authorize_typos, part.clone())?;
+                            let operation = resolve_primitive_part(ctx, authorize_typos, part.clone())?;
                             and_op_children.push(operation);
-                        }
+                        },
                         words => {
-                            let is_prefix = words.last().map_or(false, |part| part.is_prefix());
-                            let words: Vec<_> = words
-                                .iter()
-                                .filter_map(|part| {
-                                    if let PrimitiveQueryPart::Word(word, _) = part {
-                                        Some(word.as_str())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
+                            let is_prefix = words.last().map(|part| part.is_prefix()).unwrap_or(false);
+                            let words: Vec<_> = words.iter().filter_map(| part| {
+                                if let PrimitiveQueryPart::Word(word, _) = part {
+                                    Some(word.as_str())
+                                } else {
+                                    None
+                                }
+                            }).collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
-
-                            let is_stop_word = ctx.is_stop_word(&concat)?;
                             let query = Query { prefix: is_prefix, kind: typos(concat, authorize_typos) };
-                            if query.prefix || query.kind.is_tolerant() || !is_stop_word {
-                                operations.push(Operation::Query(query));
-                                and_op_children.push(Operation::or(false, operations));
-                            }
+                            operations.push(Operation::Query(query));
+                            and_op_children.push(Operation::or(false, operations));
                         }
                     }
 
@@ -600,10 +580,6 @@ mod test {
         fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
             let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
             Ok(self.synonyms.get(&words).cloned())
-        }
-
-        fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>> {
-            Ok(None)
         }
     }
 
