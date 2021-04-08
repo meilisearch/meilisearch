@@ -155,7 +155,10 @@ pub struct Highlighter<'a, A> {
 
 impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
     pub fn new(stop_words: &'a fst::Set<A>) -> Self {
-        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(stop_words);
+
+        let analyzer = Analyzer::new(config);
 
         Self { analyzer }
     }

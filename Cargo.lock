@@ -1847,7 +1847,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
- "meilisearch-tokenizer 0.1.1 (git+https://github.com/meilisearch/Tokenizer.git?branch=main)",
+ "meilisearch-tokenizer",
  "memmap",
  "milli",
  "mime",
@@ -1894,22 +1894,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-tokenizer"
-version = "0.1.1"
-source = "git+https://github.com/meilisearch/Tokenizer.git?branch=main#31ba3ff4a15501f12b7d37ac64ddce7c35a9757c"
-dependencies = [
- "character_converter",
- "cow-utils",
- "deunicode",
- "fst",
- "jieba-rs",
- "once_cell",
- "slice-group-by",
- "unicode-segmentation",
- "whatlang",
-]
-
-[[package]]
 name = "memchr"
 version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1937,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?rev=2bcdd8844c4ec9f6f8a34617ea0e4321fa633c0c#2bcdd8844c4ec9f6f8a34617ea0e4321fa633c0c"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.1.0#2bcdd8844c4ec9f6f8a34617ea0e4321fa633c0c"
 dependencies = [
  "anyhow",
  "bstr",
@@ -1957,7 +1941,7 @@ dependencies = [
  "linked-hash-map",
  "log",
  "logging_timer",
- "meilisearch-tokenizer 0.1.1 (git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.0)",
+ "meilisearch-tokenizer",
  "memmap",
  "num-traits",
  "obkv",
@@ -2252,7 +2236,8 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 [[package]]
 name = "pest"
 version = "2.1.3"
-source = "git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67#51fd1d49f1041f7839975664ef71fe15c7dcaf67"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10f4872ae94d7b90ae48754df22fd42ad52ce740b8f370b03da4835417403e53"
 dependencies = [
  "ucd-trie",
 ]
@@ -2260,8 +2245,7 @@ dependencies = [
 [[package]]
 name = "pest"
 version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10f4872ae94d7b90ae48754df22fd42ad52ce740b8f370b03da4835417403e53"
+source = "git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67#51fd1d49f1041f7839975664ef71fe15c7dcaf67"
 dependencies = [
  "ucd-trie",
 ]
