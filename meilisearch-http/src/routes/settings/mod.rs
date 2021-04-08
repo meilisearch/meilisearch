@@ -91,6 +91,12 @@ make_setting_route!(
     searchable_attributes
 );
 
+make_setting_route!(
+    "/indexes/{index_uid}/settings/stop-words",
+    std::collections::BTreeSet<String>,
+    stop_words
+);
+
 //make_setting_route!(
 //"/indexes/{index_uid}/settings/distinct-attribute",
 //String,
@@ -122,7 +128,8 @@ macro_rules! create_services {
 create_services!(
     attributes_for_faceting,
     displayed_attributes,
-    searchable_attributes
+    searchable_attributes,
+    stop_words
 );
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
