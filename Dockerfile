@@ -27,8 +27,7 @@ RUN     find . -path "*/src/main.rs" -delete
 
 ARG     COMMIT_SHA
 ARG     COMMIT_DATE
-ENV     COMMIT_SHA=${COMMIT_SHA}
-ENV     COMMIT_DATE=${COMMIT_DATE}
+ENV     COMMIT_SHA=${COMMIT_SHA} COMMIT_DATE=${COMMIT_DATE}
 
 COPY    . .
 RUN     $HOME/.cargo/bin/cargo build --release

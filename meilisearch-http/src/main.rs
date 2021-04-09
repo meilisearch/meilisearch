@@ -100,6 +100,15 @@ async fn run_http(
 }
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
+    let commit_sha = match option_env!("COMMIT_SHA") {
+        Some("") | None => env!("VERGEN_SHA"),
+        Some(commit_sha) => commit_sha
+    };
+    let commit_date = match option_env!("COMMIT_DATE") {
+        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some(commit_date) => commit_date
+    };
+
     let ascii_name = r#"
 888b     d888          d8b 888 d8b  .d8888b.                                    888
 8888b   d8888          Y8P 888 Y8P d88P  Y88b                                   888
@@ -116,11 +125,8 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"http://{}\"", opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
-    eprintln!("Commit SHA:\t\t{:?}", env!("VERGEN_SHA").to_string());
-    eprintln!(
-        "Build date:\t\t{:?}",
-        env!("VERGEN_BUILD_TIMESTAMP").to_string()
-    );
+    eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
+    eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
     eprintln!(
         "Package version:\t{:?}",
         env!("CARGO_PKG_VERSION").to_string()

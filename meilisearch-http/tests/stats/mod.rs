@@ -9,7 +9,7 @@ async fn get_settings_unexisting_index() {
     assert_eq!(code, 200);
     let version = response.as_object().unwrap();
     assert!(version.get("commitSha").is_some());
-    assert!(version.get("buildDate").is_some());
+    assert!(version.get("commitDate").is_some());
     assert!(version.get("pkgVersion").is_some());
 }
 
