@@ -155,7 +155,7 @@ impl fmt::Debug for Query {
 
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
-    fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> anyhow::Result<Option<Vec<Vec<String>>>>;
+    fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
         match self.word_docids(word)? {
             Some(rb) => Ok(Some(rb.len())),
@@ -177,7 +177,7 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.index.word_docids.get(self.rtxn, word)
     }
 
-    fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> anyhow::Result<Option<Vec<Vec<String>>>> {
+    fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
         self.index.words_synonyms(self.rtxn, words)
     }
 
@@ -270,10 +270,10 @@ fn typos(word: String, authorize_typos: bool) -> QueryKind {
     }
 }
 
-/// Fetch synonyms from the `Context` for the provided words
+/// Fetch synonyms from the `Context` for the provided word
 /// and create the list of operations for the query tree
-fn synonyms(ctx: &impl Context, words: &[&str]) -> anyhow::Result<Option<Vec<Operation>>> {
-    let synonyms = ctx.synonyms(words)?;
+fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operation>>> {
+    let synonyms = ctx.synonyms(word)?;
 
     Ok(synonyms.map(|synonyms| {
         synonyms.into_iter().map(|synonym| {
@@ -581,8 +581,8 @@ mod test {
             Ok(self.postings.get(word).cloned())
         }
 
-        fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> anyhow::Result<Option<Vec<Vec<String>>>> {
-            let words: Vec<_> = words.iter().map(|s| s.as_ref().to_string()).collect();
+        fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
+            let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
             Ok(self.synonyms.get(&words).cloned())
         }
     }

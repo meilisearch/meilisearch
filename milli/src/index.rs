@@ -417,22 +417,13 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, SYNONYMS_KEY)
     }
 
-    pub fn synonyms(&self, rtxn: &RoTxn) -> anyhow::Result<Option<HashMap<Vec<String>, Vec<Vec<String>>>>> {
-        match self.main.get::<_, Str, SerdeBincode<HashMap<Vec<String>, Vec<Vec<String>>>>>(rtxn, SYNONYMS_KEY)? {
-            Some(synonyms) => Ok(Some(synonyms)),
-            None => Ok(None),
-        }
+    pub fn synonyms(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
+        Ok(self.main.get::<_, Str, SerdeBincode<_>>(rtxn, SYNONYMS_KEY)?.unwrap_or_default())
     }
 
-    pub fn words_synonyms<S: AsRef<str>>(&self, rtxn: &RoTxn, words: &[S]) -> anyhow::Result<Option<Vec<Vec<String>>>> {
-        let words: Vec<_> = words.iter().map(|s| s.as_ref().to_string()).collect();
-
-        match self.synonyms(rtxn)? {
-            Some(synonyms) => Ok(Some(
-                synonyms.get(&words).cloned().unwrap_or(Vec::default())
-            )),
-            None => Ok(None)
-        }
+    pub fn words_synonyms<S: AsRef<str>>(&self, rtxn: &RoTxn, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
+        let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
+        Ok(self.synonyms(rtxn)?.remove(&words))
     }
 
     /* words prefixes fst */

@@ -5,6 +5,7 @@ use anyhow::Context;
 use chrono::Utc;
 use grenad::CompressionType;
 use itertools::Itertools;
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use rayon::ThreadPool;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -13,7 +14,6 @@ use crate::criterion::Criterion;
 use crate::facet::FacetType;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
-use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting<T> {
@@ -328,18 +328,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_synonyms(&mut self) -> anyhow::Result<bool> {
         match self.synonyms {
             Setting::Set(ref synonyms) => {
-                let old_synonyms = self.index.synonyms(self.wtxn)?.unwrap_or_default();
-
-                let mut config = AnalyzerConfig::default();
-
-                let stop_words = self.index.stop_words(self.wtxn)?;
-                if let Some(stop_words) = &stop_words {
-                    config.stop_words(stop_words);
-                }
-
-                let analyzer = Analyzer::new(config);
-
-                let normalize = |text: &String| {
+                fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> Vec<String> {
                     analyzer
                         .analyze(text)
                         .tokens()
@@ -347,20 +336,40 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                             if token.is_word() { Some(token.text().to_string()) } else { None }
                         )
                         .collect::<Vec<_>>()
-                };
+                }
 
-                let new_synonyms = synonyms
-                    .iter()
-                    .map(|(word, synonyms)| {
-                        let normalized_word = normalize(word);
-                        let normalized_synonyms = synonyms.iter()
-                            .map(normalize)
-                            .unique()
-                            .collect::<Vec<_>>();
+                let mut config = AnalyzerConfig::default();
+                let stop_words = self.index.stop_words(self.wtxn)?;
+                if let Some(stop_words) = &stop_words {
+                    config.stop_words(stop_words);
+                }
+                let analyzer = Analyzer::new(config);
 
-                        (normalized_word, normalized_synonyms)
-                    })
-                    .collect();
+                let mut new_synonyms = HashMap::new();
+                for (word, synonyms) in synonyms {
+                    // Normalize both the word and associated synonyms.
+                    let normalized_word = normalize(&analyzer, word);
+                    let normalized_synonyms = synonyms
+                        .iter()
+                        .map(|synonym| normalize(&analyzer, synonym));
+
+                    // Store the normalized synonyms under the normalized word,
+                    // merging the possible duplicate words.
+                    let entry = new_synonyms
+                        .entry(normalized_word)
+                        .or_insert_with(Vec::new);
+                    entry.extend(normalized_synonyms);
+                }
+
+                // Make sure that we don't have duplicate synonyms.
+                new_synonyms
+                    .iter_mut()
+                    .for_each(|(_, synonyms)| {
+                        synonyms.sort_unstable();
+                        synonyms.dedup();
+                    });
+
+                let old_synonyms = self.index.synonyms(self.wtxn)?;
 
                 if new_synonyms != old_synonyms {
                     self.index.put_synonyms(self.wtxn, &new_synonyms)?;
@@ -732,6 +741,64 @@ mod tests {
         assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
         let result = index.search(&rtxn).query("benoît").execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
+    }
+
+    #[test]
+    fn set_and_reset_synonyms() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // In the same transaction provide some synonyms
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_synonyms(hashmap! {
+            "blini".to_string() => vec!["crepes".to_string()],
+            "super like".to_string() => vec!["love".to_string()],
+            "puppies".to_string() => vec!["dogs".to_string(), "doggos".to_string()]
+        });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure synonyms are effectively stored
+        let rtxn = index.read_txn().unwrap();
+        let synonyms = index.synonyms(&rtxn).unwrap();
+        assert!(!synonyms.is_empty()); // at this point the index should return something
+
+        // Check that we can use synonyms
+        let result = index.search(&rtxn).query("blini").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1);
+        let result = index.search(&rtxn).query("super like").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1);
+        let result = index.search(&rtxn).query("puppies").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 2);
+
+        // Reset the synonyms
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.reset_synonyms();
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Ensure synonyms are reset
+        let rtxn = index.read_txn().unwrap();
+        let synonyms = index.synonyms(&rtxn).unwrap();
+        assert!(synonyms.is_empty());
+
+        // Check that synonyms are no longer work
+        let result = index.search(&rtxn).query("blini").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+        let result = index.search(&rtxn).query("super like").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+        let result = index.search(&rtxn).query("puppies").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
     }
 
     #[test]
