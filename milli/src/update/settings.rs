@@ -6,12 +6,51 @@ use chrono::Utc;
 use grenad::CompressionType;
 use itertools::Itertools;
 use rayon::ThreadPool;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::{FieldsIdsMap, Index};
 use crate::criterion::Criterion;
 use crate::facet::FacetType;
-use crate::update::index_documents::{Transform, IndexDocumentsMethod};
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
-use crate::{Index, FieldsIdsMap};
+use crate::update::index_documents::{IndexDocumentsMethod, Transform};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Setting<T> {
+    Set(T),
+    Reset,
+    NotSet,
+}
+
+impl<T> Default for Setting<T> {
+    fn default() -> Self {
+        Self::NotSet
+    }
+}
+
+impl<T> Setting<T> {
+    pub const fn is_not_set(&self) -> bool {
+        matches!(self, Self::NotSet)
+    }
+}
+
+impl<T: Serialize> Serialize for Setting<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        match self {
+            Self::Set(value) => Some(value),
+            // Usually not_set isn't serialized by setting skip_serializing_if field attribute
+            Self::NotSet | Self::Reset => None,
+        }.serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        Deserialize::deserialize(deserializer).map(|x| match x {
+            Some(x) => Self::Set(x),
+            None => Self::Reset, // Reset is forced by sending null value
+        })
+    }
+}
 
 pub struct Settings<'a, 't, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -26,13 +65,11 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     update_id: u64,
 
-    // If a struct field is set to `None` it means that it hasn't been set by the user,
-    // however if it is `Some(None)` it means that the user forced a reset of the setting.
-    searchable_fields: Option<Option<Vec<String>>>,
-    displayed_fields: Option<Option<Vec<String>>>,
-    faceted_fields: Option<Option<HashMap<String, String>>>,
-    criteria: Option<Option<Vec<String>>>,
-    stop_words: Option<Option<BTreeSet<String>>>,
+    searchable_fields: Setting<Vec<String>>,
+    displayed_fields: Setting<Vec<String>>,
+    faceted_fields: Setting<HashMap<String, String>>,
+    criteria: Setting<Vec<String>>,
+    stop_words: Setting<BTreeSet<String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -52,62 +89,62 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
             thread_pool: None,
-            searchable_fields: None,
-            displayed_fields: None,
-            faceted_fields: None,
-            criteria: None,
-            stop_words: None,
+            searchable_fields: Setting::NotSet,
+            displayed_fields: Setting::NotSet,
+            faceted_fields: Setting::NotSet,
+            criteria: Setting::NotSet,
+            stop_words: Setting::NotSet,
             update_id,
         }
     }
 
     pub fn reset_searchable_fields(&mut self) {
-        self.searchable_fields = Some(None);
+        self.searchable_fields = Setting::Reset;
     }
 
     pub fn set_searchable_fields(&mut self, names: Vec<String>) {
-        self.searchable_fields = Some(Some(names));
+        self.searchable_fields = Setting::Set(names);
     }
 
     pub fn reset_displayed_fields(&mut self) {
-        self.displayed_fields = Some(None);
+        self.displayed_fields = Setting::Reset;
     }
 
     pub fn set_displayed_fields(&mut self, names: Vec<String>) {
-        self.displayed_fields = Some(Some(names));
-    }
-
-    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
-        self.faceted_fields = Some(Some(names_facet_types));
+        self.displayed_fields = Setting::Set(names);
     }
 
     pub fn reset_faceted_fields(&mut self) {
-        self.faceted_fields = Some(None);
+        self.faceted_fields = Setting::Reset;
+    }
+
+    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
+        self.faceted_fields = Setting::Set(names_facet_types);
     }
 
     pub fn reset_criteria(&mut self) {
-        self.criteria = Some(None);
+        self.criteria = Setting::Reset;
     }
 
     pub fn set_criteria(&mut self, criteria: Vec<String>) {
-        self.criteria = Some(Some(criteria));
+        self.criteria = Setting::Set(criteria);
     }
 
     pub fn reset_stop_words(&mut self) {
-        self.stop_words = Some(None);
+        self.stop_words = Setting::Reset;
     }
 
     pub fn set_stop_words(&mut self, stop_words: BTreeSet<String>) {
         self.stop_words = if stop_words.is_empty() {
-            Some(None)
+            Setting::Reset
         } else {
-            Some(Some(stop_words))
+            Setting::Set(stop_words)
         }
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
-    where
-        F: Fn(UpdateIndexingStep, u64) + Sync
+        where
+            F: Fn(UpdateIndexingStep, u64) + Sync
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let update_id = self.update_id;
@@ -115,7 +152,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
         if self.index.number_of_documents(&self.wtxn)? == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let transform = Transform {
@@ -160,7 +197,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     fn update_displayed(&mut self) -> anyhow::Result<bool> {
         match self.displayed_fields {
-            Some(Some(ref fields)) => {
+            Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names: Vec<_> = fields
@@ -177,8 +214,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_displayed_fields(self.wtxn, &names)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Some(None) => { self.index.delete_displayed_fields(self.wtxn)?; },
-            None => return Ok(false),
+            Setting::Reset => { self.index.delete_displayed_fields(self.wtxn)?; }
+            Setting::NotSet => return Ok(false),
         }
         Ok(true)
     }
@@ -187,7 +224,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     /// reflect the order of the searchable attributes.
     fn update_searchable(&mut self) -> anyhow::Result<bool> {
         match self.searchable_fields {
-            Some(Some(ref fields)) => {
+            Setting::Set(ref fields) => {
                 // every time the searchable attributes are updated, we need to update the
                 // ids for any settings that uses the facets. (displayed_fields,
                 // faceted_fields)
@@ -218,15 +255,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_searchable_fields(self.wtxn, &names)?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
             }
-            Some(None) => { self.index.delete_searchable_fields(self.wtxn)?; },
-            None => return Ok(false),
+            Setting::Reset => { self.index.delete_searchable_fields(self.wtxn)?; }
+            Setting::NotSet => return Ok(false),
         }
         Ok(true)
     }
 
     fn update_stop_words(&mut self) -> anyhow::Result<bool> {
         match self.stop_words {
-            Some(Some(ref stop_words)) => {
+            Setting::Set(ref stop_words) => {
                 let current = self.index.stop_words(self.wtxn)?;
                 // since we can't compare a BTreeSet with an FST we are going to convert the
                 // BTreeSet to an FST and then compare bytes per bytes the two FSTs.
@@ -241,14 +278,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     Ok(false)
                 }
             }
-            Some(None) => Ok(self.index.delete_stop_words(self.wtxn)?),
-            None => Ok(false),
+            Setting::Reset => Ok(self.index.delete_stop_words(self.wtxn)?),
+            Setting::NotSet => Ok(false),
         }
     }
 
     fn update_facets(&mut self) -> anyhow::Result<bool> {
         match self.faceted_fields {
-            Some(Some(ref fields)) => {
+            Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_facets = HashMap::new();
                 for (name, ty) in fields {
@@ -259,15 +296,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_faceted_fields(self.wtxn, &new_facets)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Some(None) => { self.index.delete_faceted_fields(self.wtxn)?; },
-            None => return Ok(false)
+            Setting::Reset => { self.index.delete_faceted_fields(self.wtxn)?; }
+            Setting::NotSet => return Ok(false)
         }
         Ok(true)
     }
 
     fn update_criteria(&mut self) -> anyhow::Result<()> {
         match self.criteria {
-            Some(Some(ref fields)) => {
+            Setting::Set(ref fields) => {
                 let faceted_fields = self.index.faceted_fields(&self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
@@ -276,15 +313,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
             }
-            Some(None) => { self.index.delete_criteria(self.wtxn)?; }
-            None => (),
+            Setting::Reset => { self.index.delete_criteria(self.wtxn)?; }
+            Setting::NotSet => (),
         }
         Ok(())
     }
 
     pub fn execute<F>(mut self, progress_callback: F) -> anyhow::Result<()>
-    where
-    F: Fn(UpdateIndexingStep, u64) + Sync
+        where
+            F: Fn(UpdateIndexingStep, u64) + Sync
     {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
@@ -305,13 +342,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use heed::EnvOpenOptions;
-    use maplit::{hashmap, btreeset};
+    use maplit::{btreeset, hashmap};
 
     use crate::facet::FacetType;
     use crate::update::{IndexDocuments, UpdateFormat};
+
+    use super::*;
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -480,7 +517,7 @@ mod tests {
         // Set the faceted fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap!{ "age".into() => "integer".into() });
+        builder.set_faceted_fields(hashmap! { "age".into() => "integer".into() });
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -493,7 +530,7 @@ mod tests {
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.faceted_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashmap!{ "age".to_string() => FacetType::Integer });
+        assert_eq!(fields_ids, hashmap! { "age".to_string() => FacetType::Integer });
         // Only count the field_id 0 and level 0 facet values.
         let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 3);
@@ -550,7 +587,7 @@ mod tests {
 
         // In the same transaction we provide some stop_words
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        let set = btreeset!{ "i".to_string(), "the".to_string(), "are".to_string() };
+        let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
         builder.set_stop_words(set.clone());
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -614,7 +651,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
-        builder.set_faceted_fields(hashmap!{
+        builder.set_faceted_fields(hashmap! {
             "age".into() => "integer".into(),
             "toto".into() => "integer".into(),
         });
