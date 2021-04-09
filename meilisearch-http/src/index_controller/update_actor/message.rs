@@ -34,4 +34,8 @@ pub enum UpdateMsg<D> {
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
+    GetSize {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<u64>>,
+    },
 }

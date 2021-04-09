@@ -8,9 +8,10 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStoreStore};
 use crate::index_controller::index_actor::IndexActorHandle;
 use crate::index_controller::{get_arc_ownership_blocking, UpdateMeta, UpdateStatus};
+
+use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStoreStore};
 
 pub struct UpdateActor<D, S, I> {
     path: PathBuf,
@@ -71,6 +72,9 @@ where
                 }
                 Some(Snapshot { uuid, path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(uuid, path).await);
+                }
+                Some(GetSize { uuid, ret }) => {
+                    let _ = ret.send(self.handle_get_size(uuid).await);
                 }
                 None => break,
             }
@@ -222,5 +226,21 @@ where
         }
 
         Ok(())
+    }
+
+    async fn handle_get_size(&self, uuid: Uuid) -> Result<u64> {
+        let size = match self.store.get(uuid).await? {
+            Some(update_store) => tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+                let txn = update_store.env.read_txn()?;
+
+                update_store.get_size(&txn)
+            })
+            .await
+            .map_err(|e| UpdateError::Error(e.into()))?
+            .map_err(|e| UpdateError::Error(e.into()))?,
+            None => 0,
+        };
+
+        Ok(size)
     }
 }

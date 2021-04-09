@@ -5,10 +5,10 @@ use std::sync::Arc;
 use anyhow::{bail, Context};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
-use walkdir::WalkDir;
 
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Facets, Settings, UpdateResult};
+use crate::helpers::EnvSizer;
 
 mod search;
 mod updates;
@@ -55,11 +55,7 @@ impl Index {
         let stop_words = self
             .stop_words(&txn)?
             .map(|stop_words| -> anyhow::Result<BTreeSet<_>> {
-                Ok(stop_words
-                .stream()
-                .into_strs()?
-                .into_iter()
-                .collect())
+                Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
@@ -127,13 +123,8 @@ impl Index {
         }
     }
 
-    pub fn size(&self) -> anyhow::Result<u64> {
-        Ok(WalkDir::new(self.env.path())
-            .into_iter()
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| entry.metadata().ok())
-            .filter(|metadata| metadata.is_file())
-            .fold(0, |acc, m| acc + m.len()))
+    pub fn size(&self) -> u64 {
+        self.env.size()
     }
 
     fn fields_to_display<S: AsRef<str>>(

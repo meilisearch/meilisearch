@@ -30,6 +30,7 @@ pub trait UuidResolverHandle {
     async fn delete(&self, name: String) -> anyhow::Result<Uuid>;
     async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>>;
     async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>>;
+    async fn get_size(&self) -> Result<u64>;
 }
 
 #[derive(Debug, Error)]

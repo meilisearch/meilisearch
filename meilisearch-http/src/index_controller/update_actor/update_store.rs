@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::fs::{copy, create_dir_all, remove_file};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,10 +7,10 @@ use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
 use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use crate::helpers::EnvSizer;
 use crate::index_controller::updates::*;
 
 type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
@@ -408,5 +409,19 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn get_size(&self, txn: &heed::RoTxn) -> anyhow::Result<u64> {
+        let mut size = self.env.size();
+
+        for path in self.pending.iter(txn)? {
+            let (_, path) = path?;
+
+            if let Ok(metadata) = path.metadata() {
+                size += metadata.len()
+            }
+        }
+
+        Ok(size)
     }
 }

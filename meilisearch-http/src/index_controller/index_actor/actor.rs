@@ -360,7 +360,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             let rtxn = index.read_txn()?;
 
             Ok(IndexStats {
-                size: index.size()?,
+                size: index.size(),
                 number_of_documents: index.number_of_documents(&rtxn)?,
                 is_indexing,
                 fields_distribution: index.fields_distribution(&rtxn)?,

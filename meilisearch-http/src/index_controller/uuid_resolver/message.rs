@@ -4,6 +4,7 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::Result;
+
 pub enum UuidResolveMsg {
     Get {
         uid: String,
@@ -28,5 +29,8 @@ pub enum UuidResolveMsg {
     SnapshotRequest {
         path: PathBuf,
         ret: oneshot::Sender<Result<Vec<Uuid>>>,
+    },
+    GetSize {
+        ret: oneshot::Sender<Result<u64>>,
     },
 }
