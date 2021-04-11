@@ -996,58 +996,93 @@ async fn main() -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use serde_test::{assert_de_tokens, assert_ser_tokens, Token};
+    use maplit::{btreeset,hashmap};
+    use serde_test::{assert_tokens, Token};
 
     use milli::update::Setting;
 
     use crate::Settings;
 
     #[test]
-    fn serialize_settings() {
+    fn serde_settings_set() {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
-            searchable_attributes: Setting::Reset,
-            faceted_attributes: Setting::NotSet,
-            criteria: Setting::NotSet,
-            stop_words: Default::default(),
+            searchable_attributes: Setting::Set(vec!["age".to_string()]),
+            faceted_attributes: Setting::Set(hashmap! { "age".into() => "integer".into() }),
+            criteria: Setting::Set(vec!["asc(age)".to_string()]),
+            stop_words: Setting::Set(btreeset! { "and".to_string() }),
         };
 
-        assert_ser_tokens(&settings, &[
-            Token::Struct { name: "Settings", len: 3 },
+        assert_tokens(&settings, &[
+            Token::Struct { name: "Settings", len: 5 },
             Token::Str("displayedAttributes"),
             Token::Some,
             Token::Seq { len: Some(1) },
             Token::Str("name"),
             Token::SeqEnd,
             Token::Str("searchableAttributes"),
+            Token::Some,
+            Token::Seq { len: Some(1) },
+            Token::Str("age"),
+            Token::SeqEnd,
+            Token::Str("facetedAttributes"),
+            Token::Some,
+            Token::Map { len: Some(1) },
+            Token::Str("age"),
+            Token::Str("integer"),
+            Token::MapEnd,
+            Token::Str("criteria"),
+            Token::Some,
+            Token::Seq { len: Some(1) },
+            Token::Str("asc(age)"),
+            Token::SeqEnd,
+            Token::Str("stopWords"),
+            Token::Some,
+            Token::Seq { len: Some(1) },
+            Token::Str("and"),
+            Token::SeqEnd,
+            Token::StructEnd,
+        ]);
+    }
+
+    #[test]
+    fn serde_settings_reset() {
+        let settings = Settings {
+            displayed_attributes: Setting::Reset,
+            searchable_attributes: Setting::Reset,
+            faceted_attributes: Setting::Reset,
+            criteria: Setting::Reset,
+            stop_words: Setting::Reset,
+        };
+
+        assert_tokens(&settings, &[
+            Token::Struct { name: "Settings", len: 5 },
+            Token::Str("displayedAttributes"),
+            Token::None,
+            Token::Str("searchableAttributes"),
             Token::None,
             Token::Str("facetedAttributes"),
+            Token::None,
+            Token::Str("criteria"),
+            Token::None,
+            Token::Str("stopWords"),
             Token::None,
             Token::StructEnd,
         ]);
     }
 
     #[test]
-    fn deserialize_settings() {
+    fn serde_settings_notset() {
         let settings = Settings {
-            displayed_attributes: Setting::Set(vec!["name".to_string()]),
-            searchable_attributes: Setting::Reset,
-            faceted_attributes: Setting::Reset,
+            displayed_attributes: Setting::NotSet,
+            searchable_attributes: Setting::NotSet,
+            faceted_attributes: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
         };
 
-        assert_de_tokens(&settings, &[
-            Token::Struct { name: "Settings", len: 3 },
-            Token::Str("displayedAttributes"),
-            Token::Some,
-            Token::Seq { len: Some(1) },
-            Token::Str("name"),
-            Token::SeqEnd,
-            Token::Str("searchableAttributes"),
-            Token::None,
-            Token::Str("facetedAttributes"),
-            Token::None,
+        assert_tokens(&settings, &[
+            Token::Struct { name: "Settings", len: 0 },
             Token::StructEnd,
         ]);
     }
