@@ -1756,6 +1756,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "byte-unit",
+ "bytemuck",
  "bytes 0.6.0",
  "cargo_toml",
  "chrono",

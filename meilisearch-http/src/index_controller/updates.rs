@@ -8,16 +8,14 @@ pub struct Enqueued<M> {
     pub update_id: u64,
     pub meta: M,
     pub enqueued_at: DateTime<Utc>,
-    pub index_uuid: Uuid,
 }
 
 impl<M> Enqueued<M> {
-    pub fn new(meta: M, update_id: u64, index_uuid: Uuid) -> Self {
+    pub fn new(meta: M, update_id: u64) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
             update_id,
-            index_uuid,
         }
     }
 
