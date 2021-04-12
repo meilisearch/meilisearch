@@ -1,0 +1,27 @@
+name-template: 'Milli v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+exclude-labels:
+  - 'skip-changelog'
+version-resolver:
+  minor:
+    labels:
+      - 'breaking-change'
+  default: patch
+categories:
+  - title: 'Breaking changes ⚠️'
+    label: 'breaking-change'
+template: |
+  ## Changes
+
+  $CHANGES
+
+  Thanks again to $CONTRIBUTORS! 🎉
+no-changes-template: 'Changes are coming soon 😎'
+sort-direction: 'ascending'
+replacers:
+  - search: '/(?:and )?@dependabot-preview(?:\[bot\])?,?/g'
+    replace: ''
+  - search: '/(?:and )?@bors(?:\[bot\])?,?/g'
+    replace: ''
+  - search: '/(?:and )?@meili-bot,?/g'
+    replace: ''
