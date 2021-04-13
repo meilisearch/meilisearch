@@ -3,6 +3,24 @@ mod utils;
 use criterion::{criterion_group, criterion_main};
 
 fn bench_criterion(c: &mut criterion::Criterion) {
+    let songs_base_queries = &[
+                "mingus ",
+                "thelonious monk ",
+                "Disneyland ",
+                "the white stripes ",
+                "indochine ",
+                "klub des loosers ",
+                "fear of the dark ",
+                "michel delpech ",
+                "stromae ",
+                "dire straits ",
+                "aretha franklin ",
+    ];
+    let default_criterion: Vec<String> = milli::default_criteria().iter().map(|criteria| criteria.to_string()).collect();
+    let default_criterion = default_criterion.iter().map(|s| s.as_str());
+    let asc_default: Vec<&str> = std::iter::once("asc").chain(default_criterion.clone()).collect();
+    let desc_default: Vec<&str> = std::iter::once("desc").chain(default_criterion.clone()).collect();
+
     let confs = &[
         utils::Conf {
             group_name: "proximity",
@@ -15,6 +33,7 @@ fn bench_criterion(c: &mut criterion::Criterion) {
             ],
             criterion: Some(&["proximity"]),
             optional_words: false,
+            ..utils::Conf::BASE
         },
         utils::Conf {
             group_name: "typo",
@@ -34,6 +53,7 @@ fn bench_criterion(c: &mut criterion::Criterion) {
             ],
             criterion: Some(&["typo"]),
             optional_words: false,
+            ..utils::Conf::BASE
         },
         utils::Conf {
             group_name: "words",
@@ -47,8 +67,32 @@ fn bench_criterion(c: &mut criterion::Criterion) {
                 "whathavenotnsuchforth and then a good amount of words tot pop in order to match the first one ", // 16
             ],
             criterion: Some(&["words"]),
-            optional_words: true,
-        }
+            ..utils::Conf::BASE
+        },
+        utils::Conf {
+            group_name: "asc",
+            queries: songs_base_queries,
+            criterion: Some(&["asc"]),
+            ..utils::Conf::BASE
+        },
+        utils::Conf {
+            group_name: "desc",
+            queries: songs_base_queries,
+            criterion: Some(&["desc"]),
+            ..utils::Conf::BASE
+        },
+        utils::Conf {
+            group_name: "asc + default",
+            queries: songs_base_queries,
+            criterion: Some(&asc_default[..]),
+            ..utils::Conf::BASE
+        },
+        utils::Conf {
+            group_name: "desc + default",
+            queries: songs_base_queries,
+            criterion: Some(&desc_default[..]),
+            ..utils::Conf::BASE
+        },
     ];
 
     utils::run_benches(c, confs);
