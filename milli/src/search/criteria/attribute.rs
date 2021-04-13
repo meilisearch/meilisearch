@@ -11,6 +11,10 @@ use crate::search::query_tree::{Operation, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
 use super::{Criterion, CriterionResult, Context, resolve_query_tree};
 
+/// To be able to divide integers by the number of words in the query
+/// we want to find a multiplier that allow us to divide by any number between 1 and 10.
+/// We Choosed the LCM of all numbers between 1 and 10 as the multiplier (https://en.wikipedia.org/wiki/Least_common_multiple).
+const LCM_10_FIRST_NUMBERS: u32 = 2520;
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
     query_tree: Option<Operation>,
@@ -347,7 +351,7 @@ impl<'t, 'q> Branch<'t, 'q> {
     fn compute_rank(&self) -> u32 {
         // we compute a rank from the left interval.
         let (left, _, _) = self.last_result;
-        left.saturating_sub((0..self.branch_size).sum()) * 60 / self.branch_size
+        left.saturating_sub((0..self.branch_size).sum()) * LCM_10_FIRST_NUMBERS / self.branch_size
     }
 
     fn cmp(&self, other: &Self) -> Ordering {
@@ -545,7 +549,7 @@ fn linear_compute_candidates(
                 // we substract the word index to the position.
                 let branch_rank: u64 = branch_rank.into_iter().enumerate().map(|(i, r)| r - i as u64).sum();
                 // here we do the means of the words of the branch
-                min_rank = min_rank.min(branch_rank / branch_len as u64);
+                min_rank = min_rank.min(branch_rank * LCM_10_FIRST_NUMBERS as u64 / branch_len as u64);
             }
         }
 
