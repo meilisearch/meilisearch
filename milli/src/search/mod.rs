@@ -1,25 +1,27 @@
 use std::borrow::Cow;
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{Entry, HashMap};
 use std::fmt;
 use std::mem::take;
 use std::str::Utf8Error;
 use std::time::Instant;
 
 use fst::{IntoStreamer, Streamer};
-use levenshtein_automata::{DFA, LevenshteinAutomatonBuilder as LevBuilder};
+use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::debug;
-use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use crate::search::criteria::fetcher::{FetcherResult, Fetcher};
-use crate::{Index, DocumentId};
-use distinct::{MapDistinct, FacetDistinct, Distinct, DocIter, NoopDistinct};
-use self::query_tree::QueryTreeBuilder;
+use distinct::{Distinct, DocIter, FacetDistinct, MapDistinct, NoopDistinct};
 
-pub use self::facet::FacetIter;
-pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
+use crate::search::criteria::fetcher::{Fetcher, FetcherResult};
+use crate::{DocumentId, Index};
+
+pub use self::facet::{
+    FacetCondition, FacetDistribution, FacetIter, FacetNumberOperator, FacetStringOperator,
+};
 pub use self::query_tree::MatchingWords;
+use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -38,6 +40,7 @@ pub struct Search<'a> {
     limit: usize,
     optional_words: bool,
     authorize_typos: bool,
+    words_limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -51,6 +54,7 @@ impl<'a> Search<'a> {
             limit: 20,
             optional_words: true,
             authorize_typos: true,
+            words_limit: 10,
             rtxn,
             index,
         }
@@ -81,6 +85,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn words_limit(&mut self, value: usize) -> &mut Search<'a> {
+        self.words_limit = value;
+        self
+    }
+
     pub fn facet_condition(&mut self, condition: FacetCondition) -> &mut Search<'a> {
         self.facet_condition = Some(condition);
         self
@@ -94,6 +103,7 @@ impl<'a> Search<'a> {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
                 builder.authorize_typos(self.authorize_typos);
+                builder.words_limit(self.words_limit);
                 // We make sure that the analyzer is aware of the stop words
                 // this ensures that the query builder is able to properly remove them.
                 let mut config = AnalyzerConfig::default();
@@ -154,14 +164,12 @@ impl<'a> Search<'a> {
         matching_words: MatchingWords,
         mut criteria: Fetcher,
     ) -> anyhow::Result<SearchResult> {
-
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
         let mut excluded_documents = RoaringBitmap::new();
         let mut documents_ids = Vec::with_capacity(self.limit);
 
         while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next()? {
-
             debug!("Number of candidates found {}", candidates.len());
 
             let excluded = take(&mut excluded_documents);
@@ -195,6 +203,7 @@ impl fmt::Debug for Search<'_> {
             limit,
             optional_words,
             authorize_typos,
+            words_limit,
             rtxn: _,
             index: _,
         } = self;
@@ -205,6 +214,7 @@ impl fmt::Debug for Search<'_> {
             .field("limit", limit)
             .field("optional_words", optional_words)
             .field("authorize_typos", authorize_typos)
+            .field("words_limit", words_limit)
             .finish()
     }
 }
@@ -225,8 +235,7 @@ pub fn word_derivations<'c>(
     max_typo: u8,
     fst: &fst::Set<Cow<[u8]>>,
     cache: &'c mut WordDerivationsCache,
-) -> Result<&'c [(String, u8)], Utf8Error>
-{
+) -> Result<&'c [(String, u8)], Utf8Error> {
     match cache.entry((word.to_string(), is_prefix, max_typo)) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
