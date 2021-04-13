@@ -1,10 +1,3 @@
-mod index_actor;
-mod snapshot;
-mod update_actor;
-mod update_handler;
-mod updates;
-mod uuid_resolver;
-
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,33 +7,40 @@ use anyhow::bail;
 use futures::stream::StreamExt;
 use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
+use milli::FieldsDistribution;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use index_actor::IndexActorHandle;
+use snapshot::load_snapshot;
+use snapshot::SnapshotService;
+use update_actor::UpdateActorHandle;
+pub use updates::{Failed, Processed, Processing};
+use uuid_resolver::UuidError;
+use uuid_resolver::UuidResolverHandle;
+
 use crate::index::{Document, SearchQuery, SearchResult};
 use crate::index::{Facets, Settings, UpdateResult};
 use crate::option::Opt;
 
-use index_actor::IndexActorHandle;
-use snapshot::load_snapshot;
-use update_actor::UpdateActorHandle;
-use uuid_resolver::UuidResolverHandle;
-
-use snapshot::SnapshotService;
-pub use updates::{Failed, Processed, Processing};
-use uuid_resolver::UuidError;
+mod index_actor;
+mod snapshot;
+mod update_actor;
+mod update_handler;
+mod updates;
+mod uuid_resolver;
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    uid: String,
+    pub uid: String,
     name: String,
     #[serde(flatten)]
-    meta: index_actor::IndexMeta,
+    pub meta: index_actor::IndexMeta,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +61,14 @@ pub enum UpdateMeta {
 pub struct IndexSettings {
     pub uid: Option<String>,
     pub primary_key: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct IndexStats {
+    pub size: u64,
+    pub number_of_documents: u64,
+    pub is_indexing: bool,
+    pub fields_distribution: FieldsDistribution,
 }
 
 pub struct IndexController {
@@ -100,10 +108,11 @@ impl IndexController {
                 update_handle.clone(),
                 Duration::from_secs(options.snapshot_interval_sec),
                 options.snapshot_dir.clone(),
-                options.db_path
-                .file_name()
-                .map(|n| n.to_owned().into_string().expect("invalid path"))
-                .unwrap_or_else(|| String::from("data.ms")),
+                options
+                    .db_path
+                    .file_name()
+                    .map(|n| n.to_owned().into_string().expect("invalid path"))
+                    .unwrap_or_else(|| String::from("data.ms")),
             );
 
             tokio::task::spawn(snapshot_service.run());
@@ -340,6 +349,22 @@ impl IndexController {
             meta,
         };
         Ok(meta)
+    }
+
+    pub async fn get_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+
+        Ok(self.index_handle.get_index_stats(uuid).await?)
+    }
+
+    pub async fn get_updates_size(&self, uid: String) -> anyhow::Result<u64> {
+        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+
+        Ok(self.update_handle.get_size(uuid).await?)
+    }
+
+    pub async fn get_uuids_size(&self) -> anyhow::Result<u64> {
+        Ok(self.uuid_resolver.get_size().await?)
     }
 }
 

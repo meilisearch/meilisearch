@@ -46,6 +46,7 @@ pub trait UpdateActorHandle {
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn create(&self, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
+    async fn get_size(&self, uuid: Uuid) -> Result<u64>;
     async fn update(
         &self,
         meta: UpdateMeta,

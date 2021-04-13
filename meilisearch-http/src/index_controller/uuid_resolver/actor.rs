@@ -41,6 +41,9 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(SnapshotRequest { path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(path).await);
                 }
+                Some(GetSize { ret }) => {
+                    let _ = ret.send(self.handle_get_size().await);
+                }
                 // all senders have been dropped, need to quit.
                 None => break,
             }
@@ -85,6 +88,10 @@ impl<S: UuidStore> UuidResolverActor<S> {
         }
         self.store.insert(uid, uuid).await?;
         Ok(())
+    }
+
+    async fn handle_get_size(&self) -> Result<u64> {
+        self.store.get_size().await
     }
 }
 

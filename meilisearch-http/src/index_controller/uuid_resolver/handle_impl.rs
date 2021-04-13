@@ -75,4 +75,13 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .await
             .expect("Uuid resolver actor has been killed")?)
     }
+
+    async fn get_size(&self) -> Result<u64> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::GetSize { ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
+    }
 }

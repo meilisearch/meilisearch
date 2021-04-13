@@ -1,6 +1,3 @@
-mod search;
-mod updates;
-
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -11,6 +8,10 @@ use serde_json::{Map, Value};
 
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Facets, Settings, UpdateResult};
+use crate::helpers::EnvSizer;
+
+mod search;
+mod updates;
 
 pub type Document = Map<String, Value>;
 
@@ -54,11 +55,7 @@ impl Index {
         let stop_words = self
             .stop_words(&txn)?
             .map(|stop_words| -> anyhow::Result<BTreeSet<_>> {
-                Ok(stop_words
-                .stream()
-                .into_strs()?
-                .into_iter()
-                .collect())
+                Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
@@ -124,6 +121,10 @@ impl Index {
             Some(document) => Ok(obkv_to_json(&fields_to_display, &fields_ids_map, document)?),
             None => bail!("Document with id {} not found", doc_id),
         }
+    }
+
+    pub fn size(&self) -> u64 {
+        self.env.size()
     }
 
     fn fields_to_display<S: AsRef<str>>(

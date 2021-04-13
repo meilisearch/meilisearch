@@ -1,15 +1,17 @@
-pub mod search;
-mod updates;
-
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use sha2::Digest;
 
 use crate::index::Settings;
-use crate::index_controller::IndexController;
+use crate::index_controller::{IndexController, IndexStats};
 use crate::index_controller::{IndexMetadata, IndexSettings};
 use crate::option::Opt;
+
+pub mod search;
+mod updates;
 
 #[derive(Clone)]
 pub struct Data {
@@ -35,6 +37,13 @@ pub struct ApiKeys {
     pub public: Option<String>,
     pub private: Option<String>,
     pub master: Option<String>,
+}
+
+#[derive(Default)]
+pub struct Stats {
+    pub database_size: u64,
+    pub last_update: Option<DateTime<Utc>>,
+    pub indexes: HashMap<String, IndexStats>,
 }
 
 impl ApiKeys {
@@ -102,6 +111,34 @@ impl Data {
 
         let meta = self.index_controller.create_index(settings).await?;
         Ok(meta)
+    }
+
+    pub async fn get_index_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
+        Ok(self.index_controller.get_stats(uid).await?)
+    }
+
+    pub async fn get_stats(&self) -> anyhow::Result<Stats> {
+        let mut stats = Stats::default();
+        stats.database_size += self.index_controller.get_uuids_size().await?;
+
+        for index in self.index_controller.list_indexes().await? {
+            let index_stats = self.index_controller.get_stats(index.uid.clone()).await?;
+
+            stats.database_size += index_stats.size;
+            stats.database_size += self
+                .index_controller
+                .get_updates_size(index.uid.clone())
+                .await?;
+
+            stats.last_update = Some(match stats.last_update {
+                Some(last_update) => last_update.max(index.meta.updated_at),
+                None => index.meta.updated_at,
+            });
+
+            stats.indexes.insert(index.uid, index_stats);
+        }
+
+        Ok(stats)
     }
 
     #[inline]

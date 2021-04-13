@@ -8,20 +8,24 @@ use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::update_handler::UpdateHandler;
-use crate::index_controller::{get_arc_ownership_blocking, updates::Processing, UpdateMeta};
+use crate::index_controller::{
+    get_arc_ownership_blocking, updates::Processing, IndexStats, UpdateMeta,
+};
 use crate::option::IndexerOpts;
+
+use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 
 pub struct IndexActor<S> {
     read_receiver: Option<mpsc::Receiver<IndexMsg>>,
     write_receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
+    processing: RwLock<Option<Uuid>>,
     store: S,
 }
 
@@ -39,8 +43,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(Self {
             read_receiver,
             write_receiver,
-            store,
             update_handler,
+            processing: RwLock::new(None),
+            store,
         })
     }
 
@@ -146,6 +151,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Snapshot { uuid, path, ret } => {
                 let _ = ret.send(self.handle_snapshot(uuid, path).await);
             }
+            GetStats { uuid, ret } => {
+                let _ = ret.send(self.handle_get_stats(uuid).await);
+            }
         }
     }
 
@@ -175,16 +183,25 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        debug!("Processing update {}", meta.id());
-        let uuid = meta.index_uuid();
-        let update_handler = self.update_handler.clone();
-        let index = match self.store.get(*uuid).await? {
-            Some(index) => index,
-            None => self.store.create(*uuid, None).await?,
-        };
-        spawn_blocking(move || update_handler.handle_update(meta, data, index))
-            .await
-            .map_err(|e| IndexError::Error(e.into()))
+        async fn get_result<S: IndexStore>(actor: &IndexActor<S>, meta: Processing<UpdateMeta>, data: File) -> Result<UpdateResult> {
+            debug!("Processing update {}", meta.id());
+            let uuid = *meta.index_uuid();
+            let update_handler = actor.update_handler.clone();
+            let index = match actor.store.get(uuid).await? {
+                Some(index) => index,
+                None => actor.store.create(uuid, None).await?,
+            };
+
+            spawn_blocking(move || update_handler.handle_update(meta, data, index))
+                .await
+                .map_err(|e| IndexError::Error(e.into()))
+        }
+
+        *self.processing.write().await = Some(meta.index_uuid().clone());
+        let result = get_result(self, meta, data).await;
+        *self.processing.write().await = None;
+
+        result
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings> {
@@ -327,5 +344,29 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         }
 
         Ok(())
+    }
+
+    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+        let index = self
+            .store
+            .get(uuid)
+            .await?
+            .ok_or(IndexError::UnexistingIndex)?;
+
+        let processing = self.processing.read().await;
+        let is_indexing = *processing == Some(uuid);
+
+        spawn_blocking(move || {
+            let rtxn = index.read_txn()?;
+
+            Ok(IndexStats {
+                size: index.size(),
+                number_of_documents: index.number_of_documents(&rtxn)?,
+                is_indexing,
+                fields_distribution: index.fields_distribution(&rtxn)?,
+            })
+        })
+        .await
+        .map_err(|e| IndexError::Error(e.into()))?
     }
 }

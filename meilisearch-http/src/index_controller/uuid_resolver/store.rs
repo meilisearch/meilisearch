@@ -8,6 +8,7 @@ use heed::{
 use uuid::Uuid;
 
 use super::{Result, UuidError, UUID_STORE_SIZE};
+use crate::helpers::EnvSizer;
 
 #[async_trait::async_trait]
 pub trait UuidStore {
@@ -19,6 +20,7 @@ pub trait UuidStore {
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
     async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>>;
+    async fn get_size(&self) -> Result<u64>;
 }
 
 pub struct HeedUuidStore {
@@ -150,5 +152,9 @@ impl UuidStore for HeedUuidStore {
             Ok(entries)
         })
         .await?
+    }
+
+    async fn get_size(&self) -> Result<u64> {
+        Ok(self.env.size())
     }
 }

@@ -8,6 +8,7 @@ use serde_qs as qs;
 use siphasher::sip::SipHasher;
 use walkdir::WalkDir;
 
+use crate::helpers::EnvSizer;
 use crate::Data;
 use crate::Opt;
 
@@ -33,12 +34,7 @@ impl EventProperties {
             }
         }
 
-        let database_size = WalkDir::new(&data.db_path)
-            .into_iter()
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| entry.metadata().ok())
-            .filter(|metadata| metadata.is_file())
-            .fold(0, |acc, m| acc + m.len());
+        let database_size = data.env.size();
 
         let last_update_timestamp = data.db.last_update(&reader)?.map(|u| u.timestamp());
 
@@ -116,7 +112,7 @@ pub fn analytics_sender(data: Data, opt: Opt) {
             time,
             app_version,
             user_properties,
-            event_properties
+            event_properties,
         };
         let event = serde_json::to_string(&event).unwrap();
 
