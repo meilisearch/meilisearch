@@ -33,7 +33,7 @@ fn bench_criterion(c: &mut criterion::Criterion) {
             ],
             criterion: Some(&["proximity"]),
             optional_words: false,
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "typo",
@@ -53,7 +53,7 @@ fn bench_criterion(c: &mut criterion::Criterion) {
             ],
             criterion: Some(&["typo"]),
             optional_words: false,
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "words",
@@ -67,31 +67,31 @@ fn bench_criterion(c: &mut criterion::Criterion) {
                 "whathavenotnsuchforth and then a good amount of words tot pop in order to match the first one ", // 16
             ],
             criterion: Some(&["words"]),
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "asc",
             queries: songs_base_queries,
             criterion: Some(&["asc"]),
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "desc",
             queries: songs_base_queries,
             criterion: Some(&["desc"]),
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "asc + default",
             queries: songs_base_queries,
             criterion: Some(&asc_default[..]),
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "desc + default",
             queries: songs_base_queries,
             criterion: Some(&desc_default[..]),
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
     ];
 

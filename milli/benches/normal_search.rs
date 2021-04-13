@@ -9,7 +9,7 @@ fn bench_normal(c: &mut criterion::Criterion) {
             queries: &[
                 "",
             ],
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "basic without quote",
@@ -19,7 +19,7 @@ fn bench_normal(c: &mut criterion::Criterion) {
                 "marcus miller", // 60
                 "Notstandskomitee", // 4
             ],
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "basic with quote",
@@ -29,7 +29,7 @@ fn bench_normal(c: &mut criterion::Criterion) {
                 "\"marcus\" \"miller\"", // 60
                 "\"Notstandskomitee\"", // 4
             ],
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "prefix search",
@@ -40,7 +40,7 @@ fn bench_normal(c: &mut criterion::Criterion) {
                 "i",
                 "x", // only 7k results
             ],
-            ..utils::Conf::BASE
+            ..utils::Conf::BASE_SONGS
         },
     ];
 

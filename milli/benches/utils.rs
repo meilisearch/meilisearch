@@ -2,7 +2,7 @@ use std::{fs::{File, create_dir_all, remove_dir_all}, time::Duration};
 
 use heed::EnvOpenOptions;
 use criterion::BenchmarkId;
-use milli::{FacetCondition, Index, update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
+use milli::{FacetCondition, Index, update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat}};
 
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
@@ -12,47 +12,81 @@ pub struct Conf<'a> {
     pub dataset: &'a str,
     pub group_name: &'a str,
     pub queries: &'a[&'a str],
+    /// here you can change which criterion are used and in which order.
+    /// - if you specify something all the base configuration will be thrown out
+    /// - if you don't specify anything (None) the default configuration will be kept
     pub criterion: Option<&'a [&'a str]>,
+    /// the last chance to configure your database as you want
+    pub configure: fn(&mut Settings),
     pub facet_condition: Option<FacetCondition>,
+    /// enable or disable the optional words on the query
     pub optional_words: bool,
 }
 
 impl Conf<'_> {
+    fn nop(_builder: &mut Settings) {}
+
+    fn songs_conf(builder: &mut Settings) {
+        let displayed_fields = [
+            "id", "title", "album", "artist", "genre", "country", "released", "duration",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        builder.set_displayed_fields(displayed_fields);
+
+        let searchable_fields = ["title", "album", "artist"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        builder.set_searchable_fields(searchable_fields);
+    }
+
     pub const BASE: Self = Conf {
         database_name: "benches.mmdb",
         dataset: "",
         group_name: "",
         queries: &[],
         criterion: None,
+        configure: Self::nop,
         facet_condition: None,
         optional_words: true,
     };
+
+    pub const BASE_SONGS: Self = Conf {
+        dataset: "smol-songs",
+        configure: Self::songs_conf,
+        ..Self::BASE
+    };
 }
 
-pub fn base_setup(database: &str, dataset: &str, criterion: Option<Vec<String>>) -> Index {
-    match remove_dir_all(&database) {
+pub fn base_setup(conf: &Conf) -> Index {
+    match remove_dir_all(&conf.database_name) {
         Ok(_) => (),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         Err(e) => panic!("{}", e),
     }
-    create_dir_all(&database).unwrap();
+    create_dir_all(&conf.database_name).unwrap();
 
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(10);
-    let index = Index::new(options, database).unwrap();
+    let index = Index::new(options, conf.database_name).unwrap();
 
     let update_builder = UpdateBuilder::new(0);
     let mut wtxn = index.write_txn().unwrap();
     let mut builder = update_builder.settings(&mut wtxn, &index);
 
-    if let Some(criterion) = criterion {
+    if let Some(criterion) = conf.criterion {
         builder.reset_faceted_fields();
         builder.reset_criteria();
         builder.reset_stop_words();
 
+        let criterion = criterion.iter().map(|s| s.to_string()).collect();
         builder.set_criteria(criterion);
     }
+
+    (conf.configure)(&mut builder);
 
     builder.execute(|_, _| ()).unwrap();
     wtxn.commit().unwrap();
@@ -63,7 +97,7 @@ pub fn base_setup(database: &str, dataset: &str, criterion: Option<Vec<String>>)
     builder.update_format(UpdateFormat::Csv);
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
     // we called from cargo the current directory is supposed to be milli/milli
-    let reader = File::open(dataset).unwrap();
+    let reader = File::open(conf.dataset).unwrap();
     builder.execute(reader, |_, _| ()).unwrap();
     wtxn.commit().unwrap();
 
@@ -72,8 +106,7 @@ pub fn base_setup(database: &str, dataset: &str, criterion: Option<Vec<String>>)
 
 pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     for conf in confs {
-        let criterion = conf.criterion.map(|s| s.iter().map(|s| s.to_string()).collect());
-        let index = base_setup(conf.database_name, conf.dataset, criterion);
+        let index = base_setup(conf);
 
         let mut group = c.benchmark_group(&format!("{}: {}", conf.dataset, conf.group_name));
         group.measurement_time(Duration::from_secs(10));
