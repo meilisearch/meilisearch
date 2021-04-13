@@ -40,6 +40,18 @@ impl Conf<'_> {
             .map(|s| s.to_string())
             .collect();
         builder.set_searchable_fields(searchable_fields);
+
+        let faceted_fields = [
+            ("released-timestamp", "integer"),
+            ("duration-float", "float"),
+            ("genre", "string"),
+            ("country", "string"),
+            ("artist", "string"),
+        ]
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+        builder.set_faceted_fields(faceted_fields);
     }
 
     pub const BASE: Self = Conf {
@@ -54,7 +66,7 @@ impl Conf<'_> {
     };
 
     pub const BASE_SONGS: Self = Conf {
-        dataset: "smol-songs",
+        dataset: "smol-songs.csv",
         configure: Self::songs_conf,
         ..Self::BASE
     };
@@ -97,7 +109,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     builder.update_format(UpdateFormat::Csv);
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
     // we called from cargo the current directory is supposed to be milli/milli
-    let reader = File::open(conf.dataset).unwrap();
+    let dataset_path = format!("benches/{}", conf.dataset);
+    let reader = File::open(&dataset_path).expect(&format!("could not find the dataset in: {}", &dataset_path));
     builder.execute(reader, |_, _| ()).unwrap();
     wtxn.commit().unwrap();
 

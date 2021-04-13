@@ -18,8 +18,8 @@ fn bench_criterion(c: &mut criterion::Criterion) {
     ];
     let default_criterion: Vec<String> = milli::default_criteria().iter().map(|criteria| criteria.to_string()).collect();
     let default_criterion = default_criterion.iter().map(|s| s.as_str());
-    let asc_default: Vec<&str> = std::iter::once("asc").chain(default_criterion.clone()).collect();
-    let desc_default: Vec<&str> = std::iter::once("desc").chain(default_criterion.clone()).collect();
+    let asc_default: Vec<&str> = std::iter::once("asc(released-timestamp)").chain(default_criterion.clone()).collect();
+    let desc_default: Vec<&str> = std::iter::once("desc(released-timestamp)").chain(default_criterion.clone()).collect();
 
     let confs = &[
         utils::Conf {
@@ -72,13 +72,13 @@ fn bench_criterion(c: &mut criterion::Criterion) {
         utils::Conf {
             group_name: "asc",
             queries: songs_base_queries,
-            criterion: Some(&["asc"]),
+            criterion: Some(&["asc(released-timestamp)"]),
             ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
             group_name: "desc",
             queries: songs_base_queries,
-            criterion: Some(&["desc"]),
+            criterion: Some(&["desc(released-timestamp)"]),
             ..utils::Conf::BASE_SONGS
         },
         utils::Conf {
