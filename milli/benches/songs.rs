@@ -73,7 +73,7 @@ fn bench_songs(c: &mut criterion::Criterion) {
                 "les dangeureuses 1960 ",
                 "The Disneyland Sing-Along Chorus ",
                 "Under Great Northern Lights ",
-                "7000 Danses Un Jour Dans Notre Vie",
+                "7000 Danses Un Jour Dans Notre Vie ",
             ],
             criterion: Some(&["proximity"]),
             optional_words: false,
