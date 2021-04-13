@@ -331,7 +331,18 @@ where
             .pending_meta
             .prefix_iter(&rtxn, index_uuid.as_bytes())?
             .filter_map(Result::ok)
-            .filter_map(|(_, p)| (Some(p.id()) != processing.as_ref().map(|p| p.1.id())).then(|| p))
+            .filter_map(|(_, p)| {
+                if let Some((uuid, ref processing)) = *processing {
+                    // Filter out the currently processing update if it is from this index.
+                    if uuid == index_uuid && processing.id() == p.id() {
+                        None
+                    } else {
+                        Some(p)
+                    }
+                } else {
+                    Some(p)
+                }
+            })
             .map(UpdateStatus::from);
 
         updates.extend(pending);
