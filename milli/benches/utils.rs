@@ -26,34 +26,6 @@ pub struct Conf<'a> {
 impl Conf<'_> {
     fn nop(_builder: &mut Settings) {}
 
-    fn songs_conf(builder: &mut Settings) {
-        let displayed_fields = [
-            "id", "title", "album", "artist", "genre", "country", "released", "duration",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        builder.set_displayed_fields(displayed_fields);
-
-        let searchable_fields = ["title", "album", "artist"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        builder.set_searchable_fields(searchable_fields);
-
-        let faceted_fields = [
-            ("released-timestamp", "integer"),
-            ("duration-float", "float"),
-            ("genre", "string"),
-            ("country", "string"),
-            ("artist", "string"),
-        ]
-        .iter()
-        .map(|(a, b)| (a.to_string(), b.to_string()))
-        .collect();
-        builder.set_faceted_fields(faceted_fields);
-    }
-
     pub const BASE: Self = Conf {
         database_name: "benches.mmdb",
         dataset: "",
@@ -65,11 +37,6 @@ impl Conf<'_> {
         optional_words: true,
     };
 
-    pub const BASE_SONGS: Self = Conf {
-        dataset: "smol-songs.csv",
-        configure: Self::songs_conf,
-        ..Self::BASE
-    };
 }
 
 pub fn base_setup(conf: &Conf) -> Index {
