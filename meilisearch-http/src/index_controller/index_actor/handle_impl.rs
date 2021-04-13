@@ -13,8 +13,7 @@ use super::{
 
 #[derive(Clone)]
 pub struct IndexActorHandleImpl {
-    read_sender: mpsc::Sender<IndexMsg>,
-    write_sender: mpsc::Sender<IndexMsg>,
+    sender: mpsc::Sender<IndexMsg>,
 }
 
 #[async_trait::async_trait]
@@ -26,7 +25,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
             uuid,
             primary_key,
         };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
     }
 
@@ -38,21 +37,21 @@ impl IndexActorHandle for IndexActorHandleImpl {
     ) -> anyhow::Result<UpdateResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update { ret, meta, data, uuid };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Search { uuid, query, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     async fn settings(&self, uuid: Uuid) -> Result<Settings> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Settings { uuid, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -71,7 +70,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
             attributes_to_retrieve,
             limit,
         };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -88,21 +87,21 @@ impl IndexActorHandle for IndexActorHandleImpl {
             doc_id,
             attributes_to_retrieve,
         };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     async fn delete(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Delete { uuid, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetMeta { uuid, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -113,14 +112,14 @@ impl IndexActorHandle for IndexActorHandleImpl {
             index_settings,
             ret,
         };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Snapshot { uuid, path, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -134,15 +133,13 @@ impl IndexActorHandle for IndexActorHandleImpl {
 
 impl IndexActorHandleImpl {
     pub fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
-        let (read_sender, read_receiver) = mpsc::channel(100);
-        let (write_sender, write_receiver) = mpsc::channel(100);
+        let (sender, receiver) = mpsc::channel(100);
 
         let store = MapIndexStore::new(path, index_size);
-        let actor = IndexActor::new(read_receiver, write_receiver, store)?;
+        let actor = IndexActor::new(receiver, store)?;
         tokio::task::spawn(actor.run());
         Ok(Self {
-            read_sender,
-            write_sender,
+            sender,
         })
     }
 }

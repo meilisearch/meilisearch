@@ -1,10 +1,8 @@
 use std::fs::File;
-use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_stream::stream;
-use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
@@ -22,8 +20,7 @@ use crate::option::IndexerOpts;
 use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 
 pub struct IndexActor<S> {
-    read_receiver: Option<mpsc::Receiver<IndexMsg>>,
-    write_receiver: Option<mpsc::Receiver<IndexMsg>>,
+    receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
     processing: RwLock<Option<Uuid>>,
     store: S,
@@ -31,18 +28,16 @@ pub struct IndexActor<S> {
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
     pub fn new(
-        read_receiver: mpsc::Receiver<IndexMsg>,
-        write_receiver: mpsc::Receiver<IndexMsg>,
+        receiver: mpsc::Receiver<IndexMsg>,
         store: S,
     ) -> Result<Self> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
-        let read_receiver = Some(read_receiver);
-        let write_receiver = Some(write_receiver);
+        let receiver = Some(receiver);
         Ok(Self {
-            read_receiver,
-            write_receiver,
+            receiver,
+            store,
             update_handler,
             processing: RwLock::new(None),
             store,
@@ -53,44 +48,21 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     /// through the read channel are processed concurrently, the messages sent through the write
     /// channel are processed one at a time.
     pub async fn run(mut self) {
-        let mut read_receiver = self
-            .read_receiver
+        let mut receiver = self
+            .receiver
             .take()
             .expect("Index Actor must have a inbox at this point.");
 
-        let read_stream = stream! {
+        let stream = stream! {
             loop {
-                match read_receiver.recv().await {
+                match receiver.recv().await {
                     Some(msg) => yield msg,
                     None => break,
                 }
             }
         };
 
-        let mut write_receiver = self
-            .write_receiver
-            .take()
-            .expect("Index Actor must have a inbox at this point.");
-
-        let write_stream = stream! {
-            loop {
-                match write_receiver.recv().await {
-                    Some(msg) => yield msg,
-                    None => break,
-                }
-            }
-        };
-
-        pin_mut!(write_stream);
-        pin_mut!(read_stream);
-
-        let fut1 = read_stream.for_each_concurrent(Some(10), |msg| self.handle_message(msg));
-        let fut2 = write_stream.for_each_concurrent(Some(1), |msg| self.handle_message(msg));
-
-        let fut1: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut1);
-        let fut2: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut2);
-
-        tokio::join!(fut1, fut2);
+        stream.for_each_concurrent(Some(10), |msg| self.handle_message(msg)).await;
     }
 
     async fn handle_message(&self, msg: IndexMsg) {
