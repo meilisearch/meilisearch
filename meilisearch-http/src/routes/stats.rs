@@ -1,18 +1,18 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::iter::FromIterator;
 
 use actix_web::get;
 use actix_web::web;
 use actix_web::HttpResponse;
 use chrono::{DateTime, Utc};
-use milli::FieldsDistribution;
 use serde::Serialize;
 
+use crate::data::Stats;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::index_controller::IndexStats;
 use crate::routes::IndexParam;
 use crate::Data;
-use crate::data::Stats;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(get_index_stats)
@@ -25,7 +25,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
-    fields_distribution: FieldsDistribution,
+    fields_distribution: BTreeMap<String, u64>,
 }
 
 impl From<IndexStats> for IndexStatsResponse {
@@ -33,7 +33,7 @@ impl From<IndexStats> for IndexStatsResponse {
         Self {
             number_of_documents: stats.number_of_documents,
             is_indexing: stats.is_indexing,
-            fields_distribution: stats.fields_distribution,
+            fields_distribution: BTreeMap::from_iter(stats.fields_distribution.into_iter()),
         }
     }
 }
@@ -53,7 +53,7 @@ async fn get_index_stats(
 struct StatsResponse {
     database_size: u64,
     last_update: Option<DateTime<Utc>>,
-    indexes: HashMap<String, IndexStatsResponse>,
+    indexes: BTreeMap<String, IndexStatsResponse>,
 }
 
 impl From<Stats> for StatsResponse {
@@ -61,7 +61,8 @@ impl From<Stats> for StatsResponse {
         Self {
             database_size: stats.database_size,
             last_update: stats.last_update,
-            indexes: stats.indexes
+            indexes: stats
+                .indexes
                 .into_iter()
                 .map(|(uid, index_stats)| (uid, index_stats.into()))
                 .collect(),
