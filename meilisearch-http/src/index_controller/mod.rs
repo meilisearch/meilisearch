@@ -233,7 +233,6 @@ impl IndexController {
         let uid = uid.ok_or_else(|| anyhow::anyhow!("Can't create an index without a uid."))?;
         let uuid = self.uuid_resolver.create(uid.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
-        let _ = self.update_handle.create(uuid).await?;
         let meta = IndexMetadata {
             name: uid.clone(),
             uid,

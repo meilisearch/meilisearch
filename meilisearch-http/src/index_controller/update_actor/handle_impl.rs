@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::index_controller::IndexActorHandle;
 
 use super::{
-    MapUpdateStoreStore, PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta,
+    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta,
     UpdateMsg, UpdateStatus,
 };
 
@@ -29,8 +29,7 @@ where
     {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);
-        let store = MapUpdateStoreStore::new(index_handle.clone(), &path, update_store_size);
-        let actor = UpdateActor::new(store, receiver, path, index_handle)?;
+        let actor = UpdateActor::new(update_store_size, receiver, path, index_handle)?;
 
         tokio::task::spawn(actor.run());
 
@@ -61,13 +60,6 @@ where
     async fn delete(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Delete { uuid, ret };
-        let _ = self.sender.send(msg).await;
-        receiver.await.expect("update actor killed.")
-    }
-
-    async fn create(&self, uuid: Uuid) -> Result<()> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Create { uuid, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

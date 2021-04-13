@@ -15,6 +15,7 @@ pub enum IndexMsg {
         ret: oneshot::Sender<Result<IndexMeta>>,
     },
     Update {
+        uuid: Uuid,
         meta: Processing<UpdateMeta>,
         data: std::fs::File,
         ret: oneshot::Sender<Result<UpdateResult>>,

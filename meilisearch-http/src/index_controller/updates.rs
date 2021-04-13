@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -72,10 +71,6 @@ impl<M> Processing<M> {
 
     pub fn meta(&self) -> &M {
         self.from.meta()
-    }
-
-    pub fn index_uuid(&self) -> &Uuid {
-        &self.from.index_uuid
     }
 
     pub fn process<N>(self, meta: N) -> Processed<M, N> {

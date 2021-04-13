@@ -25,10 +25,6 @@ pub enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
-    Create {
-        uuid: Uuid,
-        ret: oneshot::Sender<Result<()>>,
-    },
     Snapshot {
         uuid: Uuid,
         path: PathBuf,

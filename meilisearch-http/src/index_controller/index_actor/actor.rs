@@ -103,8 +103,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             } => {
                 let _ = ret.send(self.handle_create_index(uuid, primary_key).await);
             }
-            Update { ret, meta, data } => {
-                let _ = ret.send(self.handle_update(meta, data).await);
+            Update { ret, meta, data, uuid } => {
+                let _ = ret.send(self.handle_update(uuid, meta, data).await);
             }
             Search { ret, query, uuid } => {
                 let _ = ret.send(self.handle_search(uuid, query).await);
@@ -180,25 +180,25 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
     async fn handle_update(
         &self,
+        uuid: Uuid,
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        async fn get_result<S: IndexStore>(actor: &IndexActor<S>, meta: Processing<UpdateMeta>, data: File) -> Result<UpdateResult> {
+        let get_result = || async {
             debug!("Processing update {}", meta.id());
-            let uuid = *meta.index_uuid();
-            let update_handler = actor.update_handler.clone();
-            let index = match actor.store.get(uuid).await? {
+            let update_handler = self.update_handler.clone();
+            let index = match self.store.get(uuid).await? {
                 Some(index) => index,
-                None => actor.store.create(uuid, None).await?,
+                None => self.store.create(uuid, None).await?,
             };
 
             spawn_blocking(move || update_handler.handle_update(meta, data, index))
                 .await
                 .map_err(|e| IndexError::Error(e.into()))
-        }
+        };
 
-        *self.processing.write().await = Some(*meta.index_uuid());
-        let result = get_result(self, meta, data).await;
+        *self.processing.write().await = Some(uuid);
+        let result = get_result().await;
         *self.processing.write().await = None;
 
         result

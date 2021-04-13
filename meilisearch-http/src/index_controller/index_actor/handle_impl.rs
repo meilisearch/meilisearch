@@ -32,11 +32,12 @@ impl IndexActorHandle for IndexActorHandleImpl {
 
     async fn update(
         &self,
+        uuid: Uuid,
         meta: Processing<UpdateMeta>,
         data: std::fs::File,
     ) -> anyhow::Result<UpdateResult> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::Update { ret, meta, data };
+        let msg = IndexMsg::Update { ret, meta, data, uuid };
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }

@@ -1,7 +1,6 @@
 mod actor;
 mod handle_impl;
 mod message;
-mod store;
 mod update_store;
 
 use std::path::PathBuf;
@@ -15,7 +14,6 @@ use crate::index_controller::{UpdateMeta, UpdateStatus};
 
 use actor::UpdateActor;
 use message::UpdateMsg;
-use store::{MapUpdateStoreStore, UpdateStoreStore};
 
 pub use handle_impl::UpdateActorHandleImpl;
 
@@ -30,8 +28,6 @@ use mockall::automock;
 pub enum UpdateError {
     #[error("error with update: {0}")]
     Error(Box<dyn std::error::Error + Sync + Send + 'static>),
-    #[error("Index {0} doesn't exist.")]
-    UnexistingIndex(Uuid),
     #[error("Update {0} doesn't exist.")]
     UnexistingUpdate(u64),
 }
@@ -44,7 +40,6 @@ pub trait UpdateActorHandle {
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>>;
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
-    async fn create(&self, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
     async fn get_size(&self, uuid: Uuid) -> Result<u64>;
     async fn update(

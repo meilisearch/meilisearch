@@ -75,6 +75,7 @@ pub trait IndexActorHandle {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn update(
         &self,
+        uuid: Uuid,
         meta: Processing<UpdateMeta>,
         data: std::fs::File,
     ) -> anyhow::Result<UpdateResult>;

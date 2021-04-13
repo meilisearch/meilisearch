@@ -170,10 +170,6 @@ where
         Ok(update_store)
     }
 
-    pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
-        self.env.prepare_for_closing()
-    }
-
     /// Returns the new biggest id to use to store the new update.
     fn new_update_id(&self, txn: &heed::RoTxn, index_uuid: Uuid) -> heed::Result<u64> {
         // TODO: this is a very inneficient process for finding the next update id for each index,
@@ -508,6 +504,38 @@ where
         wtxn.commit()?;
 
         Ok(aborted_updates)
+    }
+
+    pub fn delete_all(&self, uuid: Uuid) -> anyhow::Result<()> {
+        fn delete_all<A>(
+            txn: &mut heed::RwTxn,
+            uuid: Uuid,
+            db: Database<ByteSlice, A>
+        ) -> anyhow::Result<()>
+            where A: for<'a> heed::BytesDecode<'a>
+        {
+            let mut iter = db.prefix_iter_mut(txn, uuid.as_bytes())?;
+            while let Some(_) = iter.next() {
+                iter.del_current()?;
+            }
+            Ok(())
+        }
+
+        let mut txn = self.env.write_txn()?;
+
+        delete_all(&mut txn, uuid, self.pending)?;
+        delete_all(&mut txn, uuid, self.pending_meta)?;
+        delete_all(&mut txn, uuid, self.processed_meta)?;
+        delete_all(&mut txn, uuid, self.aborted_meta)?;
+        delete_all(&mut txn, uuid, self.failed_meta)?;
+
+        let processing = self.processing.upgradable_read();
+        if let Some((processing_uuid, _)) = *processing {
+            if processing_uuid == uuid {
+                parking_lot::RwLockUpgradableReadGuard::upgrade(processing).take();
+            }
+        }
+        Ok(())
     }
 
     pub fn snapshot(
