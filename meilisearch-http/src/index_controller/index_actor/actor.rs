@@ -6,7 +6,7 @@ use async_stream::stream;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
@@ -24,7 +24,6 @@ pub const CONCURRENT_INDEX_MSG: usize = 10;
 pub struct IndexActor<S> {
     receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
-    processing: RwLock<Option<Uuid>>,
     store: S,
 }
 
@@ -38,7 +37,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             receiver,
             store,
             update_handler,
-            processing: RwLock::new(None),
         })
     }
 
@@ -174,9 +172,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 .map_err(|e| IndexError::Error(e.into()))
         };
 
-        *self.processing.write().await = Some(uuid);
         let result = get_result().await;
-        *self.processing.write().await = None;
 
         result
     }
@@ -330,16 +326,13 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
 
-        let processing = self.processing.read().await;
-        let is_indexing = *processing == Some(uuid);
-
         spawn_blocking(move || {
             let rtxn = index.read_txn()?;
 
             Ok(IndexStats {
                 size: index.size(),
                 number_of_documents: index.number_of_documents(&rtxn)?,
-                is_indexing,
+                is_indexing: None,
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })

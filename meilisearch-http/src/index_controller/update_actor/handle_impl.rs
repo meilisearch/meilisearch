@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::index_controller::IndexActorHandle;
 
 use super::{
-    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStatus,
+    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStatus, UpdateStoreInfo
 };
 
 #[derive(Clone)]
@@ -70,9 +70,9 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn get_size(&self) -> Result<u64> {
+    async fn get_info(&self) -> Result<UpdateStoreInfo> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::GetSize { ret };
+        let msg = UpdateMsg::GetInfo { ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use super::{PayloadData, Result, UpdateMeta, UpdateStatus};
+use super::{PayloadData, Result, UpdateMeta, UpdateStatus, UpdateStoreInfo};
 
 pub enum UpdateMsg<D> {
     Update {
@@ -30,7 +30,7 @@ pub enum UpdateMsg<D> {
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
-    GetSize {
-        ret: oneshot::Sender<Result<u64>>,
+    GetInfo {
+        ret: oneshot::Sender<Result<UpdateStoreInfo>>,
     },
 }

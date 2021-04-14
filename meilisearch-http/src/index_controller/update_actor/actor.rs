@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 use futures::StreamExt;
 
-use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore};
+use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore, UpdateStoreInfo};
 use crate::index_controller::index_actor::{IndexActorHandle, CONCURRENT_INDEX_MSG};
 use crate::index_controller::{UpdateMeta, UpdateStatus};
 
@@ -81,8 +81,8 @@ where
                 Some(Snapshot { uuids, path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(uuids, path).await);
                 }
-                Some(GetSize { ret }) => {
-                    let _ = ret.send(self.handle_get_size().await);
+                Some(GetInfo { ret }) => {
+                    let _ = ret.send(self.handle_get_info().await);
                 }
                 None => break,
             }
@@ -232,17 +232,27 @@ where
         Ok(())
     }
 
-    async fn handle_get_size(&self) -> Result<u64> {
+    async fn handle_get_info(&self) -> Result<UpdateStoreInfo> {
         let update_store = self.store.clone();
-        let size = tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+        let processing  = self.store.processing.clone();
+        let info = tokio::task::spawn_blocking(move || -> anyhow::Result<UpdateStoreInfo> {
             let txn = update_store.env.read_txn()?;
-
-            update_store.get_size(&txn)
+            let size = update_store.get_size(&txn)?;
+            let processing = processing
+                .read()
+                .as_ref()
+                .map(|(uuid, _)| uuid)
+                .cloned();
+            let info = UpdateStoreInfo {
+                size, processing
+            };
+            Ok(info)
         })
         .await
         .map_err(|e| UpdateError::Error(e.into()))?
         .map_err(|e| UpdateError::Error(e.into()))?;
 
-        Ok(size)
+
+        Ok(info)
     }
 }

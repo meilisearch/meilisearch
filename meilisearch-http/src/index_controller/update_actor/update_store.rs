@@ -67,7 +67,7 @@ pub struct UpdateStore<M, N, E> {
     processed_meta: Database<ByteSlice, SerdeJson<Processed<M, N>>>,
     failed_meta: Database<ByteSlice, SerdeJson<Failed<M, E>>>,
     aborted_meta: Database<ByteSlice, SerdeJson<Aborted<M>>>,
-    processing: Arc<RwLock<Option<(Uuid, Processing<M>)>>>,
+    pub processing: Arc<RwLock<Option<(Uuid, Processing<M>)>>>,
     notification_sender: mpsc::Sender<()>,
     /// A lock on the update loop. This is meant to prevent a snapshot to occur while an update is
     /// processing, while not preventing writes all together during an update

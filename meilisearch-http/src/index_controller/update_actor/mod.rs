@@ -32,6 +32,14 @@ pub enum UpdateError {
     UnexistingUpdate(u64),
 }
 
+pub struct UpdateStoreInfo {
+    /// Size of the update store in bytes.
+    pub size: u64,
+    /// Uuid of the currently processing update if it exists
+    pub processing: Option<Uuid>,
+
+}
+
 #[async_trait::async_trait]
 #[cfg_attr(test, automock(type Data=Vec<u8>;))]
 pub trait UpdateActorHandle {
@@ -41,7 +49,7 @@ pub trait UpdateActorHandle {
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()>;
-    async fn get_size(&self) -> Result<u64>;
+    async fn get_info(&self) -> Result<UpdateStoreInfo>;
     async fn update(
         &self,
         meta: UpdateMeta,

@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
 use anyhow::bail;
+use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
@@ -37,6 +39,8 @@ pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
+    #[serde(skip)]
+    pub uuid: Uuid,
     pub uid: String,
     name: String,
     #[serde(flatten)]
@@ -63,11 +67,12 @@ pub struct IndexSettings {
     pub primary_key: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize)]
 pub struct IndexStats {
+    #[serde(skip)]
     pub size: u64,
     pub number_of_documents: u64,
-    pub is_indexing: bool,
+    pub is_indexing: Option<bool>,
     pub fields_distribution: FieldsDistribution,
 }
 
@@ -75,6 +80,13 @@ pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
     index_handle: index_actor::IndexActorHandleImpl,
     update_handle: update_actor::UpdateActorHandleImpl<Bytes>,
+}
+
+#[derive(Serialize)]
+pub struct Stats {
+    pub database_size: u64,
+    pub last_update: Option<DateTime<Utc>>,
+    pub indexes: BTreeMap<String, IndexStats>,
 }
 
 impl IndexController {
@@ -166,6 +178,7 @@ impl IndexController {
             Err(UuidError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let status = perform_update(uuid).await?;
+                self.index_handle.create_index(uuid, None).await?;
                 self.uuid_resolver.insert(name, uuid).await?;
                 Ok(status)
             }
@@ -218,6 +231,7 @@ impl IndexController {
             Err(UuidError::UnexistingIndex(name)) if create => {
                 let uuid = Uuid::new_v4();
                 let status = perform_udpate(uuid).await?;
+                self.index_handle.create_index(uuid, None).await?;
                 self.uuid_resolver.insert(name, uuid).await?;
                 Ok(status)
             }
@@ -234,6 +248,7 @@ impl IndexController {
         let uuid = self.uuid_resolver.create(uid.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
         let meta = IndexMetadata {
+            uuid,
             name: uid.clone(),
             uid,
             meta,
@@ -269,6 +284,7 @@ impl IndexController {
         for (uid, uuid) in uuids {
             let meta = self.index_handle.get_index_meta(uuid).await?;
             let meta = IndexMetadata {
+                uuid,
                 name: uid.clone(),
                 uid,
                 meta,
@@ -326,6 +342,7 @@ impl IndexController {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let meta = self.index_handle.update_index(uuid, index_settings).await?;
         let meta = IndexMetadata {
+            uuid,
             name: uid.clone(),
             uid,
             meta,
@@ -343,6 +360,7 @@ impl IndexController {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let meta = self.index_handle.get_index_meta(uuid).await?;
         let meta = IndexMetadata {
+            uuid,
             name: uid.clone(),
             uid,
             meta,
@@ -350,18 +368,42 @@ impl IndexController {
         Ok(meta)
     }
 
-    pub async fn get_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
-
-        Ok(self.index_handle.get_index_stats(uuid).await?)
-    }
-
-    pub async fn get_updates_size(&self) -> anyhow::Result<u64> {
-        Ok(self.update_handle.get_size().await?)
-    }
-
     pub async fn get_uuids_size(&self) -> anyhow::Result<u64> {
         Ok(self.uuid_resolver.get_size().await?)
+    }
+
+    pub async fn get_index_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
+        let uuid = self.uuid_resolver.get(uid).await?;
+        let update_infos = self.update_handle.get_info().await?;
+        let mut stats = self.index_handle.get_index_stats(uuid).await?;
+        stats.is_indexing = (Some(uuid) == update_infos.processing).into();
+        Ok(stats)
+    }
+
+    pub async fn get_all_stats(&self) -> anyhow::Result<Stats> {
+        let update_infos = self.update_handle.get_info().await?;
+        let mut database_size = self.get_uuids_size().await? + update_infos.size;
+        let mut last_update: Option<DateTime<_>> = None;
+        let mut indexes = BTreeMap::new();
+
+        for index in self.list_indexes().await? {
+            let mut index_stats = self.index_handle.get_index_stats(index.uuid).await?;
+            database_size += index_stats.size;
+
+            last_update = last_update.map_or(Some(index.meta.updated_at), |last| {
+                Some(last.max(index.meta.updated_at))
+            });
+
+            index_stats.is_indexing = (Some(index.uuid) == update_infos.processing).into();
+
+            indexes.insert(index.uid, index_stats);
+        }
+
+        Ok(Stats {
+            database_size,
+            last_update,
+            indexes,
+        })
     }
 }
 
