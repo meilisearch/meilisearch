@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::hash_map::{HashMap, Entry};
 use std::fmt;
+use std::mem::take;
 use std::str::Utf8Error;
 use std::time::Instant;
 
@@ -159,11 +160,11 @@ impl<'a> Search<'a> {
         let mut excluded_documents = RoaringBitmap::new();
         let mut documents_ids = Vec::with_capacity(self.limit);
 
-        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next(&excluded_documents)? {
+        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next()? {
 
             debug!("Number of candidates found {}", candidates.len());
 
-            let excluded = std::mem::take(&mut excluded_documents);
+            let excluded = take(&mut excluded_documents);
 
             let mut candidates = distinct.distinct(candidates, excluded);
 

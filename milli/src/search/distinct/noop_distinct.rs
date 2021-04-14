@@ -16,7 +16,7 @@ impl Iterator for NoopDistinctIter {
     type Item = anyhow::Result<DocumentId>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.candidates.next().map(Result::Ok)
+        self.candidates.next().map(Ok)
     }
 }
 

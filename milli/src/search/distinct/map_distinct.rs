@@ -18,10 +18,9 @@ pub struct MapDistinct<'a> {
 
 impl<'a> MapDistinct<'a> {
     pub fn new(distinct: FieldId, index: &'a Index, txn: &'a heed::RoTxn<'a>) -> Self {
-        let map = HashMap::new();
         Self {
             distinct,
-            map,
+            map: HashMap::new(),
             index,
             txn,
         }
@@ -38,6 +37,9 @@ pub struct MapDistinctIter<'a, 'b> {
 }
 
 impl<'a, 'b> MapDistinctIter<'a, 'b> {
+    /// Performs the next iteration of the mafacetp distinct. This is a convenience method that is
+    /// called by the Iterator::next implementation that tranposes the result. It makes error
+    /// handling easier.
     fn next_inner(&mut self) -> anyhow::Result<Option<DocumentId>> {
         let map = &mut self.map;
         let mut filter = |value: Value| {
@@ -54,22 +56,15 @@ impl<'a, 'b> MapDistinctIter<'a, 'b> {
                 .transpose()?;
 
             let accept = match value {
-                Some(value) => {
-                    match value {
-                        // Since we can't distinct these values, we always accept them
-                        Value::Null | Value::Object(_) => true,
-                        Value::Array(values) => {
-                            let mut accept = true;
-                            for value in values {
-                                accept &= filter(value);
-                            }
-                            accept
-                        }
-                        value => filter(value),
+                Some(Value::Array(values)) => {
+                    let mut accept = true;
+                    for value in values {
+                        accept &= filter(value);
                     }
+                    accept
                 }
-                // Accept values by default.
-                _ => true,
+                Some(Value::Null) | Some(Value::Object(_)) | None => true,
+                Some(value) => filter(value),
             };
 
             if accept {

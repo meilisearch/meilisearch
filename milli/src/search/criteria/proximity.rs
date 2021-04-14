@@ -8,7 +8,7 @@ use log::debug;
 use crate::{DocumentId, Position, search::{query_tree::QueryKind}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::{build_dfa, WordDerivationsCache};
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree, CriterionContext};
+use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context,
@@ -56,9 +56,8 @@ impl<'t> Proximity<'t> {
 
 impl<'t> Criterion for Proximity<'t> {
     #[logging_timer::time("Proximity::{}")]
-    fn next(&mut self, context: CriterionContext) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
-        let CriterionContext { word_cache, exclude } = context;
         loop {
             debug!("Proximity at iteration {} (max {:?}) ({:?})",
                 self.proximity,
@@ -99,7 +98,7 @@ impl<'t> Criterion for Proximity<'t> {
                                     self.ctx,
                                     query_tree,
                                     candidates,
-                                    word_cache,
+                                    wdcache,
                                 )?;
                                 self.plane_sweep_cache = Some(cache.into_iter());
 
@@ -111,7 +110,7 @@ impl<'t> Criterion for Proximity<'t> {
                                &query_tree,
                                self.proximity,
                                &mut self.candidates_cache,
-                               word_cache,
+                               wdcache,
                            )?
                         };
 
@@ -141,7 +140,7 @@ impl<'t> Criterion for Proximity<'t> {
                             &query_tree,
                             self.proximity,
                             &mut self.candidates_cache,
-                            word_cache,
+                            wdcache,
                         )?;
 
                         new_candidates.difference_with(&candidates);
@@ -171,11 +170,11 @@ impl<'t> Criterion for Proximity<'t> {
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next(CriterionContext { exclude, word_cache })? {
+                            match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     let candidates = match (&query_tree, candidates) {
                                         (_, Some(candidates)) => candidates,
-                                        (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), word_cache)?,
+                                        (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
                                         (None, None) => RoaringBitmap::new(),
                                     };
 
