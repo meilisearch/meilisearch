@@ -6,9 +6,9 @@ use anyhow::{bail, Context};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
 
+use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Facets, Settings, UpdateResult};
-use crate::helpers::EnvSizer;
 
 mod search;
 mod updates;

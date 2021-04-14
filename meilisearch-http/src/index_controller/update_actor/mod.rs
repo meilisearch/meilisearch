@@ -40,8 +40,8 @@ pub trait UpdateActorHandle {
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>>;
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
-    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
-    async fn get_size(&self, uuid: Uuid) -> Result<u64>;
+    async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()>;
+    async fn get_size(&self) -> Result<u64>;
     async fn update(
         &self,
         meta: UpdateMeta,

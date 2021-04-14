@@ -71,15 +71,10 @@ where
             return Ok(());
         }
 
-        let tasks = uuids
-            .iter()
-            .map(|&uuid| {
-                self.update_handle
-                    .snapshot(uuid, temp_snapshot_path.clone())
-            })
-            .collect::<Vec<_>>();
 
-        futures::future::try_join_all(tasks).await?;
+        self.update_handle
+            .snapshot(uuids, temp_snapshot_path.clone())
+            .await?;
 
         let snapshot_dir = self.snapshot_path.clone();
         let snapshot_path = self

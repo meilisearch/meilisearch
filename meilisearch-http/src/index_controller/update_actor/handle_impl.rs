@@ -6,8 +6,7 @@ use uuid::Uuid;
 use crate::index_controller::IndexActorHandle;
 
 use super::{
-    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta,
-    UpdateMsg, UpdateStatus,
+    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStatus,
 };
 
 #[derive(Clone)]
@@ -27,7 +26,7 @@ where
     where
         I: IndexActorHandle + Clone + Send + Sync + 'static,
     {
-        let path = path.as_ref().to_owned().join("updates");
+        let path = path.as_ref().to_owned();
         let (sender, receiver) = mpsc::channel(100);
         let actor = UpdateActor::new(update_store_size, receiver, path, index_handle)?;
 
@@ -64,16 +63,16 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+    async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Snapshot { uuid, path, ret };
+        let msg = UpdateMsg::Snapshot { uuids, path, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
 
-    async fn get_size(&self, uuid: Uuid) -> Result<u64> {
+    async fn get_size(&self) -> Result<u64> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::GetSize { uuid, ret };
+        let msg = UpdateMsg::GetSize { ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

@@ -8,11 +8,11 @@ use tokio::fs;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use futures::StreamExt;
 
 use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore};
-use crate::index_controller::index_actor::IndexActorHandle;
+use crate::index_controller::index_actor::{IndexActorHandle, CONCURRENT_INDEX_MSG};
 use crate::index_controller::{UpdateMeta, UpdateStatus};
-
 
 pub struct UpdateActor<D, I> {
     path: PathBuf,
@@ -32,10 +32,7 @@ where
         path: impl AsRef<Path>,
         index_handle: I,
     ) -> anyhow::Result<Self> {
-        let path = path
-            .as_ref()
-            .to_owned()
-            .join("updates");
+        let path = path.as_ref().to_owned().join("updates");
 
         std::fs::create_dir_all(&path)?;
 
@@ -81,11 +78,11 @@ where
                 Some(Delete { uuid, ret }) => {
                     let _ = ret.send(self.handle_delete(uuid).await);
                 }
-                Some(Snapshot { uuid, path, ret }) => {
-                    let _ = ret.send(self.handle_snapshot(uuid, path).await);
+                Some(Snapshot { uuids, path, ret }) => {
+                    let _ = ret.send(self.handle_snapshot(uuids, path).await);
                 }
-                Some(GetSize { uuid, ret }) => {
-                    let _ = ret.send(self.handle_get_size(uuid).await);
+                Some(GetSize { ret }) => {
+                    let _ = ret.send(self.handle_get_size().await);
                 }
                 None => break,
             }
@@ -200,7 +197,7 @@ where
         Ok(())
     }
 
-    async fn handle_snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+    async fn handle_snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
@@ -210,32 +207,41 @@ where
             let mut txn = update_store.env.write_txn()?;
 
             // create db snapshot
-            update_store.snapshot(&mut txn, &path, uuid)?;
+            update_store.snapshot(&mut txn, &path)?;
 
-            futures::executor::block_on(
-                async move { index_handle.snapshot(uuid, path).await },
-            )?;
-            Ok(())
+            // Perform the snapshot of each index concurently. Only a third of the capabilities of
+            // the index actor at a time not to put too much pressure on the index actor
+            let path = &path;
+            let handle = &index_handle;
+
+            let mut stream = futures::stream::iter(uuids.iter())
+                .map(|&uuid| handle.snapshot(uuid, path.clone()))
+                .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+
+            futures::executor::block_on(async {
+                while let Some(res) = stream.next().await {
+                    res?;
+                }
+                Ok(())
+            })
         })
         .await
-            .map_err(|e| UpdateError::Error(e.into()))?
-            .map_err(|e| UpdateError::Error(e.into()))?;
+        .map_err(|e| UpdateError::Error(e.into()))?
+        .map_err(|e| UpdateError::Error(e.into()))?;
 
         Ok(())
     }
 
-    async fn handle_get_size(&self, uuid: Uuid) -> Result<u64> {
-        let size = match self.store.get(uuid).await? {
-            Some(update_store) => tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
-                let txn = update_store.env.read_txn()?;
+    async fn handle_get_size(&self) -> Result<u64> {
+        let update_store = self.store.clone();
+        let size = tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+            let txn = update_store.env.read_txn()?;
 
-                update_store.get_size(&txn)
-            })
-            .await
-            .map_err(|e| UpdateError::Error(e.into()))?
-            .map_err(|e| UpdateError::Error(e.into()))?,
-            None => 0,
-        };
+            update_store.get_size(&txn)
+        })
+        .await
+        .map_err(|e| UpdateError::Error(e.into()))?
+        .map_err(|e| UpdateError::Error(e.into()))?;
 
         Ok(size)
     }

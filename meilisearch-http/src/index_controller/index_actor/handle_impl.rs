@@ -36,7 +36,12 @@ impl IndexActorHandle for IndexActorHandleImpl {
         data: std::fs::File,
     ) -> anyhow::Result<UpdateResult> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::Update { ret, meta, data, uuid };
+        let msg = IndexMsg::Update {
+            ret,
+            meta,
+            data,
+            uuid,
+        };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
@@ -126,7 +131,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
     async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetStats { uuid, ret };
-        let _ = self.read_sender.send(msg).await;
+        let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 }
@@ -138,8 +143,6 @@ impl IndexActorHandleImpl {
         let store = MapIndexStore::new(path, index_size);
         let actor = IndexActor::new(receiver, store)?;
         tokio::task::spawn(actor.run());
-        Ok(Self {
-            sender,
-        })
+        Ok(Self { sender })
     }
 }

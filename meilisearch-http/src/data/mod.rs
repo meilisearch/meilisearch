@@ -127,7 +127,7 @@ impl Data {
             stats.database_size += index_stats.size;
             stats.database_size += self
                 .index_controller
-                .get_updates_size(index.uid.clone())
+                .get_updates_size()
                 .await?;
 
             stats.last_update = Some(match stats.last_update {

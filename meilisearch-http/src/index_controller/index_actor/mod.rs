@@ -8,6 +8,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use actor::IndexActor;
+pub use actor::CONCURRENT_INDEX_MSG;
 pub use handle_impl::IndexActorHandleImpl;
 use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};

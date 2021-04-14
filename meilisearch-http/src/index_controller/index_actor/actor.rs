@@ -19,6 +19,8 @@ use crate::option::IndexerOpts;
 
 use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
 
+pub const CONCURRENT_INDEX_MSG: usize = 10;
+
 pub struct IndexActor<S> {
     receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
@@ -27,10 +29,7 @@ pub struct IndexActor<S> {
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    pub fn new(
-        receiver: mpsc::Receiver<IndexMsg>,
-        store: S,
-    ) -> Result<Self> {
+    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> Result<Self> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
@@ -40,7 +39,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             store,
             update_handler,
             processing: RwLock::new(None),
-            store,
         })
     }
 
@@ -62,7 +60,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
         };
 
-        stream.for_each_concurrent(Some(10), |msg| self.handle_message(msg)).await;
+        stream
+            .for_each_concurrent(Some(CONCURRENT_INDEX_MSG), |msg| self.handle_message(msg))
+            .await;
     }
 
     async fn handle_message(&self, msg: IndexMsg) {
@@ -75,7 +75,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             } => {
                 let _ = ret.send(self.handle_create_index(uuid, primary_key).await);
             }
-            Update { ret, meta, data, uuid } => {
+            Update {
+                ret,
+                meta,
+                data,
+                uuid,
+            } => {
                 let _ = ret.send(self.handle_update(uuid, meta, data).await);
             }
             Search { ret, query, uuid } => {

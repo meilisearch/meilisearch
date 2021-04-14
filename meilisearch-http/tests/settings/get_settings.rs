@@ -23,13 +23,7 @@ async fn get_settings() {
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
-        json!([
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-        ])
+        json!(["words", "typo", "proximity", "attribute", "exactness"])
     );
     assert_eq!(settings["stopWords"], json!([]));
 }

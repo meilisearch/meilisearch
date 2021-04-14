@@ -356,10 +356,8 @@ impl IndexController {
         Ok(self.index_handle.get_index_stats(uuid).await?)
     }
 
-    pub async fn get_updates_size(&self, uid: String) -> anyhow::Result<u64> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
-
-        Ok(self.update_handle.get_size(uuid).await?)
+    pub async fn get_updates_size(&self) -> anyhow::Result<u64> {
+        Ok(self.update_handle.get_size().await?)
     }
 
     pub async fn get_uuids_size(&self) -> anyhow::Result<u64> {

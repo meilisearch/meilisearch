@@ -26,12 +26,11 @@ pub enum UpdateMsg<D> {
         ret: oneshot::Sender<Result<()>>,
     },
     Snapshot {
-        uuid: Uuid,
+        uuids: Vec<Uuid>,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
     GetSize {
-        uuid: Uuid,
         ret: oneshot::Sender<Result<u64>>,
     },
 }

@@ -5,6 +5,7 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use anyhow::Context;
 use bytemuck::{Pod, Zeroable};
 use heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use heed::{BytesDecode, BytesEncode, CompactionOption, Database, Env, EnvOpenOptions};
@@ -106,7 +107,7 @@ where
         mut options: EnvOpenOptions,
         path: P,
         update_handler: U,
-    ) -> heed::Result<Arc<Self>>
+    ) -> anyhow::Result<Arc<Self>>
     where
         P: AsRef<Path>,
         U: HandleUpdate<M, N, E> + Sync + Clone + Send + 'static,
@@ -126,6 +127,11 @@ where
         let _ = notification_sender.send(());
 
         let update_lock = Arc::new(Mutex::new(()));
+
+        // Init update loop to perform any pending updates at launch.
+        // Since we just launched the update store, and we still own the receiving end of the
+        // channel, this call is guarenteed to succeed.
+        notification_sender.try_send(()).expect("Failed to init update store");
 
         let update_store = Arc::new(UpdateStore {
             env,
@@ -277,8 +283,11 @@ where
                 // to the update handler. Processing store is non persistent to be able recover
                 // from a failure
                 let processing = pending.processing();
-                self.processing.write().replace((index_uuid, processing.clone()));
-                let file = File::open(&content_path)?;
+                self.processing
+                    .write()
+                    .replace((index_uuid, processing.clone()));
+                let file = File::open(&content_path)
+                    .with_context(|| format!("file at path: {:?}", &content_path))?;
                 // Process the pending update using the provided user function.
                 let result = handler.handle_update(index_uuid, processing, file)?;
                 drop(rtxn);
@@ -521,9 +530,10 @@ where
         fn delete_all<A>(
             txn: &mut heed::RwTxn,
             uuid: Uuid,
-            db: Database<ByteSlice, A>
+            db: Database<ByteSlice, A>,
         ) -> anyhow::Result<()>
-            where A: for<'a> heed::BytesDecode<'a>
+        where
+            A: for<'a> heed::BytesDecode<'a>,
         {
             let mut iter = db.prefix_iter_mut(txn, uuid.as_bytes())?;
             while let Some(_) = iter.next() {
@@ -553,19 +563,17 @@ where
         &self,
         txn: &mut heed::RwTxn,
         path: impl AsRef<Path>,
-        uuid: Uuid,
     ) -> anyhow::Result<()> {
         let update_path = path.as_ref().join("updates");
         create_dir_all(&update_path)?;
 
-        let mut snapshot_path = update_path.join(format!("update-{}", uuid));
         // acquire write lock to prevent further writes during snapshot
-        create_dir_all(&snapshot_path)?;
-        snapshot_path.push("data.mdb");
+        create_dir_all(&update_path)?;
+        let db_path = update_path.join("data.mdb");
 
         // create db snapshot
         self.env
-            .copy_to_path(&snapshot_path, CompactionOption::Enabled)?;
+            .copy_to_path(&db_path, CompactionOption::Enabled)?;
 
         let update_files_path = update_path.join("update_files");
         create_dir_all(&update_files_path)?;
