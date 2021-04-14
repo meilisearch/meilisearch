@@ -63,3 +63,7 @@ default = []
 [[bench]]
 name = "songs"
 harness = false
+
+[[bench]]
+name = "wiki"
+harness = false
