@@ -138,6 +138,7 @@ fn bench_songs(c: &mut criterion::Criterion) {
             criterion: Some(&["desc(released-timestamp)"]),
             ..BASE_CONF
         },
+
         /* then we bench the asc and desc criterion on top of the default criterion */
         utils::Conf {
             group_name: "asc + default",
@@ -149,6 +150,24 @@ fn bench_songs(c: &mut criterion::Criterion) {
             criterion: Some(&desc_default[..]),
             ..BASE_CONF
         },
+
+        /* we bench the filters with the default request */
+        utils::Conf {
+            group_name: "basic filter: <=",
+            facet_condition: Some("released-timestamp <= 946728000"), // year 2000
+            ..BASE_CONF
+        },
+        utils::Conf {
+            group_name: "basic filter: TO",
+            facet_condition: Some("released-timestamp 946728000 TO 1262347200"), // year 2000 to 2010
+            ..BASE_CONF
+        },
+        utils::Conf {
+            group_name: "big filter",
+            facet_condition: Some("released-timestamp != 1262347200 AND (NOT (released-timestamp = 946728000)) AND (duration-float = 1 OR (duration-float 1.1 TO 1.5 AND released-timestamp > 315576000))"),
+            ..BASE_CONF
+        },
+
         /* the we bench some global / normal search with all the default criterion in the default
          * order */
         utils::Conf {
@@ -174,7 +193,10 @@ fn bench_songs(c: &mut criterion::Criterion) {
             group_name: "prefix search",
             queries: &[
                 "s", // 500k+ results
-                "a", "b", "i", "x", // only 7k results
+                "a", //
+                "b", //
+                "i", //
+                "x", // only 7k results
             ],
             ..BASE_CONF
         },

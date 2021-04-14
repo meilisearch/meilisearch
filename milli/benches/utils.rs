@@ -1,7 +1,4 @@
-use std::{
-    fs::{create_dir_all, remove_dir_all, File},
-    time::Duration,
-};
+use std::fs::{create_dir_all, remove_dir_all, File};
 
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
@@ -24,7 +21,7 @@ pub struct Conf<'a> {
     pub criterion: Option<&'a [&'a str]>,
     /// the last chance to configure your database as you want
     pub configure: fn(&mut Settings),
-    pub facet_condition: Option<FacetCondition>,
+    pub facet_condition: Option<&'a str>,
     /// enable or disable the optional words on the query
     pub optional_words: bool,
 }
@@ -102,7 +99,8 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let rtxn = index.read_txn().unwrap();
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
-                    if let Some(facet_condition) = conf.facet_condition.clone() {
+                    if let Some(facet_condition) = conf.facet_condition {
+                        let facet_condition = FacetCondition::from_str(&rtxn, &index, facet_condition).unwrap();
                         search.facet_condition(facet_condition);
                     }
                     let _ids = search.execute().unwrap();
