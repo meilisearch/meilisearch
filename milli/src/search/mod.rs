@@ -91,7 +91,14 @@ impl<'a> Search<'a> {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
                 builder.authorize_typos(self.authorize_typos);
-                let analyzer = Analyzer::<Vec<u8>>::new(AnalyzerConfig::default());
+                // We make sure that the analyzer is aware of the stop words
+                // this ensures that the query builder is able to properly remove them.
+                let mut config = AnalyzerConfig::default();
+                let stop_words = self.index.stop_words(self.rtxn)?;
+                if let Some(ref stop_words) = stop_words {
+                    config.stop_words(stop_words);
+                }
+                let analyzer = Analyzer::new(config);
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
                 builder.build(tokens)?

@@ -155,10 +155,6 @@ impl fmt::Debug for Query {
 
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
-    fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>>;
-    fn is_stop_word(&self, word: &str) -> anyhow::Result<bool> {
-        Ok(self.stop_words()?.map_or(false, |s| s.contains(word)))
-    }
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
         match self.word_docids(word)? {
@@ -187,10 +183,6 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn synonyms<S: AsRef<str>>(&self, _words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
         Ok(None)
-    }
-
-    fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>> {
-        self.index.stop_words(self.rtxn)
     }
 }
 
@@ -229,7 +221,8 @@ impl<'a> QueryTreeBuilder<'a> {
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
     pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<Operation>> {
-        let primitive_query = create_primitive_query(query);
+        let stop_words = self.index.stop_words(self.rtxn)?;
+        let primitive_query = create_primitive_query(query, stop_words);
         if !primitive_query.is_empty() {
             create_query_tree(self, self.optional_words, self.authorize_typos, primitive_query).map(Some)
         } else {
@@ -340,7 +333,8 @@ fn create_query_tree(
     optional_words: bool,
     authorize_typos: bool,
     query: PrimitiveQuery,
-) -> anyhow::Result<Operation> {
+) -> anyhow::Result<Operation>
+{
     /// Matches on the `PrimitiveQueryPart` and create an operation from it.
     fn resolve_primitive_part(
         ctx: &impl Context,
@@ -358,12 +352,7 @@ fn create_query_tree(
                 if let Some(child) = split_best_frequency(ctx, &word)? {
                     children.push(child);
                 }
-
-                let is_stop_word = ctx.is_stop_word(&word)?;
-                let query = Query { prefix, kind: typos(word, authorize_typos) };
-                if query.prefix || query.kind.is_tolerant() || !is_stop_word {
-                    children.push(Operation::Query(query));
-                }
+                children.push(Operation::Query(Query { prefix, kind: typos(word, authorize_typos) }));
                 Ok(Operation::or(false, children))
             },
             // create a CONSECUTIVE operation wrapping all word in the phrase
@@ -378,7 +367,8 @@ fn create_query_tree(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
-    ) -> anyhow::Result<Operation> {
+    ) -> anyhow::Result<Operation>
+    {
         const MAX_NGRAM: usize = 3;
         let mut op_children = Vec::new();
 
@@ -393,31 +383,23 @@ fn create_query_tree(
 
                     match group {
                         [part] => {
-                            let operation =
-                                resolve_primitive_part(ctx, authorize_typos, part.clone())?;
+                            let operation = resolve_primitive_part(ctx, authorize_typos, part.clone())?;
                             and_op_children.push(operation);
-                        }
+                        },
                         words => {
                             let is_prefix = words.last().map_or(false, |part| part.is_prefix());
-                            let words: Vec<_> = words
-                                .iter()
-                                .filter_map(|part| {
-                                    if let PrimitiveQueryPart::Word(word, _) = part {
-                                        Some(word.as_str())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
+                            let words: Vec<_> = words.iter().filter_map(|part| {
+                                if let PrimitiveQueryPart::Word(word, _) = part {
+                                    Some(word.as_str())
+                                } else {
+                                    None
+                                }
+                            }).collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
-
-                            let is_stop_word = ctx.is_stop_word(&concat)?;
                             let query = Query { prefix: is_prefix, kind: typos(concat, authorize_typos) };
-                            if query.prefix || query.kind.is_tolerant() || !is_stop_word {
-                                operations.push(Operation::Query(query));
-                                and_op_children.push(Operation::or(false, operations));
-                            }
+                            operations.push(Operation::Query(query));
+                            and_op_children.push(Operation::or(false, operations));
                         }
                     }
 
@@ -494,7 +476,7 @@ impl PrimitiveQueryPart {
 
 /// Create primitive query from tokenized query string,
 /// the primitive query is an intermediate state to build the query tree.
-fn create_primitive_query(query: TokenStream) -> PrimitiveQuery {
+fn create_primitive_query(query: TokenStream, stop_words: Option<Set<&[u8]>>) -> PrimitiveQuery {
     let mut primitive_query = Vec::new();
     let mut phrase = Vec::new();
     let mut quoted = false;
@@ -502,14 +484,16 @@ fn create_primitive_query(query: TokenStream) -> PrimitiveQuery {
     let mut peekable = query.peekable();
     while let Some(token) = peekable.next() {
         match token.kind {
-            TokenKind::Word => {
+            TokenKind::Word | TokenKind::StopWord  => {
                 // 1. if the word is quoted we push it in a phrase-buffer waiting for the ending quote,
-                // 2. if the word is not the last token of the query we push it as a non-prefix word,
+                // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if quoted {
                     phrase.push(token.word.to_string());
                 } else if peekable.peek().is_some() {
-                    primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), false));
+                     if !stop_words.as_ref().map_or(false, |swords| swords.contains(token.word.as_ref())) {
+                         primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), false));
+                     }
                 } else {
                     primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), true));
                 }
@@ -583,7 +567,7 @@ mod test {
             query: TokenStream,
         ) -> anyhow::Result<Option<Operation>>
         {
-            let primitive_query = create_primitive_query(query);
+            let primitive_query = create_primitive_query(query, None);
             if !primitive_query.is_empty() {
                 create_query_tree(self, optional_words, authorize_typos, primitive_query).map(Some)
             } else {
@@ -600,10 +584,6 @@ mod test {
         fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
             let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
             Ok(self.synonyms.get(&words).cloned())
-        }
-
-        fn stop_words(&self) -> anyhow::Result<Option<Set<&[u8]>>> {
-            Ok(None)
         }
     }
 
