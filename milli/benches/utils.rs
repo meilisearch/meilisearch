@@ -95,7 +95,6 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
         let index = base_setup(conf);
 
         let mut group = c.benchmark_group(&format!("{}: {}", conf.dataset, conf.group_name));
-        group.measurement_time(Duration::from_secs(10));
 
         for &query in conf.queries {
             group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
