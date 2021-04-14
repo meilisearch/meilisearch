@@ -1,12 +1,14 @@
-use roaring::RoaringBitmap;
+use roaring::{RoaringBitmap, bitmap::IntoIter};
 
 use crate::DocumentId;
 use super::{DocIter, Distinct};
 
+/// A distinct implementer that does not perform any distinct, and simply returns an iterator to
+/// the candidates.
 pub struct NoopDistinct;
 
 pub struct NoopDistinctIter {
-    candidates: roaring::bitmap::IntoIter,
+    candidates: IntoIter,
     excluded: RoaringBitmap,
 }
 

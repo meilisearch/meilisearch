@@ -6,6 +6,9 @@ use serde_json::Value;
 use super::{Distinct, DocIter};
 use crate::{DocumentId, FieldId, Index};
 
+/// A distinct implementer that is backed by an `HashMap`. Each time a document is seen, the value
+/// for its distinct field is added to the map. If the map already contains an entry for this
+/// value, then the document is filtered out, and is added to the excluded set.
 pub struct MapDistinct<'a> {
     distinct: FieldId,
     map: HashMap<String, usize>,

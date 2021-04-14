@@ -6,6 +6,12 @@ use crate::heed_codec::facet::*;
 use crate::{facet::FacetType, DocumentId, FieldId, Index};
 use super::{Distinct, DocIter};
 
+/// A distinct implementer that is backed by facets. On each iteration, the facet values for the
+/// distinct attribute of the first document are retrieved. The document ids for these facet values
+/// are then retrieved and taken out of the the candidate and added to the excluded set. We take
+/// care to keep the document we are currently on, and remove it from the excluded list. The next
+/// iterations will never contain any occurence of a document with the same distinct value as a
+/// document from previous iterations.
 pub struct FacetDistinct<'a> {
     distinct: FieldId,
     index: &'a Index,
@@ -114,6 +120,9 @@ impl<'a> FacetDistinctIter<'a> {
         Ok(())
     }
 
+    /// Performs the next iteration of the facet distinct. This is a convenience method that is
+    /// called by the Iterator::next implementation that tranposes the result. It makes error
+    /// handling easier.
     fn next_inner(&mut self) -> anyhow::Result<Option<DocumentId>> {
         // The first step is to remove all the excluded documents from our candidates
         self.candidates.difference_with(&self.excluded);
@@ -127,8 +136,10 @@ impl<'a> FacetDistinctIter<'a> {
                     FacetType::Float => self.distinct_float(id)?,
                 };
 
-                // On every iteration, the first document is always a distinct one, since it
-                // hasn't been discarded by the previous difference.
+                // The first document of each iteration is kept, since the next call to
+                // `difference_with` will filter out all the documents for that facet value. By
+                // increasing the offset we make sure to get the first valid value for the next
+                // distinct document to keep.
                 self.iter_offset += 1;
                 Ok(Some(id))
             }
