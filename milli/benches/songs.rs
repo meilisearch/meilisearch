@@ -35,17 +35,16 @@ fn base_conf(builder: &mut Settings) {
 const BASE_CONF: Conf = Conf {
     dataset: "smol-songs.csv",
     queries: &[
-        "mingus ",
-        "thelonious monk ",
-        "Disneyland ",
-        "the white stripes ",
-        "indochine ",
-        "klub des loosers ",
-        "fear of the dark ",
-        "michel delpech ",
-        "stromae ",
-        "dire straits ",
-        "aretha franklin ",
+        "john ", // 9097
+        "david ", // 4794
+        "charles ", // 1957
+        "david bowie ", // 1200
+        "michael jackson ", // 600
+        "thelonious monk ", // 303
+        "charles mingus ", // 142
+        "marcus miller ", // 60
+        "tamo ", // 13
+        "Notstandskomitee ", // 4
     ],
     configure: base_conf,
     ..Conf::BASE
@@ -63,6 +62,17 @@ fn bench_songs(c: &mut criterion::Criterion) {
     let desc_default: Vec<&str> = std::iter::once("desc(released-timestamp)")
         .chain(default_criterion.clone())
         .collect();
+
+    let basic_with_quote: Vec<String> = BASE_CONF
+        .queries
+        .iter()
+        .map(|s| {
+            s.trim()
+                .split(' ')
+                .map(|s| format!(r#""{}""#, s)).collect::<Vec<String>>().join(" ")
+        })
+        .collect();
+    let basic_with_quote: &[&str] = &basic_with_quote.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
 
     let confs = &[
         /* first we bench each criterion alone */
@@ -108,7 +118,7 @@ fn bench_songs(c: &mut criterion::Criterion) {
                 "seven nation mummy ", // one word to pop
                 "7000 Danses / Le Baiser / je me trompe de mots ", // four words to pop
                 "Bring Your Daughter To The Slaughter but now this is not part of the title ", // nine words to pop
-                "whathavenotnsuchforth and a good amount of words to pop to match the first one ", // 16
+                "whathavenotnsuchforth and a good amount of words to pop to match the first one ", // 13
             ],
             criterion: Some(&["words"]),
             ..BASE_CONF
@@ -147,22 +157,16 @@ fn bench_songs(c: &mut criterion::Criterion) {
         },
         utils::Conf {
             group_name: "basic without quote",
-            queries: &[
-                "david bowie", // 1200
-                "michael jackson", // 600
-                "marcus miller", // 60
-                "Notstandskomitee", // 4
-            ],
+            queries: &BASE_CONF
+                .queries
+                .iter()
+                .map(|s| s.trim()) // we remove the space at the end of each request
+                .collect::<Vec<&str>>(),
             ..BASE_CONF
         },
         utils::Conf {
             group_name: "basic with quote",
-            queries: &[
-                "\"david\" \"bowie\"", // 1200
-                "\"michael\" \"jackson\"", // 600
-                "\"marcus\" \"miller\"", // 60
-                "\"Notstandskomitee\"", // 4
-            ],
+            queries: basic_with_quote,
             ..BASE_CONF
         },
         utils::Conf {
