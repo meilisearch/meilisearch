@@ -38,10 +38,15 @@ fn bench_songs(c: &mut criterion::Criterion) {
         .map(|s| {
             s.trim()
                 .split(' ')
-                .map(|s| format!(r#""{}""#, s)).collect::<Vec<String>>().join(" ")
+                .map(|s| format!(r#""{}""#, s))
+                .collect::<Vec<String>>()
+                .join(" ")
         })
         .collect();
-    let basic_with_quote: &[&str] = &basic_with_quote.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+    let basic_with_quote: &[&str] = &basic_with_quote
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<&str>>();
 
     let confs = &[
         /* first we bench each criterion alone */

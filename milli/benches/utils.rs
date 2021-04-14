@@ -1,8 +1,14 @@
-use std::{fs::{File, create_dir_all, remove_dir_all}, time::Duration};
+use std::{
+    fs::{create_dir_all, remove_dir_all, File},
+    time::Duration,
+};
 
-use heed::EnvOpenOptions;
 use criterion::BenchmarkId;
-use milli::{FacetCondition, Index, update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat}};
+use heed::EnvOpenOptions;
+use milli::{
+    update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat},
+    FacetCondition, Index,
+};
 
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
@@ -11,7 +17,7 @@ pub struct Conf<'a> {
     /// the dataset to be used, it must be an uncompressed csv
     pub dataset: &'a str,
     pub group_name: &'a str,
-    pub queries: &'a[&'a str],
+    pub queries: &'a [&'a str],
     /// here you can change which criterion are used and in which order.
     /// - if you specify something all the base configuration will be thrown out
     /// - if you don't specify anything (None) the default configuration will be kept
@@ -36,7 +42,6 @@ impl Conf<'_> {
         facet_condition: None,
         optional_words: true,
     };
-
 }
 
 pub fn base_setup(conf: &Conf) -> Index {
@@ -77,7 +82,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
     // we called from cargo the current directory is supposed to be milli/milli
     let dataset_path = format!("benches/{}", conf.dataset);
-    let reader = File::open(&dataset_path).expect(&format!("could not find the dataset in: {}", &dataset_path));
+    let reader = File::open(&dataset_path)
+        .expect(&format!("could not find the dataset in: {}", &dataset_path));
     builder.execute(reader, |_, _| ()).unwrap();
     wtxn.commit().unwrap();
 
