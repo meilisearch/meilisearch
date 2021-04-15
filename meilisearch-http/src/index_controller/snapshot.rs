@@ -71,11 +71,9 @@ where
             return Ok(());
         }
 
-
         self.update_handle
             .snapshot(uuids, temp_snapshot_path.clone())
             .await?;
-
         let snapshot_dir = self.snapshot_path.clone();
         let snapshot_path = self
             .snapshot_path
@@ -133,19 +131,22 @@ pub fn load_snapshot(
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use futures::future::{err, ok};
     use rand::Rng;
     use tokio::time::timeout;
     use uuid::Uuid;
 
     use super::*;
-    use crate::index_controller::update_actor::{MockUpdateActorHandle, UpdateError};
+    use crate::index_controller::update_actor::{UpdateError, MockUpdateActorHandle, UpdateActorHandleImpl};
+    use crate::index_controller::index_actor::MockIndexActorHandle;
     use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidError};
 
     #[actix_rt::test]
     async fn test_normal() {
         let mut rng = rand::thread_rng();
-        let uuids_num = rng.gen_range(5, 10);
+        let uuids_num: usize = rng.gen_range(5, 10);
         let uuids = (0..uuids_num).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
 
         let mut uuid_resolver = MockUuidResolverHandle::new();
@@ -155,13 +156,19 @@ mod test {
             .times(1)
             .returning(move |_| Box::pin(ok(uuids_clone.clone())));
 
-        let mut update_handle = MockUpdateActorHandle::new();
         let uuids_clone = uuids.clone();
-        update_handle
+        let mut index_handle = MockIndexActorHandle::new();
+        index_handle
             .expect_snapshot()
             .withf(move |uuid, _path| uuids_clone.contains(uuid))
             .times(uuids_num)
-            .returning(move |_, _| Box::pin(ok(())));
+            .returning(move |_, _| {
+                Box::pin(ok(()))
+            });
+
+        let dir = tempfile::tempdir_in(".").unwrap();
+        let handle = Arc::new(index_handle);
+        let update_handle = UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
 
         let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(

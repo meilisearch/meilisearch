@@ -68,6 +68,7 @@ pub struct IndexSettings {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexStats {
     #[serde(skip)]
     pub size: u64,
@@ -83,6 +84,7 @@ pub struct IndexController {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub database_size: u64,
     pub last_update: Option<DateTime<Utc>>,

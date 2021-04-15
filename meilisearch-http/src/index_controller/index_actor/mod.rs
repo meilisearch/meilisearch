@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::sync::Arc;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
@@ -68,6 +70,70 @@ pub enum IndexError {
     HeedError(#[from] heed::Error),
     #[error("Existing primary key")]
     ExistingPrimaryKey,
+}
+
+#[cfg(test)]
+#[async_trait::async_trait]
+impl IndexActorHandle for Arc<MockIndexActorHandle> {
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
+        self.as_ref().create_index(uuid, primary_key).await
+    }
+
+    async fn update(
+        &self,
+        uuid: Uuid,
+        meta: Processing<UpdateMeta>,
+        data: std::fs::File,
+    ) -> anyhow::Result<UpdateResult> {
+        self.as_ref().update(uuid, meta, data).await
+    }
+
+    async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
+        self.as_ref().search(uuid, query).await
+    }
+
+    async fn settings(&self, uuid: Uuid) -> Result<Settings> {
+        self.as_ref().settings(uuid).await
+    }
+
+    async fn documents(
+        &self,
+        uuid: Uuid,
+        offset: usize,
+        limit: usize,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> Result<Vec<Document>> {
+        self.as_ref().documents(uuid, offset, limit, attributes_to_retrieve).await
+    }
+
+    async fn document(
+        &self,
+        uuid: Uuid,
+        doc_id: String,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> Result<Document> {
+        self.as_ref().document(uuid, doc_id, attributes_to_retrieve).await
+    }
+
+    async fn delete(&self, uuid: Uuid) -> Result<()> {
+        self.as_ref().delete(uuid).await
+    }
+
+    async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
+        self.as_ref().get_index_meta(uuid).await
+    }
+
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
+        self.as_ref().update_index(uuid, index_settings).await
+    }
+
+    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+        self.as_ref().snapshot(uuid, path).await
+    }
+
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+        self.as_ref().get_index_stats(uuid).await
+    }
 }
 
 #[async_trait::async_trait]
