@@ -203,7 +203,6 @@
                 apiKeyContainer.appendChild(columnNode);
 
                 apiKey.addEventListener('input', function(e) {
-                    console.log("addEventListener");
                     localStorage.setItem('apiKey', apiKey.value);
                     refreshIndexList();
                 }, false);
