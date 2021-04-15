@@ -483,5 +483,4 @@ mod test {
 
         assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
     }
-
 }

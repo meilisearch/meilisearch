@@ -70,6 +70,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     faceted_fields: Setting<HashMap<String, String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
+    distinct_attribute: Setting<String>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -94,6 +95,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             faceted_fields: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
+            distinct_attribute: Setting::NotSet,
             update_id,
         }
     }
@@ -140,6 +142,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         } else {
             Setting::Set(stop_words)
         }
+    }
+
+    pub fn set_distinct_attribute(&mut self, distinct_attribute: String) {
+        self.distinct_attribute = Setting::Set(distinct_attribute);
+    }
+
+    pub fn reset_distinct_attribute(&mut self) {
+        self.distinct_attribute = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
@@ -215,6 +225,23 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => { self.index.delete_displayed_fields(self.wtxn)?; }
+            Setting::NotSet => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn update_distinct_attribute(&mut self) -> anyhow::Result<bool> {
+        match self.distinct_attribute {
+            Setting::Set(ref attr) => {
+                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+                fields_ids_map
+                    .insert(attr)
+                    .context("field id limit exceeded")?;
+
+                self.index.put_distinct_attribute(self.wtxn, &attr)?;
+                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+            }
+            Setting::Reset => { self.index.delete_distinct_attribute(self.wtxn)?; },
             Setting::NotSet => return Ok(false),
         }
         Ok(true)
@@ -328,6 +355,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_displayed()?;
         let stop_words_updated = self.update_stop_words()?;
         let facets_updated = self.update_facets()?;
+        self.update_distinct_attribute()?;
         // update_criteria MUST be called after update_facets, since criterion fields must be set
         // as facets.
         self.update_criteria()?;

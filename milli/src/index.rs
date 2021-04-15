@@ -19,6 +19,7 @@ use crate::{
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
+pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
 pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
@@ -342,6 +343,20 @@ impl Index {
         }
     }
 
+    /* Distinct attribute */
+
+    pub(crate) fn put_distinct_attribute(&self, wtxn: &mut RwTxn, distinct_attribute: &str) -> heed::Result<()> {
+        self.main.put::<_, Str, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY, distinct_attribute)
+    }
+
+    pub fn distinct_attribute<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
+        self.main.get::<_, Str, Str>(rtxn, DISTINCT_ATTRIBUTE_KEY)
+    }
+
+    pub(crate) fn delete_distinct_attribute(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY)
+    }
+
     /* criteria */
 
     pub fn put_criteria(&self, wtxn: &mut RwTxn, criteria: &[Criterion]) -> heed::Result<()> {
@@ -463,12 +478,43 @@ impl Index {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    use std::ops::Deref;
+
     use heed::EnvOpenOptions;
     use maplit::hashmap;
+    use tempfile::TempDir;
 
     use crate::Index;
     use crate::update::{IndexDocuments, UpdateFormat};
+
+    pub(crate) struct TempIndex {
+        inner: Index,
+        _tempdir: TempDir,
+    }
+
+    impl Deref for TempIndex {
+        type Target = Index;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl TempIndex {
+        /// Creates a temporary index, with a default `4096 * 100` size. This should be enough for
+        /// most tests.
+        pub fn new() -> Self {
+            let mut options = EnvOpenOptions::new();
+            options.map_size(100 * 4096);
+            let _tempdir = TempDir::new_in(".").unwrap();
+            let inner = Index::new(options, _tempdir.path()).unwrap();
+            Self {
+                inner,
+                _tempdir
+            }
+        }
+    }
 
     #[test]
     fn initial_fields_distribution() {

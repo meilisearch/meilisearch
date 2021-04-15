@@ -5,8 +5,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
-use crate::search::WordDerivationsCache;
-use super::{resolve_query_tree, Criterion, CriterionResult, Context};
+use super::{resolve_query_tree, Criterion, CriterionResult, Context, WordDerivationsCache};
 
 pub struct Words<'t> {
     ctx: &'t dyn Context,
