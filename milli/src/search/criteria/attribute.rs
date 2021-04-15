@@ -15,6 +15,7 @@ use super::{Criterion, CriterionResult, Context, resolve_query_tree};
 /// we want to find a multiplier that allow us to divide by any number between 1 and 10.
 /// We Choosed the LCM of all numbers between 1 and 10 as the multiplier (https://en.wikipedia.org/wiki/Least_common_multiple).
 const LCM_10_FIRST_NUMBERS: u32 = 2520;
+
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
     query_tree: Option<Operation>,
@@ -134,6 +135,9 @@ impl<'t> Criterion for Attribute<'t> {
     }
 }
 
+/// WordLevelIterator is an pseudo-Iterator over intervals of word-position for one word,
+/// it will begin at the first non-empty interval and will return every interval without
+/// jumping over empty intervals.
 struct WordLevelIterator<'t, 'q> {
     inner: Box<dyn Iterator<Item =heed::Result<((&'t str, TreeLevel, u32, u32), RoaringBitmap)>> + 't>,
     level: TreeLevel,
@@ -197,12 +201,14 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
     }
 }
 
+/// QueryLevelIterator is an pseudo-Iterator for a Query,
+/// It contains WordLevelIterators and is chainned with other QueryLevelIterator.
 struct QueryLevelIterator<'t, 'q> {
-    previous: Option<Box<QueryLevelIterator<'t, 'q>>>,
+    parent: Option<Box<QueryLevelIterator<'t, 'q>>>,
     inner: Vec<WordLevelIterator<'t, 'q>>,
     level: TreeLevel,
     accumulator: Vec<Option<(u32, u32, RoaringBitmap)>>,
-    previous_accumulator: Vec<Option<(u32, u32, RoaringBitmap)>>,
+    parent_accumulator: Vec<Option<(u32, u32, RoaringBitmap)>>,
 }
 
 impl<'t, 'q> QueryLevelIterator<'t, 'q> {
@@ -239,26 +245,27 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
         let highest = inner.iter().max_by_key(|wli| wli.level).map(|wli| wli.level.clone());
         match highest {
             Some(level) => Ok(Some(Self {
-                previous: None,
+                parent: None,
                 inner,
                 level,
                 accumulator: vec![],
-                previous_accumulator: vec![],
+                parent_accumulator: vec![],
             })),
             None => Ok(None),
         }
     }
 
-    fn previous(&mut self, previous: QueryLevelIterator<'t, 'q>) -> &Self {
-        self.previous = Some(Box::new(previous));
+    fn parent(&mut self, parent: QueryLevelIterator<'t, 'q>) -> &Self {
+        self.parent = Some(Box::new(parent));
         self
     }
 
+    /// create a new QueryLevelIterator with a lower level than the current one.
     fn dig(&self, ctx: &'t dyn Context<'t>) -> heed::Result<Self> {
-        let (level, previous) = match &self.previous {
-            Some(previous) => {
-                let previous = previous.dig(ctx)?;
-                (previous.level.min(self.level), Some(Box::new(previous)))
+        let (level, parent) = match &self.parent {
+            Some(parent) => {
+                let parent = parent.dig(ctx)?;
+                (parent.level.min(self.level), Some(Box::new(parent)))
             },
             None => (self.level.saturating_sub(1), None),
         };
@@ -268,7 +275,7 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
             inner.push(word_level_iterator.dig(ctx, &level)?);
         }
 
-        Ok(Self {previous, inner, level, accumulator: vec![], previous_accumulator: vec![]})
+        Ok(Self {parent, inner, level, accumulator: vec![], parent_accumulator: vec![]})
     }
 
 
@@ -295,29 +302,31 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
         Ok(accumulated)
     }
 
+    /// return the next meta-interval created from inner WordLevelIterators,
+    /// and from eventual chainned QueryLevelIterator.
     fn next(&mut self) -> heed::Result<(TreeLevel, Option<(u32, u32, RoaringBitmap)>)> {
-        let previous_result = match self.previous.as_mut() {
-            Some(previous) => {
-                Some(previous.next()?)
+        let parent_result = match self.parent.as_mut() {
+            Some(parent) => {
+                Some(parent.next()?)
             },
             None => None,
         };
 
-        match previous_result {
-            Some((previous_level, previous_next)) => {
-                let inner_next = self.inner_next(previous_level)?;
+        match parent_result {
+            Some((parent_level, parent_next)) => {
+                let inner_next = self.inner_next(parent_level)?;
                 self.accumulator.push(inner_next);
-                self.previous_accumulator.push(previous_next);
+                self.parent_accumulator.push(parent_next);
                 // TODO @many clean firsts intervals of both accumulators when both RoaringBitmap are empty,
                 // WARNING the cleaned intervals count needs to be kept to skip at the end
                 let mut merged_interval = None;
-                for current in self.accumulator.iter().rev().zip(self.previous_accumulator.iter()) {
+                for current in self.accumulator.iter().rev().zip(self.parent_accumulator.iter()) {
                     if let (Some((left_a, right_a, a)), Some((left_b, right_b, b))) = current {
                         let (_, _, merged_docids) = merged_interval.get_or_insert_with(|| (left_a + left_b, right_a + right_b, RoaringBitmap::new()));
                         merged_docids.union_with(&(a & b));
                     }
                 }
-                Ok((previous_level, merged_interval))
+                Ok((parent_level, merged_interval))
             },
             None => {
                 let level = self.level.clone();
@@ -412,7 +421,7 @@ fn initialize_query_level_iterators<'t, 'q>(
             .rev()
             .fold(None, |fold: Option<QueryLevelIterator>, mut qli| match fold {
                 Some(fold) => {
-                    qli.previous(fold);
+                    qli.parent(fold);
                     Some(qli)
                 },
                 None => Some(qli),
