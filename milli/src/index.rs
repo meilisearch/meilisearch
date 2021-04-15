@@ -478,12 +478,43 @@ impl Index {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    use std::ops::Deref;
+
     use heed::EnvOpenOptions;
     use maplit::hashmap;
+    use tempfile::TempDir;
 
     use crate::Index;
     use crate::update::{IndexDocuments, UpdateFormat};
+
+    pub(crate) struct TempIndex {
+        inner: Index,
+        _tempdir: TempDir,
+    }
+
+    impl Deref for TempIndex {
+        type Target = Index;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl TempIndex {
+        /// Creates a temporary index, with a default `4096 * 100` size. This should be enough for
+        /// most tests.
+        pub fn new() -> Self {
+            let mut options = EnvOpenOptions::new();
+            options.map_size(100 * 4096);
+            let _tempdir = TempDir::new_in(".").unwrap();
+            let inner = Index::new(options, _tempdir.path()).unwrap();
+            Self {
+                inner,
+                _tempdir
+            }
+        }
+    }
 
     #[test]
     fn initial_fields_distribution() {

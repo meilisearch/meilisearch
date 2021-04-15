@@ -6,7 +6,9 @@ use serde_json::Value;
 use super::{Distinct, DocIter};
 use crate::{DocumentId, FieldId, Index};
 
-/// A distinct implementer that is backed by an `HashMap`. Each time a document is seen, the value
+/// A distinct implementer that is backed by an `HashMap`.
+///
+/// Each time a document is seen, the value
 /// for its distinct field is added to the map. If the map already contains an entry for this
 /// value, then the document is filtered out, and is added to the excluded set.
 pub struct MapDistinct<'a> {
@@ -38,7 +40,7 @@ pub struct MapDistinctIter<'a, 'b> {
 
 impl<'a, 'b> MapDistinctIter<'a, 'b> {
     /// Performs the next iteration of the mafacetp distinct. This is a convenience method that is
-    /// called by the Iterator::next implementation that tranposes the result. It makes error
+    /// called by the Iterator::next implementation that transposes the result. It makes error
     /// handling easier.
     fn next_inner(&mut self) -> anyhow::Result<Option<DocumentId>> {
         let map = &mut self.map;
@@ -104,4 +106,33 @@ impl<'a, 'b> Distinct<'b> for MapDistinct<'a> {
             excluded,
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use super::*;
+    use super::super::test::{generate_index, validate_distinct_candidates};
+
+    macro_rules! test_map_distinct {
+        ($name:ident, $distinct:literal) => {
+            #[test]
+            fn $name() {
+                let (index, fid, candidates) = generate_index($distinct, HashMap::new());
+                let txn = index.read_txn().unwrap();
+                let mut map_distinct = MapDistinct::new(fid, &index, &txn);
+                let excluded = RoaringBitmap::new();
+                let mut iter = map_distinct.distinct(candidates.clone(), excluded);
+                let count = validate_distinct_candidates(iter.by_ref(), fid, &index);
+                let excluded = iter.into_excluded();
+                assert_eq!(count as u64 + excluded.len(), candidates.len());
+            }
+        };
+    }
+
+    test_map_distinct!(test_string, "txt");
+    test_map_distinct!(test_strings, "txts");
+    test_map_distinct!(test_int, "cat-int");
+    test_map_distinct!(test_ints, "cat-ints");
 }

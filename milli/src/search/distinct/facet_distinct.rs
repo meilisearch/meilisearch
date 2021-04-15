@@ -6,7 +6,9 @@ use crate::heed_codec::facet::*;
 use crate::{facet::FacetType, DocumentId, FieldId, Index};
 use super::{Distinct, DocIter};
 
-/// A distinct implementer that is backed by facets. On each iteration, the facet values for the
+/// A distinct implementer that is backed by facets.
+///
+/// On each iteration, the facet values for the
 /// distinct attribute of the first document are retrieved. The document ids for these facet values
 /// are then retrieved and taken out of the the candidate and added to the excluded set. We take
 /// care to keep the document we are currently on, and remove it from the excluded list. The next
@@ -121,7 +123,7 @@ impl<'a> FacetDistinctIter<'a> {
     }
 
     /// Performs the next iteration of the facet distinct. This is a convenience method that is
-    /// called by the Iterator::next implementation that tranposes the result. It makes error
+    /// called by the Iterator::next implementation that transposes the result. It makes error
     /// handling easier.
     fn next_inner(&mut self) -> anyhow::Result<Option<DocumentId>> {
         // The first step is to remove all the excluded documents from our candidates
@@ -200,4 +202,37 @@ impl<'a> Distinct<'_> for FacetDistinct<'a> {
             txn: self.txn,
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use super::*;
+    use super::super::test::{generate_index, validate_distinct_candidates};
+    use crate::facet::FacetType;
+
+    macro_rules! test_facet_distinct {
+        ($name:ident, $distinct:literal, $facet_type:expr) => {
+            #[test]
+            fn $name() {
+                use std::iter::FromIterator;
+
+                let facets = HashMap::from_iter(Some(($distinct.to_string(), $facet_type.to_string())));
+                let (index, fid, candidates) = generate_index($distinct, facets);
+                let txn = index.read_txn().unwrap();
+                let mut map_distinct = FacetDistinct::new(fid, &index, &txn, $facet_type);
+                let excluded = RoaringBitmap::new();
+                let mut iter = map_distinct.distinct(candidates.clone(), excluded);
+                let count = validate_distinct_candidates(iter.by_ref(), fid, &index);
+                let excluded = iter.into_excluded();
+                assert_eq!(count as u64 + excluded.len(), candidates.len());
+            }
+        };
+    }
+
+    test_facet_distinct!(test_string, "txt", FacetType::String);
+    test_facet_distinct!(test_strings, "txts", FacetType::String);
+    test_facet_distinct!(test_int, "cat-int", FacetType::Integer);
+    test_facet_distinct!(test_ints, "cat-ints", FacetType::Integer);
 }
