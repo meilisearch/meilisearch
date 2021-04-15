@@ -8,7 +8,6 @@ pub mod key;
 pub mod search;
 pub mod settings;
 pub mod stats;
-pub mod stop_words;
 pub mod synonym;
 //pub mod dump;
 
