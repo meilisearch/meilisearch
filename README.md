@@ -16,7 +16,7 @@ You can specify the number of threads to use to index documents and many other s
 
 ```bash
 cd http-ui
-cargo run --release -- serve --db my-database.mdb -vvv --indexing-jobs 8
+cargo run --release -- --db my-database.mdb -vvv --indexing-jobs 8
 ```
 
 ### Index your documents
