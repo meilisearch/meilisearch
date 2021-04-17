@@ -184,6 +184,23 @@ async fn test_get_all_documents_attributes_to_retrieve() {
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
+            attributes_to_retrieve: Some(vec!["wrong"]),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 20);
+    assert_eq!(
+        response.as_array().unwrap()[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .count(),
+        0
+    );
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
             attributes_to_retrieve: Some(vec!["name", "tags"]),
             ..Default::default()
         })
@@ -197,6 +214,40 @@ async fn test_get_all_documents_attributes_to_retrieve() {
             .keys()
             .count(),
         2
+    );
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            attributes_to_retrieve: Some(vec!["*"]),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 20);
+    assert_eq!(
+        response.as_array().unwrap()[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .count(),
+        16
+    );
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            attributes_to_retrieve: Some(vec!["*", "wrong"]),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 20);
+    assert_eq!(
+        response.as_array().unwrap()[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .count(),
+        16
     );
 }
 
