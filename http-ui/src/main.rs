@@ -260,6 +260,9 @@ struct Settings {
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     stop_words: Setting<BTreeSet<String>>,
+
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    synonyms: Setting<HashMap<String, Vec<String>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +431,13 @@ async fn main() -> anyhow::Result<()> {
                     match settings.stop_words {
                         Setting::Set(stop_words) => builder.set_stop_words(stop_words),
                         Setting::Reset => builder.reset_stop_words(),
+                        Setting::NotSet => ()
+                    }
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    match settings.synonyms {
+                        Setting::Set(synonyms) => builder.set_synonyms(synonyms),
+                        Setting::Reset => builder.reset_synonyms(),
                         Setting::NotSet => ()
                     }
 
@@ -1011,10 +1021,11 @@ mod tests {
             faceted_attributes: Setting::Set(hashmap! { "age".into() => "integer".into() }),
             criteria: Setting::Set(vec!["asc(age)".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
+            synonyms: Setting::Set(hashmap! { "alex".to_string() => vec!["alexey".to_string()] })
         };
 
         assert_tokens(&settings, &[
-            Token::Struct { name: "Settings", len: 5 },
+            Token::Struct { name: "Settings", len: 6 },
             Token::Str("displayedAttributes"),
             Token::Some,
             Token::Seq { len: Some(1) },
@@ -1041,6 +1052,14 @@ mod tests {
             Token::Seq { len: Some(1) },
             Token::Str("and"),
             Token::SeqEnd,
+            Token::Str("synonyms"),
+            Token::Some,
+            Token::Map { len: Some(1) },
+            Token::Str("alex"),
+            Token::Seq {len: Some(1) },
+            Token::Str("alexey"),
+            Token::SeqEnd,
+            Token::MapEnd,
             Token::StructEnd,
         ]);
     }
@@ -1053,10 +1072,11 @@ mod tests {
             faceted_attributes: Setting::Reset,
             criteria: Setting::Reset,
             stop_words: Setting::Reset,
+            synonyms: Setting::Reset,
         };
 
         assert_tokens(&settings, &[
-            Token::Struct { name: "Settings", len: 5 },
+            Token::Struct { name: "Settings", len: 6 },
             Token::Str("displayedAttributes"),
             Token::None,
             Token::Str("searchableAttributes"),
@@ -1066,6 +1086,8 @@ mod tests {
             Token::Str("criteria"),
             Token::None,
             Token::Str("stopWords"),
+            Token::None,
+            Token::Str("synonyms"),
             Token::None,
             Token::StructEnd,
         ]);
@@ -1079,6 +1101,7 @@ mod tests {
             faceted_attributes: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
+            synonyms: Setting::NotSet,
         };
 
         assert_tokens(&settings, &[

@@ -177,12 +177,12 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.index.word_docids.get(self.rtxn, word)
     }
 
-    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
-        self.index.word_documents_count(self.rtxn, word)
+    fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
+        self.index.words_synonyms(self.rtxn, words)
     }
 
-    fn synonyms<S: AsRef<str>>(&self, _words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
-        Ok(None)
+    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
+        self.index.word_documents_count(self.rtxn, word)
     }
 }
 
@@ -588,7 +588,6 @@ mod test {
     }
 
     impl Default for TestContext {
-
         fn default() -> TestContext {
             let mut rng = StdRng::seed_from_u64(102);
             let rng = &mut rng;
