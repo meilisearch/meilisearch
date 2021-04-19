@@ -108,9 +108,18 @@ async fn get_all_documents(
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     let attributes_to_retrieve = params
-        .attributes_to_retrieve
-        .as_ref()
-        .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+    .attributes_to_retrieve
+    .as_ref()
+    .and_then(|attrs| {
+        let mut names = Vec::new();
+        for name in attrs.split(',').map(String::from) {
+            if name == "*" {
+                return None
+            }
+            names.push(name);
+        }
+        Some(names)
+    });
 
     match data
         .retrieve_documents(
