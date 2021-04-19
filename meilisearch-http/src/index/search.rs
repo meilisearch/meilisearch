@@ -196,7 +196,7 @@ fn compute_formatted<A: AsRef<[u8]>>(
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
     highlighter: &Highlighter<A>,
-    matching_words: &MatchingWords,
+    matching_words: &impl Matcher,
     all_formatted: &[FieldId],
     to_highlight_ids: &HashSet<FieldId>,
 ) -> anyhow::Result<Document> {
@@ -222,6 +222,24 @@ fn compute_formatted<A: AsRef<[u8]>>(
     }
 
     Ok(document)
+}
+
+/// trait to allow unit testing of `compute_formated`
+trait Matcher {
+    fn matches(&self, w: &str) -> bool;
+}
+
+#[cfg(test)]
+impl Matcher for HashSet<String> {
+    fn matches(&self, w: &str) -> bool {
+        self.contains(w)
+    }
+}
+
+impl Matcher for MatchingWords {
+    fn matches(&self, w: &str) -> bool {
+        self.matches(w)
+    }
 }
 
 fn parse_facets_array(
@@ -253,7 +271,7 @@ fn parse_facets_array(
     FacetCondition::from_array(txn, &index.0, ands)
 }
 
-pub struct Highlighter<'a, A> {
+struct Highlighter<'a, A> {
     analyzer: Analyzer<'a, A>,
     marks: (String, String),
 }
@@ -268,7 +286,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         Self { analyzer, marks }
     }
 
-    pub fn highlight_value(&self, value: Value, words_to_highlight: &MatchingWords) -> Value {
+    fn highlight_value(&self, value: Value, words_to_highlight: &impl Matcher) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
@@ -318,5 +336,118 @@ fn parse_facets(
         //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
         Value::Array(arr) => parse_facets_array(txn, index, arr),
         v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::iter::FromIterator;
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn no_formatted() {
+        let stop_words = fst::Set::default();
+        let highlighter = Highlighter::new(
+            &stop_words,
+            (String::from("<mark>"), String::from("</mark>")),
+        );
+
+        let mut fields = FieldsIdsMap::new();
+        let id = fields.insert("test").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let all_formatted = Vec::new();
+        let to_highlight_ids = HashSet::new();
+
+        let matching_words = MatchingWords::default();
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &highlighter,
+            &matching_words,
+            &all_formatted,
+            &to_highlight_ids
+        ).unwrap();
+
+        assert!(value.is_empty());
+    }
+
+    #[test]
+    fn formatted_no_highlight() {
+        let stop_words = fst::Set::default();
+        let highlighter = Highlighter::new(
+            &stop_words,
+            (String::from("<mark>"), String::from("</mark>")),
+        );
+
+        let mut fields = FieldsIdsMap::new();
+        let id = fields.insert("test").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let all_formatted = vec![id];
+        let to_highlight_ids = HashSet::new();
+
+        let matching_words = MatchingWords::default();
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &highlighter,
+            &matching_words,
+            &all_formatted,
+            &to_highlight_ids
+        ).unwrap();
+
+        assert_eq!(Value::Object(value), json!({"test": "hello"}));
+    }
+
+    #[test]
+    fn formatted_with_highlight() {
+        let stop_words = fst::Set::default();
+        let highlighter = Highlighter::new(
+            &stop_words,
+            (String::from("<mark>"), String::from("</mark>")),
+        );
+
+        let mut fields = FieldsIdsMap::new();
+        let id = fields.insert("test").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let all_formatted = vec![id];
+        let to_highlight_ids = HashSet::from_iter(Some(id));
+
+        let matching_words = HashSet::from_iter(Some(String::from("hello")));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &highlighter,
+            &matching_words,
+            &all_formatted,
+            &to_highlight_ids
+        ).unwrap();
+
+        assert_eq!(Value::Object(value), json!({"test": "<mark>hello</mark>"}));
     }
 }
