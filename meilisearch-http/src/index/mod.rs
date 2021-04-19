@@ -83,7 +83,7 @@ impl Index {
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
         let fields_to_display =
-            self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
+            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -108,7 +108,7 @@ impl Index {
         let fields_ids_map = self.fields_ids_map(&txn)?;
 
         let fields_to_display =
-            self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
+            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -134,7 +134,7 @@ impl Index {
     fn fields_to_display<S: AsRef<str>>(
         &self,
         txn: &heed::RoTxn,
-        attributes_to_retrieve: Option<Vec<S>>,
+        attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> anyhow::Result<Vec<u8>> {
         let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)? {
