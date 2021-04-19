@@ -37,7 +37,6 @@ pub struct UpdateStoreInfo {
     pub size: u64,
     /// Uuid of the currently processing update if it exists
     pub processing: Option<Uuid>,
-
 }
 
 #[async_trait::async_trait]

@@ -130,7 +130,7 @@ where
 
         // Init update loop to perform any pending updates at launch.
         // Since we just launched the update store, and we still own the receiving end of the
-        // channel, this call is guarenteed to succeed.
+        // channel, this call is guaranteed to succeed.
         notification_sender.try_send(()).expect("Failed to init update store");
 
         let update_store = Arc::new(UpdateStore {
@@ -339,20 +339,19 @@ where
         let pending = self
             .pending_meta
             .prefix_iter(&rtxn, index_uuid.as_bytes())?
-            .filter_map(Result::ok)
-            .filter_map(|(_, p)| {
+            .filter_map(|entry| {
+                let (_, p) = entry.ok()?;
                 if let Some((uuid, ref processing)) = *processing {
                     // Filter out the currently processing update if it is from this index.
                     if uuid == index_uuid && processing.id() == p.id() {
                         None
                     } else {
-                        Some(p)
+                        Some(UpdateStatus::from(p))
                     }
                 } else {
-                    Some(p)
+                    Some(UpdateStatus::from(p))
                 }
-            })
-            .map(UpdateStatus::from);
+            });
 
         updates.extend(pending);
 

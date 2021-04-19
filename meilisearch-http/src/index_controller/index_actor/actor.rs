@@ -159,22 +159,16 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         meta: Processing<UpdateMeta>,
         data: File,
     ) -> Result<UpdateResult> {
-        let get_result = || async {
-            debug!("Processing update {}", meta.id());
-            let update_handler = self.update_handler.clone();
-            let index = match self.store.get(uuid).await? {
-                Some(index) => index,
-                None => self.store.create(uuid, None).await?,
-            };
-
-            spawn_blocking(move || update_handler.handle_update(meta, data, index))
-                .await
-                .map_err(|e| IndexError::Error(e.into()))
+        debug!("Processing update {}", meta.id());
+        let update_handler = self.update_handler.clone();
+        let index = match self.store.get(uuid).await? {
+            Some(index) => index,
+            None => self.store.create(uuid, None).await?,
         };
 
-        let result = get_result().await;
-
-        result
+        spawn_blocking(move || update_handler.handle_update(meta, data, index))
+            .await
+            .map_err(|e| IndexError::Error(e.into()))
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings> {

@@ -112,7 +112,6 @@ impl Data {
         Ok(self.index_controller.get_all_stats().await?)
     }
 
-
     #[inline]
     pub fn http_payload_size_limit(&self) -> usize {
         self.options.http_payload_size_limit.get_bytes() as usize
