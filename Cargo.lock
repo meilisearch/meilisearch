@@ -1847,7 +1847,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
- "meilisearch-tokenizer 0.2.1",
+ "meilisearch-tokenizer",
  "memmap",
  "milli",
  "mime",
@@ -1876,22 +1876,6 @@ dependencies = [
  "uuid",
  "vergen",
  "walkdir",
-]
-
-[[package]]
-name = "meilisearch-tokenizer"
-version = "0.1.1"
-source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.0#833c48b2ee39071f8b4f51abd15122afdb3c8c06"
-dependencies = [
- "character_converter",
- "cow-utils",
- "deunicode",
- "fst",
- "jieba-rs",
- "once_cell",
- "slice-group-by",
- "unicode-segmentation",
- "whatlang",
 ]
 
 [[package]]
@@ -1937,8 +1921,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.1.0#2bcdd8844c4ec9f6f8a34617ea0e4321fa633c0c"
+version = "0.1.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.1.1#f5ec14c54cc3ab76ca581eca9b6e0870f09fd63f"
 dependencies = [
  "anyhow",
  "bstr",
@@ -1958,7 +1942,7 @@ dependencies = [
  "linked-hash-map",
  "log",
  "logging_timer",
- "meilisearch-tokenizer 0.1.1",
+ "meilisearch-tokenizer",
  "memmap",
  "num-traits",
  "obkv",
