@@ -35,10 +35,18 @@ pub struct SearchQuery {
     pub facet_distributions: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchHit {
+    #[serde(flatten)]
+    pub document: Map<String, Value>,
+    #[serde(rename = "_formatted", skip_serializing_if = "Map::is_empty")]
+    pub formatted: Map<String, Value>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-    pub hits: Vec<Map<String, Value>>,
+    pub hits: Vec<SearchHit>,
     pub nb_hits: u64,
     pub exhaustive_nb_hits: bool,
     pub query: String,
@@ -90,7 +98,11 @@ impl Index {
             if let Some(ref attributes_to_highlight) = query.attributes_to_highlight {
                 highlighter.highlight_record(&mut object, &matching_words, attributes_to_highlight);
             }
-            documents.push(object);
+            let hit = SearchHit {
+                document: object,
+                formatted: Map::new(),
+            };
+            documents.push(hit);
         }
 
         let nb_hits = candidates.len();
