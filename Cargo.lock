@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "helpers"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "byte-unit",
@@ -889,7 +889,7 @@ dependencies = [
 
 [[package]]
 name = "http-ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "askama",
@@ -991,7 +991,7 @@ dependencies = [
 
 [[package]]
 name = "infos"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "byte-unit",
@@ -1248,7 +1248,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bstr",
@@ -2011,7 +2011,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "byte-unit",
