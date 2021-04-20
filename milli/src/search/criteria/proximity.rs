@@ -10,6 +10,8 @@ use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::{build_dfa, WordDerivationsCache};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
 
+type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
+
 pub struct Proximity<'t> {
     ctx: &'t dyn Context,
     query_tree: Option<(usize, Operation)>,
@@ -17,7 +19,7 @@ pub struct Proximity<'t> {
     candidates: Candidates,
     bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
-    candidates_cache: HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+    candidates_cache: Cache,
     plane_sweep_cache: Option<btree_map::IntoIter<u8, RoaringBitmap>>,
 }
 
@@ -35,7 +37,7 @@ impl<'t> Proximity<'t> {
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
-            candidates_cache: HashMap::new(),
+            candidates_cache: Cache::new(),
             plane_sweep_cache: None,
         }
     }
@@ -48,7 +50,7 @@ impl<'t> Proximity<'t> {
             candidates: Candidates::default(),
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
-            candidates_cache: HashMap::new(),
+            candidates_cache: Cache::new(),
             plane_sweep_cache: None,
         }
     }
@@ -204,7 +206,7 @@ fn resolve_candidates<'t>(
     ctx: &'t dyn Context,
     query_tree: &Operation,
     proximity: u8,
-    cache: &mut HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+    cache: &mut Cache,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<RoaringBitmap>
 {
@@ -212,7 +214,7 @@ fn resolve_candidates<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
         proximity: u8,
-        cache: &mut HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+        cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
     {
@@ -249,7 +251,7 @@ fn resolve_candidates<'t>(
         left: &Operation,
         right: &Operation,
         proximity: u8,
-        cache: &mut HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+        cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
     {
@@ -303,7 +305,7 @@ fn resolve_candidates<'t>(
         ctx: &'t dyn Context,
         branches: &[Operation],
         proximity: u8,
-        cache: &mut HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+        cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
     {
@@ -332,7 +334,7 @@ fn resolve_candidates<'t>(
                 Ok(output)
             },
             Some((head1, None)) => resolve_operation(ctx, head1, proximity, cache, wdcache),
-            None => return Ok(Default::default()),
+            None => Ok(Default::default()),
         }
     }
 
@@ -505,10 +507,8 @@ fn resolve_plane_sweep_candidates(
                             let iter = word_derivations(word, true, 0, &words_positions)
                                 .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
                             result.extend(iter);
-                        } else {
-                            if let Some(positions) = words_positions.get(word) {
+                        } else if let Some(positions) = words_positions.get(word) {
                                 result.extend(positions.iter().map(|p| (p, 0, p)));
-                            }
                         }
                     },
                     QueryKind::Tolerant { typo, word } => {
