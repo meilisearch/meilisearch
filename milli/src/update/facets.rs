@@ -7,12 +7,11 @@ use grenad::{CompressionType, Reader, Writer, FileFuse};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
 use log::debug;
-use num_traits::{Bounded, Zero};
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
+use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::Index;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
@@ -65,58 +64,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         for (field_id, facet_type) in faceted_fields {
             let (content, documents_ids) = match facet_type {
-                FacetType::Integer => {
-                    clear_field_levels::<i64, FacetLevelValueI64Codec>(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
-
-                    let documents_ids = compute_faceted_documents_ids(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
-
-                    let content = compute_facet_levels::<i64, FacetLevelValueI64Codec>(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        self.chunk_compression_type,
-                        self.chunk_compression_level,
-                        self.chunk_fusing_shrink_size,
-                        self.level_group_size,
-                        self.min_level_size,
-                        field_id,
-                    )?;
-
-                    (Some(content), documents_ids)
-                },
-                FacetType::Float => {
-                    clear_field_levels::<f64, FacetLevelValueF64Codec>(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
-
-                    let documents_ids = compute_faceted_documents_ids(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
-
-                    let content = compute_facet_levels::<f64, FacetLevelValueF64Codec>(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        self.chunk_compression_type,
-                        self.chunk_compression_level,
-                        self.chunk_fusing_shrink_size,
-                        self.level_group_size,
-                        self.min_level_size,
-                        field_id,
-                    )?;
-
-                    (Some(content), documents_ids)
-                },
                 FacetType::String => {
                     let documents_ids = compute_faceted_documents_ids(
                         self.wtxn,
@@ -125,6 +72,32 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                     )?;
 
                     (None, documents_ids)
+                },
+                FacetType::Number => {
+                    clear_field_number_levels(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>(),
+                        field_id,
+                    )?;
+
+                    let documents_ids = compute_faceted_documents_ids(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
+
+                    let content = compute_facet_number_levels(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>(),
+                        self.chunk_compression_type,
+                        self.chunk_compression_level,
+                        self.chunk_fusing_shrink_size,
+                        self.level_group_size,
+                        self.min_level_size,
+                        field_id,
+                    )?;
+
+                    (Some(content), documents_ids)
                 },
             };
 
@@ -145,25 +118,21 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
     }
 }
 
-fn clear_field_levels<'t, T: 't, KC>(
+fn clear_field_number_levels<'t, >(
     wtxn: &'t mut heed::RwTxn,
-    db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
+    db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     field_id: u8,
 ) -> heed::Result<()>
-where
-    T: Copy + Bounded,
-    KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
-    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
-    let left = (field_id, 1, T::min_value(), T::min_value());
-    let right = (field_id, u8::MAX, T::max_value(), T::max_value());
+    let left = (field_id, 1, f64::MIN, f64::MIN);
+    let right = (field_id, u8::MAX, f64::MAX, f64::MAX);
     let range = left..=right;
-    db.remap_key_type::<KC>().delete_range(wtxn, &range).map(drop)
+    db.delete_range(wtxn, &range).map(drop)
 }
 
-fn compute_facet_levels<'t, T: 't, KC>(
+fn compute_facet_number_levels<'t>(
     rtxn: &'t heed::RoTxn,
-    db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
+    db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
     shrink_size: Option<u64>,
@@ -171,12 +140,10 @@ fn compute_facet_levels<'t, T: 't, KC>(
     min_level_size: NonZeroUsize,
     field_id: u8,
 ) -> anyhow::Result<Reader<FileFuse>>
-where
-    T: Copy + PartialEq + PartialOrd + Bounded + Zero,
-    KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
-    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
-    let first_level_size = db.prefix_iter(rtxn, &[field_id])?
+    let first_level_size = db
+        .remap_key_type::<ByteSlice>()
+        .prefix_iter(rtxn, &[field_id])?
         .remap_types::<DecodeIgnore, DecodeIgnore>()
         .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
@@ -187,8 +154,8 @@ where
     })?;
 
     let level_0_range = {
-        let left = (field_id, 0, T::min_value(), T::min_value());
-        let right = (field_id, 0, T::max_value(), T::max_value());
+        let left = (field_id, 0, f64::MIN, f64::MIN);
+        let right = (field_id, 0, f64::MAX, f64::MAX);
         left..=right
     };
 
@@ -199,11 +166,10 @@ where
         .take_while(|(_, s)| first_level_size / *s >= min_level_size.get());
 
     for (level, group_size) in group_size_iter {
-        let mut left = T::zero();
-        let mut right = T::zero();
+        let mut left = 0.0;
+        let mut right = 0.0;
         let mut group_docids = RoaringBitmap::new();
 
-        let db = db.remap_key_type::<KC>();
         for (i, result) in db.range(rtxn, &level_0_range)?.enumerate() {
             let ((_field_id, _level, value, _right), docids) = result?;
 
@@ -212,7 +178,7 @@ where
             } else if i % group_size == 0 {
                 // we found the first bound of the next group, we must store the left
                 // and right bounds associated with the docids.
-                write_entry::<T, KC>(&mut writer, field_id, level, left, right, &group_docids)?;
+                write_number_entry(&mut writer, field_id, level, left, right, &group_docids)?;
 
                 // We save the left bound for the new group and also reset the docids.
                 group_docids = RoaringBitmap::new();
@@ -225,7 +191,7 @@ where
         }
 
         if !group_docids.is_empty() {
-            write_entry::<T, KC>(&mut writer, field_id, level, left, right, &group_docids)?;
+            write_number_entry(&mut writer, field_id, level, left, right, &group_docids)?;
         }
     }
 
@@ -246,19 +212,17 @@ fn compute_faceted_documents_ids(
     Ok(documents_ids)
 }
 
-fn write_entry<T, KC>(
+fn write_number_entry(
     writer: &mut Writer<File>,
     field_id: u8,
     level: u8,
-    left: T,
-    right: T,
+    left: f64,
+    right: f64,
     ids: &RoaringBitmap,
 ) -> anyhow::Result<()>
-where
-    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
     let key = (field_id, level, left, right);
-    let key = KC::bytes_encode(&key).ok_or(Error::Encoding)?;
+    let key = FacetLevelValueF64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
     let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;
     writer.insert(&key, &data)?;
     Ok(())

@@ -81,28 +81,7 @@ impl<'a> FacetDistinctIter<'a> {
         Ok(())
     }
 
-    fn distinct_integer(&mut self, id: DocumentId) -> anyhow::Result<()> {
-        let iter = get_facet_values::<FieldDocIdFacetI64Codec>(
-            id,
-            self.distinct,
-            self.index,
-            self.txn,
-        )?;
-
-        for item in iter {
-            let ((_, _, value), _) = item?;
-            // get facet docids on level 0
-            let key = (self.distinct, 0, value, value);
-            let facet_docids = self.get_facet_docids::<FacetLevelValueI64Codec>(&key)?;
-            self.excluded.union_with(&facet_docids);
-        }
-
-        self.excluded.remove(id);
-
-        Ok(())
-    }
-
-    fn distinct_float(&mut self, id: DocumentId) -> anyhow::Result<()> {
+    fn distinct_number(&mut self, id: DocumentId) -> anyhow::Result<()> {
         let iter = get_facet_values::<FieldDocIdFacetF64Codec>(id,
             self.distinct,
             self.index,
@@ -134,8 +113,7 @@ impl<'a> FacetDistinctIter<'a> {
             Some(id) => {
                 match self.facet_type {
                     FacetType::String => self.distinct_string(id)?,
-                    FacetType::Integer => self.distinct_integer(id)?,
-                    FacetType::Float => self.distinct_float(id)?,
+                    FacetType::Number => self.distinct_number(id)?,
                 };
 
                 // The first document of each iteration is kept, since the next call to
@@ -233,6 +211,5 @@ mod test {
 
     test_facet_distinct!(test_string, "txt", FacetType::String);
     test_facet_distinct!(test_strings, "txts", FacetType::String);
-    test_facet_distinct!(test_int, "cat-int", FacetType::Integer);
-    test_facet_distinct!(test_ints, "cat-ints", FacetType::Integer);
+    test_facet_distinct!(test_number, "cat-int", FacetType::Number);
 }

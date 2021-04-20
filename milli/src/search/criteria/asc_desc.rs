@@ -2,16 +2,13 @@ use std::collections::HashMap;
 use std::mem::take;
 
 use anyhow::{bail, Context as _};
-use heed::{BytesDecode, BytesEncode};
 use itertools::Itertools;
 use log::debug;
-use num_traits::Bounded;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec};
-use crate::heed_codec::facet::{FieldDocIdFacetI64Codec, FieldDocIdFacetF64Codec};
+use crate::heed_codec::facet::FieldDocIdFacetF64Codec;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
@@ -253,33 +250,17 @@ fn facet_ordered<'t>(
 ) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>>
 {
     match facet_type {
-        FacetType::Float => {
+        FacetType::Number => {
             if candidates.len() <= CANDIDATES_THRESHOLD {
-                let iter = iterative_facet_ordered_iter::<FieldDocIdFacetF64Codec, f64, OrderedFloat<f64>>(
+                let iter = iterative_facet_ordered_iter(
                     index, rtxn, field_id, ascending, candidates,
                 )?;
                 Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
             } else {
                 let facet_fn = if ascending {
-                    FacetIter::<f64, FacetLevelValueF64Codec>::new_reducing
+                    FacetIter::new_reducing
                 } else {
-                    FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse_reducing
-                };
-                let iter = facet_fn(rtxn, index, field_id, candidates)?;
-                Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
-            }
-        },
-        FacetType::Integer => {
-            if candidates.len() <= CANDIDATES_THRESHOLD {
-                let iter = iterative_facet_ordered_iter::<FieldDocIdFacetI64Codec, i64, i64>(
-                    index, rtxn, field_id, ascending, candidates,
-                )?;
-                Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
-            } else {
-                let facet_fn = if ascending {
-                    FacetIter::<i64, FacetLevelValueI64Codec>::new_reducing
-                } else {
-                    FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse_reducing
+                    FacetIter::new_reverse_reducing
                 };
                 let iter = facet_fn(rtxn, index, field_id, candidates)?;
                 Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
@@ -292,28 +273,23 @@ fn facet_ordered<'t>(
 /// Fetch the whole list of candidates facet values one by one and order them by it.
 ///
 /// This function is fast when the amount of candidates to rank is small.
-fn iterative_facet_ordered_iter<'t, KC, T, U>(
+fn iterative_facet_ordered_iter<'t>(
     index: &'t Index,
     rtxn: &'t heed::RoTxn,
     field_id: FieldId,
     ascending: bool,
     candidates: RoaringBitmap,
 ) -> anyhow::Result<impl Iterator<Item = RoaringBitmap> + 't>
-where
-    KC: BytesDecode<'t, DItem = (FieldId, u32, T)>,
-    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u32, T)>,
-    T: Bounded,
-    U: From<T> + Ord + Clone + 't,
 {
-    let db = index.field_id_docid_facet_values.remap_key_type::<KC>();
+    let db = index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetF64Codec>();
     let mut docids_values = Vec::with_capacity(candidates.len() as usize);
     for docid in candidates.iter() {
-        let left = (field_id, docid, T::min_value());
-        let right = (field_id, docid, T::max_value());
+        let left = (field_id, docid, f64::MIN);
+        let right = (field_id, docid, f64::MAX);
         let mut iter = db.range(rtxn, &(left..=right))?;
         let entry = if ascending { iter.next() } else { iter.last() };
         if let Some(((_, _, value), ())) = entry.transpose()? {
-            docids_values.push((docid, U::from(value)));
+            docids_values.push((docid, OrderedFloat(value)));
         }
     }
     docids_values.sort_unstable_by_key(|(_, v)| v.clone());
