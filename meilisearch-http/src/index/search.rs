@@ -88,7 +88,9 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let displayed_ids: HashSet<FieldId> = fields_ids_map.iter().map(|(id, _)| id).collect();
+        let displayed_ids: HashSet<FieldId> = self.displayed_fields_ids(&rtxn)?
+            .map(|fields| fields.into_iter().collect::<HashSet<_>>())
+            .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
         let fids = |attrs: &HashSet<String>| {
             let mut ids = HashSet::new();
