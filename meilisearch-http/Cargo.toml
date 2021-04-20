@@ -91,6 +91,7 @@ tempdir = "0.3.7"
 urlencoding = "1.1.1"
 
 [features]
+mini-dashboard = ["default"]
 default = ["sentry"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
