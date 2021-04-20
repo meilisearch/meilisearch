@@ -1,16 +1,34 @@
 use std::time::Duration;
 
 use actix_web::http::StatusCode;
+use paste::paste;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use super::service::Service;
+
+macro_rules! make_settings_test_routes {
+    ($($name:ident),+) => {
+        $(paste! {
+            pub async fn [<update_$name>](&self, value: Value) -> (Value, StatusCode) {
+                let url = format!("/indexes/{}/settings/{}", self.uid, stringify!($name).replace("_", "-"));
+                self.service.post(url, value).await
+            }
+
+            pub async fn [<get_$name>](&self) -> (Value, StatusCode) {
+                let url = format!("/indexes/{}/settings/{}", self.uid, stringify!($name).replace("_", "-"));
+                self.service.get(url).await
+            }
+        })*
+    };
+}
 
 pub struct Index<'a> {
     pub uid: String,
     pub service: &'a Service,
 }
 
+#[allow(dead_code)]
 impl Index<'_> {
     pub async fn get(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", self.uid);
@@ -166,7 +184,12 @@ impl Index<'_> {
         let url = format!("/indexes/{}/stats", self.uid);
         self.service.get(url).await
     }
+
+    make_settings_test_routes!(
+        distinct_attribute
+    );
 }
+
 
 pub struct GetDocumentOptions;
 

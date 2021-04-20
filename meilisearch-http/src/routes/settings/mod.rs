@@ -97,11 +97,11 @@ make_setting_route!(
     stop_words
 );
 
-//make_setting_route!(
-//"/indexes/{index_uid}/settings/distinct-attribute",
-//String,
-//distinct_attribute
-//);
+make_setting_route!(
+    "/indexes/{index_uid}/settings/distinct-attribute",
+    String,
+    distinct_attribute
+);
 
 //make_setting_route!(
 //"/indexes/{index_uid}/settings/ranking-rules",
@@ -129,6 +129,7 @@ create_services!(
     attributes_for_faceting,
     displayed_attributes,
     searchable_attributes,
+    distinct_attribute,
     stop_words
 );
 
