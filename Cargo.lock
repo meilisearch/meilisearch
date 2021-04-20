@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.21.0-alpha.2"
+version = "0.21.0-alpha.3"
 dependencies = [
  "actix-cors",
  "actix-http",
