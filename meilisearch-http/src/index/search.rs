@@ -41,7 +41,7 @@ pub struct SearchQuery {
 pub struct SearchHit {
     #[serde(flatten)]
     pub document: Document,
-    #[serde(rename = "_formatted", skip_serializing_if = "Map::is_empty")]
+    #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     pub formatted: Document,
 }
 
@@ -88,14 +88,22 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let fids = |attrs: &HashSet<String>| {
-            attrs
-                .iter()
-                .filter_map(|name| fields_ids_map.id(name))
-                .collect()
-        };
-
         let displayed_ids: HashSet<FieldId> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+        let fids = |attrs: &HashSet<String>| {
+            let mut ids = HashSet::new();
+            for attr in attrs {
+                if attr == "*" {
+                    ids = displayed_ids.clone();
+                    break;
+                }
+
+                if let Some(id) = fields_ids_map.id(attr) {
+                    ids.insert(id);
+                }
+            }
+            ids
+        };
 
         let to_retrieve_ids = query
             .attributes_to_retrieve
