@@ -5,14 +5,16 @@ use std::time::Instant;
 use anyhow::bail;
 use either::Either;
 use heed::RoTxn;
+use indexmap::IndexMap;
+use itertools::Itertools;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use milli::{facet::FacetValue, FacetCondition, FieldId, FieldsIdsMap, MatchingWords};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::Index;
 
-pub type Document = Map<String, Value>;
+pub type Document = IndexMap<String, Value>;
 
 pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 
@@ -88,7 +90,7 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let displayed_ids: HashSet<FieldId> = self.displayed_fields_ids(&rtxn)?
+        let displayed_ids = self.displayed_fields_ids(&rtxn)?
             .map(|fields| fields.into_iter().collect::<HashSet<_>>())
             .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
@@ -130,6 +132,7 @@ impl Index {
         let all_attributes: Vec<_> = to_retrieve_ids
             .intersection(&displayed_ids)
             .cloned()
+            .sorted()
             .collect();
 
         // The formatted attributes are:
@@ -159,7 +162,7 @@ impl Index {
         );
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let document = milli::obkv_to_json(&all_attributes, &fields_ids_map, obkv.clone())?;
+            let document = make_document(&all_attributes, &fields_ids_map, obkv.clone())?;
             let formatted = compute_formatted(
                 &fields_ids_map,
                 obkv,
@@ -200,6 +203,29 @@ impl Index {
         };
         Ok(result)
     }
+}
+
+fn make_document(
+    attributes_to_retrieve: &[FieldId],
+    field_ids_map: &FieldsIdsMap,
+    obkv: obkv::KvReader,
+) -> anyhow::Result<Document> {
+    let mut document = Document::new();
+    for attr in attributes_to_retrieve {
+        if let Some(value) = obkv.get(*attr) {
+            let value = serde_json::from_slice(value)?;
+
+            // This unwrap must be safe since we got the ids from the fields_ids_map just
+            // before.
+            let key = field_ids_map
+                .name(*attr)
+                .expect("Missing field name")
+                .to_string();
+
+            document.insert(key, value);
+        }
+    }
+    Ok(document)
 }
 
 fn compute_formatted<A: AsRef<[u8]>>(
@@ -352,7 +378,6 @@ fn parse_facets(
 #[cfg(test)]
 mod test {
     use std::iter::FromIterator;
-    use serde_json::json;
 
     use super::*;
 
@@ -423,7 +448,7 @@ mod test {
             &to_highlight_ids
         ).unwrap();
 
-        assert_eq!(Value::Object(value), json!({"test": "hello"}));
+        assert_eq!(value["test"], "hello");
     }
 
     #[test]
@@ -458,6 +483,6 @@ mod test {
             &to_highlight_ids
         ).unwrap();
 
-        assert_eq!(Value::Object(value), json!({"test": "<mark>hello</mark>"}));
+        assert_eq!(value["test"], "<mark>hello</mark>");
     }
 }
