@@ -13,10 +13,10 @@ path = "src/main.rs"
 vergen = "3.1.0"
 
 [dependencies]
-actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "8f7b1fd" }
-actix-http = { version = "3.0.0-beta.4", features = ["cookies"] }
-actix-service = "2.0.0-beta.4"
-actix-web = { version = "4.0.0-beta.4", features = ["rustls", "cookies"] }
+actix-cors = "0.6.0-beta.1"
+actix-http = { version = "=3.0.0-beta.5" }
+actix-service = "=2.0.0-beta.5"
+actix-web = { version = "=4.0.0-beta.5", features = ["rustls"] }
 anyhow = "1.0.36"
 async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 async-stream = "0.3.0"
