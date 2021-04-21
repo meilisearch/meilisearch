@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use sha1::{Sha1, Digest};
 use reqwest::blocking::get;
+use actix_web_static_files::resource_dir;
 
 use vergen::{generate_cargo_keys, ConstantsFlags};
 use cargo_toml::Manifest;
@@ -54,5 +55,6 @@ fn setup_mini_dashboard() -> anyhow::Result<()> {
     let cursor = Cursor::new(&dashboard_assets_bytes);
     let mut zip = zip::read::ZipArchive::new(cursor)?;
     zip.extract(&dashboard_dir)?;
+    resource_dir(&dashboard_dir).build()?;
     Ok(())
 }

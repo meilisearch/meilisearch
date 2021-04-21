@@ -19,8 +19,7 @@ dependencies = [
 [[package]]
 name = "actix-cors"
 version = "0.6.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa50c395d15e5946cf04bccb1edef583e9fd42aa6710a1f89a725c5e2c4c5503"
+source = "git+https://github.com/MarinPostma/actix-extras.git?rev=2dac1a4#2dac1a421619bf7b386dea63d3ae25a3bc4abc43"
 dependencies = [
  "actix-service",
  "actix-web",
@@ -33,9 +32,9 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.0.0-beta.5"
+version = "3.0.0-beta.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb9c5d7ceb490d6565156ae1d4d467db17da1759425c65a2e36ac5e182e014e2"
+checksum = "59d51c2ba06062e698a5d212d860e9fb2afc931c285ede687aaae896c8150347"
 dependencies = [
  "actix-codec",
  "actix-rt",
@@ -48,7 +47,6 @@ dependencies = [
  "brotli2",
  "bytes 1.0.1",
  "bytestring",
- "cookie",
  "derive_more",
  "encoding_rs",
  "flate2",
@@ -63,14 +61,13 @@ dependencies = [
  "log",
  "mime",
  "once_cell",
+ "paste",
  "percent-encoding",
  "pin-project",
  "pin-project-lite 0.2.6",
  "rand 0.8.3",
  "regex",
  "serde",
- "serde_json",
- "serde_urlencoded",
  "sha-1 0.9.4",
  "smallvec",
  "time 0.2.26",
@@ -113,9 +110,9 @@ dependencies = [
 
 [[package]]
 name = "actix-server"
-version = "2.0.0-beta.4"
+version = "2.0.0-beta.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0872f02a1871257ef09c5a269dce5dc5fea5ccf502adbf5d39f118913b61411c"
+checksum = "26369215fcc3b0176018b3b68756a8bcc275bb000e6212e454944913a1f9bf87"
 dependencies = [
  "actix-rt",
  "actix-service",
@@ -130,11 +127,12 @@ dependencies = [
 
 [[package]]
 name = "actix-service"
-version = "2.0.0-beta.5"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf82340ad9f4e4caf43737fd3bbc999778a268015cdc54675f60af6240bd2b05"
+checksum = "77f5f9d66a8730d0fae62c26f3424f5751e5518086628a40b7ab6fca4a705034"
 dependencies = [
  "futures-core",
+ "paste",
  "pin-project-lite 0.2.6",
 ]
 
@@ -169,9 +167,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "4.0.0-beta.5"
+version = "4.0.0-beta.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6de19cc341c2e68b1ee126de171e86b610b5bbcecc660d1250ebed73e0257bd6"
+checksum = "ff12e933051557d700b0fcad20fe25b9ca38395cc87bbc5aeaddaef17b937a2f"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -185,11 +183,13 @@ dependencies = [
  "actix-web-codegen",
  "ahash 0.7.2",
  "bytes 1.0.1",
+ "cookie",
  "derive_more",
  "either",
  "encoding_rs",
  "futures-core",
  "futures-util",
+ "itoa",
  "language-tags",
  "log",
  "mime",
@@ -214,6 +214,20 @@ dependencies = [
  "proc-macro2 1.0.26",
  "quote 1.0.9",
  "syn 1.0.70",
+]
+
+[[package]]
+name = "actix-web-static-files"
+version = "3.0.5"
+source = "git+https://github.com/MarinPostma/actix-web-static-files.git?branch=actix-web-4#6db8c3e2940d61659581492b5e9c9b9062567613"
+dependencies = [
+ "actix-service",
+ "actix-web",
+ "change-detection",
+ "derive_more",
+ "futures",
+ "mime_guess",
+ "path-slash",
 ]
 
 [[package]]
@@ -584,6 +598,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "change-detection"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "159fa412eae48a1d94d0b9ecdb85c97ce56eb2a347c62394d3fdbf221adabc1a"
+dependencies = [
+ "path-matchers",
+ "path-slash",
+]
+
+[[package]]
 name = "character_converter"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,9 +659,9 @@ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
 name = "cookie"
-version = "0.14.4"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03a5d7b21829bc7b4bf4754a978a241ae54ea55a40f92bb20216e54096f4b951"
+checksum = "ffdf8865bac3d9a3bde5bde9088ca431b11f5d37c7a578b8086af77248b76627"
 dependencies = [
  "percent-encoding",
  "time 0.2.26",
@@ -1330,6 +1354,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "494b4d60369511e7dea41cf646832512a94e542f68bb9c49e54518e0f468eb47"
 
 [[package]]
+name = "httpdate"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05842d0d43232b23ccb7060ecb0f0626922c21f30012e97b767b30afd4a5d4b9"
+
+[[package]]
 name = "human_format"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1364,7 +1394,7 @@ dependencies = [
  "http",
  "http-body 0.3.1",
  "httparse",
- "httpdate",
+ "httpdate 0.3.2",
  "itoa",
  "pin-project",
  "socket2 0.3.19",
@@ -1376,9 +1406,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "0.14.5"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf09f61b52cfcf4c00de50df88ae423d6c02354e385a86341133b5338630ad1"
+checksum = "5f006b8784cfb01fe7aa9c46f5f5cd4cf5c85a8c612a0653ec97642979062665"
 dependencies = [
  "bytes 1.0.1",
  "futures-channel",
@@ -1388,7 +1418,7 @@ dependencies = [
  "http",
  "http-body 0.4.1",
  "httparse",
- "httpdate",
+ "httpdate 1.0.0",
  "itoa",
  "pin-project",
  "socket2 0.4.0",
@@ -1421,7 +1451,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f9f7a97316d44c0af9b0301e65010573a853a9fc97046d7331d7f6bc0fd5a64"
 dependencies = [
  "futures-util",
- "hyper 0.14.5",
+ "hyper 0.14.6",
  "log",
  "rustls 0.19.1",
  "tokio 1.5.0",
@@ -1719,6 +1749,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "actix-web",
+ "actix-web-static-files",
  "anyhow",
  "assert-json-diff",
  "async-compression",
@@ -2125,6 +2156,21 @@ name = "paste"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf547ad0c65e31259204bd90935776d1c693cec2f4ff7abb7a1bbbd40dfe58"
+
+[[package]]
+name = "path-matchers"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36cd9b72a47679ec193a5f0229d9ab686b7bd45e1fbc59ccf953c9f3d83f7b2b"
+dependencies = [
+ "glob",
+]
+
+[[package]]
+name = "path-slash"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cacbb3c4ff353b534a67fb8d7524d00229da4cb1dc8c79f4db96e375ab5b619"
 
 [[package]]
 name = "percent-encoding"
@@ -2634,7 +2680,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body 0.4.1",
- "hyper 0.14.5",
+ "hyper 0.14.6",
  "hyper-rustls 0.22.1",
  "ipnet",
  "js-sys",
@@ -2812,7 +2858,7 @@ dependencies = [
  "env_logger 0.7.1",
  "failure",
  "hostname",
- "httpdate",
+ "httpdate 0.3.2",
  "im",
  "lazy_static",
  "libc",

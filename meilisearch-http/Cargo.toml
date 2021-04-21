@@ -5,11 +5,14 @@ edition = "2018"
 license = "MIT"
 name = "meilisearch-http"
 version = "0.21.0-alpha.3"
+build = "build.rs"
+
 [[bin]]
 name = "meilisearch"
 path = "src/main.rs"
 
 [build-dependencies]
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", branch = "actix-web-4" }
 anyhow = "*"
 cargo_toml = "0.9.0"
 hex = "0.4.3"
@@ -19,10 +22,11 @@ vergen = "3.1.0"
 zip = "0.5.12"
 
 [dependencies]
-actix-cors = "0.6.0-beta.1"
-actix-http = { version = "=3.0.0-beta.5" }
-actix-service = "=2.0.0-beta.5"
-actix-web = { version = "=4.0.0-beta.5", features = ["rustls"] }
+actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "2dac1a4"}
+actix-http = { version = "=3.0.0-beta.6" }
+actix-service = "2.0.0"
+actix-web = { version = "=4.0.0-beta.6", features = ["rustls"] }
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", branch = "actix-web-4", optional = true }
 anyhow = "1.0.36"
 async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 async-stream = "0.3.0"
@@ -51,6 +55,7 @@ memmap = "0.7.0"
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.1.1" }
 mime = "0.3.16"
 once_cell = "1.5.2"
+oxidized-json-checker = "0.3.2"
 parking_lot = "0.11.1"
 rand = "0.7.3"
 rayon = "1.5.0"
@@ -67,7 +72,6 @@ tempfile = "3.1.0"
 thiserror = "1.0.24"
 tokio = { version = "1", features = ["full"] }
 uuid = "0.8.2"
-oxidized-json-checker = "0.3.2"
 walkdir = "2.3.2"
 obkv = "0.1.1"
 
@@ -97,7 +101,7 @@ tempdir = "0.3.7"
 urlencoding = "1.1.1"
 
 [features]
-mini-dashboard = ["default"]
+mini-dashboard = ["default", "actix-web-static-files"]
 default = ["sentry"]
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -79,6 +79,7 @@ async fn main() -> Result<(), MainError> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 async fn run_http(
     data: Data,
     opt: Opt,

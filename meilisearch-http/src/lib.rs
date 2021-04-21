@@ -9,6 +9,7 @@ pub mod routes;
 pub use self::data::Data;
 pub use option::Opt;
 
+
 #[macro_export]
 macro_rules! create_app {
     ($data:expr, $enable_frontend:expr) => {{
@@ -18,6 +19,14 @@ macro_rules! create_app {
         use actix_web::{middleware, web};
         use meilisearch_http::error::payload_error_handler;
         use meilisearch_http::routes::*;
+
+        #[cfg(feature = "mini-dashboard")]
+        use actix_web_static_files::ResourceFiles;
+
+        #[cfg(feature = "mini-dashboard")]
+        mod dashboard {
+            include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+        }
 
         let app = App::new()
             .data($data.clone())
@@ -40,16 +49,28 @@ macro_rules! create_app {
             .configure(stats::services)
             .configure(key::services);
         //.configure(routes::dump::services);
+        #[cfg(feature = "mini-dashboard")]
         let app = if $enable_frontend {
-            app.service(load_html).service(load_css)
+            let generated = dashboard::generate();
+            let keys = generated.keys().collect::<Vec<_>>();
+            println!("served files {:?}", keys);
+            let service = ResourceFiles::new("/", generated);
+            app.service(service)
         } else {
             app.service(running)
         };
+
+        #[cfg(not(feature = "mini-dashboard"))]
+        let app = app.service(running);
+
+        println!("here\n\n\n");
         app.wrap(
             Cors::default()
-                .send_wildcard()
-                .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                .max_age(86_400), // 24h
+            .send_wildcard()
+            .allowed_headers(vec!["content-type", "x-meili-api-key"])
+            .allow_any_origin()
+            .allow_any_method()
+            .max_age(86_400) // 24h
         )
         .wrap(middleware::Logger::default())
         .wrap(middleware::Compress::default())
