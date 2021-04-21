@@ -27,7 +27,7 @@ once_cell = "1.5.2"
 ordered-float = "2.1.1"
 rayon = "1.5.0"
 regex = "1.4.3"
-roaring = { git = "https://github.com/RoaringBitmap/roaring-rs", branch = "optimize-ops" }
+roaring = "0.6.6"
 serde = { version = "1.0.123", features = ["derive"] }
 serde_json = { version = "1.0.62", features = ["preserve_order"] }
 slice-group-by = "0.2.6"
