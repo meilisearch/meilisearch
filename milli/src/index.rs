@@ -81,16 +81,7 @@ impl Index {
         let field_id_docid_facet_values = env.create_database(Some("field-id-docid-facet-values"))?;
         let documents = env.create_database(Some("documents"))?;
 
-        {
-            let mut txn = env.write_txn()?;
-            // The db was just created, we update its metadata with the relevant information.
-            if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, CREATED_AT_KEY)?.is_none() {
-                let now = Utc::now();
-                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, UPDATED_AT_KEY, &now)?;
-                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, CREATED_AT_KEY, &now)?;
-                txn.commit()?;
-            }
-        }
+        Index::initialize_creation_dates(&env, main)?;
 
         Ok(Index {
             env,
