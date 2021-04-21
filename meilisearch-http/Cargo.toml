@@ -108,5 +108,5 @@ default = ["sentry"]
 jemallocator = "0.3.2"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.0/build.zip"
-sha1 = "abb7bd8765b9fab38675958bc9d06088589c712c"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.1/build.zip"
+sha1 = "f4247f8f534214e2811637e0555347c3f6bf5794"

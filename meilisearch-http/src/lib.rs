@@ -53,7 +53,6 @@ macro_rules! create_app {
         let app = if $enable_frontend {
             let generated = dashboard::generate();
             let keys = generated.keys().collect::<Vec<_>>();
-            println!("served files {:?}", keys);
             let service = ResourceFiles::new("/", generated);
             app.service(service)
         } else {
@@ -63,7 +62,6 @@ macro_rules! create_app {
         #[cfg(not(feature = "mini-dashboard"))]
         let app = app.service(running);
 
-        println!("here\n\n\n");
         app.wrap(
             Cors::default()
             .send_wildcard()
