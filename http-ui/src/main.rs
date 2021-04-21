@@ -381,7 +381,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(_) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err(e)
                     }
                 }
                 UpdateMeta::ClearDocuments => {
@@ -391,7 +391,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match builder.execute() {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err(e)
                     }
                 }
                 UpdateMeta::Settings(settings) => {
@@ -461,7 +461,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err(e)
                     }
                 }
                 UpdateMeta::Facets(levels) => {
@@ -476,7 +476,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     match builder.execute() {
                         Ok(()) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err(e)
                     }
                 }
                 UpdateMeta::WordsPrefixes(settings) => {
@@ -491,7 +491,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     match builder.execute() {
                         Ok(()) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e.into())
+                        Err(e) => Err(e)
                     }
                 }
             };
@@ -1001,7 +1001,8 @@ async fn main() -> anyhow::Result<()> {
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
-    Ok(warp::serve(routes).run(addr).await)
+    warp::serve(routes).run(addr).await;
+    Ok(())
 }
 
 #[cfg(test)]
