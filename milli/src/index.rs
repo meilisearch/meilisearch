@@ -14,6 +14,10 @@ use crate::{
     BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
     ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
 };
+use crate::heed_codec::facet::{
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    FacetValueStringCodec, FacetLevelValueF64Codec,
+};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 
@@ -40,33 +44,45 @@ const UPDATED_AT_KEY: &str = "updated-at";
 pub struct Index {
     /// The LMDB environment which this index is associated with.
     pub env: heed::Env,
+
     /// Contains many different types (e.g. the fields ids map).
     pub main: PolyDatabase,
+
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
+
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
     pub word_prefix_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    
     /// Maps the word, level and position range with the docids that corresponds to it.
     pub word_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
     /// Maps the level positions of a word prefix with all the docids where this prefix appears.
     pub word_prefix_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
-    /// Maps the facet field id and the globally ordered value with the docids that corresponds to it.
-    pub facet_field_id_value_docids: Database<ByteSlice, CboRoaringBitmapCodec>,
-    /// Maps the document id, the facet field id and the globally ordered value.
-    pub field_id_docid_facet_values: Database<ByteSlice, Unit>,
+
+    /// Maps the facet field id, level and the number with the docids that corresponds to it.
+    pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+    /// Maps the facet field id and the string with the docids that corresponds to it.
+    pub facet_id_string_docids: Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
+
+    /// Maps the document id, the facet field id and the numbers.
+    pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
+    /// Maps the document id, the facet field id and the strings.
+    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Unit>,
+
     /// Maps the document id to the document as an obkv store.
     pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(11);
+        options.max_dbs(13);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
@@ -77,8 +93,10 @@ impl Index {
         let word_prefix_pair_proximity_docids = env.create_database(Some("word-prefix-pair-proximity-docids"))?;
         let word_level_position_docids = env.create_database(Some("word-level-position-docids"))?;
         let word_prefix_level_position_docids = env.create_database(Some("word-prefix-level-position-docids"))?;
-        let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
-        let field_id_docid_facet_values = env.create_database(Some("field-id-docid-facet-values"))?;
+        let facet_id_f64_docids = env.create_database(Some("facet-id-f64-docids"))?;
+        let facet_id_string_docids = env.create_database(Some("facet-id-string-docids"))?;
+        let field_id_docid_facet_f64s = env.create_database(Some("field-id-docid-facet-f64s"))?;
+        let field_id_docid_facet_strings = env.create_database(Some("field-id-docid-facet-strings"))?;
         let documents = env.create_database(Some("documents"))?;
 
         Index::initialize_creation_dates(&env, main)?;
@@ -93,10 +111,24 @@ impl Index {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
-            facet_field_id_value_docids,
-            field_id_docid_facet_values,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
             documents,
         })
+    }
+
+    fn initialize_creation_dates(env: &heed::Env, main: PolyDatabase) -> heed::Result<()> {
+        let mut txn = env.write_txn()?;
+        // The db was just created, we update its metadata with the relevant information.
+        if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, CREATED_AT_KEY)?.is_none() {
+            let now = Utc::now();
+            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, UPDATED_AT_KEY, &now)?;
+            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, CREATED_AT_KEY, &now)?;
+            txn.commit()?;
+        }
+        Ok(())
     }
 
     /// Create a write transaction to be able to write into the index.
