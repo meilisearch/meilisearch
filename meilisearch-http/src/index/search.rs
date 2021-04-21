@@ -158,7 +158,7 @@ impl Index {
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(
             &stop_words,
-            (String::from("<mark>"), String::from("</mark>")),
+            (String::from("<em>"), String::from("</em>")),
         );
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
@@ -386,7 +386,7 @@ mod test {
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(
             &stop_words,
-            (String::from("<mark>"), String::from("</mark>")),
+            (String::from("<em>"), String::from("</em>")),
         );
 
         let mut fields = FieldsIdsMap::new();
@@ -421,7 +421,7 @@ mod test {
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(
             &stop_words,
-            (String::from("<mark>"), String::from("</mark>")),
+            (String::from("<em>"), String::from("</em>")),
         );
 
         let mut fields = FieldsIdsMap::new();
@@ -456,7 +456,7 @@ mod test {
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(
             &stop_words,
-            (String::from("<mark>"), String::from("</mark>")),
+            (String::from("<em>"), String::from("</em>")),
         );
 
         let mut fields = FieldsIdsMap::new();
@@ -483,6 +483,6 @@ mod test {
             &to_highlight_ids
         ).unwrap();
 
-        assert_eq!(value["test"], "<mark>hello</mark>");
+        assert_eq!(value["test"], "<em>hello</em>");
     }
 }
