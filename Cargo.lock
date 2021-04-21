@@ -1005,7 +1005,7 @@ dependencies = [
  "heed",
  "jemallocator",
  "milli",
- "roaring",
+ "roaring 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json",
  "stderrlog",
  "structopt",
@@ -1287,7 +1287,7 @@ dependencies = [
  "rand 0.8.3",
  "rayon",
  "regex",
- "roaring",
+ "roaring 0.6.5 (git+https://github.com/RoaringBitmap/roaring-rs?branch=optimize-ops)",
  "serde",
  "serde_json",
  "slice-group-by",
@@ -1967,6 +1967,16 @@ name = "roaring"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6744a4a918e91359ad1d356a91e2e943a86d9fb9ae77f715d617032ea2af88f"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "retain_mut",
+]
+
+[[package]]
+name = "roaring"
+version = "0.6.5"
+source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=optimize-ops#6689f8c9dd2efdbfde4442d4d803e87169780593"
 dependencies = [
  "bytemuck",
  "byteorder",

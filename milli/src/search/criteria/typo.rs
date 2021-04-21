@@ -328,6 +328,7 @@ mod test {
         let parent = Initial::new(query_tree, facet_candidates);
         let mut criteria = Typo::new(&context, Box::new(parent));
 
+        assert!(criteria.next(&mut wdcache).unwrap().unwrap().candidates.is_none());
         assert!(criteria.next(&mut wdcache).unwrap().is_none());
     }
 
@@ -440,7 +441,7 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_1 & &facet_candidates),
-            bucket_candidates: candidates_1 & &facet_candidates,
+            bucket_candidates: facet_candidates.clone(),
         };
 
         assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
@@ -462,7 +463,7 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_2 & &facet_candidates),
-            bucket_candidates: candidates_2 & &facet_candidates,
+            bucket_candidates: RoaringBitmap::new(),
         };
 
         assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
