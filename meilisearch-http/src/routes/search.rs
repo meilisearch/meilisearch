@@ -36,11 +36,11 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
     fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
 
         let attributes_to_highlight = other
             .attributes_to_highlight
