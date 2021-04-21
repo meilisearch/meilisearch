@@ -4,13 +4,12 @@ use std::collections::hash_map::Entry;
 use anyhow::anyhow;
 use chrono::Utc;
 use fst::IntoStreamer;
-use heed::types::ByteSlice;
+use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use crate::facet::FacetType;
-use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
-use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
+use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -90,8 +89,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
-            facet_field_id_value_docids,
-            field_id_docid_facet_values,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
             documents,
         } = self.index;
 
@@ -285,52 +286,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
-        // Remove the documents ids from the faceted documents ids.
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
-        for (field_id, facet_type) in faceted_fields {
-            let mut docids = self.index.faceted_documents_ids(self.wtxn, field_id)?;
-            docids.difference_with(&self.documents_ids);
-            self.index.put_faceted_documents_ids(self.wtxn, field_id, &docids)?;
-
-            // We delete the entries that are part of the documents ids.
-            let iter = field_id_docid_facet_values.prefix_iter_mut(self.wtxn, &[field_id])?;
-            match facet_type {
-                FacetType::String => {
-                    let mut iter = iter.remap_key_type::<FieldDocIdFacetStringCodec>();
-                    while let Some(result) = iter.next() {
-                        let ((_fid, docid, _value), ()) = result?;
-                        if self.documents_ids.contains(docid) {
-                            iter.del_current()?;
-                        }
-                    }
-                },
-                FacetType::Number => {
-                    let mut iter = iter.remap_key_type::<FieldDocIdFacetF64Codec>();
-                    while let Some(result) = iter.next() {
-                        let ((_fid, docid, _value), ()) = result?;
-                        if self.documents_ids.contains(docid) {
-                            iter.del_current()?;
-                        }
-                    }
-                },
-            }
-        }
-
-        // We delete the documents ids that are under the facet field id values.
-        let mut iter = facet_field_id_value_docids.iter_mut(self.wtxn)?;
-        while let Some(result) = iter.next() {
-            let (bytes, mut docids) = result?;
-            let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
-            if docids.is_empty() {
-                iter.del_current()?;
-            } else if docids.len() != previous_len {
-                iter.put_current(bytes, &docids)?;
-            }
-        }
-
-        drop(iter);
-
         // We delete the documents ids that are under the word level position docids.
         let mut iter = word_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
         while let Some(result) = iter.next() {
@@ -361,8 +316,93 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
+        // We delete the documents ids that are under the facet field id values.
+        remove_docids_from_facet_field_id_value_docids(
+            self.wtxn,
+            facet_id_f64_docids,
+            &self.documents_ids,
+        )?;
+
+        remove_docids_from_facet_field_id_value_docids(
+            self.wtxn,
+            facet_id_string_docids,
+            &self.documents_ids,
+        )?;
+
+        // Remove the documents ids from the faceted documents ids.
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
+        for (field_id, facet_type) in faceted_fields {
+            let mut docids = self.index.faceted_documents_ids(self.wtxn, field_id)?;
+            docids.difference_with(&self.documents_ids);
+            self.index.put_faceted_documents_ids(self.wtxn, field_id, &docids)?;
+
+            remove_docids_from_field_id_docid_facet_value(
+                self.wtxn,
+                field_id_docid_facet_f64s,
+                field_id,
+                &self.documents_ids,
+                |(_fid, docid, _value)| docid,
+            )?;
+
+            remove_docids_from_field_id_docid_facet_value(
+                self.wtxn,
+                field_id_docid_facet_strings,
+                field_id,
+                &self.documents_ids,
+                |(_fid, docid, _value)| docid,
+            )?;
+        }
+
         Ok(self.documents_ids.len())
     }
+}
+
+fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F>(
+    wtxn: &'a mut heed::RwTxn,
+    db: &heed::Database<C, Unit>,
+    field_id: FieldId,
+    to_remove: &RoaringBitmap,
+    convert: F,
+) -> heed::Result<()>
+where
+    C: heed::BytesDecode<'a, DItem=K> + heed::BytesEncode<'a, EItem=K>,
+    F: Fn(K) -> DocumentId,
+{
+    let mut iter = db.remap_key_type::<ByteSlice>()
+        .prefix_iter_mut(wtxn, &[field_id])?
+        .remap_key_type::<C>();
+
+    while let Some(result) = iter.next() {
+        let (key, ()) = result?;
+        if to_remove.contains(convert(key)) {
+            iter.del_current()?;
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_docids_from_facet_field_id_value_docids<'a, C>(
+    wtxn: &'a mut heed::RwTxn,
+    db: &heed::Database<C, CboRoaringBitmapCodec>,
+    to_remove: &RoaringBitmap,
+) -> heed::Result<()>
+where
+    C: heed::BytesDecode<'a> + heed::BytesEncode<'a>,
+{
+    let mut iter = db.remap_key_type::<ByteSlice>().iter_mut(wtxn)?;
+    while let Some(result) = iter.next() {
+        let (bytes, mut docids) = result?;
+        let previous_len = docids.len();
+        docids.difference_with(to_remove);
+        if docids.is_empty() {
+            iter.del_current()?;
+        } else if docids.len() != previous_len {
+            iter.put_current(bytes, &docids)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

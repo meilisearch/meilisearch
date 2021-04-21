@@ -30,8 +30,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
-            facet_field_id_value_docids,
-            field_id_docid_facet_values,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
             documents,
         } = self.index;
 
@@ -59,8 +61,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         word_prefix_pair_proximity_docids.clear(self.wtxn)?;
         word_level_position_docids.clear(self.wtxn)?;
         word_prefix_level_position_docids.clear(self.wtxn)?;
-        facet_field_id_value_docids.clear(self.wtxn)?;
-        field_id_docid_facet_values.clear(self.wtxn)?;
+        facet_id_f64_docids.clear(self.wtxn)?;
+        facet_id_string_docids.clear(self.wtxn)?;
+        field_id_docid_facet_f64s.clear(self.wtxn)?;
+        field_id_docid_facet_strings.clear(self.wtxn)?;
         documents.clear(self.wtxn)?;
 
         Ok(number_of_documents)
