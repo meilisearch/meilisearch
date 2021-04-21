@@ -13,7 +13,6 @@ COPY    Cargo.lock .
 COPY    Cargo.toml .
 
 COPY    meilisearch-error/Cargo.toml meilisearch-error/
-COPY    meilisearch-http/Cargo.lock meilisearch-http/
 COPY    meilisearch-http/Cargo.toml meilisearch-http/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
