@@ -9,7 +9,6 @@ pub mod routes;
 pub use self::data::Data;
 pub use option::Opt;
 
-
 #[macro_export]
 macro_rules! create_app {
     ($data:expr, $enable_frontend:expr) => {{
@@ -52,7 +51,6 @@ macro_rules! create_app {
         #[cfg(feature = "mini-dashboard")]
         let app = if $enable_frontend {
             let generated = dashboard::generate();
-            let keys = generated.keys().collect::<Vec<_>>();
             let service = ResourceFiles::new("/", generated);
             app.service(service)
         } else {

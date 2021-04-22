@@ -11,15 +11,15 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [build-dependencies]
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e" }
-anyhow = "*"
-cargo_toml = "0.9.0"
-hex = "0.4.3"
-reqwest = { version = "0.11.3", features = ["blocking", "rustls-tls"], default-features = false}
-sha-1 = "0.9.4"
-tempfile = "3.1.0"
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
+anyhow = { version = "*", optional = true }
+cargo_toml = { version = "0.9.0", optional = true }
+hex = { version = "0.4.3", optional = true }
+reqwest = { version = "0.11.3", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+sha-1 = { version = "0.9.4", optional = true }
+tempfile = { version = "3.1.0", optional = true }
 vergen = "3.1.0"
-zip = "0.5.12"
+zip = { version = "0.5.12", optional = true }
 
 [dependencies]
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "2dac1a4"}
@@ -71,7 +71,7 @@ tar = "0.4.29"
 tempfile = "3.1.0"
 thiserror = "1.0.24"
 tokio = { version = "1", features = ["full"] }
-uuid = "0.8.2"
+uuid = { version =  "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
 obkv = "0.1.1"
 
@@ -101,8 +101,18 @@ tempdir = "0.3.7"
 urlencoding = "1.1.1"
 
 [features]
-mini-dashboard = ["default", "actix-web-static-files"]
-default = ["sentry"]
+mini-dashboard = [
+    "actix-web-static-files",
+    "anyhow",
+    "cargo_toml",
+    "hex",
+    "reqwest",
+    "sha-1",
+    "tempfile",
+    "zip",
+]
+telemetry = ["sentry"]
+default = ["telemetry", "mini-dashboard"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"

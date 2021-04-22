@@ -1,15 +1,4 @@
-use std::env;
-use std::fs::create_dir_all;
-use std::io::Cursor;
-use std::path::PathBuf;
-
-use anyhow::Context;
-use sha1::{Sha1, Digest};
-use reqwest::blocking::get;
-use actix_web_static_files::resource_dir;
-
 use vergen::{generate_cargo_keys, ConstantsFlags};
-use cargo_toml::Manifest;
 
 fn main() {
     // Setup the flags, toggling off the 'SEMVER_FROM_CARGO_PKG' flag
@@ -19,42 +8,77 @@ fn main() {
     // Generate the 'cargo:' key output
     generate_cargo_keys(ConstantsFlags::all()).expect("Unable to generate the cargo keys!");
 
-    if let Ok(_) = env::var("CARGO_FEATURE_MINI_DASHBOARD") {
-        setup_mini_dashboard().expect("Could not load mini-dashboard assets");
-    }
+    #[cfg(feature = "mini-dashboard")]
+    mini_dashboard::setup_mini_dashboard().expect("Could not load the mini-dashboard assets");
 }
 
-fn setup_mini_dashboard() -> anyhow::Result<()> {
-    let cargo_manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let cargo_toml = cargo_manifest_dir.join("Cargo.toml");
+#[cfg(feature = "mini-dashboard")]
+mod mini_dashboard {
+    use std::env;
+    use std::fs::{create_dir_all, File, OpenOptions};
+    use std::io::{Cursor, Read, Write};
+    use std::path::PathBuf;
 
-    let manifest = Manifest::from_path(cargo_toml).unwrap();
+    use actix_web_static_files::resource_dir;
+    use anyhow::Context;
+    use cargo_toml::Manifest;
+    use reqwest::blocking::get;
+    use sha1::{Digest, Sha1};
 
-    let meta = &manifest
-        .package
-        .as_ref()
-        .context("package not specified in Cargo.toml")?
-        .metadata
-        .as_ref()
-        .context("no metadata specified in Cargo.toml")?
-        ["mini-dashboard"];
+    pub fn setup_mini_dashboard() -> anyhow::Result<()> {
+        let cargo_manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        let cargo_toml = cargo_manifest_dir.join("Cargo.toml");
 
-    let url = meta["assets-url"].as_str().unwrap();
+        let sha1_path = cargo_manifest_dir.join(".mini-dashboard.sha1");
+        let dashboard_dir = cargo_manifest_dir.join("mini-dashboard");
 
-    let dashboard_assets_bytes = get(url)?
-        .bytes()?;
+        let manifest = Manifest::from_path(cargo_toml).unwrap();
 
-    let mut hasher = Sha1::new();
-    hasher.update(&dashboard_assets_bytes);
-    let sha1_dashboard = hex::encode(hasher.finalize());
+        let meta = &manifest
+            .package
+            .as_ref()
+            .context("package not specified in Cargo.toml")?
+            .metadata
+            .as_ref()
+            .context("no metadata specified in Cargo.toml")?["mini-dashboard"];
 
-    assert_eq!(meta["sha1"].as_str().unwrap(), sha1_dashboard);
+        // Check if there already is a dashboard built, and if it is up to date.
+        if sha1_path.exists() && dashboard_dir.exists() {
+            let mut sha1_file = File::open(&sha1_path)?;
+            let mut sha1 = String::new();
+            sha1_file.read_to_string(&mut sha1)?;
+            if sha1 == meta["sha1"].as_str().unwrap() {
+                // Nothing to do.
+                return Ok(())
+            }
+        }
 
-    let dashboard_dir = cargo_manifest_dir.join("mini-dashboard");
-    create_dir_all(&dashboard_dir)?;
-    let cursor = Cursor::new(&dashboard_assets_bytes);
-    let mut zip = zip::read::ZipArchive::new(cursor)?;
-    zip.extract(&dashboard_dir)?;
-    resource_dir(&dashboard_dir).build()?;
-    Ok(())
+        let url = meta["assets-url"].as_str().unwrap();
+
+        let dashboard_assets_bytes = get(url)?.bytes()?;
+
+        let mut hasher = Sha1::new();
+        hasher.update(&dashboard_assets_bytes);
+        let sha1 = hex::encode(hasher.finalize());
+
+        assert_eq!(meta["sha1"].as_str().unwrap(), sha1, "Downloaded mini-dashboard shasum differs from the one specified in the Cargo.toml");
+
+        create_dir_all(&dashboard_dir)?;
+        let cursor = Cursor::new(&dashboard_assets_bytes);
+        let mut zip = zip::read::ZipArchive::new(cursor)?;
+        zip.extract(&dashboard_dir)?;
+        resource_dir(&dashboard_dir).build()?;
+
+        // Write the sha1 for the dashboard back to file.
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(sha1_path)?;
+
+        file.write_all(sha1.as_bytes())?;
+        file.flush()?;
+
+        Ok(())
+    }
 }
