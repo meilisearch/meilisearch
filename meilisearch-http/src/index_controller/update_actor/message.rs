@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use tokio::sync::{mpsc, oneshot};
@@ -26,7 +27,7 @@ pub enum UpdateMsg<D> {
         ret: oneshot::Sender<Result<()>>,
     },
     Snapshot {
-        uuids: Vec<Uuid>,
+        uuids: HashSet<Uuid>,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },

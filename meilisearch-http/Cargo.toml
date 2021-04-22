@@ -28,15 +28,13 @@ actix-service = "2.0.0"
 actix-web = { version = "=4.0.0-beta.6", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
 anyhow = "1.0.36"
-async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 async-stream = "0.3.0"
 async-trait = "0.1.42"
+arc-swap = "1.2.0"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
-bytemuck = "1.5.1"
 bytes = "0.6.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
-dashmap = "4.0.2"
 either = "1.6.1"
 env_logger = "0.8.2"
 flate2 = "1.0.19"

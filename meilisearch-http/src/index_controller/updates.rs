@@ -1,87 +1,121 @@
+use std::path::{Path, PathBuf};
+
 use chrono::{DateTime, Utc};
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Enqueued<M> {
-    pub update_id: u64,
-    pub meta: M,
-    pub enqueued_at: DateTime<Utc>,
+use crate::index::{Facets, Settings};
+
+pub type UpdateError = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateResult {
+    DocumentsAddition(DocumentAdditionResult),
+    DocumentDeletion { deleted: u64 },
+    Other,
 }
 
-impl<M> Enqueued<M> {
-    pub fn new(meta: M, update_id: u64) -> Self {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum UpdateMeta {
+    DocumentsAddition {
+        method: IndexDocumentsMethod,
+        format: UpdateFormat,
+        primary_key: Option<String>,
+    },
+    ClearDocuments,
+    DeleteDocuments,
+    Settings(Settings),
+    Facets(Facets),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Enqueued {
+    pub update_id: u64,
+    pub meta: UpdateMeta,
+    pub enqueued_at: DateTime<Utc>,
+    pub content: Option<PathBuf>,
+}
+
+impl Enqueued {
+    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<PathBuf>) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
             update_id,
+            content,
         }
     }
 
-    pub fn processing(self) -> Processing<M> {
+    pub fn processing(self) -> Processing {
         Processing {
             from: self,
             started_processing_at: Utc::now(),
         }
     }
 
-    pub fn abort(self) -> Aborted<M> {
+    pub fn abort(self) -> Aborted {
         Aborted {
             from: self,
             aborted_at: Utc::now(),
         }
     }
 
-    pub fn meta(&self) -> &M {
+    pub fn meta(&self) -> &UpdateMeta {
         &self.meta
     }
 
     pub fn id(&self) -> u64 {
         self.update_id
     }
+
+    pub fn content_path(&self) -> Option<&Path> {
+        self.content.as_deref()
+    }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Processed<M, N> {
-    pub success: N,
+pub struct Processed {
+    pub success: UpdateResult,
     pub processed_at: DateTime<Utc>,
     #[serde(flatten)]
-    pub from: Processing<M>,
+    pub from: Processing,
 }
 
-impl<M, N> Processed<M, N> {
+impl Processed {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Processing<M> {
+pub struct Processing {
     #[serde(flatten)]
-    pub from: Enqueued<M>,
+    pub from: Enqueued,
     pub started_processing_at: DateTime<Utc>,
 }
 
-impl<M> Processing<M> {
+impl Processing {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &M {
+    pub fn meta(&self) -> &UpdateMeta {
         self.from.meta()
     }
 
-    pub fn process<N>(self, meta: N) -> Processed<M, N> {
+    pub fn process(self, success: UpdateResult) -> Processed {
         Processed {
-            success: meta,
+            success,
             from: self,
             processed_at: Utc::now(),
         }
     }
 
-    pub fn fail<E>(self, error: E) -> Failed<M, E> {
+    pub fn fail(self, error: UpdateError) -> Failed {
         Failed {
             from: self,
             error,
@@ -90,46 +124,46 @@ impl<M> Processing<M> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Aborted<M> {
+pub struct Aborted {
     #[serde(flatten)]
-    from: Enqueued<M>,
+    from: Enqueued,
     aborted_at: DateTime<Utc>,
 }
 
-impl<M> Aborted<M> {
+impl Aborted {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Failed<M, E> {
+pub struct Failed {
     #[serde(flatten)]
-    from: Processing<M>,
-    error: E,
+    from: Processing,
+    error: UpdateError,
     failed_at: DateTime<Utc>,
 }
 
-impl<M, E> Failed<M, E> {
+impl Failed {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
-pub enum UpdateStatus<M, N, E> {
-    Processing(Processing<M>),
-    Enqueued(Enqueued<M>),
-    Processed(Processed<M, N>),
-    Aborted(Aborted<M>),
-    Failed(Failed<M, E>),
+pub enum UpdateStatus {
+    Processing(Processing),
+    Enqueued(Enqueued),
+    Processed(Processed),
+    Aborted(Aborted),
+    Failed(Failed),
 }
 
-impl<M, N, E> UpdateStatus<M, N, E> {
+impl UpdateStatus {
     pub fn id(&self) -> u64 {
         match self {
             UpdateStatus::Processing(u) => u.id(),
@@ -140,7 +174,7 @@ impl<M, N, E> UpdateStatus<M, N, E> {
         }
     }
 
-    pub fn processed(&self) -> Option<&Processed<M, N>> {
+    pub fn processed(&self) -> Option<&Processed> {
         match self {
             UpdateStatus::Processed(p) => Some(p),
             _ => None,
@@ -148,32 +182,32 @@ impl<M, N, E> UpdateStatus<M, N, E> {
     }
 }
 
-impl<M, N, E> From<Enqueued<M>> for UpdateStatus<M, N, E> {
-    fn from(other: Enqueued<M>) -> Self {
+impl From<Enqueued> for UpdateStatus {
+    fn from(other: Enqueued) -> Self {
         Self::Enqueued(other)
     }
 }
 
-impl<M, N, E> From<Aborted<M>> for UpdateStatus<M, N, E> {
-    fn from(other: Aborted<M>) -> Self {
+impl From<Aborted> for UpdateStatus {
+    fn from(other: Aborted) -> Self {
         Self::Aborted(other)
     }
 }
 
-impl<M, N, E> From<Processed<M, N>> for UpdateStatus<M, N, E> {
-    fn from(other: Processed<M, N>) -> Self {
+impl From<Processed> for UpdateStatus {
+    fn from(other: Processed) -> Self {
         Self::Processed(other)
     }
 }
 
-impl<M, N, E> From<Processing<M>> for UpdateStatus<M, N, E> {
-    fn from(other: Processing<M>) -> Self {
+impl From<Processing> for UpdateStatus {
+    fn from(other: Processing) -> Self {
         Self::Processing(other)
     }
 }
 
-impl<M, N, E> From<Failed<M, E>> for UpdateStatus<M, N, E> {
-    fn from(other: Failed<M, E>) -> Self {
+impl From<Failed> for UpdateStatus {
+    fn from(other: Failed) -> Self {
         Self::Failed(other)
     }
 }

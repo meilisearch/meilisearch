@@ -8,23 +8,19 @@ use anyhow::bail;
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use milli::FieldsDistribution;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+pub use updates::*;
 use index_actor::IndexActorHandle;
-use snapshot::load_snapshot;
-use snapshot::SnapshotService;
+use snapshot::{SnapshotService, load_snapshot};
 use update_actor::UpdateActorHandle;
-pub use updates::{Failed, Processed, Processing};
-use uuid_resolver::UuidError;
-use uuid_resolver::UuidResolverHandle;
+use uuid_resolver::{UuidError, UuidResolverHandle};
 
-use crate::index::{Document, SearchQuery, SearchResult};
-use crate::index::{Facets, Settings, UpdateResult};
+use crate::index::{Settings, Document, SearchQuery, SearchResult};
 use crate::option::Opt;
 
 mod index_actor;
@@ -33,8 +29,6 @@ mod update_actor;
 mod update_handler;
 mod updates;
 mod uuid_resolver;
-
-pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -45,20 +39,6 @@ pub struct IndexMetadata {
     name: String,
     #[serde(flatten)]
     pub meta: index_actor::IndexMeta,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum UpdateMeta {
-    DocumentsAddition {
-        method: IndexDocumentsMethod,
-        format: UpdateFormat,
-        primary_key: Option<String>,
-    },
-    ClearDocuments,
-    DeleteDocuments,
-    Settings(Settings),
-    Facets(Facets),
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +53,9 @@ pub struct IndexStats {
     #[serde(skip)]
     pub size: u64,
     pub number_of_documents: u64,
+    /// Whether the current index is performing an update. It is initially `None` when the
+    /// index returns it, since it is the `UpdateStore` that knows what index is currently indexing. It is
+    /// later set to either true or false, we we retrieve the information from the `UpdateStore`
     pub is_indexing: Option<bool>,
     pub fields_distribution: FieldsDistribution,
 }
@@ -180,7 +163,8 @@ impl IndexController {
             Err(UuidError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let status = perform_update(uuid).await?;
-                self.index_handle.create_index(uuid, None).await?;
+                // ignore if index creation fails now, since it may already have been created
+                let _ = self.index_handle.create_index(uuid, None).await;
                 self.uuid_resolver.insert(name, uuid).await?;
                 Ok(status)
             }
@@ -233,7 +217,8 @@ impl IndexController {
             Err(UuidError::UnexistingIndex(name)) if create => {
                 let uuid = Uuid::new_v4();
                 let status = perform_udpate(uuid).await?;
-                self.index_handle.create_index(uuid, None).await?;
+                // ignore if index creation fails now, since it may already have been created
+                let _ = self.index_handle.create_index(uuid, None).await;
                 self.uuid_resolver.insert(name, uuid).await?;
                 Ok(status)
             }
@@ -378,7 +363,8 @@ impl IndexController {
         let uuid = self.uuid_resolver.get(uid).await?;
         let update_infos = self.update_handle.get_info().await?;
         let mut stats = self.index_handle.get_index_stats(uuid).await?;
-        stats.is_indexing = (Some(uuid) == update_infos.processing).into();
+        // Check if the currently indexing update is from out index.
+        stats.is_indexing = Some(Some(uuid) == update_infos.processing);
         Ok(stats)
     }
 
@@ -396,7 +382,7 @@ impl IndexController {
                 Some(last.max(index.meta.updated_at))
             });
 
-            index_stats.is_indexing = (Some(index.uuid) == update_infos.processing).into();
+            index_stats.is_indexing = Some(Some(index.uuid) == update_infos.processing);
 
             indexes.insert(index.uid, index_stats);
         }

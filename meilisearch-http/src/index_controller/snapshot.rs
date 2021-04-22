@@ -131,7 +131,8 @@ pub fn load_snapshot(
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::iter::FromIterator;
+    use std::{collections::HashSet, sync::Arc};
 
     use futures::future::{err, ok};
     use rand::Rng;
@@ -139,15 +140,19 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::index_controller::update_actor::{UpdateError, MockUpdateActorHandle, UpdateActorHandleImpl};
     use crate::index_controller::index_actor::MockIndexActorHandle;
+    use crate::index_controller::update_actor::{
+        MockUpdateActorHandle, UpdateActorHandleImpl, UpdateError,
+    };
     use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidError};
 
     #[actix_rt::test]
     async fn test_normal() {
         let mut rng = rand::thread_rng();
         let uuids_num: usize = rng.gen_range(5, 10);
-        let uuids = (0..uuids_num).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
+        let uuids = (0..uuids_num)
+            .map(|_| Uuid::new_v4())
+            .collect::<HashSet<_>>();
 
         let mut uuid_resolver = MockUuidResolverHandle::new();
         let uuids_clone = uuids.clone();
@@ -162,13 +167,12 @@ mod test {
             .expect_snapshot()
             .withf(move |uuid, _path| uuids_clone.contains(uuid))
             .times(uuids_num)
-            .returning(move |_, _| {
-                Box::pin(ok(()))
-            });
+            .returning(move |_, _| Box::pin(ok(())));
 
         let dir = tempfile::tempdir_in(".").unwrap();
         let handle = Arc::new(index_handle);
-        let update_handle = UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
+        let update_handle =
+            UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
 
         let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(
@@ -214,7 +218,7 @@ mod test {
         uuid_resolver
             .expect_snapshot()
             .times(1)
-            .returning(move |_| Box::pin(ok(vec![uuid])));
+            .returning(move |_| Box::pin(ok(HashSet::from_iter(Some(uuid)))));
 
         let mut update_handle = MockUpdateActorHandle::new();
         update_handle

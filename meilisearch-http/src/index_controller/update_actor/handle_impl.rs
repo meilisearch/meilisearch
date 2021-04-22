@@ -1,12 +1,13 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::index_controller::IndexActorHandle;
+use crate::index_controller::{IndexActorHandle, UpdateStatus};
 
 use super::{
-    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStatus, UpdateStoreInfo
+    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStoreInfo,
 };
 
 #[derive(Clone)]
@@ -63,7 +64,7 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+    async fn snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Snapshot { uuids, path, ret };
         let _ = self.sender.send(msg).await;

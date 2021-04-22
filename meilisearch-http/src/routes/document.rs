@@ -107,14 +107,11 @@ async fn get_all_documents(
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let attributes_to_retrieve = params
-    .attributes_to_retrieve
-    .as_ref()
-    .and_then(|attrs| {
+    let attributes_to_retrieve = params.attributes_to_retrieve.as_ref().and_then(|attrs| {
         let mut names = Vec::new();
         for name in attrs.split(',').map(String::from) {
             if name == "*" {
-                return None
+                return None;
             }
             names.push(name);
         }

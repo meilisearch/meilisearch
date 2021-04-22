@@ -1,14 +1,16 @@
+use std::collections::HashSet;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use futures::StreamExt;
 use log::info;
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
+use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use futures::StreamExt;
 
 use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore, UpdateStoreInfo};
 use crate::index_controller::index_actor::{IndexActorHandle, CONCURRENT_INDEX_MSG};
@@ -32,18 +34,14 @@ where
         path: impl AsRef<Path>,
         index_handle: I,
     ) -> anyhow::Result<Self> {
-        let path = path.as_ref().to_owned().join("updates");
+        let path = path.as_ref().join("updates");
 
         std::fs::create_dir_all(&path)?;
 
         let mut options = heed::EnvOpenOptions::new();
         options.map_size(update_db_size);
 
-        let handle = index_handle.clone();
-        let store = UpdateStore::open(options, &path, move |uuid, meta, file| {
-            futures::executor::block_on(handle.update(uuid, meta, file))
-        })
-        .map_err(|e| UpdateError::Error(e.into()))?;
+        let store = UpdateStore::open(options, &path, index_handle.clone())?;
         std::fs::create_dir_all(path.join("update_files"))?;
         assert!(path.exists());
         Ok(Self {
@@ -95,40 +93,54 @@ where
         meta: UpdateMeta,
         mut payload: mpsc::Receiver<PayloadData<D>>,
     ) -> Result<UpdateStatus> {
-        let update_file_id = uuid::Uuid::new_v4();
-        let path = self
-            .path
-            .join(format!("update_files/update_{}", update_file_id));
-        let mut file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&path)
-            .await
-            .map_err(|e| UpdateError::Error(Box::new(e)))?;
 
-        while let Some(bytes) = payload.recv().await {
-            match bytes {
-                Ok(bytes) => {
-                    file.write_all(bytes.as_ref())
+        let file_path = match meta {
+            UpdateMeta::DocumentsAddition { .. }
+            | UpdateMeta::DeleteDocuments => {
+
+                let update_file_id = uuid::Uuid::new_v4();
+                let path = self
+                    .path
+                    .join(format!("update_files/update_{}", update_file_id));
+                let mut file = fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(&path)
+                    .await
+                    .map_err(|e| UpdateError::Error(Box::new(e)))?;
+
+                let mut file_len = 0;
+                while let Some(bytes) = payload.recv().await {
+                    match bytes {
+                        Ok(bytes) => {
+                            file_len += bytes.as_ref().len();
+                            file.write_all(bytes.as_ref())
+                                .await
+                                .map_err(|e| UpdateError::Error(Box::new(e)))?;
+                            }
+                        Err(e) => {
+                            return Err(UpdateError::Error(e));
+                        }
+                    }
+                }
+
+                if file_len != 0 {
+                    file.flush()
                         .await
                         .map_err(|e| UpdateError::Error(Box::new(e)))?;
-                }
-                Err(e) => {
-                    return Err(UpdateError::Error(e));
+                    let file = file.into_std().await;
+                    Some((file, path))
+                } else {
+                    // empty update, delete the empty file.
+                    fs::remove_file(&path)
+                        .await
+                        .map_err(|e| UpdateError::Error(Box::new(e)))?;
+                    None
                 }
             }
-        }
-
-        file.flush()
-            .await
-            .map_err(|e| UpdateError::Error(Box::new(e)))?;
-
-        file.seek(SeekFrom::Start(0))
-            .await
-            .map_err(|e| UpdateError::Error(Box::new(e)))?;
-
-        let mut file = file.into_std().await;
+            _ => None
+        };
 
         let update_store = self.store.clone();
 
@@ -136,12 +148,9 @@ where
             use std::io::{copy, sink, BufReader, Seek};
 
             // If the payload is empty, ignore the check.
-            if file
-                .metadata()
-                .map_err(|e| UpdateError::Error(Box::new(e)))?
-                .len()
-                > 0
-            {
+            let path = if let Some((mut file, path)) = file_path {
+                // set the file back to the beginning
+                file.seek(SeekFrom::Start(0)).map_err(|e| UpdateError::Error(Box::new(e)))?;
                 // Check that the json payload is valid:
                 let reader = BufReader::new(&mut file);
                 let mut checker = JsonChecker::new(reader);
@@ -153,7 +162,10 @@ where
                     let _: serde_json::Value = serde_json::from_reader(file)
                         .map_err(|e| UpdateError::Error(Box::new(e)))?;
                 }
-            }
+                Some(path)
+            } else {
+                None
+            };
 
             // The payload is valid, we can register it to the update store.
             update_store
@@ -197,17 +209,11 @@ where
         Ok(())
     }
 
-    async fn handle_snapshot(&self, uuids: Vec<Uuid>, path: PathBuf) -> Result<()> {
+    async fn handle_snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            // acquire write lock to prevent further writes during snapshot
-            // the update lock must be acquired BEFORE the write lock to prevent dead lock
-            let _lock = update_store.update_lock.lock();
-            let mut txn = update_store.env.write_txn()?;
-
-            // create db snapshot
-            update_store.snapshot(&mut txn, &path)?;
+            update_store.snapshot(&uuids, &path)?;
 
             // Perform the snapshot of each index concurently. Only a third of the capabilities of
             // the index actor at a time not to put too much pressure on the index actor
@@ -218,7 +224,7 @@ where
                 .map(|&uuid| handle.snapshot(uuid, path.clone()))
                 .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
 
-            futures::executor::block_on(async {
+            Handle::current().block_on(async {
                 while let Some(res) = stream.next().await {
                     res?;
                 }
@@ -234,24 +240,13 @@ where
 
     async fn handle_get_info(&self) -> Result<UpdateStoreInfo> {
         let update_store = self.store.clone();
-        let processing  = self.store.processing.clone();
         let info = tokio::task::spawn_blocking(move || -> anyhow::Result<UpdateStoreInfo> {
-            let txn = update_store.env.read_txn()?;
-            let size = update_store.get_size(&txn)?;
-            let processing = processing
-                .read()
-                .as_ref()
-                .map(|(uuid, _)| uuid)
-                .cloned();
-            let info = UpdateStoreInfo {
-                size, processing
-            };
+            let info = update_store.get_info()?;
             Ok(info)
         })
         .await
         .map_err(|e| UpdateError::Error(e.into()))?
         .map_err(|e| UpdateError::Error(e.into()))?;
-
 
         Ok(info)
     }

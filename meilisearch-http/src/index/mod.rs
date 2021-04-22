@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, UpdateResult};
+pub use updates::{Facets, Settings};
 
 mod search;
 mod updates;
@@ -59,9 +59,7 @@ impl Index {
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
-        let distinct_attribute = self
-            .distinct_attribute(&txn)?
-            .map(String::from);
+        let distinct_attribute = self.distinct_attribute(&txn)?.map(String::from);
 
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
