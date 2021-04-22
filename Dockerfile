@@ -20,7 +20,7 @@ ENV     RUSTFLAGS="-C target-feature=-crt-static"
 # Create dummy main.rs files for each workspace member to be able to compile all the dependencies
 RUN     find . -type d -name "meilisearch-*" | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
 # Use `cargo build` instead of `cargo vendor` because we need to not only download but compile dependencies too
-RUN     $HOME/.cargo/bin/cargo build --release
+RUN     $HOME/.cargo/bin/cargo build --release --features mini-dashboard
 # Cleanup dummy main.rs files
 RUN     find . -path "*/src/main.rs" -delete
 
@@ -29,7 +29,7 @@ ARG     COMMIT_DATE
 ENV     COMMIT_SHA=${COMMIT_SHA} COMMIT_DATE=${COMMIT_DATE}
 
 COPY    . .
-RUN     $HOME/.cargo/bin/cargo build --release
+RUN     $HOME/.cargo/bin/cargo build --release --features mini-dashboard
 
 # Run
 FROM    alpine:3.10

@@ -5,7 +5,6 @@ edition = "2018"
 license = "MIT"
 name = "meilisearch-http"
 version = "0.21.0-alpha.3"
-build = "build.rs"
 
 [[bin]]
 name = "meilisearch"
