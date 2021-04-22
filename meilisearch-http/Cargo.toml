@@ -11,12 +11,13 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [build-dependencies]
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", branch = "actix-web-4" }
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e" }
 anyhow = "*"
 cargo_toml = "0.9.0"
 hex = "0.4.3"
 reqwest = { version = "0.11.3", features = ["blocking", "rustls-tls"], default-features = false}
 sha-1 = "0.9.4"
+tempfile = "3.1.0"
 vergen = "3.1.0"
 zip = "0.5.12"
 
@@ -25,7 +26,7 @@ actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "2
 actix-http = { version = "=3.0.0-beta.6" }
 actix-service = "2.0.0"
 actix-web = { version = "=4.0.0-beta.6", features = ["rustls"] }
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", branch = "actix-web-4", optional = true }
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
 anyhow = "1.0.36"
 async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 async-stream = "0.3.0"

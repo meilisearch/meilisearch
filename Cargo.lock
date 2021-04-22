@@ -219,7 +219,7 @@ dependencies = [
 [[package]]
 name = "actix-web-static-files"
 version = "3.0.5"
-source = "git+https://github.com/MarinPostma/actix-web-static-files.git?branch=actix-web-4#6db8c3e2940d61659581492b5e9c9b9062567613"
+source = "git+https://github.com/MarinPostma/actix-web-static-files.git?rev=6db8c3e#6db8c3e2940d61659581492b5e9c9b9062567613"
 dependencies = [
  "actix-service",
  "actix-web",
