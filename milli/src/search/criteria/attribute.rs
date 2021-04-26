@@ -13,7 +13,7 @@ use super::{Criterion, CriterionResult, Context, resolve_query_tree};
 
 /// To be able to divide integers by the number of words in the query
 /// we want to find a multiplier that allow us to divide by any number between 1 and 10.
-/// We Choosed the LCM of all numbers between 1 and 10 as the multiplier (https://en.wikipedia.org/wiki/Least_common_multiple).
+/// We chose the LCM of all numbers between 1 and 10 as the multiplier (https://en.wikipedia.org/wiki/Least_common_multiple).
 const LCM_10_FIRST_NUMBERS: u32 = 2520;
 
 pub struct Attribute<'t> {

@@ -123,7 +123,15 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         Ok(words_positions)
     }
 
-    fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>> {
+    fn word_position_iterator(
+        &self,
+        word: &str,
+        level: TreeLevel,
+        in_prefix_cache: bool,
+        left: Option<u32>,
+        right: Option<u32>
+    ) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>
+    {
         let range = {
             let left = left.unwrap_or(u32::min_value());
             let right = right.unwrap_or(u32::max_value());

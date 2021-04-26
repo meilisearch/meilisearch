@@ -44,11 +44,7 @@ impl<'t> Final<'t> {
 
                     bucket_candidates.union_with(&candidates);
 
-                    return Ok(Some(FinalResult {
-                        query_tree,
-                        candidates,
-                        bucket_candidates,
-                    }));
+                    return Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }));
                 },
                 None => return Ok(None),
             }
