@@ -2,7 +2,8 @@ use std::error;
 use std::fmt;
 
 use actix_web as aweb;
-use actix_web::dev::HttpResponseBuilder;
+use actix_web::body::Body;
+use actix_web::dev::BaseHttpResponseBuilder;
 use actix_web::error::{JsonPayloadError, QueryPayloadError};
 use actix_web::http::Error as HttpError;
 use actix_web::http::StatusCode;
@@ -71,8 +72,9 @@ impl Serialize for ResponseError {
 }
 
 impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::HttpResponse {
-        HttpResponseBuilder::new(self.status_code()).json(&self)
+    fn error_response(&self) -> aweb::BaseHttpResponse<Body> {
+        let json = serde_json::to_vec(self).unwrap();
+        BaseHttpResponseBuilder::new(self.status_code()).body(json)
     }
 
     fn status_code(&self) -> StatusCode {
@@ -297,6 +299,7 @@ impl From<JsonPayloadError> for Error {
             JsonPayloadError::Payload(err) => {
                 Error::BadRequest(format!("Problem while decoding the request: {}", err))
             }
+            e => Error::Internal(format!("Unexpected Json error: {}", e))
         }
     }
 }
@@ -307,6 +310,7 @@ impl From<QueryPayloadError> for Error {
             QueryPayloadError::Deserialize(err) => {
                 Error::BadRequest(format!("Invalid query parameters: {}", err))
             }
+            e => Error::Internal(format!("Unexpected query payload error: {}", e))
         }
     }
 }

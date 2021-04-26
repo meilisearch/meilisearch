@@ -72,19 +72,14 @@ async fn main() -> Result<(), MainError> {
 
     print_launch_resume(&opt, &data);
 
-    let enable_frontend = opt.env != "production";
-
-    run_http(data, opt, enable_frontend).await?;
+    run_http(data, opt).await?;
 
     Ok(())
 }
 
-async fn run_http(
-    data: Data,
-    opt: Opt,
-    enable_frontend: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let http_server = HttpServer::new(move || create_app!(&data, enable_frontend))
+async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+    let _enable_dashboard = &opt.env == "development";
+    let http_server = HttpServer::new(move || create_app!(&data, _enable_dashboard))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C
         .disable_signals();
 
@@ -102,11 +97,11 @@ async fn run_http(
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
     let commit_sha = match option_env!("COMMIT_SHA") {
         Some("") | None => env!("VERGEN_SHA"),
-        Some(commit_sha) => commit_sha
+        Some(commit_sha) => commit_sha,
     };
     let commit_date = match option_env!("COMMIT_DATE") {
         Some("") | None => env!("VERGEN_COMMIT_DATE"),
-        Some(commit_date) => commit_date
+        Some(commit_date) => commit_date,
     };
 
     let ascii_name = r#"
