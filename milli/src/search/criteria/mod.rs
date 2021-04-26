@@ -130,7 +130,7 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         in_prefix_cache: bool,
         left: Option<u32>,
         right: Option<u32>
-    ) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>
     {
         let range = {
             let left = left.unwrap_or(u32::min_value());
