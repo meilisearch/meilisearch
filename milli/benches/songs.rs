@@ -20,8 +20,8 @@ fn base_conf(builder: &mut Settings) {
     builder.set_searchable_fields(searchable_fields);
 
     let faceted_fields = [
-        ("released-timestamp", "integer"),
-        ("duration-float", "float"),
+        ("released-timestamp", "number"),
+        ("duration-float", "number"),
         ("genre", "string"),
         ("country", "string"),
         ("artist", "string"),
