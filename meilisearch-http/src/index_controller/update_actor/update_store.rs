@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::helpers::EnvSizer;
 use crate::index_controller::updates::*;
 
+#[allow(clippy::upper_case_acronyms)]
 type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 #[derive(Clone)]

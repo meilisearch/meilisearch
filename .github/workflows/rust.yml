@@ -13,12 +13,54 @@ env:
 
 jobs:
   tests:
-
-    runs-on: ubuntu-latest
-
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04, macos-latest]
     steps:
     - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run cargo check without any default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --no-default-features
+    - name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --locked --release
+
+  # We don't run test on Windows since we get the following error: There is not enough space on the disk.
+  check-on-windows:
+    name: Cargo check on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run cargo check without any default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --no-default-features
+    - name: Run cargo check with all default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+
+  clippy:
+    name: Run Clippy
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets -- --deny warnings

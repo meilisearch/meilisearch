@@ -1,3 +1,8 @@
-status = ['tests']
+status = [
+    'Tests on ubuntu-18.04',
+    'Tests on macos-latest',
+    'Cargo check on Windows',
+    'Run Clippy'
+]
 # 3 hours timeout
 timeout-sec = 10800

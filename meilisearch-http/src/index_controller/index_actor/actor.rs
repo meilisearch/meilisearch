@@ -197,7 +197,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 .map_err(|e| IndexError::Error(e.into()))
         }
 
-        *self.processing.write().await = Some(meta.index_uuid().clone());
+        *self.processing.write().await = Some(*meta.index_uuid());
         let result = get_result(self, meta, data).await;
         *self.processing.write().await = None;
 

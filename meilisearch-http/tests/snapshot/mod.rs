@@ -35,7 +35,7 @@ async fn perform_snapshot() {
     let snapshot_path = snapshot_dir
         .path()
         .to_owned()
-        .join(format!("db.snapshot"));
+        .join("db.snapshot".to_string());
 
     let options = Opt {
         import_snapshot: Some(snapshot_path),
