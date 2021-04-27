@@ -57,7 +57,7 @@ impl<'t> Criterion for Attribute<'t> {
                         flatten_query_tree(&qt)
                     });
 
-                    let found_candidates = if candidates.len() < 1_000 {
+                    let found_candidates = if candidates.len() < 1000 {
                         let current_buckets = match self.current_buckets.as_mut() {
                             Some(current_buckets) => current_buckets,
                             None => {
