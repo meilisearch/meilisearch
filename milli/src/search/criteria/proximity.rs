@@ -30,7 +30,7 @@ impl<'t> Proximity<'t> {
             state: None,
             proximity: 0,
             bucket_candidates: RoaringBitmap::new(),
-            parent: parent,
+            parent,
             candidates_cache: Cache::new(),
             plane_sweep_cache: None,
         }
