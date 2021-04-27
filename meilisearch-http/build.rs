@@ -28,9 +28,10 @@ mod mini_dashboard {
     pub fn setup_mini_dashboard() -> anyhow::Result<()> {
         let cargo_manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
         let cargo_toml = cargo_manifest_dir.join("Cargo.toml");
+        let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-        let sha1_path = cargo_manifest_dir.join(".mini-dashboard.sha1");
-        let dashboard_dir = cargo_manifest_dir.join("mini-dashboard");
+        let sha1_path = out_dir.join(".mini-dashboard.sha1");
+        let dashboard_dir = out_dir.join("mini-dashboard");
 
         let manifest = Manifest::from_path(cargo_toml).unwrap();
 
