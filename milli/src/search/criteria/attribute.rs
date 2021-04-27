@@ -453,7 +453,7 @@ fn initialize_query_level_iterators<'t, 'q>(
         }
         // QueryLevelIterator need to be sorted by level and folded in descending order.
         branch_positions.sort_unstable_by_key(|qli| qli.level);
-        let folded_query_level_iterators =  branch_positions
+        let folded_query_level_iterators = branch_positions
             .into_iter()
             .fold(None, |fold: Option<QueryLevelIterator>, mut qli| match fold {
                 Some(fold) => {
