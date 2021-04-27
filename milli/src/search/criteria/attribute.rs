@@ -304,9 +304,7 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
     /// and from eventual chainned QueryLevelIterator.
     fn next(&mut self, allowed_candidates: &RoaringBitmap, tree_level: TreeLevel) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
         let parent_result = match self.parent.as_mut() {
-            Some(parent) => {
-                Some(parent.next(allowed_candidates, tree_level)?)
-            },
+            Some(parent) => Some(parent.next(allowed_candidates, tree_level)?),
             None => None,
         };
 
