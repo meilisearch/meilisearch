@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::mem::size_of;
+
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use roaring::RoaringBitmap;
 
@@ -7,9 +9,14 @@ pub struct BoRoaringBitmapCodec;
 impl heed::BytesDecode<'_> for BoRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
-    fn bytes_decode(mut bytes: &[u8]) -> Option<Self::DItem> {
+    fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
         let mut bitmap = RoaringBitmap::new();
-        while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
+        let num_u32 = bytes.len() / size_of::<u32>();
+        for i in 0..num_u32 {
+            let start = i * size_of::<u32>();
+            let end = (i + 1) * size_of::<u32>();
+            let mut bytes = bytes.get(start..end)?;
+            let integer = bytes.read_u32::<NativeEndian>().ok()?;
             bitmap.insert(integer);
         }
         Some(bitmap)
