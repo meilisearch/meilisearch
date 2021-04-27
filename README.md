@@ -28,7 +28,7 @@ cargo run --release
 cargo test
 ```
 
-If you encouter any `Too many open files` error when running the tests, please upgrade the maximum number of open file descriptors with this command:
+If you encounter any `Too many open files` error when running the tests, please upgrade the maximum number of open file descriptors with this command:
 
 ```
 ulimit -Sn 3000
