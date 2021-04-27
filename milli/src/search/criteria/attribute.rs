@@ -496,7 +496,9 @@ fn set_compute_candidates<'t>(
         let branch_rank = branch.compute_rank();
         // if current is worst than best we break to return
         // candidates that correspond to the best rank
-        if let Some((best_rank, _)) = final_candidates { if branch_rank > best_rank { break; } }
+        if let Some((best_rank, _)) = final_candidates {
+            if branch_rank > best_rank { break }
+        }
         let _left = branch.last_result.0;
         let candidates = take(&mut branch.last_result.2);
         if candidates.is_empty() {
