@@ -465,7 +465,7 @@ fn initialize_query_level_iterators<'t, 'q>(
 
         if let Some(mut folded_query_level_iterators) = folded_query_level_iterators {
             let tree_level = folded_query_level_iterators.level;
-            let last_result  = folded_query_level_iterators.next(allowed_candidates, tree_level)?;
+            let last_result = folded_query_level_iterators.next(allowed_candidates, tree_level)?;
             if let Some(last_result) = last_result {
                 let branch = Branch {
                     last_result,
