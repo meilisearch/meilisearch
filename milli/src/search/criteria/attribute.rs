@@ -529,9 +529,7 @@ fn set_compute_candidates<'t>(
 
     }
 
-    Ok(final_candidates.map(|(_rank, candidates)| {
-        candidates
-    }))
+    Ok(final_candidates.map(|(_rank, candidates)| candidates))
 }
 
 fn linear_compute_candidates(
