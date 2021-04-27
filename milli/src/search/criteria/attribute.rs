@@ -77,9 +77,7 @@ impl<'t> Criterion for Attribute<'t> {
                             },
                         }
                     } else {
-                        let found_candidates = set_compute_candidates(self.ctx, flattened_query_tree, candidates, wdcache)?;
-
-                        match found_candidates {
+                        match set_compute_candidates(self.ctx, flattened_query_tree, candidates, wdcache)? {
                             Some(candidates) => candidates,
                             None => {
                                 return Ok(Some(CriterionResult {
