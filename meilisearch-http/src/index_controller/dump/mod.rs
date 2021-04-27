@@ -1,14 +1,13 @@
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+mod v1;
+mod v2;
+
+use std::{fs::File, path::{Path, PathBuf}, sync::Arc};
 
 use anyhow::bail;
 use heed::EnvOpenOptions;
 use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use serde::{Deserialize, Serialize};
+use serde::{de::Deserializer, Deserialize, Serialize};
 use tempfile::TempDir;
 use tokio::fs;
 use tokio::task::spawn_blocking;
@@ -20,13 +19,30 @@ use crate::index::Index;
 use crate::index_controller::uuid_resolver;
 use crate::{helpers::compression, index::Settings};
 
+pub (super) fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
+}
+
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 enum DumpVersion {
     V1,
+    V2,
 }
 
 impl DumpVersion {
-    const CURRENT: Self = Self::V1;
+    const CURRENT: Self = Self::V2;
+
+    /// Select the good importation function from the `DumpVersion` of metadata
+    pub fn import_index(self, size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
+        match self {
+            Self::V1 => v1::import_index(size, dump_path, index_path),
+            Self::V2 => v2::import_index(size, dump_path, index_path),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -141,16 +157,6 @@ where
     }
 }
 
-/// Extract Settings from `settings.json` file present at provided `dir_path`
-fn settings_from_path(dir_path: &Path) -> anyhow::Result<Settings> {
-    let path = dir_path.join("settings.json");
-    let file = File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let metadata = serde_json::from_reader(reader)?;
-
-    Ok(metadata)
-}
-
 /// Write Settings in `settings.json` file at provided `dir_path`
 fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> {
     let path = dir_path.join("settings.json");
@@ -161,40 +167,7 @@ fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn import_index_v1(size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
-    std::fs::create_dir_all(&index_path)?;
-    let mut options = EnvOpenOptions::new();
-    options.map_size(size);
-    let index = milli::Index::new(options, index_path)?;
-    let index = Index(Arc::new(index));
-
-    // extract `settings.json` file and import content
-    let settings = settings_from_path(&dump_path)?;
-    let update_builder = UpdateBuilder::new(0);
-    index.update_settings(&settings, update_builder)?;
-
-    let update_builder = UpdateBuilder::new(1);
-    let file = File::open(&index_path.join("documents.jsonl"))?;
-    let reader = std::io::BufReader::new(file);
-    index.update_documents(
-        UpdateFormat::JsonStream,
-        IndexDocumentsMethod::ReplaceDocuments,
-        reader,
-        update_builder,
-        None,
-    )?;
-
-    // the last step: we extract the milli::Index and close it
-    Arc::try_unwrap(index.0)
-        .map_err(|_e| "[dumps] At this point no one is supposed to have a reference on the index")
-        .unwrap()
-        .prepare_for_closing()
-        .wait();
-
-    Ok(())
-}
-
-pub fn load_dump(
+pub async fn load_dump(
     db_path: impl AsRef<Path>,
     dump_path: impl AsRef<Path>,
     size: usize,
@@ -212,15 +185,10 @@ pub fn load_dump(
     // read dump metadata
     let metadata = DumpMetadata::from_path(&tmp_dir_path)?;
 
-    // choose importation function from DumpVersion of metadata
-    let import_index = match metadata.dump_version {
-        DumpVersion::V1 => import_index_v1,
-    };
-
     // remove indexes which have same `uuid` than indexes to import and create empty indexes
-    let existing_index_uids = futures::executor::block_on(uuid_resolver.list())?;
+    let existing_index_uids = uuid_resolver.list().await?;
 
-    info!("Deleting indexes provided in the dump...");
+    info!("Deleting indexes already present in the db and provided in the dump...");
     for idx in &metadata.indexes {
         if let Some((_, uuid)) = existing_index_uids.iter().find(|(s, _)| s == &idx.uid) {
             // if we find the index in the `uuid_resolver` it's supposed to exist on the file system
@@ -237,18 +205,19 @@ pub fn load_dump(
             }
         } else {
             // if the index does not exist in the `uuid_resolver` we create it
-            futures::executor::block_on(uuid_resolver.create(idx.uid.clone()))?;
+            uuid_resolver.create(idx.uid.clone()).await?;
         }
     }
 
     // import each indexes content
     for idx in metadata.indexes {
         let dump_path = tmp_dir_path.join(&idx.uid);
-        let uuid = futures::executor::block_on(uuid_resolver.get(idx.uid))?;
+        let uuid = uuid_resolver.get(idx.uid).await?;
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
+        let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
 
         info!("Importing dump from {} into {}...", dump_path.display(), index_path.display());
-        import_index(size, &dump_path, &index_path).unwrap();
+        metadata.dump_version.import_index(size, &dump_path, &index_path).unwrap();
         info!("Dump importation from {} succeed", dump_path.display());
     }
 

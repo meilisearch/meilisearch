@@ -55,10 +55,10 @@ impl ApiKeys {
 }
 
 impl Data {
-    pub fn new(options: Opt) -> anyhow::Result<Data> {
+    pub async fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
 
-        let index_controller = IndexController::new(&path, &options)?;
+        let index_controller = IndexController::new(&path, &options).await?;
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
