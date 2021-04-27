@@ -1,13 +1,13 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::index_controller::IndexActorHandle;
+use crate::index_controller::{IndexActorHandle, UpdateStatus};
 
 use super::{
-    MapUpdateStoreStore, PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta,
-    UpdateMsg, UpdateStatus,
+    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStoreInfo,
 };
 
 #[derive(Clone)]
@@ -27,10 +27,9 @@ where
     where
         I: IndexActorHandle + Clone + Send + Sync + 'static,
     {
-        let path = path.as_ref().to_owned().join("updates");
+        let path = path.as_ref().to_owned();
         let (sender, receiver) = mpsc::channel(100);
-        let store = MapUpdateStoreStore::new(index_handle.clone(), &path, update_store_size);
-        let actor = UpdateActor::new(store, receiver, path, index_handle)?;
+        let actor = UpdateActor::new(update_store_size, receiver, path, index_handle)?;
 
         tokio::task::spawn(actor.run());
 
@@ -65,23 +64,16 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn create(&self, uuid: Uuid) -> Result<()> {
+    async fn snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Create { uuid, ret };
+        let msg = UpdateMsg::Snapshot { uuids, path, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
 
-    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+    async fn get_info(&self) -> Result<UpdateStoreInfo> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Snapshot { uuid, path, ret };
-        let _ = self.sender.send(msg).await;
-        receiver.await.expect("update actor killed.")
-    }
-
-    async fn get_size(&self, uuid: Uuid) -> Result<u64> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::GetSize { uuid, ret };
+        let msg = UpdateMsg::GetInfo { ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

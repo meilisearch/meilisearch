@@ -4,20 +4,21 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{updates::Processing, IndexStats, UpdateMeta};
+use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
-use super::{IndexMeta, IndexSettings, Result, UpdateResult};
+use super::{IndexMeta, IndexResult, IndexSettings};
 
 pub enum IndexMsg {
     CreateIndex {
         uuid: Uuid,
         primary_key: Option<String>,
-        ret: oneshot::Sender<Result<IndexMeta>>,
+        ret: oneshot::Sender<IndexResult<IndexMeta>>,
     },
     Update {
-        meta: Processing<UpdateMeta>,
-        data: std::fs::File,
-        ret: oneshot::Sender<Result<UpdateResult>>,
+        uuid: Uuid,
+        meta: Processing,
+        data: Option<std::fs::File>,
+        ret: oneshot::Sender<IndexResult<Result<Processed, Failed>>>,
     },
     Search {
         uuid: Uuid,
@@ -26,41 +27,41 @@ pub enum IndexMsg {
     },
     Settings {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<Settings>>,
+        ret: oneshot::Sender<IndexResult<Settings>>,
     },
     Documents {
         uuid: Uuid,
         attributes_to_retrieve: Option<Vec<String>>,
         offset: usize,
         limit: usize,
-        ret: oneshot::Sender<Result<Vec<Document>>>,
+        ret: oneshot::Sender<IndexResult<Vec<Document>>>,
     },
     Document {
         uuid: Uuid,
         attributes_to_retrieve: Option<Vec<String>>,
         doc_id: String,
-        ret: oneshot::Sender<Result<Document>>,
+        ret: oneshot::Sender<IndexResult<Document>>,
     },
     Delete {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<()>>,
+        ret: oneshot::Sender<IndexResult<()>>,
     },
     GetMeta {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<IndexMeta>>,
+        ret: oneshot::Sender<IndexResult<IndexMeta>>,
     },
     UpdateIndex {
         uuid: Uuid,
         index_settings: IndexSettings,
-        ret: oneshot::Sender<Result<IndexMeta>>,
+        ret: oneshot::Sender<IndexResult<IndexMeta>>,
     },
     Snapshot {
         uuid: Uuid,
         path: PathBuf,
-        ret: oneshot::Sender<Result<()>>,
+        ret: oneshot::Sender<IndexResult<()>>,
     },
     GetStats {
         uuid: Uuid,
-        ret: oneshot::Sender<Result<IndexStats>>,
+        ret: oneshot::Sender<IndexResult<IndexStats>>,
     },
 }

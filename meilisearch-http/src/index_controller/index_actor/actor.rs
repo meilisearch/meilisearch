@@ -1,96 +1,59 @@
 use std::fs::File;
-use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_stream::stream;
-use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 use crate::index::{Document, SearchQuery, SearchResult, Settings};
-use crate::index_controller::update_handler::UpdateHandler;
 use crate::index_controller::{
-    get_arc_ownership_blocking, updates::Processing, IndexStats, UpdateMeta,
+    get_arc_ownership_blocking, update_handler::UpdateHandler, Failed, IndexStats, Processed,
+    Processing,
 };
 use crate::option::IndexerOpts;
 
-use super::{IndexError, IndexMeta, IndexMsg, IndexSettings, IndexStore, Result, UpdateResult};
+use super::{IndexError, IndexMeta, IndexMsg, IndexResult, IndexSettings, IndexStore};
+
+pub const CONCURRENT_INDEX_MSG: usize = 10;
 
 pub struct IndexActor<S> {
-    read_receiver: Option<mpsc::Receiver<IndexMsg>>,
-    write_receiver: Option<mpsc::Receiver<IndexMsg>>,
+    receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
-    processing: RwLock<Option<Uuid>>,
     store: S,
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    pub fn new(
-        read_receiver: mpsc::Receiver<IndexMsg>,
-        write_receiver: mpsc::Receiver<IndexMsg>,
-        store: S,
-    ) -> Result<Self> {
+    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> IndexResult<Self> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
-        let read_receiver = Some(read_receiver);
-        let write_receiver = Some(write_receiver);
-        Ok(Self {
-            read_receiver,
-            write_receiver,
-            update_handler,
-            processing: RwLock::new(None),
-            store,
-        })
+        let receiver = Some(receiver);
+        Ok(Self { receiver, update_handler, store })
     }
 
-    /// `run` poll the write_receiver and read_receiver concurrently, but while messages send
-    /// through the read channel are processed concurrently, the messages sent through the write
-    /// channel are processed one at a time.
     pub async fn run(mut self) {
-        let mut read_receiver = self
-            .read_receiver
+        let mut receiver = self
+            .receiver
             .take()
             .expect("Index Actor must have a inbox at this point.");
 
-        let read_stream = stream! {
+        let stream = stream! {
             loop {
-                match read_receiver.recv().await {
+                match receiver.recv().await {
                     Some(msg) => yield msg,
                     None => break,
                 }
             }
         };
 
-        let mut write_receiver = self
-            .write_receiver
-            .take()
-            .expect("Index Actor must have a inbox at this point.");
-
-        let write_stream = stream! {
-            loop {
-                match write_receiver.recv().await {
-                    Some(msg) => yield msg,
-                    None => break,
-                }
-            }
-        };
-
-        pin_mut!(write_stream);
-        pin_mut!(read_stream);
-
-        let fut1 = read_stream.for_each_concurrent(Some(10), |msg| self.handle_message(msg));
-        let fut2 = write_stream.for_each_concurrent(Some(1), |msg| self.handle_message(msg));
-
-        let fut1: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut1);
-        let fut2: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut2);
-
-        tokio::join!(fut1, fut2);
+        stream
+            .for_each_concurrent(Some(CONCURRENT_INDEX_MSG), |msg| self.handle_message(msg))
+            .await;
     }
 
     async fn handle_message(&self, msg: IndexMsg) {
@@ -103,8 +66,13 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             } => {
                 let _ = ret.send(self.handle_create_index(uuid, primary_key).await);
             }
-            Update { ret, meta, data } => {
-                let _ = ret.send(self.handle_update(meta, data).await);
+            Update {
+                ret,
+                meta,
+                data,
+                uuid,
+            } => {
+                let _ = ret.send(self.handle_update(uuid, meta, data).await);
             }
             Search { ret, query, uuid } => {
                 let _ = ret.send(self.handle_search(uuid, query).await);
@@ -170,7 +138,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         &self,
         uuid: Uuid,
         primary_key: Option<String>,
-    ) -> Result<IndexMeta> {
+    ) -> IndexResult<IndexMeta> {
         let index = self.store.create(uuid, primary_key).await?;
         let meta = spawn_blocking(move || IndexMeta::new(&index))
             .await
@@ -180,31 +148,23 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
     async fn handle_update(
         &self,
-        meta: Processing<UpdateMeta>,
-        data: File,
-    ) -> Result<UpdateResult> {
-        async fn get_result<S: IndexStore>(actor: &IndexActor<S>, meta: Processing<UpdateMeta>, data: File) -> Result<UpdateResult> {
-            debug!("Processing update {}", meta.id());
-            let uuid = *meta.index_uuid();
-            let update_handler = actor.update_handler.clone();
-            let index = match actor.store.get(uuid).await? {
-                Some(index) => index,
-                None => actor.store.create(uuid, None).await?,
-            };
+        uuid: Uuid,
+        meta: Processing,
+        data: Option<File>,
+    ) -> IndexResult<Result<Processed, Failed>> {
+        debug!("Processing update {}", meta.id());
+        let update_handler = self.update_handler.clone();
+        let index = match self.store.get(uuid).await? {
+            Some(index) => index,
+            None => self.store.create(uuid, None).await?,
+        };
 
-            spawn_blocking(move || update_handler.handle_update(meta, data, index))
-                .await
-                .map_err(|e| IndexError::Error(e.into()))
-        }
-
-        *self.processing.write().await = Some(*meta.index_uuid());
-        let result = get_result(self, meta, data).await;
-        *self.processing.write().await = None;
-
-        result
+        spawn_blocking(move || update_handler.handle_update(meta, data, index))
+            .await
+            .map_err(|e| IndexError::Error(e.into()))
     }
 
-    async fn handle_settings(&self, uuid: Uuid) -> Result<Settings> {
+    async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings> {
         let index = self
             .store
             .get(uuid)
@@ -221,7 +181,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> Result<Vec<Document>> {
+    ) -> IndexResult<Vec<Document>> {
         let index = self
             .store
             .get(uuid)
@@ -241,7 +201,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         uuid: Uuid,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> Result<Document> {
+    ) -> IndexResult<Document> {
         let index = self
             .store
             .get(uuid)
@@ -256,7 +216,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         .map_err(|e| IndexError::Error(e.into()))?
     }
 
-    async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
+    async fn handle_delete(&self, uuid: Uuid) -> IndexResult<()> {
         let index = self.store.delete(uuid).await?;
 
         if let Some(index) = index {
@@ -273,7 +233,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
+    async fn handle_get_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta> {
         match self.store.get(uuid).await? {
             Some(index) => {
                 let meta = spawn_blocking(move || IndexMeta::new(&index))
@@ -289,7 +249,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         &self,
         uuid: Uuid,
         index_settings: IndexSettings,
-    ) -> Result<IndexMeta> {
+    ) -> IndexResult<IndexMeta> {
         let index = self
             .store
             .get(uuid)
@@ -316,7 +276,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         .map_err(|e| IndexError::Error(e.into()))?
     }
 
-    async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> Result<()> {
+    async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> IndexResult<()> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
@@ -346,15 +306,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+    async fn handle_get_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
         let index = self
             .store
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
-
-        let processing = self.processing.read().await;
-        let is_indexing = *processing == Some(uuid);
 
         spawn_blocking(move || {
             let rtxn = index.read_txn()?;
@@ -362,7 +319,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Ok(IndexStats {
                 size: index.size(),
                 number_of_documents: index.number_of_documents(&rtxn)?,
-                is_indexing,
+                is_indexing: None,
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })

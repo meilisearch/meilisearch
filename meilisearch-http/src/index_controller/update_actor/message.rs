@@ -1,9 +1,10 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use super::{PayloadData, Result, UpdateMeta, UpdateStatus};
+use super::{PayloadData, Result, UpdateMeta, UpdateStatus, UpdateStoreInfo};
 
 pub enum UpdateMsg<D> {
     Update {
@@ -25,17 +26,12 @@ pub enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
-    Create {
-        uuid: Uuid,
-        ret: oneshot::Sender<Result<()>>,
-    },
     Snapshot {
-        uuid: Uuid,
+        uuids: HashSet<Uuid>,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
-    GetSize {
-        uuid: Uuid,
-        ret: oneshot::Sender<Result<u64>>,
+    GetInfo {
+        ret: oneshot::Sender<Result<UpdateStoreInfo>>,
     },
 }

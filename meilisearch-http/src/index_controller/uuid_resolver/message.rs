@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use tokio::sync::oneshot;
@@ -28,7 +29,7 @@ pub enum UuidResolveMsg {
     },
     SnapshotRequest {
         path: PathBuf,
-        ret: oneshot::Sender<Result<Vec<Uuid>>>,
+        ret: oneshot::Sender<Result<HashSet<Uuid>>>,
     },
     GetSize {
         ret: oneshot::Sender<Result<u64>>,

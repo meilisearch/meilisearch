@@ -77,8 +77,8 @@ async fn document_addition_with_primary_key() {
             "content": "foo",
         }
     ]);
-    let (_response, code) = index.add_documents(documents, Some("primary")).await;
-    assert_eq!(code, 202);
+    let (response, code) = index.add_documents(documents, Some("primary")).await;
+    assert_eq!(code, 202, "response: {}", response);
 
     index.wait_update_id(0).await;
 
@@ -189,8 +189,8 @@ async fn replace_document() {
         }
     ]);
 
-    let (_response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 202);
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202, "response: {}", response);
 
     index.wait_update_id(0).await;
 
@@ -260,8 +260,8 @@ async fn update_document() {
         }
     ]);
 
-    let (_response, code) = index.update_documents(documents, None).await;
-    assert_eq!(code, 202);
+    let (response, code) = index.update_documents(documents, None).await;
+    assert_eq!(code, 202, "response: {}", response);
 
     index.wait_update_id(1).await;
 

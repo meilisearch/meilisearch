@@ -1,15 +1,10 @@
-use std::collections::BTreeMap;
-
 use actix_web::get;
 use actix_web::web;
 use actix_web::HttpResponse;
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::data::Stats;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use crate::index_controller::IndexStats;
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -19,59 +14,19 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_version);
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct IndexStatsResponse {
-    number_of_documents: u64,
-    is_indexing: bool,
-    fields_distribution: BTreeMap<String, u64>,
-}
-
-impl From<IndexStats> for IndexStatsResponse {
-    fn from(stats: IndexStats) -> Self {
-        Self {
-            number_of_documents: stats.number_of_documents,
-            is_indexing: stats.is_indexing,
-            fields_distribution: stats.fields_distribution.into_iter().collect(),
-        }
-    }
-}
-
 #[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
 async fn get_index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response: IndexStatsResponse = data.get_index_stats(path.index_uid.clone()).await?.into();
+    let response = data.get_index_stats(path.index_uid.clone()).await?;
 
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StatsResponse {
-    database_size: u64,
-    last_update: Option<DateTime<Utc>>,
-    indexes: BTreeMap<String, IndexStatsResponse>,
-}
-
-impl From<Stats> for StatsResponse {
-    fn from(stats: Stats) -> Self {
-        Self {
-            database_size: stats.database_size,
-            last_update: stats.last_update,
-            indexes: stats
-                .indexes
-                .into_iter()
-                .map(|(uid, index_stats)| (uid, index_stats.into()))
-                .collect(),
-        }
-    }
-}
-
 #[get("/stats", wrap = "Authentication::Private")]
 async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    let response: StatsResponse = data.get_stats().await?.into();
+    let response = data.get_all_stats().await?;
 
     Ok(HttpResponse::Ok().json(response))
 }

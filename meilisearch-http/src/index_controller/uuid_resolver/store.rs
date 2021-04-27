@@ -1,5 +1,6 @@
-use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
+use std::collections::HashSet;
+use std::fs::create_dir_all;
 
 use heed::{
     types::{ByteSlice, Str},
@@ -19,7 +20,7 @@ pub trait UuidStore {
     async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
     async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
-    async fn snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>>;
+    async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
 }
 
@@ -129,17 +130,17 @@ impl UuidStore for HeedUuidStore {
         .await?
     }
 
-    async fn snapshot(&self, mut path: PathBuf) -> Result<Vec<Uuid>> {
+    async fn snapshot(&self, mut path: PathBuf) -> Result<HashSet<Uuid>> {
         let env = self.env.clone();
         let db = self.db;
         tokio::task::spawn_blocking(move || {
             // Write transaction to acquire a lock on the database.
             let txn = env.write_txn()?;
-            let mut entries = Vec::new();
+            let mut entries = HashSet::new();
             for entry in db.iter(&txn)? {
                 let (_, uuid) = entry?;
                 let uuid = Uuid::from_slice(uuid)?;
-                entries.push(uuid)
+                entries.insert(uuid);
             }
 
             // only perform snapshot if there are indexes

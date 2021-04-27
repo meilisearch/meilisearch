@@ -4,17 +4,11 @@ use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
 use log::info;
-use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{de::Deserializer, Deserialize, Serialize};
 
 use super::Index;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: u64 },
-    Other,
-}
+use crate::index_controller::UpdateResult;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,7 +85,7 @@ impl Index {
         &self,
         format: UpdateFormat,
         method: IndexDocumentsMethod,
-        content: impl io::Read,
+        content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> anyhow::Result<UpdateResult> {
@@ -108,16 +102,15 @@ impl Index {
         builder.update_format(format);
         builder.index_documents_method(method);
 
-        let gzipped = false;
-        let reader = if gzipped {
-            Box::new(GzDecoder::new(content))
-        } else {
-            Box::new(content) as Box<dyn io::Read>
-        };
+        let indexing_callback =
+            |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
-        let result = builder.execute(reader, |indexing_step, update_id| {
-            info!("update {}: {:?}", update_id, indexing_step)
-        });
+        let gzipped = false;
+        let result = match content {
+            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback),
+            Some(content) => builder.execute(content, indexing_callback),
+            None => builder.execute(std::io::empty(), indexing_callback),
+        };
 
         info!("document addition done: {:?}", result);
 
@@ -228,10 +221,13 @@ impl Index {
 
     pub fn delete_documents(
         &self,
-        document_ids: impl io::Read,
+        document_ids: Option<impl io::Read>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
-        let ids: Vec<String> = serde_json::from_reader(document_ids)?;
+        let ids = match document_ids {
+            Some(reader) => serde_json::from_reader(reader)?,
+            None => Vec::<String>::new(),
+        };
         let mut txn = self.write_txn()?;
         let mut builder = update_builder.delete_documents(&mut txn, self)?;
 

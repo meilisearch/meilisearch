@@ -6,9 +6,8 @@ use grenad::CompressionType;
 use milli::update::UpdateBuilder;
 use rayon::ThreadPool;
 
-use crate::index::UpdateResult;
-use crate::index_controller::updates::{Failed, Processed, Processing};
 use crate::index_controller::UpdateMeta;
+use crate::index_controller::{Failed, Processed, Processing};
 use crate::option::IndexerOpts;
 
 pub struct UpdateHandler {
@@ -59,10 +58,10 @@ impl UpdateHandler {
 
     pub fn handle_update(
         &self,
-        meta: Processing<UpdateMeta>,
-        content: File,
+        meta: Processing,
+        content: Option<File>,
         index: Index,
-    ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
+    ) -> Result<Processed, Failed> {
         use UpdateMeta::*;
 
         let update_id = meta.id();

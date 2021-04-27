@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use log::{info, warn};
 use tokio::sync::mpsc;
@@ -78,7 +78,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
         Ok(result)
     }
 
-    async fn handle_snapshot(&self, path: PathBuf) -> Result<Vec<Uuid>> {
+    async fn handle_snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         self.store.snapshot(path).await
     }
 

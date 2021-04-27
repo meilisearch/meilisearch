@@ -1,2 +1,2 @@
-mod get_settings;
 mod distinct;
+mod get_settings;

@@ -185,11 +185,8 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    make_settings_test_routes!(
-        distinct_attribute
-    );
+    make_settings_test_routes!(distinct_attribute);
 }
-
 
 pub struct GetDocumentOptions;
 

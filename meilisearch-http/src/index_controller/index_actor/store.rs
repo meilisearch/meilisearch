@@ -8,16 +8,16 @@ use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use super::{IndexError, Result};
+use super::{IndexError, IndexResult};
 use crate::index::Index;
 
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
 #[async_trait::async_trait]
 pub trait IndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
-    async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
-    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>>;
+    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> IndexResult<Index>;
+    async fn get(&self, uuid: Uuid) -> IndexResult<Option<Index>>;
+    async fn delete(&self, uuid: Uuid) -> IndexResult<Option<Index>>;
 }
 
 pub struct MapIndexStore {
@@ -40,14 +40,14 @@ impl MapIndexStore {
 
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index> {
+    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> IndexResult<Index> {
         let path = self.path.join(format!("index-{}", uuid));
         if path.exists() {
             return Err(IndexError::IndexAlreadyExists);
         }
 
         let index_size = self.index_size;
-        let index = spawn_blocking(move || -> Result<Index> {
+        let index = spawn_blocking(move || -> IndexResult<Index> {
             let index = open_index(&path, index_size)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
@@ -64,7 +64,7 @@ impl IndexStore for MapIndexStore {
         Ok(index)
     }
 
-    async fn get(&self, uuid: Uuid) -> Result<Option<Index>> {
+    async fn get(&self, uuid: Uuid) -> IndexResult<Option<Index>> {
         let guard = self.index_store.read().await;
         match guard.get(&uuid) {
             Some(index) => Ok(Some(index.clone())),
@@ -86,7 +86,7 @@ impl IndexStore for MapIndexStore {
         }
     }
 
-    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>> {
+    async fn delete(&self, uuid: Uuid) -> IndexResult<Option<Index>> {
         let db_path = self.path.join(format!("index-{}", uuid));
         fs::remove_dir_all(db_path)
             .await
@@ -96,7 +96,7 @@ impl IndexStore for MapIndexStore {
     }
 }
 
-fn open_index(path: impl AsRef<Path>, size: usize) -> Result<Index> {
+fn open_index(path: impl AsRef<Path>, size: usize) -> IndexResult<Index> {
     std::fs::create_dir_all(&path).map_err(|e| IndexError::Error(e.into()))?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
