@@ -554,7 +554,7 @@ fn linear_compute_candidates(
                         QueryKind::Exact { word, .. } => {
                             if *prefix {
                                 word_derivations(word, true, 0, &words_positions)
-                                .flat_map(|positions| positions.iter().next()).min()
+                                    .flat_map(|positions| positions.iter().next()).min()
                             } else {
                                 words_positions.get(word)
                                     .map(|positions| positions.iter().next())
