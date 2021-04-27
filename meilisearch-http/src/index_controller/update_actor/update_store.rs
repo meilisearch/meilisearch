@@ -13,16 +13,17 @@ use uuid::Uuid;
 use crate::helpers::EnvSizer;
 use crate::index_controller::updates::*;
 
-type Beu64 = heed::zerocopy::U64<heed::byteorder::BE>;
+#[allow(clippy::upper_case_acronyms)]
+type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 #[derive(Clone)]
 pub struct UpdateStore<M, N, E> {
     pub env: Env,
-    pending_meta: Database<OwnedType<Beu64>, SerdeJson<Enqueued<M>>>,
-    pending: Database<OwnedType<Beu64>, SerdeJson<PathBuf>>,
-    processed_meta: Database<OwnedType<Beu64>, SerdeJson<Processed<M, N>>>,
-    failed_meta: Database<OwnedType<Beu64>, SerdeJson<Failed<M, E>>>,
-    aborted_meta: Database<OwnedType<Beu64>, SerdeJson<Aborted<M>>>,
+    pending_meta: Database<OwnedType<BEU64>, SerdeJson<Enqueued<M>>>,
+    pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
+    processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
+    failed_meta: Database<OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
+    aborted_meta: Database<OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
     processing: Arc<RwLock<Option<Processing<M>>>>,
     notification_sender: mpsc::Sender<()>,
     /// A lock on the update loop. This is meant to prevent a snapshot to occur while an update is
@@ -176,7 +177,7 @@ where
         // asking for the id and registering it so other update registering
         // will be forced to wait for a new write txn.
         let update_id = self.new_update_id(&wtxn)?;
-        let update_key = Beu64::new(update_id);
+        let update_key = BEU64::new(update_id);
 
         let meta = Enqueued::new(meta, update_id, index_uuid);
         self.pending_meta.put(&mut wtxn, &update_key, &meta)?;
@@ -295,7 +296,7 @@ where
     /// Returns the update associated meta or `None` if the update doesn't exist.
     pub fn meta(&self, update_id: u64) -> heed::Result<Option<UpdateStatus<M, N, E>>> {
         let rtxn = self.env.read_txn()?;
-        let key = Beu64::new(update_id);
+        let key = BEU64::new(update_id);
 
         if let Some(ref meta) = *self.processing.read() {
             if meta.id() == update_id {
@@ -331,7 +332,7 @@ where
     #[allow(dead_code)]
     pub fn abort_update(&self, update_id: u64) -> heed::Result<Option<Aborted<M>>> {
         let mut wtxn = self.env.write_txn()?;
-        let key = Beu64::new(update_id);
+        let key = BEU64::new(update_id);
 
         // We cannot abort an update that is currently being processed.
         if self.pending_meta.first(&wtxn)?.map(|(key, _)| key.get()) == Some(update_id) {
@@ -369,7 +370,7 @@ where
         }
 
         for (id, aborted) in &aborted_updates {
-            let key = Beu64::new(*id);
+            let key = BEU64::new(*id);
             self.aborted_meta.put(&mut wtxn, &key, &aborted)?;
             self.pending_meta.delete(&mut wtxn, &key)?;
             self.pending.delete(&mut wtxn, &key)?;
