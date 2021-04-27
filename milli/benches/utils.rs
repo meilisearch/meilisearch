@@ -7,6 +7,15 @@ use milli::{
     FacetCondition, Index,
 };
 
+/// The name of the environment variable used to select the path
+/// of the directory containing the datasets
+const BASE_DATASETS_PATH_KEY: &str = "MILLI_BENCH_DATASETS_PATH";
+
+/// The default path for the dataset if nothing is specified
+/// By default we chose `milli/benches` because any cargo command ran in `milli/milli/**` will be
+/// executed with a pwd of `milli/milli`
+const DEFAULT_DATASETS_PATH: &str = "milli/benches";
+
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
     /// each benchmark will first try to delete it and then recreate it
@@ -78,7 +87,10 @@ pub fn base_setup(conf: &Conf) -> Index {
     builder.update_format(UpdateFormat::Csv);
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
     // we called from cargo the current directory is supposed to be milli/milli
-    let dataset_path = format!("benches/{}", conf.dataset);
+    let base_dataset_path = std::env::vars()
+        .find(|var| var.0 == BASE_DATASETS_PATH_KEY)
+        .map_or(DEFAULT_DATASETS_PATH.to_owned(), |(_key, value)| value);
+    let dataset_path = format!("{}/{}", base_dataset_path, conf.dataset);
     let reader = File::open(&dataset_path)
         .expect(&format!("could not find the dataset in: {}", &dataset_path));
     builder.execute(reader, |_, _| ()).unwrap();
@@ -100,7 +112,8 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
                     if let Some(facet_condition) = conf.facet_condition {
-                        let facet_condition = FacetCondition::from_str(&rtxn, &index, facet_condition).unwrap();
+                        let facet_condition =
+                            FacetCondition::from_str(&rtxn, &index, facet_condition).unwrap();
                         search.facet_condition(facet_condition);
                     }
                     let _ids = search.execute().unwrap();
