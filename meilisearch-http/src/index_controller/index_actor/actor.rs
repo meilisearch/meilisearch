@@ -33,11 +33,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
         let update_handler = Arc::new(update_handler);
         let receiver = Some(receiver);
-        Ok(Self {
-            receiver,
-            store,
-            update_handler,
-        })
+        Ok(Self { receiver, update_handler, store })
     }
 
     pub async fn run(mut self) {

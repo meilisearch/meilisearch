@@ -58,7 +58,7 @@ impl StateLock {
     fn from_state(state: State) -> Self {
         let lock = Mutex::new(());
         let data = ArcSwap::from(Arc::new(state));
-        Self { data, lock }
+        Self { lock, data }
     }
 
     fn read(&self) -> Arc<State> {
@@ -68,10 +68,11 @@ impl StateLock {
     fn write(&self) -> StateLockGuard {
         let _lock = self.lock.lock();
         let state = &self;
-        StateLockGuard { state, _lock }
+        StateLockGuard { _lock, state }
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum State {
     Idle,
     Processing(Uuid, Processing),
@@ -201,14 +202,7 @@ impl UpdateStore {
             .try_send(())
             .expect("Failed to init update store");
 
-        let update_store = Arc::new(UpdateStore {
-            env,
-            notification_sender,
-            next_update_id,
-            pending_queue,
-            updates,
-            state,
-        });
+        let update_store = Arc::new(UpdateStore { env, pending_queue, next_update_id, updates, state, notification_sender });
 
         // We need a weak reference so we can take ownership on the arc later when we
         // want to close the index.

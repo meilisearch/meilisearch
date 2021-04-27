@@ -68,11 +68,7 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner {
-            index_controller,
-            options,
-            api_keys,
-        };
+        let inner = DataInner { index_controller, api_keys, options };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })

@@ -44,11 +44,7 @@ impl IndexMeta {
         let created_at = index.created_at(&txn)?;
         let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
-        Ok(Self {
-            primary_key,
-            updated_at,
-            created_at,
-        })
+        Ok(Self { created_at, updated_at, primary_key })
     }
 }
 

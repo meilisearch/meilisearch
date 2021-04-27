@@ -44,12 +44,7 @@ where
         let store = UpdateStore::open(options, &path, index_handle.clone())?;
         std::fs::create_dir_all(path.join("update_files"))?;
         assert!(path.exists());
-        Ok(Self {
-            store,
-            inbox,
-            path,
-            index_handle,
-        })
+        Ok(Self { path, store, inbox, index_handle })
     }
 
     pub async fn run(mut self) {
