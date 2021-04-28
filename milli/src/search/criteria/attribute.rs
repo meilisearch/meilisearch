@@ -9,7 +9,7 @@ use crate::{TreeLevel, search::build_dfa};
 use crate::search::criteria::Query;
 use crate::search::query_tree::{Operation, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
-use super::{Criterion, CriterionResult, Context, resolve_query_tree};
+use super::{Criterion, CriterionParameters, CriterionResult, Context, resolve_query_tree};
 
 /// To be able to divide integers by the number of words in the query
 /// we want to find a multiplier that allow us to divide by any number between 1 and 10.
@@ -19,6 +19,10 @@ const LCM_10_FIRST_NUMBERS: u32 = 2520;
 /// To compute the interval size of a level,
 /// we use 4 as the exponentiation base and the level as the exponent.
 const LEVEL_EXPONENTIATION_BASE: u32 = 4;
+
+/// Threshold on the number of candidates that will make
+/// the system to choose between one algorithm or another.
+const CANDIDATES_THRESHOLD: u64 = 1000;
 
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
@@ -46,7 +50,12 @@ impl<'t> Attribute<'t> {
 
 impl<'t> Criterion for Attribute<'t> {
     #[logging_timer::time("Attribute::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+        // remove excluded candidates when next is called, instead of doing it in the loop.
+        if let Some(candidates) = self.candidates.as_mut() {
+            *candidates -= params.excluded_candidates;
+        }
+
         loop {
             match (&self.query_tree, &mut self.candidates) {
                 (_, Some(candidates)) if candidates.is_empty() => {
@@ -61,7 +70,7 @@ impl<'t> Criterion for Attribute<'t> {
                         flatten_query_tree(&qt)
                     });
 
-                    let found_candidates = if candidates.len() < 1000 {
+                    let found_candidates = if candidates.len() < CANDIDATES_THRESHOLD {
                         let current_buckets = match self.current_buckets.as_mut() {
                             Some(current_buckets) => current_buckets,
                             None => {
@@ -81,7 +90,7 @@ impl<'t> Criterion for Attribute<'t> {
                             },
                         }
                     } else {
-                        match set_compute_candidates(self.ctx, flattened_query_tree, candidates, wdcache)? {
+                        match set_compute_candidates(self.ctx, flattened_query_tree, candidates, params.wdcache)? {
                             Some(candidates) => candidates,
                             None => {
                                 return Ok(Some(CriterionResult {
@@ -102,7 +111,8 @@ impl<'t> Criterion for Attribute<'t> {
                     }));
                 },
                 (Some(qt), None) => {
-                    let query_tree_candidates = resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), wdcache)?;
+                    let mut query_tree_candidates = resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), params.wdcache)?;
+                    query_tree_candidates -= params.excluded_candidates;
                     self.bucket_candidates |= &query_tree_candidates;
                     self.candidates = Some(query_tree_candidates);
                 },
@@ -114,7 +124,7 @@ impl<'t> Criterion for Attribute<'t> {
                     }));
                 },
                 (None, None) => {
-                    match self.parent.next(wdcache)? {
+                    match self.parent.next(params)? {
                         Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,

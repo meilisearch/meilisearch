@@ -165,13 +165,13 @@ impl<'a> Search<'a> {
     ) -> anyhow::Result<SearchResult> {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
-        let mut excluded_documents = RoaringBitmap::new();
+        let mut excluded_candidates = RoaringBitmap::new();
         let mut documents_ids = Vec::with_capacity(self.limit);
 
-        while let Some(FinalResult { candidates, bucket_candidates, .. }) = criteria.next()? {
+        while let Some(FinalResult { candidates, bucket_candidates, .. }) = criteria.next(&excluded_candidates)? {
             debug!("Number of candidates found {}", candidates.len());
 
-            let excluded = take(&mut excluded_documents);
+            let excluded = take(&mut excluded_candidates);
 
             let mut candidates = distinct.distinct(candidates, excluded);
 
@@ -186,7 +186,7 @@ impl<'a> Search<'a> {
                 documents_ids.push(candidate?);
             }
             if documents_ids.len() == self.limit { break }
-            excluded_documents = candidates.into_excluded();
+            excluded_candidates = candidates.into_excluded();
         }
 
         Ok(SearchResult { matching_words, candidates: initial_candidates, documents_ids })
