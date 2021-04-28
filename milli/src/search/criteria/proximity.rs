@@ -55,7 +55,7 @@ impl<'t> Criterion for Proximity<'t> {
                     if self.proximity as usize > *max_prox {
                         self.state = None; // reset state
                     } else {
-                        let mut new_candidates = if candidates.len() <= 1000 {
+                        let mut new_candidates = if candidates.len() <= 1000 && self.proximity > 0 {
                             if let Some(cache) = self.plane_sweep_cache.as_mut() {
                                 match cache.next() {
                                     Some((p, candidates)) => {
