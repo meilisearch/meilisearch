@@ -330,11 +330,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         )?;
 
         // Remove the documents ids from the faceted documents ids.
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
-        for (field_id, facet_type) in faceted_fields {
-            let mut docids = self.index.faceted_documents_ids(self.wtxn, field_id)?;
+        for field_id in self.index.faceted_fields_ids(self.wtxn)? {
+            // Remove docids from the number faceted documents ids
+            let mut docids = self.index.number_faceted_documents_ids(self.wtxn, field_id)?;
             docids.difference_with(&self.documents_ids);
-            self.index.put_faceted_documents_ids(self.wtxn, field_id, &docids)?;
+            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &docids)?;
 
             remove_docids_from_field_id_docid_facet_value(
                 self.wtxn,
@@ -343,6 +343,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 &self.documents_ids,
                 |(_fid, docid, _value)| docid,
             )?;
+
+            // Remove docids from the string faceted documents ids
+            let mut docids = self.index.string_faceted_documents_ids(self.wtxn, field_id)?;
+            docids.difference_with(&self.documents_ids);
+            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &docids)?;
 
             remove_docids_from_field_id_docid_facet_value(
                 self.wtxn,

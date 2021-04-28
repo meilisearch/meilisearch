@@ -145,7 +145,7 @@ impl<'a> Search<'a> {
                 let faceted_fields = self.index.faceted_fields(self.rtxn)?;
                 match faceted_fields.get(name) {
                     Some(facet_type) => {
-                        let distinct = FacetDistinct::new(id, self.index, self.rtxn, *facet_type);
+                        let distinct = FacetDistinct::new(id, self.index, self.rtxn);
                         self.perform_sort(distinct, matching_words, criteria)
                     }
                     None => {

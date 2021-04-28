@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -11,7 +11,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{FieldsIdsMap, Index};
 use crate::criterion::Criterion;
-use crate::facet::FacetType;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
 
@@ -68,7 +67,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    faceted_fields: Setting<HashMap<String, String>>,
+    faceted_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
     distinct_attribute: Setting<String>,
@@ -123,7 +122,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.faceted_fields = Setting::Reset;
     }
 
-    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
+    pub fn set_faceted_fields(&mut self, names_facet_types: HashSet<String>) {
         self.faceted_fields = Setting::Set(names_facet_types);
     }
 
@@ -387,11 +386,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.faceted_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-                let mut new_facets = HashMap::new();
-                for (name, ty) in fields {
+                let mut new_facets = HashSet::new();
+                for name in fields {
                     fields_ids_map.insert(name).context("field id limit exceeded")?;
-                    let ty = FacetType::from_str(&ty)?;
-                    new_facets.insert(name.clone(), ty);
+                    new_facets.insert(name.clone());
                 }
                 self.index.put_faceted_fields(self.wtxn, &new_facets)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;

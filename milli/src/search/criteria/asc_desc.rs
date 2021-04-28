@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem::take;
 
-use anyhow::{bail, Context as _};
+use anyhow::Context;
 use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
@@ -23,7 +23,6 @@ pub struct AscDesc<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     field_name: String,
     field_id: FieldId,
-    facet_type: FacetType,
     ascending: bool,
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
@@ -51,6 +50,7 @@ impl<'t> AscDesc<'t> {
         Self::new(index, rtxn, parent, field_name, false)
     }
 
+
     fn new(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
@@ -60,19 +60,19 @@ impl<'t> AscDesc<'t> {
     ) -> anyhow::Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let faceted_fields = index.faceted_fields(rtxn)?;
-        let (field_id, facet_type) =
-            field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+        let field_id = fields_ids_map
+            .id(&field_name)
+            .with_context(|| format!("field {:?} isn't registered", field_name))?;
 
         Ok(AscDesc {
             index,
             rtxn,
             field_name,
             field_id,
-            facet_type,
             ascending,
             query_tree: None,
             candidates: Box::new(std::iter::empty()),
-            faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
+            faceted_candidates: index.number_faceted_documents_ids(rtxn, field_id)?,
             bucket_candidates: RoaringBitmap::new(),
             parent,
         })
@@ -165,27 +165,20 @@ fn facet_ordered<'t>(
     index: &'t Index,
     rtxn: &'t heed::RoTxn,
     field_id: FieldId,
-    facet_type: FacetType,
     ascending: bool,
     candidates: RoaringBitmap,
 ) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
-    match facet_type {
-        FacetType::Number => {
-            if candidates.len() <= CANDIDATES_THRESHOLD {
-                let iter =
-                    iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
-                Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
-            } else {
-                let facet_fn = if ascending {
-                    FacetIter::new_reducing
-                } else {
-                    FacetIter::new_reverse_reducing
-                };
-                let iter = facet_fn(rtxn, index, field_id, candidates)?;
-                Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
-            }
-        }
-        FacetType::String => bail!("criteria facet type must be a number"),
+    if candidates.len() <= CANDIDATES_THRESHOLD {
+        let iter = iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
+        Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
+    } else {
+        let facet_fn = if ascending {
+            FacetIter::new_reducing
+        } else {
+            FacetIter::new_reverse_reducing
+        };
+        let iter = facet_fn(rtxn, index, field_id, candidates)?;
+        Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
     }
 }
 

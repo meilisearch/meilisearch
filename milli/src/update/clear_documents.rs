@@ -49,8 +49,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_fields_distribution(self.wtxn, &FieldsDistribution::default())?;
 
         // We clean all the faceted documents ids.
-        for (field_id, _) in faceted_fields {
-            self.index.put_faceted_documents_ids(self.wtxn, field_id, &RoaringBitmap::default())?;
+        let empty = RoaringBitmap::default();
+        for field_id in faceted_fields {
+            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &empty)?;
+            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &empty)?;
         }
 
         // Clear the other databases.

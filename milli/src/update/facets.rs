@@ -9,7 +9,6 @@ use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::Index;
@@ -62,56 +61,51 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
-        for (field_id, facet_type) in faceted_fields {
-            let (content, documents_ids) = match facet_type {
-                FacetType::String => {
-                    let documents_ids = compute_faceted_documents_ids(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
 
-                    (None, documents_ids)
-                },
-                FacetType::Number => {
-                    clear_field_number_levels(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>(),
-                        field_id,
-                    )?;
+        for field_id in faceted_fields {
+            // Compute and store the faceted strings documents ids.
+            let string_documents_ids = compute_faceted_documents_ids(
+                self.wtxn,
+                self.index.facet_id_string_docids.remap_key_type::<ByteSlice>(),
+                field_id,
+            )?;
 
-                    let documents_ids = compute_faceted_documents_ids(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids,
-                        field_id,
-                    )?;
+            // Clear the facet number levels.
+            clear_field_number_levels(
+                self.wtxn,
+                self.index.facet_id_f64_docids,
+                field_id,
+            )?;
 
-                    let content = compute_facet_number_levels(
-                        self.wtxn,
-                        self.index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>(),
-                        self.chunk_compression_type,
-                        self.chunk_compression_level,
-                        self.chunk_fusing_shrink_size,
-                        self.level_group_size,
-                        self.min_level_size,
-                        field_id,
-                    )?;
+            // Compute and store the faceted numbers documents ids.
+            let number_documents_ids = compute_faceted_documents_ids(
+                self.wtxn,
+                self.index.facet_id_f64_docids.remap_key_type::<ByteSlice>(),
+                field_id,
+            )?;
 
-                    (Some(content), documents_ids)
-                },
-            };
+            let content = compute_facet_number_levels(
+                self.wtxn,
+                self.index.facet_id_f64_docids,
+                self.chunk_compression_type,
+                self.chunk_compression_level,
+                self.chunk_fusing_shrink_size,
+                self.level_group_size,
+                self.min_level_size,
+                field_id,
+            )?;
 
-            if let Some(content) = content {
-                write_into_lmdb_database(
-                    self.wtxn,
-                    *self.index.facet_field_id_value_docids.as_polymorph(),
-                    content,
-                    |_, _| anyhow::bail!("invalid facet level merging"),
-                    WriteMethod::GetMergePut,
-                )?;
-            }
+            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &string_documents_ids)?;
+            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &number_documents_ids)?;
 
-            self.index.put_faceted_documents_ids(self.wtxn, field_id, &documents_ids)?;
+            // Store the
+            write_into_lmdb_database(
+                self.wtxn,
+                *self.index.facet_id_f64_docids.as_polymorph(),
+                content,
+                |_, _| anyhow::bail!("invalid facet number level merging"),
+                WriteMethod::GetMergePut,
+            )?;
         }
 
         Ok(())
@@ -205,10 +199,12 @@ fn compute_faceted_documents_ids(
 ) -> anyhow::Result<RoaringBitmap>
 {
     let mut documents_ids = RoaringBitmap::new();
+
     for result in db.prefix_iter(rtxn, &[field_id])? {
         let (_key, docids) = result?;
-        documents_ids.union_with(&docids);
+        documents_ids |= docids;
     }
+
     Ok(documents_ids)
 }
 

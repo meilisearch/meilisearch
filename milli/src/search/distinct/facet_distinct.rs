@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 
 use super::{Distinct, DocIter};
 use crate::heed_codec::facet::*;
-use crate::{facet::FacetType, DocumentId, FieldId, Index};
+use crate::{DocumentId, FieldId, Index};
 
 const FID_SIZE: usize = size_of::<FieldId>();
 const DOCID_SIZE: usize = size_of::<DocumentId>();
@@ -22,7 +22,6 @@ pub struct FacetDistinct<'a> {
     distinct: FieldId,
     index: &'a Index,
     txn: &'a heed::RoTxn<'a>,
-    facet_type: FacetType,
 }
 
 impl<'a> FacetDistinct<'a> {
@@ -30,14 +29,9 @@ impl<'a> FacetDistinct<'a> {
         distinct: FieldId,
         index: &'a Index,
         txn: &'a heed::RoTxn<'a>,
-        facet_type: FacetType,
-    ) -> Self {
-        Self {
-            distinct,
-            index,
-            txn,
-            facet_type,
-        }
+    ) -> Self
+    {
+        Self { distinct, index, txn }
     }
 }
 
@@ -45,7 +39,6 @@ pub struct FacetDistinctIter<'a> {
     candidates: RoaringBitmap,
     distinct: FieldId,
     excluded: RoaringBitmap,
-    facet_type: FacetType,
     index: &'a Index,
     iter_offset: usize,
     txn: &'a heed::RoTxn<'a>,
@@ -117,6 +110,7 @@ impl<'a> FacetDistinctIter<'a> {
                 // increasing the offset we make sure to get the first valid value for the next
                 // distinct document to keep.
                 self.iter_offset += 1;
+
                 Ok(Some(id))
             }
             // no more candidate at this offset, return.
@@ -188,7 +182,6 @@ impl<'a> Distinct<'_> for FacetDistinct<'a> {
             candidates,
             distinct: self.distinct,
             excluded,
-            facet_type: self.facet_type,
             index: self.index,
             iter_offset: 0,
             txn: self.txn,
