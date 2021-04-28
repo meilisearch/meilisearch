@@ -140,7 +140,7 @@ impl<'t> FacetIter<'t> {
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
+        let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
@@ -157,7 +157,7 @@ impl<'t> FacetIter<'t> {
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
+        let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRevRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Right(highest_iter))];
@@ -175,7 +175,7 @@ impl<'t> FacetIter<'t> {
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetIter<'t>>
     {
-        let db = index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueF64Codec>();
+        let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
