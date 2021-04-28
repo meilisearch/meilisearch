@@ -1,10 +1,14 @@
 use std::mem::size_of;
 
+use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
+use super::{Distinct, DocIter};
 use crate::heed_codec::facet::*;
 use crate::{facet::FacetType, DocumentId, FieldId, Index};
-use super::{Distinct, DocIter};
+
+const FID_SIZE: usize = size_of::<FieldId>();
+const DOCID_SIZE: usize = size_of::<DocumentId>();
 
 /// A distinct implementer that is backed by facets.
 ///
@@ -48,31 +52,27 @@ pub struct FacetDistinctIter<'a> {
 }
 
 impl<'a> FacetDistinctIter<'a> {
-    fn get_facet_docids<'c, KC>(&self, key: &'c KC::EItem) -> anyhow::Result<RoaringBitmap>
-    where
-        KC: heed::BytesEncode<'c>,
-    {
-        let facet_docids = self
-            .index
-            .facet_field_id_value_docids
-            .remap_key_type::<KC>()
-            .get(self.txn, key)?
-            .expect("Corrupted data: Facet values must exist");
-        Ok(facet_docids)
+    fn facet_string_docids(&self, key: &str) -> heed::Result<Option<RoaringBitmap>> {
+        self.index
+            .facet_id_string_docids
+            .get(self.txn, &(self.distinct, key))
+    }
+
+    fn facet_number_docids(&self, key: f64) -> heed::Result<Option<RoaringBitmap>> {
+        // get facet docids on level 0
+        self.index
+            .facet_id_f64_docids
+            .get(self.txn, &(self.distinct, 0, key, key))
     }
 
     fn distinct_string(&mut self, id: DocumentId) -> anyhow::Result<()> {
-        let iter = get_facet_values::<FieldDocIdFacetStringCodec>(
-            id,
-            self.distinct,
-            self.index,
-            self.txn,
-        )?;
+        let iter = facet_string_values(id, self.distinct, self.index, self.txn)?;
 
         for item in iter {
             let ((_, _, value), _) = item?;
-            let key = (self.distinct, value);
-            let facet_docids = self.get_facet_docids::<FacetValueStringCodec>(&key)?;
+            let facet_docids = self
+                .facet_string_docids(value)?
+                .expect("Corrupted data: Facet values must exist");
             self.excluded.union_with(&facet_docids);
         }
 
@@ -82,17 +82,13 @@ impl<'a> FacetDistinctIter<'a> {
     }
 
     fn distinct_number(&mut self, id: DocumentId) -> anyhow::Result<()> {
-        let iter = get_facet_values::<FieldDocIdFacetF64Codec>(id,
-            self.distinct,
-            self.index,
-            self.txn,
-        )?;
+        let iter = facet_number_values(id, self.distinct, self.index, self.txn)?;
 
         for item in iter {
             let ((_, _, value), _) = item?;
-            // get facet docids on level 0
-            let key = (self.distinct, 0, value, value);
-            let facet_docids = self.get_facet_docids::<FacetLevelValueF64Codec>(&key)?;
+            let facet_docids = self
+                .facet_number_docids(value)?
+                .expect("Corrupted data: Facet values must exist");
             self.excluded.union_with(&facet_docids);
         }
 
@@ -129,26 +125,44 @@ impl<'a> FacetDistinctIter<'a> {
     }
 }
 
-fn get_facet_values<'a, KC>(
+fn facet_values_prefix_key(distinct: FieldId, id: DocumentId) -> [u8; FID_SIZE + DOCID_SIZE] {
+    let mut key = [0; FID_SIZE + DOCID_SIZE];
+    key[0..FID_SIZE].copy_from_slice(&distinct.to_be_bytes());
+    key[FID_SIZE..].copy_from_slice(&id.to_be_bytes());
+    key
+}
+
+fn facet_number_values<'a>(
     id: DocumentId,
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> anyhow::Result<heed::RoPrefix<'a, KC, heed::types::Unit>>
-where
-    KC: heed::BytesDecode<'a>,
-{
-    const FID_SIZE: usize = size_of::<FieldId>();
-    const DOCID_SIZE: usize = size_of::<DocumentId>();
-
-    let mut key = [0; FID_SIZE + DOCID_SIZE];
-    key[0..FID_SIZE].copy_from_slice(&distinct.to_be_bytes());
-    key[FID_SIZE..].copy_from_slice(&id.to_be_bytes());
+) -> anyhow::Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, heed::types::Unit>> {
+    let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
-        .field_id_docid_facet_values
+        .field_id_docid_facet_f64s
+        .remap_key_type::<ByteSlice>()
         .prefix_iter(txn, &key)?
-        .remap_key_type::<KC>();
+        .remap_key_type::<FieldDocIdFacetF64Codec>();
+
+    Ok(iter)
+}
+
+fn facet_string_values<'a>(
+    id: DocumentId,
+    distinct: FieldId,
+    index: &Index,
+    txn: &'a heed::RoTxn,
+) -> anyhow::Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, heed::types::Unit>> {
+    let key = facet_values_prefix_key(distinct, id);
+
+    let iter = index
+        .field_id_docid_facet_strings
+        .remap_key_type::<ByteSlice>()
+        .prefix_iter(txn, &key)?
+        .remap_key_type::<FieldDocIdFacetStringCodec>();
+
     Ok(iter)
 }
 
@@ -186,8 +200,8 @@ impl<'a> Distinct<'_> for FacetDistinct<'a> {
 mod test {
     use std::collections::HashMap;
 
-    use super::*;
     use super::super::test::{generate_index, validate_distinct_candidates};
+    use super::*;
     use crate::facet::FacetType;
 
     macro_rules! test_facet_distinct {
@@ -196,7 +210,8 @@ mod test {
             fn $name() {
                 use std::iter::FromIterator;
 
-                let facets = HashMap::from_iter(Some(($distinct.to_string(), $facet_type.to_string())));
+                let facets =
+                    HashMap::from_iter(Some(($distinct.to_string(), $facet_type.to_string())));
                 let (index, fid, candidates) = generate_index($distinct, facets);
                 let txn = index.read_txn().unwrap();
                 let mut map_distinct = FacetDistinct::new(fid, &index, &txn, $facet_type);
