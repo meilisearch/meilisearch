@@ -16,6 +16,10 @@ use super::{Criterion, CriterionResult, Context, resolve_query_tree};
 /// We chose the LCM of all numbers between 1 and 10 as the multiplier (https://en.wikipedia.org/wiki/Least_common_multiple).
 const LCM_10_FIRST_NUMBERS: u32 = 2520;
 
+/// To compute the interval size of a level,
+/// we use 4 as the exponentiation base and the level as the exponent.
+const LEVEL_EXPONENTIATION_BASE: u32 = 4;
+
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
     query_tree: Option<Operation>,
@@ -150,7 +154,7 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
     fn new(ctx: &'t dyn Context<'t>, word: Cow<'q, str>, in_prefix_cache: bool) -> heed::Result<Option<Self>> {
         match ctx.word_position_last_level(&word, in_prefix_cache)? {
             Some(level) =>  {
-                let interval_size = 4u32.pow(Into::<u8>::into(level.clone()) as u32);
+                let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level.clone()) as u32);
                 let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, None, None)?;
                 Ok(Some(Self { inner, level, interval_size, word, in_prefix_cache, inner_next: None, current_interval: None }))
             },
@@ -160,7 +164,7 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
 
     fn dig(&self, ctx: &'t dyn Context<'t>, level: &TreeLevel, left_interval: Option<u32>) -> heed::Result<Self> {
         let level = level.min(&self.level).clone();
-        let interval_size = 4u32.pow(Into::<u8>::into(level.clone()) as u32);
+        let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level.clone()) as u32);
         let word = self.word.clone();
         let in_prefix_cache = self.in_prefix_cache;
         let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, left_interval, None)?;
@@ -280,10 +284,10 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
     fn inner_next(&mut self, level: TreeLevel) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
         let mut accumulated: Option<(u32, u32, RoaringBitmap)> = None;
         let u8_level = Into::<u8>::into(level);
-        let interval_size = 4u32.pow(u8_level as u32);
+        let interval_size = LEVEL_EXPONENTIATION_BASE.pow(u8_level as u32);
         for wli in self.inner.iter_mut() {
             let wli_u8_level = Into::<u8>::into(wli.level.clone());
-            let accumulated_count = 4u32.pow((u8_level - wli_u8_level) as u32);
+            let accumulated_count = LEVEL_EXPONENTIATION_BASE.pow((u8_level - wli_u8_level) as u32);
             for _ in 0..accumulated_count {
                 if let Some((next_left, _, next_docids)) =  wli.next()? {
                     accumulated = match accumulated.take(){
@@ -311,20 +315,12 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
         match parent_result {
             Some(parent_next) => {
                 let inner_next = self.inner_next(tree_level)?;
-                self.interval_to_skip += self.accumulator.iter().zip(self.parent_accumulator.iter()).skip(self.interval_to_skip).take_while(|current| {
-                    match current {
-                        (Some((_, _, inner)), Some((_, _, parent))) => {
-                            inner.is_disjoint(allowed_candidates) && parent.is_empty()
-                        },
-                        (Some((_, _, inner)), None) => {
-                            inner.is_disjoint(allowed_candidates)
-                        },
-                        (None, Some((_, _, parent))) => {
-                            parent.is_empty()
-                        },
-                        (None, None) => true,
-                    }
-                }).count();
+                self.interval_to_skip += interval_to_skip(
+                    &self.parent_accumulator,
+                    &self.accumulator,
+                    self.interval_to_skip,
+                    allowed_candidates
+                );
                 self.accumulator.push(inner_next);
                 self.parent_accumulator.push(parent_next);
                 let mut merged_interval: Option<(u32, u32, RoaringBitmap)> = None;
@@ -358,6 +354,29 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
     }
 }
 
+/// Count the number of interval that can be skiped when we make the cross-intersections
+/// in order to compute the next meta-interval.
+/// A pair of intervals is skiped when both intervals doesn't contain any allowed docids.
+fn interval_to_skip(
+    parent_accumulator: &[Option<(u32, u32, RoaringBitmap)>],
+    current_accumulator: &[Option<(u32, u32, RoaringBitmap)>],
+    already_skiped: usize,
+    allowed_candidates: &RoaringBitmap,
+) -> usize {
+    parent_accumulator.into_iter()
+        .zip(current_accumulator.into_iter())
+        .skip(already_skiped)
+        .take_while(|(parent, current)| {
+            let skip_parent = parent.as_ref().map_or(true, |(_, _, docids)| docids.is_empty());
+            let skip_current = current.as_ref().map_or(true, |(_, _, docids)| docids.is_disjoint(allowed_candidates));
+            skip_parent && skip_current
+        })
+        .count()
+
+}
+
+/// A Branch is represent a possible alternative of the original query and is build with the Query Tree,
+/// This branch allows us to iterate over meta-interval of position and to dig in it if it contains interesting candidates.
 struct Branch<'t, 'q> {
     query_level_iterator: QueryLevelIterator<'t, 'q>,
     last_result: (u32, u32, RoaringBitmap),
@@ -366,6 +385,8 @@ struct Branch<'t, 'q> {
 }
 
 impl<'t, 'q> Branch<'t, 'q> {
+    /// return the next meta-interval of the branch,
+    /// and update inner interval in order to be ranked by the BinaryHeap.
     fn next(&mut self, allowed_candidates: &RoaringBitmap) -> heed::Result<bool> {
         let tree_level = self.query_level_iterator.level;
         match self.query_level_iterator.next(allowed_candidates, tree_level)? {
@@ -378,19 +399,24 @@ impl<'t, 'q> Branch<'t, 'q> {
         }
     }
 
+    /// make the current Branch iterate over smaller intervals.
     fn dig(&mut self, ctx: &'t dyn Context<'t>) -> heed::Result<()> {
         self.query_level_iterator = self.query_level_iterator.dig(ctx)?;
         Ok(())
     }
 
+    /// because next() method could be time consuming,
+    /// update inner interval in order to be ranked by the binary_heap without computing it,
+    /// the next() method should be called when the real interval is needed.
     fn lazy_next(&mut self) {
         let u8_level = Into::<u8>::into(self.tree_level.clone());
-        let interval_size = 4u32.pow(u8_level as u32);
+        let interval_size = LEVEL_EXPONENTIATION_BASE.pow(u8_level as u32);
         let (left, right, _) = self.last_result;
 
         self.last_result = (left + interval_size,  right + interval_size, RoaringBitmap::new());
     }
 
+    /// return the score of the current inner interval.
     fn compute_rank(&self) -> u32 {
         // we compute a rank from the left interval.
         let (left, _, _) = self.last_result;
