@@ -4,21 +4,25 @@ use std::borrow::Cow;
 use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::search::{word_derivations, WordDerivationsCache};
+use crate::{TreeLevel, search::{word_derivations, WordDerivationsCache}};
 use crate::{Index, DocumentId};
 
 use super::query_tree::{Operation, Query, QueryKind};
+use self::asc_desc::AscDesc;
+use self::attribute::Attribute;
+use self::r#final::Final;
+use self::initial::Initial;
+use self::proximity::Proximity;
 use self::typo::Typo;
 use self::words::Words;
-use self::asc_desc::AscDesc;
-use self::proximity::Proximity;
-use self::fetcher::Fetcher;
 
+mod asc_desc;
+mod attribute;
+mod initial;
+mod proximity;
 mod typo;
 mod words;
-mod asc_desc;
-mod proximity;
-pub mod fetcher;
+pub mod r#final;
 
 pub trait Criterion {
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>>;
@@ -59,7 +63,8 @@ impl Default for Candidates {
         Self::Forbidden(RoaringBitmap::new())
     }
 }
-pub trait Context {
+
+pub trait Context<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap>;
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
@@ -68,6 +73,8 @@ pub trait Context {
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
     fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>>;
+    fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>;
+    fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -76,7 +83,7 @@ pub struct CriteriaBuilder<'t> {
     words_prefixes_fst: fst::Set<Cow<'t, [u8]>>,
 }
 
-impl<'a> Context for CriteriaBuilder<'a> {
+impl<'c> Context<'c> for CriteriaBuilder<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
         self.index.documents_ids(self.rtxn)
     }
@@ -115,6 +122,48 @@ impl<'a> Context for CriteriaBuilder<'a> {
         }
         Ok(words_positions)
     }
+
+    fn word_position_iterator(
+        &self,
+        word: &str,
+        level: TreeLevel,
+        in_prefix_cache: bool,
+        left: Option<u32>,
+        right: Option<u32>
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>
+    {
+        let range = {
+            let left = left.unwrap_or(u32::min_value());
+            let right = right.unwrap_or(u32::max_value());
+            let left = (word, level, left, left);
+            let right = (word, level, right, right);
+            left..=right
+        };
+        let db = match in_prefix_cache {
+            true => self.index.word_prefix_level_position_docids,
+            false => self.index.word_level_position_docids,
+        };
+
+        Ok(Box::new(db.range(self.rtxn, &range)?))
+    }
+
+    fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>> {
+        let range = {
+            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
+            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
+            left..=right
+        };
+        let db = match in_prefix_cache {
+            true => self.index.word_prefix_level_position_docids,
+            false => self.index.word_level_position_docids,
+        };
+        let last_level = db
+            .remap_data_type::<heed::types::DecodeIgnore>()
+            .range(self.rtxn, &range)?.last().transpose()?
+            .map(|((_, level, _, _), _)| level);
+
+        Ok(last_level)
+    }
 }
 
 impl<'t> CriteriaBuilder<'t> {
@@ -126,42 +175,26 @@ impl<'t> CriteriaBuilder<'t> {
 
     pub fn build(
         &'t self,
-        mut query_tree: Option<Operation>,
-        mut facet_candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Fetcher<'t>>
+        query_tree: Option<Operation>,
+        facet_candidates: Option<RoaringBitmap>,
+    ) -> anyhow::Result<Final<'t>>
     {
         use crate::criterion::Criterion as Name;
 
-        let mut criterion = None as Option<Box<dyn Criterion>>;
+        let mut criterion = Box::new(Initial::new(query_tree, facet_candidates)) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
-            criterion = Some(match criterion.take() {
-                Some(father) => match name {
-                    Name::Typo => Box::new(Typo::new(self, father)),
-                    Name::Words => Box::new(Words::new(self, father)),
-                    Name::Proximity => Box::new(Proximity::new(self, father)),
-                    Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, father, field)?),
-                    Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, father, field)?),
-                    _otherwise => father,
-                },
-                None => match name {
-                    Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())),
-                    Name::Asc(field) => {
-                        Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
-                    },
-                    Name::Desc(field) => {
-                        Box::new(AscDesc::initial_desc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
-                    },
-                    _otherwise => continue,
-                },
-            });
+            criterion = match name {
+                Name::Typo => Box::new(Typo::new(self, criterion)),
+                Name::Words => Box::new(Words::new(self, criterion)),
+                Name::Proximity => Box::new(Proximity::new(self, criterion)),
+                Name::Attribute => Box::new(Attribute::new(self, criterion)),
+                Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?),
+                Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?),
+                _otherwise => criterion,
+            };
         }
 
-        match criterion {
-            Some(criterion) => Ok(Fetcher::new(self, criterion)),
-            None => Ok(Fetcher::initial(self, query_tree, facet_candidates)),
-        }
+        Ok(Final::new(self, criterion))
     }
 }
 
@@ -362,9 +395,10 @@ pub mod test {
         word_prefix_docids: HashMap<String, RoaringBitmap>,
         word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         word_prefix_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
+        docid_words: HashMap<u32, Vec<String>>,
     }
 
-    impl<'a> Context for TestContext<'a> {
+    impl<'c> Context<'c> for TestContext<'c> {
         fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
             Ok(self.word_docids.iter().fold(RoaringBitmap::new(), |acc, (_, docids)| acc | docids))
         }
@@ -395,7 +429,24 @@ pub mod test {
             self.word_prefix_docids.contains_key(&word.to_string())
         }
 
-        fn docid_words_positions(&self, _docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
+        fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
+            if let Some(docid_words) = self.docid_words.get(&docid) {
+                Ok(docid_words
+                    .iter()
+                    .enumerate()
+                    .map(|(i,w)| (w.clone(), RoaringBitmap::from_sorted_iter(std::iter::once(i as u32))))
+                    .collect()
+                )
+            } else {
+                Ok(HashMap::new())
+            }
+        }
+
+        fn word_position_iterator(&self, _word: &str, _level: TreeLevel, _in_prefix_cache: bool, _left: Option<u32>, _right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>> {
+            todo!()
+        }
+
+        fn word_position_last_level(&self, _word: &str, _in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>> {
             todo!()
         }
     }
@@ -431,50 +482,58 @@ pub mod test {
                 s("morning")    => random_postings(rng,    125),
             };
 
+            let mut docid_words = HashMap::new();
+            for (word, docids) in word_docids.iter() {
+                for docid in docids {
+                    let words = docid_words.entry(docid).or_insert(vec![]);
+                    words.push(word.clone());
+                }
+            }
+
             let word_prefix_docids = hashmap!{
                 s("h")   => &word_docids[&s("hello")] | &word_docids[&s("hi")],
                 s("wor") => &word_docids[&s("word")]  | &word_docids[&s("world")],
                 s("20")  => &word_docids[&s("2020")]  | &word_docids[&s("2021")],
             };
 
-            let hello_world = &word_docids[&s("hello")] & &word_docids[&s("world")];
-            let hello_world_split = (hello_world.len() / 2) as usize;
-            let hello_world_1 = hello_world.iter().take(hello_world_split).collect();
-            let hello_world_2 = hello_world.iter().skip(hello_world_split).collect();
-
-            let hello_word = &word_docids[&s("hello")] & &word_docids[&s("word")];
-            let hello_word_split = (hello_word.len() / 2) as usize;
-            let hello_word_4 = hello_word.iter().take(hello_word_split).collect();
-            let hello_word_6 = hello_word.iter().skip(hello_word_split).take(hello_word_split/2).collect();
-            let hello_word_7 = hello_word.iter().skip(hello_word_split + hello_word_split/2).collect();
-            let word_pair_proximity_docids = hashmap!{
-                (s("good"), s("morning"), 1)   => &word_docids[&s("good")] & &word_docids[&s("morning")],
-                (s("hello"), s("world"), 1)   => hello_world_1,
-                (s("hello"), s("world"), 4)   => hello_world_2,
-                (s("this"), s("is"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")],
-                (s("is"), s("2021"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")] & &word_docids[&s("2021")],
-                (s("is"), s("2020"), 1)   => &word_docids[&s("this")] & &word_docids[&s("is")] & (&word_docids[&s("2020")] - &word_docids[&s("2021")]),
-                (s("this"), s("2021"), 2)   => &word_docids[&s("this")] & &word_docids[&s("is")] & &word_docids[&s("2021")],
-                (s("this"), s("2020"), 2)   => &word_docids[&s("this")] & &word_docids[&s("is")] & (&word_docids[&s("2020")] - &word_docids[&s("2021")]),
-                (s("word"), s("split"), 1)   => &word_docids[&s("word")] & &word_docids[&s("split")],
-                (s("world"), s("split"), 1)   => (&word_docids[&s("world")] & &word_docids[&s("split")]) - &word_docids[&s("word")],
-                (s("hello"), s("word"), 4) => hello_word_4,
-                (s("hello"), s("word"), 6) => hello_word_6,
-                (s("hello"), s("word"), 7) => hello_word_7,
-                (s("split"), s("ngrams"), 3)   => (&word_docids[&s("split")] & &word_docids[&s("ngrams")]) - &word_docids[&s("word")],
-                (s("split"), s("ngrams"), 5)   => &word_docids[&s("split")] & &word_docids[&s("ngrams")] & &word_docids[&s("word")],
-                (s("this"), s("ngrams"), 1)   => (&word_docids[&s("split")] & &word_docids[&s("this")] & &word_docids[&s("ngrams")] ) - &word_docids[&s("word")],
-                (s("this"), s("ngrams"), 2)   => &word_docids[&s("split")] & &word_docids[&s("this")] & &word_docids[&s("ngrams")] & &word_docids[&s("word")],
-            };
-
-            let word_prefix_pair_proximity_docids = hashmap!{
-                (s("hello"), s("wor"), 1) => word_pair_proximity_docids.get(&(s("hello"), s("world"), 1)).unwrap().clone(),
-                (s("hello"), s("wor"), 4) => word_pair_proximity_docids.get(&(s("hello"), s("world"), 4)).unwrap() | word_pair_proximity_docids.get(&(s("hello"), s("word"), 4)).unwrap(),
-                (s("hello"), s("wor"), 6) => word_pair_proximity_docids.get(&(s("hello"), s("word"), 6)).unwrap().clone(),
-                (s("hello"), s("wor"), 7) => word_pair_proximity_docids.get(&(s("hello"), s("word"), 7)).unwrap().clone(),
-                (s("is"), s("20"), 1) => word_pair_proximity_docids.get(&(s("is"), s("2020"), 1)).unwrap() | word_pair_proximity_docids.get(&(s("is"), s("2021"), 1)).unwrap(),
-                (s("this"), s("20"), 2) => word_pair_proximity_docids.get(&(s("this"), s("2020"), 2)).unwrap() | word_pair_proximity_docids.get(&(s("this"), s("2021"), 2)).unwrap(),
-            };
+            let mut word_pair_proximity_docids = HashMap::new();
+            let mut word_prefix_pair_proximity_docids = HashMap::new();
+            for (lword, lcandidates) in &word_docids {
+                for (rword, rcandidates) in &word_docids {
+                    if lword == rword { continue }
+                    let candidates = lcandidates & rcandidates;
+                    for candidate in candidates {
+                        if let Some(docid_words) = docid_words.get(&candidate) {
+                            let lposition = docid_words.iter().position(|w| w == lword).unwrap();
+                            let rposition = docid_words.iter().position(|w| w == rword).unwrap();
+                            let key = if lposition < rposition {
+                                (s(lword), s(rword), (rposition - lposition) as i32)
+                            } else {
+                                (s(lword), s(rword), (lposition - rposition + 1) as i32)
+                            };
+                            let docids = word_pair_proximity_docids.entry(key).or_insert(RoaringBitmap::new());
+                            docids.push(candidate);
+                        }
+                    }
+                }
+                for (pword, pcandidates) in &word_prefix_docids {
+                    if lword.starts_with(pword) { continue }
+                    let candidates = lcandidates & pcandidates;
+                    for candidate in candidates {
+                        if let Some(docid_words) = docid_words.get(&candidate) {
+                            let lposition = docid_words.iter().position(|w| w == lword).unwrap();
+                            let rposition = docid_words.iter().position(|w| w.starts_with(pword)).unwrap();
+                            let key = if lposition < rposition {
+                                (s(lword), s(pword), (rposition - lposition) as i32)
+                            } else {
+                                (s(lword), s(pword), (lposition - rposition + 1) as i32)
+                            };
+                            let docids = word_prefix_pair_proximity_docids.entry(key).or_insert(RoaringBitmap::new());
+                            docids.push(candidate);
+                        }
+                    }
+                }
+            }
 
             let mut keys = word_docids.keys().collect::<Vec<_>>();
             keys.sort_unstable();
@@ -486,6 +545,7 @@ pub mod test {
                 word_prefix_docids,
                 word_pair_proximity_docids,
                 word_prefix_pair_proximity_docids,
+                docid_words,
             }
         }
     }

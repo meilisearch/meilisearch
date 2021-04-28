@@ -123,6 +123,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "big_s"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "199edb7b90631283b10c2422e6a0bc8b7d987bf732995ba1de53b576c97e51a8"
+
+[[package]]
 name = "bincode"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1251,6 +1257,7 @@ name = "milli"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "big_s",
  "bstr",
  "byteorder",
  "chrono",
@@ -1957,9 +1964,9 @@ checksum = "53552c6c49e1e13f1a203ef0080ab3bbef0beb570a528993e83df057a9d9bba1"
 
 [[package]]
 name = "roaring"
-version = "0.6.5"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6744a4a918e91359ad1d356a91e2e943a86d9fb9ae77f715d617032ea2af88f"
+checksum = "a4b2e7ab0bbb2d144558ae3f4761a0db06d21463b45756fc64c3393cdba3d447"
 dependencies = [
  "bytemuck",
  "byteorder",

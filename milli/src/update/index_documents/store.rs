@@ -29,7 +29,8 @@ use crate::{json_to_string, SmallVec8, SmallVec32, Position, DocumentId, FieldId
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
-    facet_field_value_docids_merge, field_id_docid_facet_values_merge,
+    word_level_position_docids_merge, facet_field_value_docids_merge,
+    field_id_docid_facet_values_merge,
 };
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
@@ -43,6 +44,7 @@ pub struct Readers {
     pub word_docids: Reader<FileFuse>,
     pub docid_word_positions: Reader<FileFuse>,
     pub words_pairs_proximities_docids: Reader<FileFuse>,
+    pub word_level_position_docids: Reader<FileFuse>,
     pub facet_field_value_docids: Reader<FileFuse>,
     pub field_id_docid_facet_values: Reader<FileFuse>,
     pub documents: Reader<FileFuse>,
@@ -69,6 +71,7 @@ pub struct Store<'s, A> {
     main_sorter: Sorter<MergeFn>,
     word_docids_sorter: Sorter<MergeFn>,
     words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
+    word_level_position_docids_sorter: Sorter<MergeFn>,
     facet_field_value_docids_sorter: Sorter<MergeFn>,
     field_id_docid_facet_values_sorter: Sorter<MergeFn>,
     // MTBL writers
@@ -94,7 +97,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     ) -> anyhow::Result<Self>
     {
         // We divide the max memory by the number of sorter the Store have.
-        let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 4));
+        let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 5));
         let linked_hash_map_size = linked_hash_map_size.unwrap_or(500);
 
         let main_sorter = create_sorter(
@@ -115,6 +118,14 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         );
         let words_pairs_proximities_docids_sorter = create_sorter(
             words_pairs_proximities_docids_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            chunk_fusing_shrink_size,
+            max_nb_chunks,
+            max_memory,
+        );
+        let word_level_position_docids_sorter = create_sorter(
+            word_level_position_docids_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -172,6 +183,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             main_sorter,
             word_docids_sorter,
             words_pairs_proximities_docids_sorter,
+            word_level_position_docids_sorter,
             facet_field_value_docids_sorter,
             field_id_docid_facet_values_sorter,
             // MTBL writers
@@ -290,6 +302,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
+        Self::write_word_position_docids(&mut self.word_level_position_docids_sorter, document_id, words_positions)?;
 
         words_positions.clear();
 
@@ -354,6 +367,42 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 writer.insert(&key, &bytes)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_word_position_docids(
+        writer: &mut Sorter<MergeFn>,
+        document_id: DocumentId,
+        words_positions: &HashMap<String, SmallVec32<Position>>,
+    ) -> anyhow::Result<()>
+    {
+        let mut key_buffer = Vec::new();
+        let mut data_buffer = Vec::new();
+
+        for (word, positions) in words_positions {
+            key_buffer.clear();
+            key_buffer.extend_from_slice(word.as_bytes());
+            key_buffer.push(0); // level 0
+
+            for position in positions {
+                key_buffer.truncate(word.len() + 1);
+                let position_bytes = position.to_be_bytes();
+                key_buffer.extend_from_slice(position_bytes.as_bytes());
+                key_buffer.extend_from_slice(position_bytes.as_bytes());
+
+                data_buffer.clear();
+                let positions = RoaringBitmap::from_iter(Some(document_id));
+                // We serialize the positions into a buffer.
+                CboRoaringBitmapCodec::serialize_into(&positions, &mut data_buffer)
+                    .with_context(|| "could not serialize positions")?;
+
+                // that we write under the generated key into MTBL
+                if lmdb_key_valid_size(&key_buffer) {
+                    writer.insert(&key_buffer, &data_buffer)?;
+                }
             }
         }
 
@@ -561,6 +610,9 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         let mut words_pairs_proximities_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         self.words_pairs_proximities_docids_sorter.write_into(&mut words_pairs_proximities_docids_wtr)?;
 
+        let mut word_level_position_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
+        self.word_level_position_docids_sorter.write_into(&mut word_level_position_docids_wtr)?;
+
         let mut facet_field_value_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         self.facet_field_value_docids_sorter.write_into(&mut facet_field_value_docids_wtr)?;
 
@@ -570,6 +622,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         let main = writer_into_reader(main_wtr, shrink_size)?;
         let word_docids = writer_into_reader(word_docids_wtr, shrink_size)?;
         let words_pairs_proximities_docids = writer_into_reader(words_pairs_proximities_docids_wtr, shrink_size)?;
+        let word_level_position_docids = writer_into_reader(word_level_position_docids_wtr, shrink_size)?;
         let facet_field_value_docids = writer_into_reader(facet_field_value_docids_wtr, shrink_size)?;
         let field_id_docid_facet_values = writer_into_reader(field_id_docid_facet_values_wtr, shrink_size)?;
         let docid_word_positions = writer_into_reader(self.docid_word_positions_writer, shrink_size)?;
@@ -580,6 +633,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             word_docids,
             docid_word_positions,
             words_pairs_proximities_docids,
+            word_level_position_docids,
             facet_field_value_docids,
             field_id_docid_facet_values,
             documents,

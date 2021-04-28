@@ -11,7 +11,7 @@ csv = "1.1.5"
 heed = "0.10.6"
 jemallocator = "0.3.2"
 milli = { path = "../milli" }
-roaring = "0.6.5"
+roaring = "0.6.6"
 serde_json = "1.0.62"
 stderrlog = "0.5.1"
 structopt = { version = "0.3.21", default-features = false }

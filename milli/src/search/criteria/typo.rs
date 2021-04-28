@@ -9,41 +9,24 @@ use crate::search::{word_derivations, WordDerivationsCache};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
 pub struct Typo<'t> {
-    ctx: &'t dyn Context,
+    ctx: &'t dyn Context<'t>,
     query_tree: Option<(usize, Operation)>,
     number_typos: u8,
     candidates: Candidates,
     bucket_candidates: RoaringBitmap,
-    parent: Option<Box<dyn Criterion + 't>>,
+    parent: Box<dyn Criterion + 't>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
 }
 
 impl<'t> Typo<'t> {
-    pub fn initial(
-        ctx: &'t dyn Context,
-        query_tree: Option<Operation>,
-        candidates: Option<RoaringBitmap>,
-    ) -> Self
-    {
-        Typo {
-            ctx,
-            query_tree: query_tree.map(|op| (maximum_typo(&op), op)),
-            number_typos: 0,
-            candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
-            bucket_candidates: RoaringBitmap::new(),
-            parent: None,
-            candidates_cache: HashMap::new(),
-        }
-    }
-
-    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
         Typo {
             ctx,
             query_tree: None,
             number_typos: 0,
             candidates: Candidates::default(),
             bucket_candidates: RoaringBitmap::new(),
-            parent: Some(parent),
+            parent,
             candidates_cache: HashMap::new(),
         }
     }
@@ -90,15 +73,10 @@ impl<'t> Criterion for Typo<'t> {
                         candidates.difference_with(&new_candidates);
                         self.number_typos += 1;
 
-                        let bucket_candidates = match self.parent {
-                            Some(_) => take(&mut self.bucket_candidates),
-                            None => new_candidates.clone(),
-                        };
-
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
                             candidates: Some(new_candidates),
-                            bucket_candidates,
+                            bucket_candidates: take(&mut self.bucket_candidates),
                         }));
                     }
                 },
@@ -145,17 +123,19 @@ impl<'t> Criterion for Typo<'t> {
                     }));
                 },
                 (None, Forbidden(_)) => {
-                    match self.parent.as_mut() {
-                        Some(parent) => {
-                            match parent.next(wdcache)? {
-                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                                    self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
-                                    self.number_typos = 0;
-                                    self.candidates = candidates.map_or_else(Candidates::default, Candidates::Allowed);
-                                    self.bucket_candidates.union_with(&bucket_candidates);
-                                },
-                                None => return Ok(None),
-                            }
+                    match self.parent.next(wdcache)? {
+                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: None,
+                                candidates: None,
+                                bucket_candidates,
+                            }));
+                        },
+                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                            self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
+                            self.number_typos = 0;
+                            self.candidates = candidates.map_or_else(Candidates::default, Candidates::Allowed);
+                            self.bucket_candidates.union_with(&bucket_candidates);
                         },
                         None => return Ok(None),
                     }
@@ -334,8 +314,8 @@ fn resolve_candidates<'t>(
 
 #[cfg(test)]
 mod test {
-
     use super::*;
+    use super::super::initial::Initial;
     use super::super::test::TestContext;
 
     #[test]
@@ -345,8 +325,10 @@ mod test {
         let facet_candidates = None;
 
         let mut wdcache = WordDerivationsCache::new();
-        let mut criteria = Typo::initial(&context, query_tree, facet_candidates);
+        let parent = Initial::new(query_tree, facet_candidates);
+        let mut criteria = Typo::new(&context, Box::new(parent));
 
+        assert!(criteria.next(&mut wdcache).unwrap().unwrap().candidates.is_none());
         assert!(criteria.next(&mut wdcache).unwrap().is_none());
     }
 
@@ -364,7 +346,8 @@ mod test {
         let facet_candidates = None;
 
         let mut wdcache = WordDerivationsCache::new();
-        let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates);
+        let parent = Initial::new(Some(query_tree), facet_candidates);
+        let mut criteria = Typo::new(&context, Box::new(parent));
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
             & context.word_docids("this").unwrap().unwrap()
@@ -413,7 +396,8 @@ mod test {
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
         let mut wdcache = WordDerivationsCache::new();
-        let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone()));
+        let parent = Initial::new(query_tree, Some(facet_candidates.clone()));
+        let mut criteria = Typo::new(&context, Box::new(parent));
 
         let expected = CriterionResult {
             query_tree: None,
@@ -442,7 +426,8 @@ mod test {
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
         let mut wdcache = WordDerivationsCache::new();
-        let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone()));
+        let parent = Initial::new(Some(query_tree), Some(facet_candidates.clone()));
+        let mut criteria = Typo::new(&context, Box::new(parent));
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
             & context.word_docids("this").unwrap().unwrap()
@@ -456,7 +441,7 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_1 & &facet_candidates),
-            bucket_candidates: candidates_1 & &facet_candidates,
+            bucket_candidates: facet_candidates.clone(),
         };
 
         assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
@@ -478,7 +463,7 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_2 & &facet_candidates),
-            bucket_candidates: candidates_2 & &facet_candidates,
+            bucket_candidates: RoaringBitmap::new(),
         };
 
         assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
