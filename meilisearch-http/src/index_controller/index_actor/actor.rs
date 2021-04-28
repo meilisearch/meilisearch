@@ -36,6 +36,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(Self { receiver, update_handler, store })
     }
 
+    /// `run` poll the write_receiver and read_receiver concurrently, but while messages send
+    /// through the read channel are processed concurrently, the messages sent through the write
+    /// channel are processed one at a time.
     pub async fn run(mut self) {
         let mut receiver = self
             .receiver
@@ -118,6 +121,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
             Snapshot { uuid, path, ret } => {
                 let _ = ret.send(self.handle_snapshot(uuid, path).await);
+            }
+            Dump { uuid, path, ret } => {
+                let _ = ret.send(self.handle_dump(uuid, path).await);
             }
             GetStats { uuid, ret } => {
                 let _ = ret.send(self.handle_get_stats(uuid).await);
@@ -306,7 +312,35 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
+    async fn handle_dump(&self, uuid: Uuid, mut path: PathBuf) -> Result<()> {
+        use tokio::fs::create_dir_all;
+
+        path.push("indexes");
+        create_dir_all(&path)
+            .await
+            .map_err(|e| IndexError::Error(e.into()))?;
+
+        if let Some(index) = self.store.get(uuid).await? {
+            let mut index_path = path.join(format!("index-{}", uuid));
+            create_dir_all(&index_path)
+                .await
+                .map_err(|e| IndexError::Error(e.into()))?;
+            index_path.push("data.mdb");
+            spawn_blocking(move || -> anyhow::Result<()> {
+                // Get write txn to wait for ongoing write transaction before dump.
+                let _txn = index.write_txn()?;
+                index.env.copy_to_path(index_path, CompactionOption::Enabled)?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| IndexError::Error(e.into()))?
+            .map_err(IndexError::Error)?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
         let index = self
             .store
             .get(uuid)

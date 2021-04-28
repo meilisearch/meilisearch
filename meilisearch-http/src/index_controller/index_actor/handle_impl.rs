@@ -136,7 +136,14 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Dump { uuid, path, ret };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetStats { uuid, ret };
         let _ = self.sender.send(msg).await;

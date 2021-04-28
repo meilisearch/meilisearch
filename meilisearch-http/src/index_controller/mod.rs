@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
 use anyhow::bail;
-use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
 use milli::FieldsDistribution;
@@ -25,6 +24,7 @@ use crate::option::Opt;
 
 mod index_actor;
 mod snapshot;
+mod dump;
 mod update_actor;
 mod update_handler;
 mod updates;
@@ -87,6 +87,13 @@ impl IndexController {
                 options.ignore_snapshot_if_db_exists,
                 options.ignore_missing_snapshot,
             )?;
+        } else if let Some(ref path) = options.import_dump {
+            load_dump(
+                &options.db_path,
+                path,
+                index_size,
+            );
+
         }
 
         std::fs::create_dir_all(&path)?;

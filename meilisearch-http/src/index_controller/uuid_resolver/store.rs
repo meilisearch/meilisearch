@@ -21,6 +21,7 @@ pub trait UuidStore {
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
     async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
+    async fn dump(&self, path: PathBuf) -> Result<Vec<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
 }
 
@@ -130,6 +131,8 @@ impl UuidStore for HeedUuidStore {
         .await?
     }
 
+    // TODO: we should merge this function and the following function for the dump. it's exactly
+    // the same code
     async fn snapshot(&self, mut path: PathBuf) -> Result<HashSet<Uuid>> {
         let env = self.env.clone();
         let db = self.db;
@@ -144,6 +147,31 @@ impl UuidStore for HeedUuidStore {
             }
 
             // only perform snapshot if there are indexes
+            if !entries.is_empty() {
+                path.push("index_uuids");
+                create_dir_all(&path).unwrap();
+                path.push("data.mdb");
+                env.copy_to_path(path, CompactionOption::Enabled)?;
+            }
+            Ok(entries)
+        })
+        .await?
+    }
+
+    async fn dump(&self, mut path: PathBuf) -> Result<Vec<Uuid>> {
+        let env = self.env.clone();
+        let db = self.db;
+        tokio::task::spawn_blocking(move || {
+            // Write transaction to acquire a lock on the database.
+            let txn = env.write_txn()?;
+            let mut entries = Vec::new();
+            for entry in db.iter(&txn)? {
+                let (_, uuid) = entry?;
+                let uuid = Uuid::from_slice(uuid)?;
+                entries.push(uuid)
+            }
+
+            // only perform dump if there are indexes
             if !entries.is_empty() {
                 path.push("index_uuids");
                 create_dir_all(&path).unwrap();

@@ -180,5 +180,4 @@ mod test {
         async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
             self.as_ref().get_index_stats(uuid).await
         }
-    }
 }

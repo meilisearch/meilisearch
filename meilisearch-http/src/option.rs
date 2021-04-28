@@ -203,6 +203,7 @@ pub struct Opt {
     pub import_dump: Option<PathBuf>,
 
     /// The batch size used in the importation process, the bigger it is the faster the dump is created.
+    /// This options is now deprecated and will be ignored
     #[structopt(long, env = "MEILI_DUMP_BATCH_SIZE", default_value = "1024")]
     pub dump_batch_size: usize,
 

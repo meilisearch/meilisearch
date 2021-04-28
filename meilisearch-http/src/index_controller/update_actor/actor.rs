@@ -71,11 +71,16 @@ where
                 Some(Delete { uuid, ret }) => {
                     let _ = ret.send(self.handle_delete(uuid).await);
                 }
-                Some(Snapshot { uuids, path, ret }) => {
-                    let _ = ret.send(self.handle_snapshot(uuids, path).await);
+                Some(Snapshot { uuid, path, ret }) => {
+                    let _ = ret.send(self.handle_snapshot(uuid, path).await);
+                }
+                Some(Dump { uuid, path, ret }) => {
+                    let _ = ret.send(self.handle_dump(uuid, path).await);
                 }
                 Some(GetInfo { ret }) => {
                     let _ = ret.send(self.handle_get_info().await);
+                Some(GetSize { uuid, ret }) => {
+                    let _ = ret.send(self.handle_get_size(uuid).await);
                 }
                 None => break,
             }
@@ -194,9 +199,51 @@ where
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
-        let store = self.store.clone();
+        let store = self.store.delete(uuid).await?;
 
-        tokio::task::spawn_blocking(move || store.delete_all(uuid))
+        if let Some(store) = store {
+            tokio::task::spawn(async move {
+                let store = get_arc_ownership_blocking(store).await;
+                tokio::task::spawn_blocking(move || {
+                    store.prepare_for_closing().wait();
+                    info!("Update store {} was closed.", uuid);
+                });
+            });
+        }
+
+        Ok(())
+    }
+
+    async fn handle_create(&self, uuid: Uuid) -> Result<()> {
+        let _ = self.store.get_or_create(uuid).await?;
+        Ok(())
+    }
+
+        Ok(())
+    }
+
+    async fn handle_create(&self, uuid: Uuid) -> Result<()> {
+        let _ = self.store.get_or_create(uuid).await?;
+        Ok(())
+    }
+
+    async fn handle_snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+        let index_handle = self.index_handle.clone();
+        if let Some(update_store) = self.store.get(uuid).await? {
+            tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                // acquire write lock to prevent further writes during snapshot
+                // the update lock must be acquired BEFORE the write lock to prevent dead lock
+                let _lock = update_store.update_lock.lock();
+                let mut txn = update_store.env.write_txn()?;
+
+                // create db snapshot
+                update_store.snapshot(&mut txn, &path, uuid)?;
+
+                futures::executor::block_on(
+                    async move { index_handle.snapshot(uuid, path).await },
+                )?;
+                Ok(())
+            })
             .await
             .map_err(|e| UpdateError::Error(e.into()))?
             .map_err(|e| UpdateError::Error(e.into()))?;
@@ -245,4 +292,42 @@ where
 
         Ok(info)
     }
+
+    async fn handle_dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+        let index_handle = self.index_handle.clone();
+        if let Some(update_store) = self.store.get(uuid).await? {
+            tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                // acquire write lock to prevent further writes during the dump
+                // the update lock must be acquired BEFORE the write lock to prevent dead lock
+                let _lock = update_store.update_lock.lock();
+                let mut txn = update_store.env.write_txn()?;
+
+                // create db dump
+                update_store.dump(&mut txn, &path, uuid)?;
+
+                futures::executor::block_on(
+                    async move { index_handle.dump(uuid, path).await },
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| UpdateError::Error(e.into()))?
+            .map_err(|e| UpdateError::Error(e.into()))?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_get_size(&self, uuid: Uuid) -> Result<u64> {
+        let size = match self.store.get(uuid).await? {
+            Some(update_store) => tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+                let txn = update_store.env.read_txn()?;
+
+                update_store.get_size(&txn)
+            })
+            .await
+            .map_err(|e| UpdateError::Error(e.into()))?
+            .map_err(|e| UpdateError::Error(e.into()))?,
+            None => 0,
+        };
 }

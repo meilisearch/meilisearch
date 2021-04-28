@@ -31,7 +31,16 @@ pub enum UpdateMsg<D> {
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
+    Dump {
+        uuid: Uuid,
+        path: PathBuf,
+        ret: oneshot::Sender<Result<()>>,
+    },
     GetInfo {
         ret: oneshot::Sender<Result<UpdateStoreInfo>>,
+    },
+    GetSize {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<u64>>,
     },
 }
