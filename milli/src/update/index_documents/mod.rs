@@ -41,7 +41,7 @@ mod transform;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentAdditionResult {
-    nb_documents: usize,
+    pub nb_documents: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
