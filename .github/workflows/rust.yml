@@ -24,8 +24,8 @@ jobs:
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
-        command: check
-        args: --no-default-features
+        command: build
+        args: --locked --release --no-default-features
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
