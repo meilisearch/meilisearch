@@ -91,7 +91,6 @@ where
         meta: UpdateMeta,
         mut payload: mpsc::Receiver<PayloadData<D>>,
     ) -> Result<UpdateStatus> {
-
         let file_path = match meta {
             UpdateMeta::DocumentsAddition { .. }
             | UpdateMeta::DeleteDocuments => {

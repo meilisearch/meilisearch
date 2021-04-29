@@ -13,9 +13,8 @@ use crate::index_controller::{UpdateMeta, UpdateStatus};
 
 use actor::UpdateActor;
 use message::UpdateMsg;
-use update_store::UpdateStore;
-pub use update_store::UpdateStoreInfo;
 
+pub use update_store::{UpdateStore, UpdateStoreInfo};
 pub use handle_impl::UpdateActorHandleImpl;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;

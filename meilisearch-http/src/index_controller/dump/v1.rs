@@ -84,19 +84,13 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     std::fs::create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
-    let index = milli::Index::new(options, index_path)?;
+    let index = milli::Index::new(options.clone(), index_path)?;
     let index = Index(Arc::new(index));
 
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
     dbg!(&settings);
-    let mut settings: index_controller::Settings = settings.into();
-    if settings.displayed_attributes.as_ref().map_or(false, |o| o.as_ref().map_or(false, |v| v.contains(&String::from("*")))) {
-        settings.displayed_attributes = None;
-    }
-    if settings.searchable_attributes.as_ref().map_or(false, |o| o.as_ref().map_or(false, |v| v.contains(&String::from("*")))) {
-        settings.searchable_attributes = None;
-    }
+    let settings: index_controller::Settings = settings.into();
     let update_builder = UpdateBuilder::new(0);
     index.update_settings(&settings, update_builder)?;
 
@@ -111,6 +105,9 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
         update_builder,
         None,
     )?;
+
+    // at this point we should handle the updates, but since the update logic is not handled in
+    // meilisearch we are just going to ignore this part
 
     // the last step: we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)

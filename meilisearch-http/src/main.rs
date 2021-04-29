@@ -54,7 +54,7 @@ async fn main() -> Result<(), MainError> {
     //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
     //}
 
-    let data = Data::new(opt.clone()).await?;
+    let data = Data::new(opt.clone())?;
 
     //if !opt.no_analytics {
     //let analytics_data = data.clone();

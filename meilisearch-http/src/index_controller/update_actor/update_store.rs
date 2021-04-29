@@ -177,11 +177,7 @@ pub struct UpdateStore {
 }
 
 impl UpdateStore {
-    pub fn open(
-        mut options: EnvOpenOptions,
-        path: impl AsRef<Path>,
-        index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
-    ) -> anyhow::Result<Arc<Self>> {
+    pub fn create(mut options: EnvOpenOptions, path: impl AsRef<Path>) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
         let env = options.open(path)?;
@@ -189,20 +185,29 @@ impl UpdateStore {
         let next_update_id = env.create_database(Some("next-update-id"))?;
         let updates = env.create_database(Some("updates"))?;
 
-        let (notification_sender, mut notification_receiver) = mpsc::channel(10);
+        let state = Arc::new(StateLock::from_state(State::Idle));
+
+        let (notification_sender, notification_receiver) = mpsc::channel(10);
         // Send a first notification to trigger the process.
         let _ = notification_sender.send(());
 
-        let state = Arc::new(StateLock::from_state(State::Idle));
+        Ok((Self { env, pending_queue, next_update_id, updates, state, notification_sender }, notification_receiver))
+    }
+
+    pub fn open(
+        options: EnvOpenOptions,
+        path: impl AsRef<Path>,
+        index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
+    ) -> anyhow::Result<Arc<Self>> {
+        let (update_store, mut notification_receiver) = Self::create(options, path)?;
+        let update_store = Arc::new(update_store);
 
         // Init update loop to perform any pending updates at launch.
         // Since we just launched the update store, and we still own the receiving end of the
         // channel, this call is guaranteed to succeed.
-        notification_sender
+        update_store.notification_sender
             .try_send(())
             .expect("Failed to init update store");
-
-        let update_store = Arc::new(UpdateStore { env, pending_queue, next_update_id, updates, state, notification_sender });
 
         // We need a weak reference so we can take ownership on the arc later when we
         // want to close the index.
@@ -281,6 +286,18 @@ impl UpdateStore {
             .blocking_send(())
             .expect("Update store loop exited.");
         Ok(meta)
+    }
+
+    /// Push already processed updates in the UpdateStore. This is useful for the dumps
+    pub fn register_already_processed_update (
+        &self,
+        result: UpdateStatus,
+        index_uuid: Uuid,
+    ) -> heed::Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        let (_global_id, update_id) = self.next_update_id(&mut wtxn, index_uuid)?;
+        self.updates.remap_key_type::<UpdateKeyCodec>().put(&mut wtxn, &(index_uuid, update_id), &result)?;
+        wtxn.commit()
     }
 
     /// Executes the user provided function on the next pending update (the one with the lowest id).

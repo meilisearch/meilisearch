@@ -19,7 +19,7 @@ async fn get_settings() {
     assert_eq!(settings.keys().len(), 6);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
-    assert_eq!(settings["attributesForFaceting"], json!(null));
+    assert_eq!(settings["attributesForFaceting"], json!({}));
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
@@ -82,7 +82,9 @@ async fn reset_all_settings() {
     assert_eq!(response["searchableAttributes"], json!(["bar"]));
     assert_eq!(response["stopWords"], json!(["the"]));
 
+    eprintln!("BEFORE");
     index.delete_settings().await;
+    eprintln!("AFTER");
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;

@@ -78,7 +78,7 @@ pub struct Stats {
 }
 
 impl IndexController {
-    pub async fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 

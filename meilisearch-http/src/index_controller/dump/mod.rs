@@ -1,7 +1,7 @@
 mod v1;
 mod v2;
 
-use std::{fs::File, path::{Path, PathBuf}, sync::Arc};
+use std::{fs::File, path::{Path}, sync::Arc};
 
 use anyhow::bail;
 use heed::EnvOpenOptions;
@@ -10,12 +10,10 @@ use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
-use super::update_actor::UpdateActorHandle;
-use super::uuid_resolver::UuidResolverHandle;
 use super::IndexMetadata;
 use crate::index::Index;
 use crate::index_controller::uuid_resolver;
-use crate::{helpers::compression, index::Settings};
+use crate::helpers::compression;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 enum DumpVersion {
@@ -24,7 +22,7 @@ enum DumpVersion {
 }
 
 impl DumpVersion {
-    const CURRENT: Self = Self::V2;
+    // const CURRENT: Self = Self::V2;
 
     /// Select the good importation function from the `DumpVersion` of metadata
     pub fn import_index(self, size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
@@ -37,23 +35,25 @@ impl DumpVersion {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DumpMetadata {
+pub struct Metadata {
     indexes: Vec<IndexMetadata>,
     db_version: String,
     dump_version: DumpVersion,
 }
 
-impl DumpMetadata {
-    /// Create a DumpMetadata with the current dump version of meilisearch.
+impl Metadata {
+    /*
+    /// Create a Metadata with the current dump version of meilisearch.
     pub fn new(indexes: Vec<IndexMetadata>, db_version: String) -> Self {
-        DumpMetadata {
+        Metadata {
             indexes,
             db_version,
             dump_version: DumpVersion::CURRENT,
         }
     }
+    */
 
-    /// Extract DumpMetadata from `metadata.json` file present at provided `dir_path`
+    /// Extract Metadata from `metadata.json` file present at provided `dir_path`
     fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
         let path = dir_path.join("metadata.json");
         let file = File::open(path)?;
@@ -63,7 +63,8 @@ impl DumpMetadata {
         Ok(metadata)
     }
 
-    /// Write DumpMetadata in `metadata.json` file at provided `dir_path`
+    /*
+    /// Write Metadata in `metadata.json` file at provided `dir_path`
     fn to_path(&self, dir_path: &Path) -> anyhow::Result<()> {
         let path = dir_path.join("metadata.json");
         let file = File::create(path)?;
@@ -72,8 +73,10 @@ impl DumpMetadata {
 
         Ok(())
     }
+    */
 }
 
+/*
 pub struct DumpService<U, R> {
     uuid_resolver_handle: R,
     update_handle: U,
@@ -148,7 +151,9 @@ where
         Ok(())
     }
 }
+*/
 
+/*
 /// Write Settings in `settings.json` file at provided `dir_path`
 fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> {
     let path = dir_path.join("settings.json");
@@ -158,6 +163,7 @@ fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> 
 
     Ok(())
 }
+*/
 
 pub fn load_dump(
     db_path: impl AsRef<Path>,
@@ -170,12 +176,12 @@ pub fn load_dump(
     let uuid_resolver = uuid_resolver::HeedUuidStore::new(&db_path)?;
 
     // extract the dump in a temporary directory
-    let tmp_dir = TempDir::new()?;
+    let tmp_dir = TempDir::new_in(db_path)?;
     let tmp_dir_path = tmp_dir.path();
     compression::from_tar_gz(dump_path, tmp_dir_path)?;
 
     // read dump metadata
-    let metadata = DumpMetadata::from_path(&tmp_dir_path)?;
+    let metadata = Metadata::from_path(&tmp_dir_path)?;
 
     // remove indexes which have same `uuid` than indexes to import and create empty indexes
     let existing_index_uids = uuid_resolver.list()?;
@@ -207,7 +213,7 @@ pub fn load_dump(
         // this cannot fail since we created all the missing uuid in the previous loop
         let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
-        let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
+        // let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
 
         info!("Importing dump from {} into {}...", dump_path.display(), index_path.display());
         metadata.dump_version.import_index(size, &dump_path, &index_path).unwrap();
