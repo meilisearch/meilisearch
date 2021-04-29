@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use crate::routes::IndexParam;
+use super::{UpdateStatusResponse, IndexParam};
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -129,7 +129,10 @@ async fn get_update_status(
         .get_update_status(params.index_uid, params.update_id)
         .await;
     match result {
-        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
+        Ok(meta) => {
+            let meta = UpdateStatusResponse::from(meta);
+            Ok(HttpResponse::Ok().json(meta))
+        },
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
@@ -143,7 +146,14 @@ async fn get_all_updates_status(
 ) -> Result<HttpResponse, ResponseError> {
     let result = data.get_updates_status(path.into_inner().index_uid).await;
     match result {
-        Ok(metas) => Ok(HttpResponse::Ok().json(metas)),
+        Ok(metas) => {
+            let metas = metas
+                .into_iter()
+                .map(UpdateStatusResponse::from)
+                .collect::<Vec<_>>();
+
+            Ok(HttpResponse::Ok().json(metas))
+        },
         Err(e) => {
             Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
         }
