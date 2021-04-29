@@ -30,7 +30,7 @@ All of that on a 39$/month machine with 4cores.
 You can feed the engine with your CSV (comma-seperated, yes) data like this:
 
 ```bash
-echo "name,age\nhello,32\nkiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
+printf "name,age\nhello,32\nkiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
 ```
 
 Here ids will be automatically generated as UUID v4 if they doesn't exist in some or every documents.
