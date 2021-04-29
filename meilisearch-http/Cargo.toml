@@ -73,6 +73,7 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version =  "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
 obkv = "0.1.1"
+pin-project = "1.0.7"
 
 [dependencies.sentry]
 default-features = false
