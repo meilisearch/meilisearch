@@ -1,9 +1,8 @@
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
-use crate::search::WordDerivationsCache;
 
-use super::{Criterion, CriterionResult};
+use super::{Criterion, CriterionResult, CriterionParameters};
 
 pub struct Initial {
     answer: Option<CriterionResult>
@@ -22,7 +21,7 @@ impl Initial {
 
 impl Criterion for Initial {
     #[logging_timer::time("Initial::{}")]
-    fn next(&mut self, _: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, _: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         Ok(self.answer.take())
     }
 }

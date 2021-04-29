@@ -12,9 +12,8 @@ use crate::heed_codec::facet::FieldDocIdFacetF64Codec;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::search::WordDerivationsCache;
 use crate::{FieldsIdsMap, FieldId, Index};
-use super::{Criterion, CriterionResult};
+use super::{Criterion, CriterionParameters, CriterionResult};
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
@@ -85,7 +84,7 @@ impl<'t> AscDesc<'t> {
 
 impl<'t> Criterion for AscDesc<'t> {
     #[logging_timer::time("AscDesc::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         loop {
             debug!("Facet {}({}) iteration",
                 if self.ascending { "Asc" } else { "Desc" }, self.field_name
@@ -93,7 +92,7 @@ impl<'t> Criterion for AscDesc<'t> {
 
             match self.candidates.next().transpose()? {
                 None => {
-                    match self.parent.next(wdcache)? {
+                    match self.parent.next(params)? {
                         Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                             let candidates_is_some = candidates.is_some();
                             self.query_tree = query_tree;
@@ -104,7 +103,8 @@ impl<'t> Criterion for AscDesc<'t> {
                                 },
                                 (Some(qt), None) => {
                                     let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
-                                    let mut candidates = resolve_query_tree(&context, qt, &mut HashMap::new(), wdcache)?;
+                                    let mut candidates = resolve_query_tree(&context, qt, &mut HashMap::new(), params.wdcache)?;
+                                    candidates -= params.excluded_candidates;
                                     candidates.intersect_with(&self.faceted_candidates);
                                     candidates
                                 },
@@ -138,7 +138,8 @@ impl<'t> Criterion for AscDesc<'t> {
                         None => return Ok(None),
                     }
                 },
-                Some(candidates) => {
+                Some(mut candidates) => {
+                    candidates -= params.excluded_candidates;
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),

@@ -8,9 +8,25 @@ use log::debug;
 use crate::{DocumentId, Position, search::{query_tree::QueryKind}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::{build_dfa, WordDerivationsCache};
-use super::{Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
+use super::{
+    Context,
+    Criterion,
+    CriterionParameters,
+    CriterionResult,
+    query_docids,
+    query_pair_proximity_docids,
+    resolve_query_tree,
+};
 
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
+
+/// Threshold on the number of candidates that will make
+/// the system choose between one algorithm or another.
+const CANDIDATES_THRESHOLD: u64 = 1000;
+
+/// Threshold on the number of proximity that will make
+/// the system choose between one algorithm or another.
+const PROXIMITY_THRESHOLD: u8 = 0;
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context<'t>,
@@ -39,7 +55,12 @@ impl<'t> Proximity<'t> {
 
 impl<'t> Criterion for Proximity<'t> {
     #[logging_timer::time("Proximity::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+        // remove excluded candidates when next is called, instead of doing it in the loop.
+        if let Some((_, candidates)) = self.state.as_mut() {
+            *candidates -= params.excluded_candidates;
+        }
+
         loop {
             debug!("Proximity at iteration {} (max prox {:?}) ({:?})",
                 self.proximity,
@@ -55,7 +76,7 @@ impl<'t> Criterion for Proximity<'t> {
                     if self.proximity as usize > *max_prox {
                         self.state = None; // reset state
                     } else {
-                        let mut new_candidates = if candidates.len() <= 1000 && self.proximity > 0 {
+                        let mut new_candidates = if candidates.len() <= CANDIDATES_THRESHOLD && self.proximity > PROXIMITY_THRESHOLD {
                             if let Some(cache) = self.plane_sweep_cache.as_mut() {
                                 match cache.next() {
                                     Some((p, candidates)) => {
@@ -72,7 +93,7 @@ impl<'t> Criterion for Proximity<'t> {
                                     self.ctx,
                                     query_tree,
                                     candidates,
-                                    wdcache,
+                                    params.wdcache,
                                 )?;
                                 self.plane_sweep_cache = Some(cache.into_iter());
 
@@ -84,7 +105,7 @@ impl<'t> Criterion for Proximity<'t> {
                                &query_tree,
                                self.proximity,
                                &mut self.candidates_cache,
-                               wdcache,
+                               params.wdcache,
                            )?
                         };
 
@@ -109,7 +130,7 @@ impl<'t> Criterion for Proximity<'t> {
                     }));
                 },
                 None => {
-                    match self.parent.next(wdcache)? {
+                    match self.parent.next(params)? {
                         Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
@@ -121,7 +142,10 @@ impl<'t> Criterion for Proximity<'t> {
                             let candidates_is_some = candidates.is_some();
                             let candidates = match (&query_tree, candidates) {
                                 (_, Some(candidates)) => candidates,
-                                (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
+                                (Some(qt), None) => {
+                                    let candidates = resolve_query_tree(self.ctx, qt, &mut HashMap::new(), params.wdcache)?;
+                                    candidates - params.excluded_candidates
+                                },
                                 (None, None) => RoaringBitmap::new(),
                             };
 

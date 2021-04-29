@@ -25,7 +25,7 @@ mod words;
 pub mod r#final;
 
 pub trait Criterion {
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>>;
+    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>>;
 }
 
 /// The result of a call to the parent criterion.
@@ -38,6 +38,12 @@ pub struct CriterionResult {
     candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
     bucket_candidates: RoaringBitmap,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CriterionParameters<'a> {
+    wdcache: &'a mut WordDerivationsCache,
+    excluded_candidates: &'a RoaringBitmap,
 }
 
 /// Either a set of candidates that defines the candidates

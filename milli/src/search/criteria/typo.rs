@@ -6,7 +6,15 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
+use super::{
+    Candidates,
+    Context,
+    Criterion,
+    CriterionParameters,
+    CriterionResult,
+    query_docids,
+    query_pair_proximity_docids
+};
 
 pub struct Typo<'t> {
     ctx: &'t dyn Context<'t>,
@@ -34,8 +42,14 @@ impl<'t> Typo<'t> {
 
 impl<'t> Criterion for Typo<'t> {
     #[logging_timer::time("Typo::{}")]
-    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
+        // remove excluded candidates when next is called, instead of doing it in the loop.
+        match &mut self.candidates {
+            Allowed(candidates) => *candidates -= params.excluded_candidates,
+            Forbidden(candidates) => *candidates |= params.excluded_candidates,
+        }
+
         loop {
             debug!("Typo at iteration {} ({:?})", self.number_typos, self.candidates);
 
@@ -54,9 +68,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -67,7 +81,7 @@ impl<'t> Criterion for Typo<'t> {
                             &new_query_tree,
                             self.number_typos,
                             &mut self.candidates_cache,
-                            wdcache,
+                            params.wdcache,
                         )?;
                         new_candidates.intersect_with(&candidates);
                         candidates.difference_with(&new_candidates);
@@ -87,9 +101,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -100,7 +114,7 @@ impl<'t> Criterion for Typo<'t> {
                             &new_query_tree,
                             self.number_typos,
                             &mut self.candidates_cache,
-                            wdcache,
+                            params.wdcache,
                         )?;
                         new_candidates.difference_with(&candidates);
                         candidates.union_with(&new_candidates);
@@ -123,7 +137,7 @@ impl<'t> Criterion for Typo<'t> {
                     }));
                 },
                 (None, Forbidden(_)) => {
-                    match self.parent.next(wdcache)? {
+                    match self.parent.next(params)? {
                         Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
@@ -134,7 +148,9 @@ impl<'t> Criterion for Typo<'t> {
                         Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                             self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
                             self.number_typos = 0;
-                            self.candidates = candidates.map_or_else(Candidates::default, Candidates::Allowed);
+                            self.candidates = candidates.map_or_else(|| {
+                                Candidates::Forbidden(params.excluded_candidates.clone())
+                            }, Candidates::Allowed);
                             self.bucket_candidates.union_with(&bucket_candidates);
                         },
                         None => return Ok(None),
@@ -324,12 +340,16 @@ mod test {
         let query_tree = None;
         let facet_candidates = None;
 
-        let mut wdcache = WordDerivationsCache::new();
+        let mut criterion_parameters = CriterionParameters {
+            wdcache: &mut WordDerivationsCache::new(),
+            excluded_candidates: &RoaringBitmap::new(),
+        };
+
         let parent = Initial::new(query_tree, facet_candidates);
         let mut criteria = Typo::new(&context, Box::new(parent));
 
-        assert!(criteria.next(&mut wdcache).unwrap().unwrap().candidates.is_none());
-        assert!(criteria.next(&mut wdcache).unwrap().is_none());
+        assert!(criteria.next(&mut criterion_parameters).unwrap().unwrap().candidates.is_none());
+        assert!(criteria.next(&mut criterion_parameters).unwrap().is_none());
     }
 
     #[test]
@@ -345,7 +365,10 @@ mod test {
 
         let facet_candidates = None;
 
-        let mut wdcache = WordDerivationsCache::new();
+        let mut criterion_parameters = CriterionParameters {
+            wdcache: &mut WordDerivationsCache::new(),
+            excluded_candidates: &RoaringBitmap::new(),
+        };
         let parent = Initial::new(Some(query_tree), facet_candidates);
         let mut criteria = Typo::new(&context, Box::new(parent));
 
@@ -364,7 +387,7 @@ mod test {
             bucket_candidates: candidates_1,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
+        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -386,7 +409,7 @@ mod test {
             bucket_candidates: candidates_2,
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
+        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
     }
 
     #[test]
@@ -395,7 +418,10 @@ mod test {
         let query_tree = None;
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut wdcache = WordDerivationsCache::new();
+        let mut criterion_parameters = CriterionParameters {
+            wdcache: &mut WordDerivationsCache::new(),
+            excluded_candidates: &RoaringBitmap::new(),
+        };
         let parent = Initial::new(query_tree, Some(facet_candidates.clone()));
         let mut criteria = Typo::new(&context, Box::new(parent));
 
@@ -406,10 +432,10 @@ mod test {
         };
 
         // first iteration, returns the facet candidates
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected));
+        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected));
 
         // second iteration, returns None because there is no more things to do
-        assert!(criteria.next(&mut wdcache).unwrap().is_none());
+        assert!(criteria.next(&mut criterion_parameters).unwrap().is_none());
     }
 
     #[test]
@@ -425,7 +451,11 @@ mod test {
 
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut wdcache = WordDerivationsCache::new();
+
+        let mut criterion_parameters = CriterionParameters {
+            wdcache: &mut WordDerivationsCache::new(),
+            excluded_candidates: &RoaringBitmap::new(),
+        };
         let parent = Initial::new(Some(query_tree), Some(facet_candidates.clone()));
         let mut criteria = Typo::new(&context, Box::new(parent));
 
@@ -444,7 +474,7 @@ mod test {
             bucket_candidates: facet_candidates.clone(),
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
+        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -466,6 +496,6 @@ mod test {
             bucket_candidates: RoaringBitmap::new(),
         };
 
-        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
+        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
     }
 }
