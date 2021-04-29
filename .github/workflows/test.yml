@@ -2,7 +2,7 @@ name: Continuous integration
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging, trying ]
   pull_request:
     branches: [ main ]
 

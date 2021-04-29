@@ -1,0 +1,5 @@
+status = [
+    'ci (stable)'
+]
+# 3 hours timeout
+timeout-sec = 10800
