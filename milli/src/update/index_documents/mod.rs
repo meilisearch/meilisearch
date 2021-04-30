@@ -300,7 +300,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             words_positions_min_level_size: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
-            autogenerate_docids: true,
+            autogenerate_docids: false,
             update_id,
         }
     }
@@ -901,7 +901,6 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         assert!(builder.execute(content, |_, _| ()).is_err());
         wtxn.commit().unwrap();
@@ -928,7 +927,6 @@ mod tests {
             { "name": "benoit" }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
         assert!(builder.execute(content, |_, _| ()).is_err());
         wtxn.commit().unwrap();
@@ -951,6 +949,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1066,6 +1065,7 @@ mod tests {
             { "name": "benoit" }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1088,6 +1088,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"[]"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1114,6 +1115,7 @@ mod tests {
         { "name": "benoit" }
         "#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::JsonStream);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();

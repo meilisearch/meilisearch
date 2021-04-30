@@ -517,6 +517,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -560,6 +561,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -581,6 +583,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
@@ -625,6 +628,7 @@ mod tests {
         // Then index some documents.
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -663,6 +667,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -684,6 +689,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
@@ -754,6 +760,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
