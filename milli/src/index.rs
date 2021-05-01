@@ -558,6 +558,7 @@ pub(crate) mod tests {
             { "name": "bob", "age": 20 }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
