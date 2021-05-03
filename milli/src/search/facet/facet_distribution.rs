@@ -3,12 +3,12 @@ use std::ops::Bound::Unbounded;
 use std::{cmp, fmt};
 
 use anyhow::Context;
-use heed::BytesDecode;
+use heed::{Database, BytesDecode};
+use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 
-use crate::facet::{FacetType, FacetValue};
-use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
-use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
+use crate::facet::FacetType;
+use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::search::facet::{FacetIter, FacetRange};
 use crate::{Index, FieldId, DocumentId};
 
@@ -60,86 +60,81 @@ impl<'a> FacetDistribution<'a> {
 
     /// There is a small amount of candidates OR we ask for facet string values so we
     /// decide to iterate over the facet values of each one of them, one by one.
-    fn facet_values_from_documents(
+    fn facet_distribution_from_documents(
         &self,
         field_id: FieldId,
         facet_type: FacetType,
         candidates: &RoaringBitmap,
-    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+        distribution: &mut BTreeMap<String, u64>,
+    ) -> heed::Result<()>
     {
         fn fetch_facet_values<'t, KC, K: 't>(
-            index: &Index,
             rtxn: &'t heed::RoTxn,
+            db: Database<KC, Unit>,
             field_id: FieldId,
             candidates: &RoaringBitmap,
-        ) -> heed::Result<BTreeMap<FacetValue, u64>>
+            distribution: &mut BTreeMap<String, u64>,
+        ) -> heed::Result<()>
         where
+            K: fmt::Display,
             KC: BytesDecode<'t, DItem = (FieldId, DocumentId, K)>,
-            K: Into<FacetValue>,
         {
-            let mut facet_values = BTreeMap::new();
             let mut key_buffer = vec![field_id];
 
             for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
                 key_buffer.truncate(1);
                 key_buffer.extend_from_slice(&docid.to_be_bytes());
-                let iter = index.field_id_docid_facet_values
+                let iter = db
+                    .remap_key_type::<ByteSlice>()
                     .prefix_iter(rtxn, &key_buffer)?
                     .remap_key_type::<KC>();
 
                 for result in iter {
                     let ((_, _, value), ()) = result?;
-                    *facet_values.entry(value.into()).or_insert(0) += 1;
+                    *distribution.entry(value.to_string()).or_insert(0) += 1;
                 }
             }
 
-            Ok(facet_values)
+            Ok(())
         }
 
-        let index = self.index;
-        let rtxn = self.rtxn;
         match facet_type {
-            FacetType::String => {
-                fetch_facet_values::<FieldDocIdFacetStringCodec, _>(index, rtxn, field_id, candidates)
-            },
             FacetType::Number => {
-                fetch_facet_values::<FieldDocIdFacetF64Codec, _>(index, rtxn, field_id, candidates)
+                let db = self.index.field_id_docid_facet_f64s;
+                fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
             },
+            FacetType::String => {
+                let db = self.index.field_id_docid_facet_strings;
+                fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
+            }
         }
     }
 
     /// There is too much documents, we use the facet levels to move throught
     /// the facet values, to find the candidates and values associated.
-    fn facet_values_from_facet_levels(
+    fn facet_numbers_distribution_from_facet_levels(
         &self,
         field_id: FieldId,
-        facet_type: FacetType,
         candidates: &RoaringBitmap,
-    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+        distribution: &mut BTreeMap<String, u64>,
+    ) -> heed::Result<()>
     {
-        let iter = match facet_type {
-            FacetType::String => unreachable!(),
-            FacetType::Number => {
-                let iter = FacetIter::new_non_reducing(
-                    self.rtxn, self.index, field_id, candidates.clone(),
-                )?;
-                iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids)))
-            },
-        };
+        let iter = FacetIter::new_non_reducing(
+            self.rtxn, self.index, field_id, candidates.clone(),
+        )?;
 
-        let mut facet_values = BTreeMap::new();
         for result in iter {
             let (value, mut docids) = result?;
             docids.intersect_with(candidates);
             if !docids.is_empty() {
-                facet_values.insert(value, docids.len());
+                distribution.insert(value.to_string(), docids.len());
             }
-            if facet_values.len() == self.max_values_by_facet {
+            if distribution.len() == self.max_values_by_facet {
                 break;
             }
         }
 
-        Ok(facet_values)
+        Ok(())
     }
 
     /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
@@ -147,80 +142,73 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values_from_raw_facet_database(
         &self,
         field_id: FieldId,
-        facet_type: FacetType,
-    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+    ) -> heed::Result<BTreeMap<String, u64>>
     {
-        let db = self.index.facet_field_id_value_docids;
-        let level = 0;
-        let iter = match facet_type {
-            FacetType::String => {
-                let iter = db
-                    .prefix_iter(self.rtxn, &[field_id])?
-                    .remap_key_type::<FacetValueStringCodec>()
-                    .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
-                Box::new(iter) as Box::<dyn Iterator<Item=_>>
-            },
-            FacetType::Number => {
-                let db = db.remap_key_type::<FacetLevelValueF64Codec>();
-                let range = FacetRange::new(
-                    self.rtxn, db, field_id, level, Unbounded, Unbounded,
-                )?;
-                Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
-            },
-        };
+        let mut distribution = BTreeMap::new();
 
-        let mut facet_values = BTreeMap::new();
-        for result in iter {
-            let (value, docids) = result?;
-            facet_values.insert(value, docids.len());
-            if facet_values.len() == self.max_values_by_facet {
+        let db = self.index.facet_id_f64_docids;
+        let range = FacetRange::new(self.rtxn, db, field_id, 0, Unbounded, Unbounded)?;
+
+        for result in range {
+            let ((_, _, value, _), docids) = result?;
+            distribution.insert(value.to_string(), docids.len());
+            if distribution.len() == self.max_values_by_facet {
                 break;
             }
         }
 
-        Ok(facet_values)
+        let iter = self.index
+            .facet_id_string_docids
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(self.rtxn, &[field_id])?
+            .remap_key_type::<FacetValueStringCodec>();
+
+        for result in iter {
+            let ((_, value), docids) = result?;
+            distribution.insert(value.to_string(), docids.len());
+            if distribution.len() == self.max_values_by_facet {
+                break;
+            }
+        }
+
+        Ok(distribution)
     }
 
-    fn facet_values(
-        &self,
-        field_id: FieldId,
-        facet_type: FacetType,
-    ) -> heed::Result<BTreeMap<FacetValue, u64>>
-    {
+    fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
+        use FacetType::{Number, String};
+
         if let Some(candidates) = self.candidates.as_ref() {
             // Classic search, candidates were specified, we must return facet values only related
             // to those candidates. We also enter here for facet strings for performance reasons.
-            if candidates.len() <= CANDIDATES_THRESHOLD || facet_type == FacetType::String {
-                self.facet_values_from_documents(field_id, facet_type, candidates)
+            let mut distribution = BTreeMap::new();
+            if candidates.len() <= CANDIDATES_THRESHOLD {
+                self.facet_distribution_from_documents(field_id, Number, candidates, &mut distribution)?;
+                self.facet_distribution_from_documents(field_id, String, candidates, &mut distribution)?;
             } else {
-                self.facet_values_from_facet_levels(field_id, facet_type, candidates)
+                self.facet_numbers_distribution_from_facet_levels(field_id, candidates, &mut distribution)?;
+                self.facet_distribution_from_documents(field_id, String, candidates, &mut distribution)?;
             }
+
+            Ok(distribution)
         } else {
-            self.facet_values_from_raw_facet_database(field_id, facet_type)
+            self.facet_values_from_raw_facet_database(field_id)
         }
     }
 
-    pub fn execute(&self) -> anyhow::Result<BTreeMap<String, BTreeMap<FacetValue, u64>>> {
+    pub fn execute(&self) -> anyhow::Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let faceted_fields = self.index.faceted_fields(self.rtxn)?;
-        let fields_ids: Vec<_> = match &self.facets {
-            Some(names) => names
-                .iter()
-                .filter_map(|n| faceted_fields.get(n).map(|t| (n.to_string(), *t)))
-                .collect(),
-            None => faceted_fields.into_iter().collect(),
-        };
 
-        let mut facets_values = BTreeMap::new();
-        for (name, ftype) in fields_ids {
+        let mut distribution = BTreeMap::new();
+        for name in faceted_fields {
             let fid = fields_ids_map.id(&name).with_context(|| {
                 format!("missing field name {:?} from the fields id map", name)
             })?;
-            let values = self.facet_values(fid, ftype)?;
-            facets_values.insert(name, values);
+            let values = self.facet_values(fid)?;
+            distribution.insert(name, values);
         }
 
-        Ok(facets_values)
+        Ok(distribution)
     }
 }
 

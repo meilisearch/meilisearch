@@ -50,7 +50,6 @@ impl<'t> AscDesc<'t> {
         Self::new(index, rtxn, parent, field_name, false)
     }
 
-
     fn new(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
@@ -59,7 +58,6 @@ impl<'t> AscDesc<'t> {
         ascending: bool,
     ) -> anyhow::Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields(rtxn)?;
         let field_id = fields_ids_map
             .id(&field_name)
             .with_context(|| format!("field {:?} isn't registered", field_name))?;

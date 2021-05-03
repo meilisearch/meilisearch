@@ -55,27 +55,45 @@ pub enum FacetCondition {
     And(Box<Self>, Box<Self>),
 }
 
-fn field_id<'a>(
+fn field_id(
     fields_ids_map: &FieldsIdsMap,
     faceted_fields: &HashSet<FieldId>,
-    items: &mut Pairs<'a, Rule>,
+    items: &mut Pairs<Rule>,
 ) -> Result<FieldId, PestError<Rule>>
 {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
-    match fields_ids_map.id(key.as_str()) {
-        Some(field_id) => Ok(field_id),
-        None => Err(PestError::new_from_span(
+
+    let field_id = match fields_ids_map.id(key.as_str()) {
+        Some(field_id) => field_id,
+        None => return Err(PestError::new_from_span(
             ErrorVariant::CustomError {
                 message: format!(
                     "attribute `{}` not found, available attributes are: {}",
                     key.as_str(),
-                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", ")
+                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
                 ),
             },
             key.as_span(),
         )),
+    };
+
+    if !faceted_fields.contains(&field_id) {
+        return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` is not faceted, available faceted attributes are: {}",
+                    key.as_str(),
+                    faceted_fields.iter().flat_map(|id| {
+                        fields_ids_map.name(*id)
+                    }).collect::<Vec<_>>().join(", "),
+                ),
+            },
+            key.as_span(),
+        ));
     }
+
+    Ok(field_id)
 }
 
 fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
@@ -84,12 +102,10 @@ where T: FromStr,
 {
     let result = match pair.as_str().parse::<T>() {
         Ok(value) => Ok(value),
-        Err(e) => {
-            Err(PestError::<Rule>::new_from_span(
-                ErrorVariant::CustomError { message: e.to_string() },
-                pair.as_span(),
-            ))
-        }
+        Err(e) => Err(PestError::<Rule>::new_from_span(
+            ErrorVariant::CustomError { message: e.to_string() },
+            pair.as_span(),
+        )),
     };
 
     (result, pair.as_str().to_string())
@@ -106,8 +122,6 @@ impl FacetCondition {
           A: AsRef<str>,
           B: AsRef<str>,
     {
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields(rtxn)?;
         let mut ands = None;
 
         for either in array {
@@ -202,7 +216,6 @@ impl FacetCondition {
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
-        let item_span = item.as_span();
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
 
@@ -236,7 +249,6 @@ impl FacetCondition {
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
-        let item_span = item.as_span();
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
 
@@ -252,7 +264,6 @@ impl FacetCondition {
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
-        let item_span = item.as_span();
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
 
@@ -268,7 +279,6 @@ impl FacetCondition {
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
-        let item_span = item.as_span();
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
 
@@ -284,7 +294,6 @@ impl FacetCondition {
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
-        let item_span = item.as_span();
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
 
