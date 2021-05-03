@@ -1771,6 +1771,7 @@ dependencies = [
  "oxidized-json-checker",
  "parking_lot",
  "paste",
+ "pin-project",
  "rand 0.7.3",
  "rayon",
  "regex",

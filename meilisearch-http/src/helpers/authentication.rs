@@ -1,14 +1,16 @@
-use std::cell::RefCell;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::web;
-use futures::future::{err, ok, Future, Ready};
+use actix_web::body::Body;
+use futures::ready;
+use futures::future::{ok, Future, Ready};
+use actix_web::ResponseError as _;
+use pin_project::pin_project;
 
-use crate::error::{Error, ResponseError};
 use crate::Data;
+use crate::error::{Error, ResponseError};
 
 #[derive(Clone, Copy)]
 pub enum Authentication {
@@ -17,13 +19,11 @@ pub enum Authentication {
     Admin,
 }
 
-impl<S: 'static, B> Transform<S, ServiceRequest> for Authentication
+impl<S: 'static> Transform<S, ServiceRequest> for Authentication
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
-    S::Future: 'static,
-    B: 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<Body>, Error = actix_web::Error>,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<Body>;
     type Error = actix_web::Error;
     type InitError = ();
     type Transform = LoggingMiddleware<S>;
@@ -32,54 +32,45 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ok(LoggingMiddleware {
             acl: *self,
-            service: Rc::new(RefCell::new(service)),
+            service,
         })
     }
 }
 
 pub struct LoggingMiddleware<S> {
     acl: Authentication,
-    service: Rc<RefCell<S>>,
+    service: S,
 }
 
 #[allow(clippy::type_complexity)]
-impl<S, B> Service<ServiceRequest> for LoggingMiddleware<S>
+impl<S> Service<ServiceRequest> for LoggingMiddleware<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<Body>, Error = actix_web::Error>,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<Body>;
     type Error = actix_web::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future = AuthenticationFuture<S>;
 
     fn poll_ready(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let svc = self.service.clone();
-        // This unwrap is left because this error should never appear. If that's the case, then
-        // it means that actix-web has an issue or someone changes the type `Data`.
         let data = req.app_data::<web::Data<Data>>().unwrap();
 
         if data.api_keys().master.is_none() {
-            return Box::pin(svc.call(req));
+            return AuthenticationFuture::Authenticated(self.service.call(req))
         }
 
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
                 Err(_) => {
-                    return Box::pin(err(
-                        ResponseError::from(Error::MissingAuthorizationHeader).into()
-                    ))
+                    return AuthenticationFuture::NoHeader(Some(req))
                 }
             },
             None => {
-                return Box::pin(err(
-                    ResponseError::from(Error::MissingAuthorizationHeader).into()
-                ));
+                return AuthenticationFuture::NoHeader(Some(req))
             }
         };
 
@@ -97,12 +88,66 @@ where
         };
 
         if authenticated {
-            Box::pin(svc.call(req))
+            AuthenticationFuture::Authenticated(self.service.call(req))
         } else {
-            Box::pin(err(ResponseError::from(Error::InvalidToken(
-                auth_header.to_string(),
-            ))
-            .into()))
+            AuthenticationFuture::Refused(Some(req))
+        }
+    }
+}
+
+#[pin_project(project = AuthProj)]
+pub enum AuthenticationFuture<S>
+where
+    S: Service<ServiceRequest>,
+{
+    Authenticated(#[pin] S::Future),
+    NoHeader(Option<ServiceRequest>),
+    Refused(Option<ServiceRequest>),
+}
+
+impl<S> Future for AuthenticationFuture<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<Body>, Error = actix_web::Error>,
+{
+    type Output = Result<ServiceResponse<Body>, actix_web::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) ->Poll<Self::Output> {
+        let this = self.project();
+        match this {
+            AuthProj::Authenticated(fut) => {
+                match ready!(fut.poll(cx)) {
+                    Ok(resp) => Poll::Ready(Ok(resp)),
+                    Err(e) => Poll::Ready(Err(e)),
+                }
+            }
+            AuthProj::NoHeader(req) => {
+                match req.take() {
+                    Some(req) => {
+                        let response = ResponseError::from(Error::MissingAuthorizationHeader);
+                        let response = response.error_response();
+                        let response = req.into_response(response);
+                        Poll::Ready(Ok(response))
+                    }
+                    // https://doc.rust-lang.org/nightly/std/future/trait.Future.html#panics
+                    None => unreachable!("poll called again on ready future"),
+                }
+            }
+            AuthProj::Refused(req) => {
+                match req.take() {
+                    Some(req) => {
+                        let bad_token = req.headers()
+                            .get("X-Meili-API-Key")
+                            .map(|h| h.to_str().map(String::from).unwrap_or_default())
+                            .unwrap_or_default();
+                        let response = ResponseError::from(Error::InvalidToken(bad_token));
+                        let response = response.error_response();
+                        let response = req.into_response(response);
+                        Poll::Ready(Ok(response))
+                    }
+                    // https://doc.rust-lang.org/nightly/std/future/trait.Future.html#panics
+                    None => unreachable!("poll called again on ready future"),
+                }
+            }
         }
     }
 }
