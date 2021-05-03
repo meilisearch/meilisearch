@@ -23,7 +23,7 @@ use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec32, Position, DocumentId, FieldId, FieldsIdsMap};
+use crate::{json_to_string, SmallVec32, Position, DocumentId, FieldId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
@@ -53,8 +53,6 @@ pub struct Readers {
 
 pub struct Store<'s, A> {
     // Indexing parameters
-    primary_key: String,
-    fields_ids_map: FieldsIdsMap,
     searchable_fields: HashSet<FieldId>,
     faceted_fields: HashSet<FieldId>,
     // Caches
@@ -87,8 +85,6 @@ pub struct Store<'s, A> {
 
 impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     pub fn new(
-        primary_key: String,
-        fields_ids_map: FieldsIdsMap,
         searchable_fields: HashSet<FieldId>,
         faceted_fields: HashSet<FieldId>,
         linked_hash_map_size: Option<usize>,
@@ -184,8 +180,6 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         Ok(Store {
             // Indexing parameters.
-            primary_key,
-            fields_ids_map,
             searchable_fields,
             faceted_fields,
             // Caches

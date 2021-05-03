@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::mem::take;
 
 use anyhow::Context;
@@ -7,11 +6,10 @@ use log::debug;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::{FieldsIdsMap, FieldId, Index};
+use crate::{FieldId, Index};
 use super::{Criterion, CriterionParameters, CriterionResult};
 
 /// Threshold on the number of candidates that will make
@@ -119,7 +117,6 @@ impl<'t> Criterion for AscDesc<'t> {
                                 self.index,
                                 self.rtxn,
                                 self.field_id,
-                                self.facet_type,
                                 self.ascending,
                                 candidates,
                             )?;
@@ -139,20 +136,6 @@ impl<'t> Criterion for AscDesc<'t> {
             }
         }
     }
-}
-
-fn field_id_facet_type(
-    fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashMap<String, FacetType>,
-    field: &str,
-) -> anyhow::Result<(FieldId, FacetType)> {
-    let id = fields_ids_map
-        .id(field)
-        .with_context(|| format!("field {:?} isn't registered", field))?;
-    let facet_type = faceted_fields
-        .get(field)
-        .with_context(|| format!("field {:?} isn't faceted", field))?;
-    Ok((id, *facet_type))
 }
 
 /// Returns an iterator over groups of the given candidates in ascending or descending order.

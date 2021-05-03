@@ -240,7 +240,10 @@ impl FacetCondition {
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
 
-        Ok(Operator(fid, Equal(Some(result?), svalue)))
+        // TODO we must normalize instead of lowercase.
+        let svalue = svalue.to_lowercase();
+
+        Ok(Operator(fid, Equal(result.ok(), svalue)))
     }
 
     fn greater_than(
@@ -473,7 +476,8 @@ mod tests {
     use super::*;
     use crate::update::Settings;
     use heed::EnvOpenOptions;
-    use maplit::hashmap;
+    use maplit::hashset;
+    use big_s::S;
 
     #[test]
     fn string() {
@@ -485,22 +489,22 @@ mod tests {
         // Set the faceted fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap!{ "channel".into() => "string".into() });
+        builder.set_faceted_fields(hashset!{ S("channel") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(&rtxn, &index, "channel = ponce").unwrap();
-        let expected = OperatorString(0, FacetStringOperator::equal("Ponce"));
+        let condition = FacetCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
+        let expected = Operator(0, Operator::Equal(None, S("ponce")));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
-        let expected = OperatorString(0, FacetStringOperator::not_equal("ponce"));
+        let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
-        let expected = OperatorString(0, FacetStringOperator::not_equal("ponce"));
+        let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
     }
 
@@ -514,20 +518,20 @@ mod tests {
         // Set the faceted fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap!{ "timestamp".into() => "number".into() });
+        builder.set_faceted_fields(hashset!{ "timestamp".into() });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
-        let expected = OperatorNumber(0, Between(22.0, 44.0));
+        let expected = Operator(0, Between(22.0, 44.0));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected = Or(
-            Box::new(OperatorNumber(0, LowerThan(22.0))),
-            Box::new(OperatorNumber(0, GreaterThan(44.0))),
+            Box::new(Operator(0, LowerThan(22.0))),
+            Box::new(Operator(0, GreaterThan(44.0))),
         );
         assert_eq!(condition, expected);
     }
@@ -542,11 +546,8 @@ mod tests {
         // Set the faceted fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
-        builder.set_faceted_fields(hashmap!{
-            "channel".into() => "string".into(),
-            "timestamp".into() => "number".into(),
-        });
+        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
+        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -557,10 +558,10 @@ mod tests {
             "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
         let expected = Or(
-            Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
+            Box::new(Operator(0, Operator::Equal(None, S("gotaga")))),
             Box::new(And(
-                Box::new(OperatorNumber(1, Between(22.0, 44.0))),
-                Box::new(OperatorString(0, FacetStringOperator::not_equal("ponce"))),
+                Box::new(Operator(1, Between(22.0, 44.0))),
+                Box::new(Operator(0, Operator::NotEqual(None, S("ponce")))),
             ))
         );
         assert_eq!(condition, expected);
@@ -570,13 +571,13 @@ mod tests {
             "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
         let expected = Or(
-            Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
+            Box::new(Operator(0, Operator::Equal(None, S("gotaga")))),
             Box::new(Or(
                 Box::new(Or(
-                    Box::new(OperatorNumber(1, LowerThan(22.0))),
-                    Box::new(OperatorNumber(1, GreaterThan(44.0))),
+                    Box::new(Operator(1, LowerThan(22.0))),
+                    Box::new(Operator(1, GreaterThan(44.0))),
                 )),
-                Box::new(OperatorString(0, FacetStringOperator::equal("ponce"))),
+                Box::new(Operator(0, Operator::Equal(None, S("ponce")))),
             )),
         );
         assert_eq!(condition, expected);
@@ -592,11 +593,8 @@ mod tests {
         // Set the faceted fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
-        builder.set_faceted_fields(hashmap!{
-            "channel".into() => "string".into(),
-            "timestamp".into() => "number".into(),
-        });
+        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
+        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -604,7 +602,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_array(
             &rtxn, &index,
-            vec![Either::Right("channel:gotaga"), Either::Left(vec!["timestamp:44", "channel:-ponce"])],
+            vec![Either::Right("channel = gotaga"), Either::Left(vec!["timestamp = 44", "channel != ponce"])],
         ).unwrap().unwrap();
         let expected = FacetCondition::from_str(
             &rtxn, &index,

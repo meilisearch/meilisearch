@@ -189,23 +189,21 @@ impl<'a> Distinct<'_> for FacetDistinct<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+    use std::collections::HashSet;
 
     use super::super::test::{generate_index, validate_distinct_candidates};
     use super::*;
-    use crate::facet::FacetType;
 
     macro_rules! test_facet_distinct {
-        ($name:ident, $distinct:literal, $facet_type:expr) => {
+        ($name:ident, $distinct:literal) => {
             #[test]
             fn $name() {
                 use std::iter::FromIterator;
 
-                let facets =
-                    HashMap::from_iter(Some(($distinct.to_string(), $facet_type.to_string())));
+                let facets = HashSet::from_iter(Some(($distinct.to_string())));
                 let (index, fid, candidates) = generate_index($distinct, facets);
                 let txn = index.read_txn().unwrap();
-                let mut map_distinct = FacetDistinct::new(fid, &index, &txn, $facet_type);
+                let mut map_distinct = FacetDistinct::new(fid, &index, &txn);
                 let excluded = RoaringBitmap::new();
                 let mut iter = map_distinct.distinct(candidates.clone(), excluded);
                 let count = validate_distinct_candidates(iter.by_ref(), fid, &index);
@@ -215,7 +213,7 @@ mod test {
         };
     }
 
-    test_facet_distinct!(test_string, "txt", FacetType::String);
-    test_facet_distinct!(test_strings, "txts", FacetType::String);
-    test_facet_distinct!(test_number, "cat-int", FacetType::Number);
+    test_facet_distinct!(test_string, "txt");
+    test_facet_distinct!(test_strings, "txts");
+    test_facet_distinct!(test_number, "cat-int");
 }

@@ -450,8 +450,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .enumerate()
                 .map(|(i, documents)| {
                     let store = Store::new(
-                        primary_key.clone(),
-                        fields_ids_map.clone(),
                         searchable_fields.clone(),
                         faceted_fields.clone(),
                         linked_hash_map_size,
@@ -553,7 +551,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 docid_word_positions_readers,
                 documents_readers,
                 words_pairs_proximities_docids_readers,
-                facet_field_numbers_docids_readers,
                 facet_field_strings_docids_readers,
                 field_id_docid_facet_numbers_readers,
                 field_id_docid_facet_strings_readers,
@@ -565,7 +562,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             docid_word_positions_readers,
             documents_readers,
             words_pairs_proximities_docids_readers,
-            facet_field_numbers_docids_readers,
             facet_field_strings_docids_readers,
             field_id_docid_facet_numbers_readers,
             field_id_docid_facet_strings_readers,
@@ -599,7 +595,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
-        let total_databases = 8;
+        let total_databases = 10;
 
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: 0,
@@ -628,6 +624,21 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             documents_readers,
             documents_merge,
             write_method
+        )?;
+
+        database_count += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: database_count,
+            total_databases,
+        });
+
+        debug!("Writing the facet id string docids into LMDB on disk...");
+        merge_into_lmdb_database(
+            self.wtxn,
+            *self.index.facet_id_string_docids.as_polymorph(),
+            facet_field_strings_docids_readers,
+            facet_field_value_docids_merge,
+            write_method,
         )?;
 
         database_count += 1;

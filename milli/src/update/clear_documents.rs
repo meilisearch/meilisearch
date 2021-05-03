@@ -118,8 +118,10 @@ mod tests {
         assert!(index.docid_word_positions.is_empty(&rtxn).unwrap());
         assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
-        assert!(index.facet_field_id_value_docids.is_empty(&rtxn).unwrap());
-        assert!(index.field_id_docid_facet_values.is_empty(&rtxn).unwrap());
+        assert!(index.facet_id_f64_docids.is_empty(&rtxn).unwrap());
+        assert!(index.facet_id_string_docids.is_empty(&rtxn).unwrap());
+        assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());
+        assert!(index.field_id_docid_facet_strings.is_empty(&rtxn).unwrap());
         assert!(index.documents.is_empty(&rtxn).unwrap());
     }
 }

@@ -28,7 +28,7 @@ pub trait Distinct<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
     use once_cell::sync::Lazy;
     use rand::{seq::SliceRandom, Rng};
@@ -74,7 +74,7 @@ mod test {
 
     /// Returns a temporary index populated with random test documents, the FieldId for the
     /// distinct attribute, and the RoaringBitmap with the document ids.
-    pub(crate) fn generate_index(distinct: &str, facets: HashMap<String, String>) -> (TempIndex, FieldId, RoaringBitmap) {
+    pub(crate) fn generate_index(distinct: &str, facets: HashSet<String>) -> (TempIndex, FieldId, RoaringBitmap) {
         let index = TempIndex::new();
         let mut txn = index.write_txn().unwrap();
 
