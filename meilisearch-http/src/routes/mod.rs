@@ -4,7 +4,7 @@ use actix_web::{get, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::index::Settings;
+use crate::index::{Settings, Unchecked};
 use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
 
 pub mod document;
@@ -34,7 +34,7 @@ pub enum UpdateType {
         #[serde(skip_serializing_if = "Option::is_none")]
         number: Option<usize>
     },
-    Settings { settings: Settings },
+    Settings { settings: Settings<Unchecked> },
 }
 
 impl From<&UpdateStatus> for UpdateType {
@@ -60,20 +60,12 @@ impl From<&UpdateStatus> for UpdateType {
                 }
             }
             UpdateMeta::ClearDocuments => UpdateType::ClearAll,
-            UpdateMeta::DeleteDocuments => {
-                let number = match other {
-                    UpdateStatus::Processed(processed) => match processed.success {
-                        UpdateResult::DocumentDeletion { deleted } => Some(deleted as usize),
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                UpdateType::DocumentsDeletion { number }
+            UpdateMeta::DeleteDocuments { ids } => {
+                UpdateType::DocumentsDeletion { number: Some(ids.len()) }
             }
             UpdateMeta::Settings(settings) => UpdateType::Settings {
                 settings: settings.clone(),
             },
-            _ => unreachable!(),
         }
     }
 }
