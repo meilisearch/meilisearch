@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded};
 use std::str::FromStr;
 
-use anyhow::Context;
 use either::Either;
 use heed::types::DecodeIgnore;
 use log::debug;
@@ -12,7 +11,6 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec};
 
@@ -65,21 +63,19 @@ fn field_id<'a>(
 {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
-
-    fields_ids_map
-        .id(key.as_str())
-        .ok_or_else(|| {
-            PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                        "attribute `{}` not found, available attributes are: {}",
-                        key.as_str(),
-                        fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", ")
-                    ),
-                },
-                key.as_span(),
-            )
-        })
+    match fields_ids_map.id(key.as_str()) {
+        Some(field_id) => Ok(field_id),
+        None => Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` not found, available attributes are: {}",
+                    key.as_str(),
+                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", ")
+                ),
+            },
+            key.as_span(),
+        )),
+    }
 }
 
 fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
@@ -110,32 +106,6 @@ impl FacetCondition {
           A: AsRef<str>,
           B: AsRef<str>,
     {
-        fn facet_condition(
-            fields_ids_map: &FieldsIdsMap,
-            faceted_fields: &HashMap<String, FacetType>,
-            key: &str,
-            value: &str,
-        ) -> anyhow::Result<FacetCondition>
-        {
-            let fid = fields_ids_map.id(key).with_context(|| {
-                format!("{:?} isn't present in the fields ids map", key)
-            })?;
-            let ftype = faceted_fields.get(key).copied().with_context(|| {
-                format!("{:?} isn't a faceted field", key)
-            })?;
-            let (neg, value) = match value.trim().strip_prefix('-') {
-                Some(value) => (true, value.trim()),
-                None => (false, value.trim()),
-            };
-
-            let operator = match ftype {
-                FacetType::String => OperatorString(fid, FacetStringOperator::equal(value)),
-                FacetType::Number => OperatorNumber(fid, FacetNumberOperator::Equal(value.parse()?)),
-            };
-
-            if neg { Ok(operator.negate()) } else { Ok(operator) }
-        }
-
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let faceted_fields = index.faceted_fields(rtxn)?;
         let mut ands = None;
@@ -145,10 +115,7 @@ impl FacetCondition {
                 Either::Left(array) => {
                     let mut ors = None;
                     for rule in array {
-                        let mut iter = rule.as_ref().splitn(2, ':');
-                        let key = iter.next().context("missing facet condition key")?;
-                        let value = iter.next().context("missing facet condition value")?;
-                        let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
+                        let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
                         ors = match ors.take() {
                             Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
                             None => Some(condition),
@@ -163,10 +130,7 @@ impl FacetCondition {
                     }
                 },
                 Either::Right(rule) => {
-                    let mut iter = rule.as_ref().splitn(2, ':');
-                    let key = iter.next().context("missing facet condition key")?;
-                    let value = iter.next().context("missing facet condition value")?;
-                    let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
+                    let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
                     ands = match ands.take() {
                         Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
                         None => Some(condition),
