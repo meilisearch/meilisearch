@@ -9,7 +9,7 @@ use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::{Index, FieldId};
 
-pub use self::facet_condition::{FacetCondition, FacetNumberOperator, FacetStringOperator};
+pub use self::facet_condition::{FacetCondition, Operator};
 pub use self::facet_distribution::FacetDistribution;
 
 mod facet_condition;

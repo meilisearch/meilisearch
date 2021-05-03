@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded};
 use std::str::FromStr;
@@ -21,76 +21,52 @@ use super::parser::Rule;
 use super::parser::{PREC_CLIMBER, FilterParser};
 
 use self::FacetCondition::*;
-use self::FacetNumberOperator::*;
+use self::Operator::*;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FacetNumberOperator {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
     GreaterThan(f64),
     GreaterThanOrEqual(f64),
-    Equal(f64),
-    NotEqual(f64),
+    Equal(Option<f64>, String),
+    NotEqual(Option<f64>, String),
     LowerThan(f64),
     LowerThanOrEqual(f64),
     Between(f64, f64),
 }
 
-impl FacetNumberOperator {
+impl Operator {
     /// This method can return two operations in case it must express
     /// an OR operation for the between case (i.e. `TO`).
     fn negate(self) -> (Self, Option<Self>) {
         match self {
-            GreaterThan(x)        => (LowerThanOrEqual(x), None),
-            GreaterThanOrEqual(x) => (LowerThan(x), None),
-            Equal(x)              => (NotEqual(x), None),
-            NotEqual(x)           => (Equal(x), None),
-            LowerThan(x)          => (GreaterThanOrEqual(x), None),
-            LowerThanOrEqual(x)   => (GreaterThan(x), None),
-            Between(x, y)         => (LowerThan(x), Some(GreaterThan(y))),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum FacetStringOperator {
-    Equal(String),
-    NotEqual(String),
-}
-
-impl FacetStringOperator {
-    fn equal(s: &str) -> Self {
-        FacetStringOperator::Equal(s.to_lowercase())
-    }
-
-    #[allow(dead_code)]
-    fn not_equal(s: &str) -> Self {
-        FacetStringOperator::equal(s).negate()
-    }
-
-    fn negate(self) -> Self {
-        match self {
-            FacetStringOperator::Equal(x)    => FacetStringOperator::NotEqual(x),
-            FacetStringOperator::NotEqual(x) => FacetStringOperator::Equal(x),
+            GreaterThan(n)        => (LowerThanOrEqual(n), None),
+            GreaterThanOrEqual(n) => (LowerThan(n), None),
+            Equal(n, s)           => (NotEqual(n, s), None),
+            NotEqual(n, s)        => (Equal(n, s), None),
+            LowerThan(n)          => (GreaterThanOrEqual(n), None),
+            LowerThanOrEqual(n)   => (GreaterThan(n), None),
+            Between(n, m)         => (LowerThan(n), Some(GreaterThan(m))),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FacetCondition {
-    OperatorString(FieldId, FacetStringOperator),
-    OperatorNumber(FieldId, FacetNumberOperator),
+    Operator(FieldId, Operator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 }
 
-fn get_field_id_facet_type<'a>(
+fn field_id<'a>(
     fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashMap<FieldId, FacetType>,
+    faceted_fields: &HashSet<FieldId>,
     items: &mut Pairs<'a, Rule>,
-) -> Result<(FieldId, FacetType), PestError<Rule>>
+) -> Result<FieldId, PestError<Rule>>
 {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
-    let field_id = fields_ids_map
+
+    fields_ids_map
         .id(key.as_str())
         .ok_or_else(|| {
             PestError::new_from_span(
@@ -103,32 +79,14 @@ fn get_field_id_facet_type<'a>(
                 },
                 key.as_span(),
             )
-        })?;
-
-    let facet_type = faceted_fields
-        .get(&field_id)
-        .copied()
-        .ok_or_else(|| {
-            PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                        "attribute `{}` is not faceted, available faceted attributes are: {}",
-                        key.as_str(),
-                        faceted_fields.keys().flat_map(|id| fields_ids_map.name(*id)).collect::<Vec<_>>().join(", ")
-                    ),
-                },
-                key.as_span(),
-            )
-        })?;
-
-    Ok((field_id, facet_type))
+        })
 }
 
-fn pest_parse<T>(pair: Pair<Rule>) -> Result<T, pest::error::Error<Rule>>
+fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
 where T: FromStr,
       T::Err: ToString,
 {
-    match pair.as_str().parse() {
+    let result = match pair.as_str().parse::<T>() {
         Ok(value) => Ok(value),
         Err(e) => {
             Err(PestError::<Rule>::new_from_span(
@@ -136,7 +94,9 @@ where T: FromStr,
                 pair.as_span(),
             ))
         }
-    }
+    };
+
+    (result, pair.as_str().to_string())
 }
 
 impl FacetCondition {
@@ -232,7 +192,7 @@ impl FacetCondition {
 
     fn from_pairs(
         fim: &FieldsIdsMap,
-        ff: &HashMap<FieldId, FacetType>,
+        ff: &HashSet<FieldId>,
         expression: Pairs<Rule>,
     ) -> anyhow::Result<Self>
     {
@@ -263,10 +223,9 @@ impl FacetCondition {
 
     fn negate(self) -> FacetCondition {
         match self {
-            OperatorString(fid, op) => OperatorString(fid, op.negate()),
-            OperatorNumber(fid, op) => match op.negate() {
-                (op, None) => OperatorNumber(fid, op),
-                (a, Some(b)) => Or(Box::new(OperatorNumber(fid, a)), Box::new(OperatorNumber(fid, b))),
+            Operator(fid, op) => match op.negate() {
+                (op, None) => Operator(fid, op),
+                (a, Some(b)) => Or(Box::new(Operator(fid, a)), Box::new(Operator(fid, b))),
             },
             Or(a, b) => And(Box::new(a.negate()), Box::new(b.negate())),
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
@@ -275,137 +234,100 @@ impl FacetCondition {
 
     fn between(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let item_span = item.as_span();
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
-        let lvalue = items.next().unwrap();
-        let rvalue = items.next().unwrap();
-        match ftype {
-            FacetType::String => {
-                Err(PestError::<Rule>::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid operator on a faceted string".to_string(),
-                    },
-                    item_span,
-                ).into())
-            },
-            FacetType::Number => {
-                let lvalue = pest_parse(lvalue)?;
-                let rvalue = pest_parse(rvalue)?;
-                Ok(OperatorNumber(fid, Between(lvalue, rvalue)))
-            },
-        }
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
+        let (lresult, _) = pest_parse(items.next().unwrap());
+        let (rresult, _) = pest_parse(items.next().unwrap());
+
+        let lvalue = lresult?;
+        let rvalue = rresult?;
+
+        Ok(Operator(fid, Between(lvalue, rvalue)))
     }
 
     fn equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
         let value = items.next().unwrap();
-        match ftype {
-            FacetType::String => Ok(OperatorString(fid, FacetStringOperator::equal(value.as_str()))),
-            FacetType::Number => Ok(OperatorNumber(fid, Equal(pest_parse(value)?))),
-        }
+        let (result, svalue) = pest_parse(value);
+
+        Ok(Operator(fid, Equal(Some(result?), svalue)))
     }
 
     fn greater_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let item_span = item.as_span();
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
         let value = items.next().unwrap();
-        match ftype {
-            FacetType::String => {
-                Err(PestError::<Rule>::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid operator on a faceted string".to_string(),
-                    },
-                    item_span,
-                ).into())
-            },
-            FacetType::Number => Ok(OperatorNumber(fid, GreaterThan(pest_parse(value)?))),
-        }
+        let (result, _svalue) = pest_parse(value);
+
+        Ok(Operator(fid, GreaterThan(result?)))
     }
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let item_span = item.as_span();
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
         let value = items.next().unwrap();
-        match ftype {
-            FacetType::String => {
-                Err(PestError::<Rule>::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid operator on a faceted string".to_string(),
-                    },
-                    item_span,
-                ).into())
-            },
-            FacetType::Number => Ok(OperatorNumber(fid, GreaterThanOrEqual(pest_parse(value)?))),
-        }
+        let (result, _svalue) = pest_parse(value);
+
+        Ok(Operator(fid, GreaterThanOrEqual(result?)))
     }
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let item_span = item.as_span();
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
         let value = items.next().unwrap();
-        match ftype {
-            FacetType::String => {
-                Err(PestError::<Rule>::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid operator on a faceted string".to_string(),
-                    },
-                    item_span,
-                ).into())
-            },
-            FacetType::Number => Ok(OperatorNumber(fid, LowerThan(pest_parse(value)?))),
-        }
+        let (result, _svalue) = pest_parse(value);
+
+        Ok(Operator(fid, LowerThan(result?)))
     }
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<FieldId, FacetType>,
+        faceted_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let item_span = item.as_span();
         let mut items = item.into_inner();
-        let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+
         let value = items.next().unwrap();
-        match ftype {
-            FacetType::String => {
-                Err(PestError::<Rule>::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid operator on a faceted string".to_string(),
-                    },
-                    item_span,
-                ).into())
-            },
-            FacetType::Number => Ok(OperatorNumber(fid, LowerThanOrEqual(pest_parse(value)?))),
-        }
+        let (result, _svalue) = pest_parse(value);
+
+        Ok(Operator(fid, LowerThanOrEqual(result?)))
     }
 }
 
@@ -485,34 +407,53 @@ impl FacetCondition {
         Ok(())
     }
 
-    fn evaluate_number_operator<>(
+    fn evaluate_operator(
         rtxn: &heed::RoTxn,
         index: &Index,
-        db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+        numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+        strings_db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
         field_id: FieldId,
-        operator: FacetNumberOperator,
+        operator: &Operator,
     ) -> anyhow::Result<RoaringBitmap>
     {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
         let (left, right) = match operator {
-            GreaterThan(val)        => (Excluded(val),      Included(f64::MAX)),
-            GreaterThanOrEqual(val) => (Included(val),      Included(f64::MAX)),
-            Equal(val)              => (Included(val),      Included(val)),
-            NotEqual(val)           => {
-                let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
-                let docids = Self::evaluate_number_operator(rtxn, index, db, field_id, Equal(val))?;
-                return Ok(all_documents_ids - docids);
+            GreaterThan(val)        => (Excluded(*val), Included(f64::MAX)),
+            GreaterThanOrEqual(val) => (Included(*val), Included(f64::MAX)),
+            Equal(number, string)   => {
+                let string_docids = strings_db.get(rtxn, &(field_id, &string))?.unwrap_or_default();
+                let number_docids = match number {
+                    Some(n) => {
+                        let n = Included(*n);
+                        let mut output = RoaringBitmap::new();
+                        Self::explore_facet_number_levels(rtxn, numbers_db, field_id, 0, n, n, &mut output)?;
+                        output
+                    },
+                    None => RoaringBitmap::new(),
+                };
+                return Ok(string_docids | number_docids);
             },
-            LowerThan(val)          => (Included(f64::MIN), Excluded(val)),
-            LowerThanOrEqual(val)   => (Included(f64::MIN), Included(val)),
-            Between(left, right)    => (Included(left),     Included(right)),
+            NotEqual(number, string) => {
+                let all_numbers_ids = if number.is_some() {
+                    index.number_faceted_documents_ids(rtxn, field_id)?
+                } else {
+                    RoaringBitmap::new()
+                };
+                let all_strings_ids = index.string_faceted_documents_ids(rtxn, field_id)?;
+                let operator = Equal(*number, string.clone());
+                let docids = Self::evaluate_operator(rtxn, index, numbers_db, strings_db, field_id, &operator)?;
+                return Ok((all_numbers_ids | all_strings_ids) - docids);
+            },
+            LowerThan(val)        => (Included(f64::MIN), Excluded(*val)),
+            LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
+            Between(left, right)  => (Included(*left),    Included(*right)),
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
         // that's fine if it don't, the value just before will be returned instead.
-        let biggest_level = db
+        let biggest_level = numbers_db
             .remap_data_type::<DecodeIgnore>()
             .get_lower_than_or_equal_to(rtxn, &(field_id, u8::MAX, f64::MAX, f64::MAX))?
             .and_then(|((id, level, _, _), _)| if id == field_id { Some(level) } else { None });
@@ -520,34 +461,10 @@ impl FacetCondition {
         match biggest_level {
             Some(level) => {
                 let mut output = RoaringBitmap::new();
-                Self::explore_facet_number_levels(rtxn, db, field_id, level, left, right, &mut output)?;
+                Self::explore_facet_number_levels(rtxn, numbers_db, field_id, level, left, right, &mut output)?;
                 Ok(output)
             },
             None => Ok(RoaringBitmap::new()),
-        }
-    }
-
-    fn evaluate_string_operator(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
-        field_id: FieldId,
-        operator: &FacetStringOperator,
-    ) -> anyhow::Result<RoaringBitmap>
-    {
-        match operator {
-            FacetStringOperator::Equal(string) => {
-                match db.get(rtxn, &(field_id, string))? {
-                    Some(docids) => Ok(docids),
-                    None => Ok(RoaringBitmap::new())
-                }
-            },
-            FacetStringOperator::NotEqual(string) => {
-                let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
-                let op = FacetStringOperator::Equal(string.clone());
-                let docids = Self::evaluate_string_operator(rtxn, index, db, field_id, &op)?;
-                Ok(all_documents_ids - docids)
-            },
         }
     }
 
@@ -557,15 +474,12 @@ impl FacetCondition {
         index: &Index,
     ) -> anyhow::Result<RoaringBitmap>
     {
-        let db = index.facet_field_id_value_docids;
+        let numbers_db = index.facet_id_f64_docids;
+        let strings_db = index.facet_id_string_docids;
+
         match self {
-            OperatorString(fid, op) => {
-                let db = db.remap_key_type::<FacetValueStringCodec>();
-                Self::evaluate_string_operator(rtxn, index, db, *fid, op)
-            },
-            OperatorNumber(fid, op) => {
-                let db = db.remap_key_type::<FacetLevelValueF64Codec>();
-                Self::evaluate_number_operator(rtxn, index, db, *fid, *op)
+            Operator(fid, op) => {
+                Self::evaluate_operator(rtxn, index, numbers_db, strings_db, *fid, op)
             },
             Or(lhs, rhs) => {
                 let lhs = lhs.evaluate(rtxn, index)?;

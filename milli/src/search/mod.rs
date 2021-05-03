@@ -16,9 +16,7 @@ use distinct::{Distinct, DocIter, FacetDistinct, MapDistinct, NoopDistinct};
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId};
 
-pub use self::facet::{
-    FacetCondition, FacetDistribution, FacetIter, FacetNumberOperator, FacetStringOperator,
-};
+pub use self::facet::{FacetCondition, FacetDistribution, FacetIter, Operator};
 pub use self::query_tree::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 
