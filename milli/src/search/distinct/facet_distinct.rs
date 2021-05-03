@@ -25,13 +25,12 @@ pub struct FacetDistinct<'a> {
 }
 
 impl<'a> FacetDistinct<'a> {
-    pub fn new(
-        distinct: FieldId,
-        index: &'a Index,
-        txn: &'a heed::RoTxn<'a>,
-    ) -> Self
-    {
-        Self { distinct, index, txn }
+    pub fn new(distinct: FieldId, index: &'a Index, txn: &'a heed::RoTxn<'a>) -> Self {
+        Self {
+            distinct,
+            index,
+            txn,
+        }
     }
 }
 
@@ -100,10 +99,9 @@ impl<'a> FacetDistinctIter<'a> {
         let mut candidates_iter = self.candidates.iter().skip(self.iter_offset);
         match candidates_iter.next() {
             Some(id) => {
-                match self.facet_type {
-                    FacetType::String => self.distinct_string(id)?,
-                    FacetType::Number => self.distinct_number(id)?,
-                };
+                // We distinct the document id on its facet strings and facet numbers.
+                self.distinct_string(id)?;
+                self.distinct_number(id)?;
 
                 // The first document of each iteration is kept, since the next call to
                 // `difference_with` will filter out all the documents for that facet value. By
