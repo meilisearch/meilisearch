@@ -33,9 +33,8 @@ pub struct SearchQuery {
     pub attributes_to_crop: Option<HashSet<String>>,
     pub crop_length: Option<usize>,
     pub attributes_to_highlight: Option<HashSet<String>>,
-    pub filters: Option<String>,
     pub matches: Option<bool>,
-    pub facet_filters: Option<Value>,
+    pub filter: Option<Value>,
     pub facet_distributions: Option<Vec<String>>,
 }
 
@@ -75,8 +74,8 @@ impl Index {
         search.limit(query.limit);
         search.offset(query.offset.unwrap_or_default());
 
-        if let Some(ref facets) = query.facet_filters {
-            if let Some(facets) = parse_facets(facets, self, &rtxn)? {
+        if let Some(ref filter) = query.filter {
+            if let Some(facets) = parse_facets(filter, self, &rtxn)? {
                 search.facet_condition(facets);
             }
         }

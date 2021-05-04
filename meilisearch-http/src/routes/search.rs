@@ -24,9 +24,8 @@ pub struct SearchQueryGet {
     attributes_to_crop: Option<String>,
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
-    filters: Option<String>,
+    filter: Option<String>,
     matches: Option<bool>,
-    facet_filters: Option<String>,
     facet_distributions: Option<String>,
 }
 
@@ -50,7 +49,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             .facet_distributions
             .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
-        let facet_filters = match other.facet_filters {
+        let filter = match other.filter {
             Some(ref f) => Some(serde_json::from_str(f)?),
             None => None,
         };
@@ -63,9 +62,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             attributes_to_crop,
             crop_length: other.crop_length,
             attributes_to_highlight,
-            filters: other.filters,
+            filter,
             matches: other.matches,
-            facet_filters,
             facet_distributions,
         })
     }
