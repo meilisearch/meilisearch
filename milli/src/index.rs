@@ -566,11 +566,11 @@ pub(crate) mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let content = &br#"[
-            { "name": "kevin" },
-            { "name": "bob", "age": 20 }
+            { "id": 1, "name": "kevin" },
+            { "id": 2, "name": "bob", "age": 20 },
+            { "id": 2, "name": "bob", "age": 20 }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.enable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -579,6 +579,7 @@ pub(crate) mod tests {
 
         let fields_distribution = index.fields_distribution(&rtxn).unwrap();
         assert_eq!(fields_distribution, hashmap! {
+            "id".to_string() => 2,
             "name".to_string() => 2,
             "age".to_string() => 1,
         });
