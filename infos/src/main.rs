@@ -5,6 +5,7 @@ use std::{str, io, fmt};
 use anyhow::Context;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
+use milli::facet::FacetType;
 use milli::{Index, TreeLevel};
 use structopt::StructOpt;
 
@@ -22,8 +23,11 @@ const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const WORD_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-level-position-docids";
 const WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-prefix-level-position-docids";
-const FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME: &str = "facet-field-id-value-docids";
-const FIELD_ID_DOCID_FACET_VALUES_DB_NAME: &str = "field-id-docid-facet-values";
+const FACET_ID_F64_DOCIDS_DB_NAME: &str = "facet-id-f64-docids";
+const FACET_ID_STRING_DOCIDS_DB_NAME: &str = "facet-id-string-docids";
+const FIELD_ID_DOCID_FACET_F64S_DB_NAME: &str = "field-id-docid-facet-f64s";
+const FIELD_ID_DOCID_FACET_STRINGS_DB_NAME: &str = "field-id-docid-facet-strings";
+
 const DOCUMENTS_DB_NAME: &str = "documents";
 
 const ALL_DATABASE_NAMES: &[&str] = &[
@@ -35,8 +39,10 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     WORD_LEVEL_POSITION_DOCIDS_DB_NAME,
     WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME,
-    FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME,
-    FIELD_ID_DOCID_FACET_VALUES_DB_NAME,
+    FACET_ID_F64_DOCIDS_DB_NAME,
+    FACET_ID_STRING_DOCIDS_DB_NAME,
+    FIELD_ID_DOCID_FACET_F64S_DB_NAME,
+    FIELD_ID_DOCID_FACET_STRINGS_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
 
@@ -108,8 +114,18 @@ enum Command {
         prefixes: Vec<String>,
     },
 
-    /// Outputs a CSV with the documents ids along with the facet values where it appears.
-    FacetValuesDocids {
+    /// Outputs a CSV with the documents ids along with the facet numbers where it appears.
+    FacetNumbersDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The field name in the document.
+        field_name: String,
+    },
+
+    /// Outputs a CSV with the documents ids along with the facet strings where it appears.
+    FacetStringsDocids {
         /// Display the whole documents ids in details.
         #[structopt(long)]
         full_display: bool,
@@ -149,8 +165,8 @@ enum Command {
         internal_documents_ids: Vec<u32>,
     },
 
-    /// Outputs some facets statistics for the given facet name.
-    FacetStats {
+    /// Outputs some facets numbers statistics for the given facet name.
+    FacetNumberStats {
         /// The field name in the document.
         field_name: String,
     },
@@ -243,8 +259,11 @@ fn main() -> anyhow::Result<()> {
         WordsPrefixesDocids { full_display, prefixes } => {
             words_prefixes_docids(&index, &rtxn, !full_display, prefixes)
         },
-        FacetValuesDocids { full_display, field_name } => {
-            facet_values_docids(&index, &rtxn, !full_display, field_name)
+        FacetNumbersDocids { full_display, field_name } => {
+            facet_values_docids(&index, &rtxn, !full_display, FacetType::Number, field_name)
+        },
+        FacetStringsDocids { full_display, field_name } => {
+            facet_values_docids(&index, &rtxn, !full_display, FacetType::String, field_name)
         },
         WordsLevelPositionsDocids { full_display, words } => {
             words_level_positions_docids(&index, &rtxn, !full_display, words)
@@ -255,7 +274,7 @@ fn main() -> anyhow::Result<()> {
         DocidsWordsPositions { full_display, internal_documents_ids } => {
             docids_words_positions(&index, &rtxn, !full_display, internal_documents_ids)
         },
-        FacetStats { field_name } => facet_stats(&index, &rtxn, field_name),
+        FacetNumberStats { field_name } => facet_number_stats(&index, &rtxn, field_name),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         AverageNumberOfPositionsByWord => {
             average_number_of_positions_by_word(&index, &rtxn)
@@ -297,36 +316,22 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
 }
 
 /// Helper function that converts the facet value key to a unique type
-/// that can be used to log or display purposes.
-fn facet_values_iter<'txn, DC: 'txn, T>(
+/// that can be used for log or display purposes.
+fn facet_values_iter<'txn, KC: 'txn, DC: 'txn>(
     rtxn: &'txn heed::RoTxn,
-    db: heed::Database<heed::types::ByteSlice, DC>,
+    db: heed::Database<KC, DC>,
     field_id: u8,
-    facet_type: milli::facet::FacetType,
-    string_fn: impl Fn(&str) -> T + 'txn,
-    float_fn: impl Fn(u8, f64, f64) -> T + 'txn,
-) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(T, DC::DItem)>> + 'txn>>
+) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(KC::DItem, DC::DItem)>> + 'txn>>
 where
+    KC: heed::BytesDecode<'txn>,
     DC: heed::BytesDecode<'txn>,
 {
-    use milli::facet::FacetType;
-    use milli::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
+    let iter = db
+        .remap_key_type::<heed::types::ByteSlice>()
+        .prefix_iter(&rtxn, &[field_id])?
+        .remap_key_type::<KC>();
 
-    let iter = db.prefix_iter(&rtxn, &[field_id])?;
-    match facet_type {
-        FacetType::String => {
-            let iter = iter.remap_key_type::<FacetValueStringCodec>()
-                .map(move |r| r.map(|((_, key), value)| (string_fn(key), value)));
-            Ok(Box::new(iter) as Box<dyn Iterator<Item=_>>)
-        },
-        FacetType::Number => {
-            let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
-                .map(move |r| r.map(|((_, level, left, right), value)| {
-                    (float_fn(level, left, right), value)
-                }));
-            Ok(Box::new(iter))
-        },
-    }
+    Ok(Box::new(iter))
 }
 
 fn facet_number_value_to_string<T: fmt::Debug>(level: u8, left: T, right: T) -> (u8, String) {
@@ -352,9 +357,11 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         word_prefix_pair_proximity_docids,
         word_level_position_docids,
         word_prefix_level_position_docids,
-        facet_field_id_value_docids,
-        field_id_docid_facet_values: _,
-        documents
+        facet_id_f64_docids,
+        facet_id_string_docids,
+        field_id_docid_facet_f64s: _,
+        field_id_docid_facet_strings: _,
+        documents,
     } = index;
 
     let main_name = "main";
@@ -365,7 +372,8 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
     let word_level_position_docids_name = "word_level_position_docids";
     let word_prefix_level_position_docids_name = "word_prefix_level_position_docids";
-    let facet_field_id_value_docids_name = "facet_field_id_value_docids";
+    let facet_id_f64_docids_name = "facet_id_f64_docids";
+    let facet_id_string_docids_name = "facet_id_string_docids";
     let documents_name = "documents";
 
     let mut heap = BinaryHeap::with_capacity(limit + 1);
@@ -437,27 +445,27 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
         let faceted_fields = index.faceted_fields_ids(rtxn)?;
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        for (field_id, field_type) in faceted_fields {
-            let facet_name = fields_ids_map.name(field_id).unwrap();
 
-            let db = facet_field_id_value_docids.remap_data_type::<ByteSlice>();
-            let iter = facet_values_iter(
-                rtxn,
-                db,
-                field_id,
-                field_type,
-                |key| key.to_owned(),
-                |level, left, right| {
-                    let mut output = facet_number_value_to_string(level, left, right).1;
-                    let _ = write!(&mut output, " (level {})", level);
-                    output
-                },
-            )?;
+        for facet_id in faceted_fields {
+            let facet_name = fields_ids_map.name(facet_id).unwrap();
 
-            for result in iter {
-                let (fvalue, value) = result?;
+            // List the facet numbers of this facet id.
+            let db = facet_id_f64_docids.remap_data_type::<ByteSlice>();
+            for result in facet_values_iter(rtxn, db, facet_id)? {
+                let ((_fid, level, left, right), value) = result?;
+                let mut output = facet_number_value_to_string(level, left, right).1;
+                write!(&mut output, " (level {})", level)?;
+                let key = format!("{} {}", facet_name, output);
+                heap.push(Reverse((value.len(), key, facet_id_f64_docids_name)));
+                if heap.len() > limit { heap.pop(); }
+            }
+
+            // List the facet strings of this facet id.
+            let db = facet_id_string_docids.remap_data_type::<ByteSlice>();
+            for result in facet_values_iter(rtxn, db, facet_id)? {
+                let ((_fid, fvalue), value) = result?;
                 let key = format!("{} {}", facet_name, fvalue);
-                heap.push(Reverse((value.len(), key, facet_field_id_value_docids_name)));
+                heap.push(Reverse((value.len(), key, facet_id_string_docids_name)));
                 if heap.len() > limit { heap.pop(); }
             }
         }
@@ -536,38 +544,55 @@ fn words_prefixes_docids(
     Ok(wtr.flush()?)
 }
 
-fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_name: String) -> anyhow::Result<()> {
+fn facet_values_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    facet_type: FacetType,
+    field_name: String,
+) -> anyhow::Result<()>
+{
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
     let field_id = fields_ids_map.id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;
-    let field_type = faceted_fields.get(&field_id)
-        .with_context(|| format!("field {} is not faceted", field_name))?;
+
+    if !faceted_fields.contains(&field_id) {
+        anyhow::bail!("field {} is not faceted", field_name);
+    }
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["facet_value", "facet_level", "documents_count", "documents_ids"])?;
 
-    let db = index.facet_field_id_value_docids;
-    let iter = facet_values_iter(
-        rtxn,
-        db,
-        field_id,
-        *field_type,
-        |key| (0, key.to_owned()),
-        facet_number_value_to_string,
-    )?;
-
-    for result in iter {
-        let ((level, value), docids) = result?;
-        let count = docids.len();
-        let docids = if debug {
-            format!("{:?}", docids)
-        } else {
-            format!("{:?}", docids.iter().collect::<Vec<_>>())
-        };
-        wtr.write_record(&[value, level.to_string(), count.to_string(), docids])?;
+    match facet_type {
+        FacetType::Number => {
+            wtr.write_record(&["facet_number", "facet_level", "documents_count", "documents_ids"])?;
+            for result in facet_values_iter(rtxn, index.facet_id_f64_docids, field_id)? {
+                let ((_fid, level, left, right), docids) = result?;
+                let value = facet_number_value_to_string(level, left, right).1;
+                let count = docids.len();
+                let docids = if debug {
+                    format!("{:?}", docids)
+                } else {
+                    format!("{:?}", docids.iter().collect::<Vec<_>>())
+                };
+                wtr.write_record(&[value, level.to_string(), count.to_string(), docids])?;
+            }
+        },
+        FacetType::String => {
+            wtr.write_record(&["facet_string", "documents_count", "documents_ids"])?;
+            for result in facet_values_iter(rtxn, index.facet_id_string_docids, field_id)? {
+                let ((_fid, value), docids) = result?;
+                let count = docids.len();
+                let docids = if debug {
+                    format!("{:?}", docids)
+                } else {
+                    format!("{:?}", docids.iter().collect::<Vec<_>>())
+                };
+                wtr.write_record(&[value.to_string(), count.to_string(), docids])?;
+            }
+        }
     }
 
     Ok(wtr.flush()?)
@@ -684,31 +709,24 @@ fn docids_words_positions(
     Ok(wtr.flush()?)
 }
 
-fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
+fn facet_number_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
     let field_id = fields_ids_map.id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;
-    let field_type = faceted_fields.get(&field_id)
-        .with_context(|| format!("field {} is not faceted", field_name))?;
 
-    let db = index.facet_field_id_value_docids;
-    let iter = facet_values_iter(
-        rtxn,
-        db,
-        field_id,
-        *field_type,
-        |_key| 0u8,
-        |level, _left, _right| level,
-    )?;
+    if !faceted_fields.contains(&field_id) {
+        anyhow::bail!("field {} is not faceted", field_name);
+    }
 
+    let iter = facet_values_iter(rtxn, index.facet_id_f64_docids, field_id)?;
     println!("The database {:?} facet stats", field_name);
 
     let mut level_size = 0;
     let mut current_level = None;
     for result in iter {
-        let (level, _) = result?;
+        let ((_fid, level, _left, _right), _) = result?;
         if let Some(current) = current_level {
             if current != level {
                 println!("\tnumber of groups at level {}: {}", current, level_size);
@@ -843,7 +861,7 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
     use heed::types::ByteSlice;
 
     let Index {
-        env: _,
+        env: _env,
         main,
         word_docids,
         word_prefix_docids,
@@ -852,8 +870,10 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         word_prefix_pair_proximity_docids,
         word_level_position_docids,
         word_prefix_level_position_docids,
-        facet_field_id_value_docids,
-        field_id_docid_facet_values,
+        facet_id_f64_docids,
+        facet_id_string_docids,
+        field_id_docid_facet_f64s,
+        field_id_docid_facet_strings,
         documents,
     } = index;
 
@@ -873,8 +893,11 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => word_prefix_pair_proximity_docids.as_polymorph(),
             WORD_LEVEL_POSITION_DOCIDS_DB_NAME => word_level_position_docids.as_polymorph(),
             WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME => word_prefix_level_position_docids.as_polymorph(),
-            FACET_FIELD_ID_VALUE_DOCIDS_DB_NAME => facet_field_id_value_docids.as_polymorph(),
-            FIELD_ID_DOCID_FACET_VALUES_DB_NAME => field_id_docid_facet_values.as_polymorph(),
+            FACET_ID_F64_DOCIDS_DB_NAME => facet_id_f64_docids.as_polymorph(),
+            FACET_ID_STRING_DOCIDS_DB_NAME => facet_id_string_docids.as_polymorph(),
+            FIELD_ID_DOCID_FACET_F64S_DB_NAME => field_id_docid_facet_f64s.as_polymorph(),
+            FIELD_ID_DOCID_FACET_STRINGS_DB_NAME => field_id_docid_facet_strings.as_polymorph(),
+
             DOCUMENTS_DB_NAME => documents.as_polymorph(),
             unknown => anyhow::bail!("unknown database {:?}", unknown),
         };
