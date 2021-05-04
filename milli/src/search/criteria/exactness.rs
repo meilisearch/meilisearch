@@ -150,7 +150,25 @@ fn resolve_state(
 {
     use State::*;
     match state {
-        ExactAttribute(mut allowed_candidates) |
+        ExactAttribute(mut allowed_candidates) => {
+            let query_len = query.len() as u32;
+            let mut candidates = RoaringBitmap::new();
+            let attributes_ids = ctx.searchable_fields_ids()?;
+            for id in attributes_ids {
+                if let Some(attribute_allowed_docids) = ctx.field_id_len_docids(id, query_len)? {
+                    let mut attribute_candidates_array = attribute_start_with_docids(ctx, id as u32, query)?;
+                    attribute_candidates_array.push(attribute_allowed_docids);
+                    candidates |= intersection_of(attribute_candidates_array.iter().collect());
+                }
+            }
+
+            // only keep allowed candidates
+            candidates &= &allowed_candidates;
+            // remove current candidates from allowed candidates
+            allowed_candidates -= &candidates;
+            Ok((candidates, Some(AttributeStartsWith(allowed_candidates))))
+
+        },
         AttributeStartsWith(mut allowed_candidates) => {
             let mut candidates = RoaringBitmap::new();
             let attributes_ids = ctx.searchable_fields_ids()?;

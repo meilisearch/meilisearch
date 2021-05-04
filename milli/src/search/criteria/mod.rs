@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::{TreeLevel, search::{word_derivations, WordDerivationsCache}};
+use crate::{FieldId, TreeLevel, search::{word_derivations, WordDerivationsCache}};
 use crate::{Index, DocumentId};
 
 use super::query_tree::{Operation, PrimitiveQuery, PrimitiveQueryPart, Query, QueryKind};
@@ -84,7 +84,8 @@ pub trait Context<'c> {
     fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>;
     fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>>;
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
-    fn searchable_fields_ids(&self) ->  heed::Result<Vec<crate::FieldId>>;
+    fn searchable_fields_ids(&self) ->  heed::Result<Vec<FieldId>>;
+    fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>>;
     fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error>;
 }
 pub struct CriteriaBuilder<'t> {
@@ -180,12 +181,15 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         self.index.words_synonyms(self.rtxn, &[word])
     }
 
-    fn searchable_fields_ids(&self) -> heed::Result<Vec<crate::FieldId>> {
+    fn searchable_fields_ids(&self) -> heed::Result<Vec<FieldId>> {
         match self.index.searchable_fields_ids(self.rtxn)? {
             Some(searchable_fields_ids) => Ok(searchable_fields_ids),
             None => Ok(self.index.fields_ids_map(self.rtxn)?.ids().collect()),
         }
+    }
 
+    fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>> {
+        Ok(None)
     }
 
     fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
@@ -486,11 +490,15 @@ pub mod test {
             todo!()
         }
 
-        fn searchable_fields_ids(&self) ->  heed::Result<Vec<crate::FieldId>> {
+        fn searchable_fields_ids(&self) ->  heed::Result<Vec<FieldId>> {
             todo!()
         }
 
         fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
+            todo!()
+        }
+
+        fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>> {
             todo!()
         }
     }
