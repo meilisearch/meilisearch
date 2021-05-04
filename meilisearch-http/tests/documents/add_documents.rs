@@ -140,9 +140,7 @@ async fn add_documents_with_primary_key_and_primary_key_already_exists() {
 
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["updateId"], 0);
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+    assert_eq!(response["status"], "failed");
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -168,9 +166,8 @@ async fn update_documents_with_primary_key_and_primary_key_already_exists() {
     index.wait_update_id(0).await;
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["updateId"], 0);
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+    // Documents without a primary key are not accepted.
+    assert_eq!(response["status"], "failed");
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);

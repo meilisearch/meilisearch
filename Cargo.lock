@@ -1761,7 +1761,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.1",
  "memmap",
  "milli",
  "mime",
@@ -1815,6 +1815,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "meilisearch-tokenizer"
+version = "0.2.2"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.2#eda4ed4968c8ac973cf1707ef89bd7012bb2722f"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang",
+]
+
+[[package]]
 name = "memchr"
 version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1841,8 +1857,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.1.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.1.1#f5ec14c54cc3ab76ca581eca9b6e0870f09fd63f"
+version = "0.2.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.2.0#792225eaffce6b3682f9b30b7370b6a547c4757e"
 dependencies = [
  "anyhow",
  "bstr",
@@ -1862,9 +1878,8 @@ dependencies = [
  "linked-hash-map",
  "log",
  "logging_timer",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.2",
  "memmap",
- "num-traits",
  "obkv",
  "once_cell",
  "ordered-float",
