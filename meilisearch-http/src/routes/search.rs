@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 
 use actix_web::{get, post, web, HttpResponse};
+use serde_json::Value;
 use serde::Deserialize;
 
 use crate::error::ResponseError;
@@ -50,7 +51,12 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let filter = match other.filter {
-            Some(ref f) => Some(serde_json::from_str(f)?),
+            Some(f) => {
+                match serde_json::from_str(&f) {
+                    Ok(v) => Some(v),
+                    _ => Some(Value::String(f)),
+                }
+            },
             None => None,
         };
 
