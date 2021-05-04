@@ -477,6 +477,18 @@ impl Index {
         Ok(documents)
     }
 
+    /// Returns an iterator over all the documents in the index.
+    pub fn all_documents<'t>(
+        &self,
+        rtxn: &'t RoTxn,
+    ) -> anyhow::Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReader<'t>)>>> {
+        Ok(self
+            .documents
+            .iter(rtxn)?
+            // we cast the BEU32 to a DocumentId
+            .map(|document| document.map(|(id, obkv)| (id.get(), obkv))))
+    }
+
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
         FacetDistribution::new(rtxn, self)
     }
