@@ -30,7 +30,6 @@ use warp::{Filter, http::Response};
 use warp::filters::ws::Message;
 
 use milli::{FacetCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
-use milli::facet::FacetValue;
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use milli::update::UpdateIndexingStep::*;
 
@@ -252,7 +251,7 @@ struct Settings {
     searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    faceted_attributes: Setting<HashMap<String, String>>,
+    faceted_attributes: Setting<HashSet<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     criteria: Setting<Vec<String>>,
@@ -671,7 +670,7 @@ async fn main() -> anyhow::Result<()> {
     struct Answer {
         documents: Vec<Map<String, Value>>,
         number_of_candidates: u64,
-        facets: BTreeMap<String, BTreeMap<FacetValue, u64>>,
+        facets: BTreeMap<String, BTreeMap<String, u64>>,
     }
 
     let disable_highlighting = opt.disable_highlighting;
@@ -985,7 +984,7 @@ async fn main() -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use maplit::{btreeset,hashmap};
+    use maplit::{btreeset,hashmap, hashset};
     use serde_test::{assert_tokens, Token};
 
     use milli::update::Setting;
@@ -997,10 +996,10 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
             searchable_attributes: Setting::Set(vec!["age".to_string()]),
-            faceted_attributes: Setting::Set(hashmap! { "age".into() => "integer".into() }),
+            faceted_attributes: Setting::Set(hashset!{ "age".to_string() }),
             criteria: Setting::Set(vec!["asc(age)".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
-            synonyms: Setting::Set(hashmap! { "alex".to_string() => vec!["alexey".to_string()] })
+            synonyms: Setting::Set(hashmap!{ "alex".to_string() => vec!["alexey".to_string()] })
         };
 
         assert_tokens(&settings, &[
