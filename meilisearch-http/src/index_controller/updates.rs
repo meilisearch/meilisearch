@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 
-use crate::index::{Facets, Settings};
+use crate::index::Settings;
 
 pub type UpdateError = String;
 
@@ -26,7 +26,6 @@ pub enum UpdateMeta {
     ClearDocuments,
     DeleteDocuments,
     Settings(Settings),
-    Facets(Facets),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
