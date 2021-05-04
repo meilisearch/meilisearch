@@ -7,9 +7,10 @@ use roaring::RoaringBitmap;
 use crate::{TreeLevel, search::{word_derivations, WordDerivationsCache}};
 use crate::{Index, DocumentId};
 
-use super::query_tree::{Operation, Query, QueryKind};
+use super::query_tree::{Operation, PrimitiveQuery, PrimitiveQueryPart, Query, QueryKind};
 use self::asc_desc::AscDesc;
 use self::attribute::Attribute;
+use self::exactness::Exactness;
 use self::r#final::Final;
 use self::initial::Initial;
 use self::proximity::Proximity;
@@ -18,6 +19,7 @@ use self::words::Words;
 
 mod asc_desc;
 mod attribute;
+mod exactness;
 mod initial;
 mod proximity;
 mod typo;
@@ -81,6 +83,9 @@ pub trait Context<'c> {
     fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>>;
     fn word_position_iterator(&self, word: &str, level: TreeLevel, in_prefix_cache: bool, left: Option<u32>, right: Option<u32>) -> heed::Result<Box<dyn Iterator<Item =heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c>>;
     fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>>;
+    fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
+    fn searchable_fields_ids(&self) ->  heed::Result<Vec<crate::FieldId>>;
+    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -170,6 +175,23 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
 
         Ok(last_level)
     }
+
+    fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>> {
+        self.index.words_synonyms(self.rtxn, &[word])
+    }
+
+    fn searchable_fields_ids(&self) -> heed::Result<Vec<crate::FieldId>> {
+        match self.index.searchable_fields_ids(self.rtxn)? {
+            Some(searchable_fields_ids) => Ok(searchable_fields_ids),
+            None => Ok(self.index.fields_ids_map(self.rtxn)?.ids().collect()),
+        }
+
+    }
+
+    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
+        let key = (word, level, left, right);
+        self.index.word_level_position_docids.get(self.rtxn, &key)
+    }
 }
 
 impl<'t> CriteriaBuilder<'t> {
@@ -182,10 +204,13 @@ impl<'t> CriteriaBuilder<'t> {
     pub fn build(
         &'t self,
         query_tree: Option<Operation>,
+        primitive_query: Option<Vec<PrimitiveQueryPart>>,
         facet_candidates: Option<RoaringBitmap>,
     ) -> anyhow::Result<Final<'t>>
     {
         use crate::criterion::Criterion as Name;
+
+        let primitive_query = primitive_query.unwrap_or_default();
 
         let mut criterion = Box::new(Initial::new(query_tree, facet_candidates)) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
@@ -194,6 +219,7 @@ impl<'t> CriteriaBuilder<'t> {
                 Name::Words => Box::new(Words::new(self, criterion)),
                 Name::Proximity => Box::new(Proximity::new(self, criterion)),
                 Name::Attribute => Box::new(Attribute::new(self, criterion)),
+                Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
                 Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?),
                 Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?),
                 _otherwise => criterion,
@@ -453,6 +479,18 @@ pub mod test {
         }
 
         fn word_position_last_level(&self, _word: &str, _in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>> {
+            todo!()
+        }
+
+        fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>> {
+            todo!()
+        }
+
+        fn searchable_fields_ids(&self) ->  heed::Result<Vec<crate::FieldId>> {
+            todo!()
+        }
+
+        fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
             todo!()
         }
     }

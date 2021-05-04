@@ -228,11 +228,12 @@ impl<'a> QueryTreeBuilder<'a> {
     /// - if `authorize_typos` is set to `false` the query tree will be generated
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
-    pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<Operation>> {
+    pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<(Operation, PrimitiveQuery)>> {
         let stop_words = self.index.stop_words(self.rtxn)?;
         let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
         if !primitive_query.is_empty() {
-            create_query_tree(self, self.optional_words, self.authorize_typos, primitive_query).map(Some)
+            let qt = create_query_tree(self, self.optional_words, self.authorize_typos, &primitive_query)?;
+            Ok(Some((qt, primitive_query)))
         } else {
             Ok(None)
         }
@@ -340,7 +341,7 @@ fn create_query_tree(
     ctx: &impl Context,
     optional_words: bool,
     authorize_typos: bool,
-    query: PrimitiveQuery,
+    query: &[PrimitiveQueryPart],
 ) -> anyhow::Result<Operation>
 {
     /// Matches on the `PrimitiveQueryPart` and create an operation from it.
@@ -458,16 +459,16 @@ fn create_query_tree(
     }
 
     if optional_words {
-        optional_word(ctx, authorize_typos, query)
+        optional_word(ctx, authorize_typos, query.to_vec())
     } else {
-        ngrams(ctx, authorize_typos, query.as_slice())
+        ngrams(ctx, authorize_typos, query)
     }
 }
 
-type PrimitiveQuery = Vec<PrimitiveQueryPart>;
+pub type PrimitiveQuery = Vec<PrimitiveQueryPart>;
 
 #[derive(Debug, Clone)]
-enum PrimitiveQueryPart {
+pub enum PrimitiveQueryPart {
     Phrase(Vec<String>),
     Word(String, IsPrefix),
 }
@@ -579,11 +580,12 @@ mod test {
             authorize_typos: bool,
             words_limit: Option<usize>,
             query: TokenStream,
-        ) -> anyhow::Result<Option<Operation>>
+        ) -> anyhow::Result<Option<(Operation, PrimitiveQuery)>>
         {
             let primitive_query = create_primitive_query(query, None, words_limit);
             if !primitive_query.is_empty() {
-                create_query_tree(self, optional_words, authorize_typos, primitive_query).map(Some)
+                let qt = create_query_tree(self, optional_words, authorize_typos, &primitive_query)?;
+                Ok(Some((qt, primitive_query)))
             } else {
                 Ok(None)
             }
@@ -674,7 +676,7 @@ mod test {
             Operation::Query(Query { prefix: true, kind: QueryKind::tolerant(2, "heyfriends".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -694,7 +696,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "heyfriends".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -725,7 +727,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "helloworld".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -770,7 +772,7 @@ mod test {
             ]),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -790,7 +792,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "ngrams".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -816,7 +818,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "wordsplitfish".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -836,7 +838,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -875,7 +877,7 @@ mod test {
                 Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "heymyfriend".to_string()) }),
             ]),
         ]);
-        let query_tree = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -891,7 +893,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
         ]);
-        let query_tree = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -925,7 +927,7 @@ mod test {
                 Operation::Query(Query { prefix: false, kind: QueryKind::exact("friend".to_string()) }),
             ]),
         ]);
-        let query_tree = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -944,7 +946,7 @@ mod test {
             ]),
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("heyfriends".to_string()) }),
         ]);
-        let query_tree = TestContext::default().build(false, false, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, false, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
@@ -957,7 +959,7 @@ mod test {
         let tokens = result.tokens();
 
         let context = TestContext::default();
-        let query_tree = context.build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = context.build(false, true, None, tokens).unwrap().unwrap();
 
         let expected = hashset!{
             ("word",                0, false),
@@ -997,7 +999,7 @@ mod test {
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("good".to_string()) }),
         ]);
 
-        let query_tree = TestContext::default().build(false, false, Some(2), tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default().build(false, false, Some(2), tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
     }
