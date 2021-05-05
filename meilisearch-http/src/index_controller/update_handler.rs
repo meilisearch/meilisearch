@@ -83,7 +83,6 @@ impl UpdateHandler {
             ClearDocuments => index.clear_documents(update_builder),
             DeleteDocuments => index.delete_documents(content, update_builder),
             Settings(settings) => index.update_settings(settings, update_builder),
-            Facets(levels) => index.update_facets(levels, update_builder),
         };
 
         match result {

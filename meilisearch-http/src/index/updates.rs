@@ -196,29 +196,6 @@ impl Index {
         }
     }
 
-    pub fn update_facets(
-        &self,
-        levels: &Facets,
-        update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
-        // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
-        let mut builder = update_builder.facets(&mut wtxn, self);
-        if let Some(value) = levels.level_group_size {
-            builder.level_group_size(value);
-        }
-        if let Some(value) = levels.min_level_size {
-            builder.min_level_size(value);
-        }
-        match builder.execute() {
-            Ok(()) => wtxn
-                .commit()
-                .and(Ok(UpdateResult::Other))
-                .map_err(Into::into),
-            Err(e) => Err(e),
-        }
-    }
-
     pub fn delete_documents(
         &self,
         document_ids: Option<impl io::Read>,
