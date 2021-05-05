@@ -41,9 +41,6 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(SnapshotRequest { path, ret }) => {
                     let _ = ret.send(self.handle_snapshot(path).await);
                 }
-                Some(DumpRequest { path, ret }) => {
-                    let _ = ret.send(self.handle_dump(path).await);
-                }
                 Some(GetSize { ret }) => {
                     let _ = ret.send(self.handle_get_size().await);
                 }
@@ -83,10 +80,6 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
     async fn handle_snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         self.store.snapshot(path).await
-    }
-
-    async fn handle_dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
-        self.store.dump(path).await
     }
 
     async fn handle_insert(&self, uid: String, uuid: Uuid) -> Result<()> {

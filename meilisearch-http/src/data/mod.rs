@@ -108,6 +108,10 @@ impl Data {
         Ok(self.index_controller.get_all_stats().await?)
     }
 
+    pub async fn dump(&self) -> anyhow::Result<String> {
+        Ok(self.index_controller.dump(self.options.dumps_dir.clone()).await?)
+    }
+
     #[inline]
     pub fn http_payload_size_limit(&self) -> usize {
         self.options.http_payload_size_limit.get_bytes() as usize

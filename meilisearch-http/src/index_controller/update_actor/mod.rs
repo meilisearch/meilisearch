@@ -40,7 +40,7 @@ pub trait UpdateActorHandle {
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, uuid: HashSet<Uuid>, path: PathBuf) -> Result<()>;
-    async fn dump(&self, uuid: HashSet<Uuid>, path: PathBuf) -> Result<()>;
+    async fn dump(&self, uuid: HashSet<(String, Uuid)>, path: PathBuf) -> Result<()>;
     async fn get_info(&self) -> Result<UpdateStoreInfo>;
     async fn update(
         &self,

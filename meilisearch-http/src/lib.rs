@@ -46,8 +46,8 @@ macro_rules! create_app {
             .configure(synonym::services)
             .configure(health::services)
             .configure(stats::services)
-            .configure(key::services);
-        //.configure(routes::dump::services);
+            .configure(key::services)
+            .configure(dump::services);
         #[cfg(feature = "mini-dashboard")]
         let app = if $enable_frontend {
             let generated = dashboard::generate();

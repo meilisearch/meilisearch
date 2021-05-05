@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -376,6 +376,13 @@ impl IndexController {
         // Check if the currently indexing update is from out index.
         stats.is_indexing = Some(Some(uuid) == update_infos.processing);
         Ok(stats)
+    }
+
+    pub async fn dump(&self, path: PathBuf) -> anyhow::Result<String> {
+        eprintln!("index_controller::mod called");
+        let res = dump::perform_dump(self, path).await?;
+        eprintln!("index_controller::mod finished");
+        Ok(res)
     }
 
     pub async fn get_all_stats(&self) -> anyhow::Result<Stats> {

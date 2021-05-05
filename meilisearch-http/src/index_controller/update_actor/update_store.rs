@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, path::PathBuf};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::fs::{copy, create_dir_all, remove_file, File};
@@ -294,6 +294,7 @@ impl UpdateStore {
         result: UpdateStatus,
         index_uuid: Uuid,
     ) -> heed::Result<()> {
+        // TODO: TAMO: load already processed updates
         let mut wtxn = self.env.write_txn()?;
         let (_global_id, update_id) = self.next_update_id(&mut wtxn, index_uuid)?;
         self.updates.remap_key_type::<UpdateKeyCodec>().put(&mut wtxn, &(index_uuid, update_id), &result)?;
@@ -516,31 +517,34 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn dump(&self, uuids: &HashSet<Uuid>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn dump(&self, uuids: &HashSet<(String, Uuid)>, path: PathBuf) -> anyhow::Result<()> {
+        use std::io::prelude::*;
         let state_lock = self.state.write();
-        state_lock.swap(State::Snapshoting); // TODO: rename the state
+        state_lock.swap(State::Snapshoting); // TODO: TAMO rename the state somehow
 
         let txn = self.env.write_txn()?;
 
-        let update_path = path.as_ref().join("updates");
-        create_dir_all(&update_path)?;
+        for (uid, uuid) in uuids.iter() {
+            let file = File::create(path.join(uid).join("updates.jsonl"))?;
+            let mut file = std::io::BufWriter::new(file);
 
-        // acquire write lock to prevent further writes during dump
-        create_dir_all(&update_path)?;
-        let db_path = update_path.join("data.mdb");
+            for update in &self.list(*uuid)? {
+                serde_json::to_writer(&mut file, update)?;
+                file.write_all(b"\n")?;
+            }
+        }
 
-        // TODO: everything
-        // create db dump
-        self.env.copy_to_path(&db_path, CompactionOption::Enabled)?;
+        // TODO: TAMO: the updates
+        // already processed updates seems to works, but I've not tried with currently running updates
 
-        let update_files_path = update_path.join("update_files");
+        let update_files_path = path.join("update_files");
         create_dir_all(&update_files_path)?;
 
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
         for entry in pendings {
             let ((_, uuid, _), pending) = entry?;
-            if uuids.contains(&uuid) {
+            if uuids.iter().any(|(_, id)| id == &uuid) {
                 if let Some(path) = pending.decode()?.content_path() {
                     let name = path.file_name().unwrap();
                     let to = update_files_path.join(name);

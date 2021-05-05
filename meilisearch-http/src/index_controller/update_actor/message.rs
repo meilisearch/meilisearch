@@ -32,7 +32,7 @@ pub enum UpdateMsg<D> {
         ret: oneshot::Sender<Result<()>>,
     },
     Dump {
-        uuids: HashSet<Uuid>,
+        uuids: HashSet<(String, Uuid)>,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },

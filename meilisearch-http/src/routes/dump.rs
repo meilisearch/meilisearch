@@ -1,14 +1,10 @@
-use std::fs::File;
-use std::path::Path;
+use actix_web::{post, get, web};
+use actix_web::HttpResponse;
+use serde::{Serialize, Deserialize};
 
-use actix_web::{get, post};
-use actix_web::{HttpResponse, web};
-use serde::{Deserialize, Serialize};
-
-use crate::dump::{DumpInfo, DumpStatus, compressed_dumps_dir, init_dump_process};
-use crate::Data;
-use crate::error::{Error, ResponseError};
+use crate::error::ResponseError;
 use crate::helpers::Authentication;
+use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(trigger_dump)
@@ -19,7 +15,10 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn trigger_dump(
     data: web::Data<Data>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    eprintln!("dump started");
+    let res = data.dump().await?;
+
+    Ok(HttpResponse::Ok().body(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -30,13 +29,13 @@ struct DumpStatusResponse {
 
 #[derive(Deserialize)]
 struct DumpParam {
-    dump_uid: String,
+    _dump_uid: String,
 }
 
 #[get("/dumps/{dump_uid}/status", wrap = "Authentication::Private")]
 async fn get_dump_status(
-    data: web::Data<Data>,
-    path: web::Path<DumpParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }

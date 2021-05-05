@@ -1,16 +1,20 @@
 mod v1;
 mod v2;
 
-use std::{fs::File, path::{Path}, sync::Arc};
+use std::{collections::HashSet, fs::{File}, path::{Path, PathBuf}, sync::Arc};
 
 use anyhow::bail;
+use chrono::Utc;
 use heed::EnvOpenOptions;
 use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
+use tokio::task::spawn_blocking;
+use tokio::fs;
+use uuid::Uuid;
 
-use super::IndexMetadata;
+use super::{IndexController, IndexMetadata, update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
 use crate::index::Index;
 use crate::index_controller::uuid_resolver;
 use crate::helpers::compression;
@@ -22,7 +26,7 @@ enum DumpVersion {
 }
 
 impl DumpVersion {
-    // const CURRENT: Self = Self::V2;
+    const CURRENT: Self = Self::V2;
 
     /// Select the good importation function from the `DumpVersion` of metadata
     pub fn import_index(self, size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
@@ -42,7 +46,6 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    /*
     /// Create a Metadata with the current dump version of meilisearch.
     pub fn new(indexes: Vec<IndexMetadata>, db_version: String) -> Self {
         Metadata {
@@ -51,7 +54,6 @@ impl Metadata {
             dump_version: DumpVersion::CURRENT,
         }
     }
-    */
 
     /// Extract Metadata from `metadata.json` file present at provided `dir_path`
     fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
@@ -63,105 +65,73 @@ impl Metadata {
         Ok(metadata)
     }
 
-    /*
     /// Write Metadata in `metadata.json` file at provided `dir_path`
-    fn to_path(&self, dir_path: &Path) -> anyhow::Result<()> {
+    pub async fn to_path(&self, dir_path: &Path) -> anyhow::Result<()> {
         let path = dir_path.join("metadata.json");
-        let file = File::create(path)?;
-
-        serde_json::to_writer(file, &self)?;
-
-        Ok(())
-    }
-    */
-}
-
-/*
-pub struct DumpService<U, R> {
-    uuid_resolver_handle: R,
-    update_handle: U,
-    dump_path: PathBuf,
-    db_name: String,
-}
-
-impl<U, R> DumpService<U, R>
-where
-    U: UpdateActorHandle,
-    R: UuidResolverHandle,
-{
-    pub fn new(
-        uuid_resolver_handle: R,
-        update_handle: U,
-        dump_path: PathBuf,
-        db_name: String,
-    ) -> Self {
-        Self {
-            uuid_resolver_handle,
-            update_handle,
-            dump_path,
-            db_name,
-        }
-    }
-
-    pub async fn run(self) {
-        if let Err(e) = self.perform_dump().await {
-            error!("{}", e);
-        }
-    }
-
-    async fn perform_dump(&self) -> anyhow::Result<()> {
-        /*
-        info!("Performing dump.");
-
-        let dump_dir = self.dump_path.clone();
-        fs::create_dir_all(&dump_dir).await?;
-        let temp_dump_dir = spawn_blocking(move || tempfile::tempdir_in(dump_dir)).await??;
-        let temp_dump_path = temp_dump_dir.path().to_owned();
-
-        let uuids = self
-            .uuid_resolver_handle
-            .dump(temp_dump_path.clone())
-            .await?;
-
-        if uuids.is_empty() {
-            return Ok(());
-        }
-
-        let tasks = uuids
-            .iter()
-            .map(|&uuid| self.update_handle.dump(uuid, temp_dump_path.clone()))
-            .collect::<Vec<_>>();
-
-        futures::future::try_join_all(tasks).await?;
-
-        let dump_dir = self.dump_path.clone();
-        let dump_path = self.dump_path.join(format!("{}.dump", self.db_name));
-        let dump_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new_in(dump_dir)?;
-            let temp_dump_file_path = temp_dump_file.path().to_owned();
-            compression::to_tar_gz(temp_dump_path, temp_dump_file_path)?;
-            temp_dump_file.persist(&dump_path)?;
-            Ok(dump_path)
-        })
-        .await??;
-
-        info!("Created dump in {:?}.", dump_path);
-        */
+        tokio::fs::write(path, serde_json::to_string(self)?).await?;
 
         Ok(())
     }
 }
-*/
+
+/// Generate uid from creation date
+fn generate_uid() -> String {
+    Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
+}
+
+pub async fn perform_dump(index_controller: &IndexController, dump_path: PathBuf) -> anyhow::Result<String> {
+    info!("Performing dump.");
+
+    let dump_dir = dump_path.clone();
+    let uid = generate_uid();
+    fs::create_dir_all(&dump_dir).await?;
+    let temp_dump_dir = spawn_blocking(move || tempfile::tempdir_in(dump_dir)).await??;
+    let temp_dump_path = temp_dump_dir.path().to_owned();
+
+    let uuids = index_controller.uuid_resolver.list().await?;
+    // maybe we could just keep the vec as-is
+    let uuids: HashSet<(String, Uuid)> = uuids.into_iter().collect();
+
+    if uuids.is_empty() {
+        return Ok(uid);
+    }
+
+    let indexes = index_controller.list_indexes().await?;
+
+    // we create one directory by index
+    for meta in indexes.iter() {
+        tokio::fs::create_dir(temp_dump_path.join(&meta.uid)).await?;
+    }
+
+    let metadata = Metadata::new(indexes, env!("CARGO_PKG_VERSION").to_string());
+    metadata.to_path(&temp_dump_path).await?;
+
+    index_controller.update_handle.dump(uuids, temp_dump_path.clone()).await?;
+    let dump_dir = dump_path.clone();
+    let dump_path = dump_path.join(format!("{}.dump", uid));
+    let dump_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
+        let temp_dump_file = tempfile::NamedTempFile::new_in(dump_dir)?;
+        let temp_dump_file_path = temp_dump_file.path().to_owned();
+        compression::to_tar_gz(temp_dump_path, temp_dump_file_path)?;
+        temp_dump_file.persist(&dump_path)?;
+        Ok(dump_path)
+    })
+    .await??;
+
+    info!("Created dump in {:?}.", dump_path);
+
+    Ok(uid)
+}
 
 /*
 /// Write Settings in `settings.json` file at provided `dir_path`
 fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> {
-    let path = dir_path.join("settings.json");
-    let file = File::create(path)?;
+let path = dir_path.join("settings.json");
+let file = File::create(path)?;
 
-    serde_json::to_writer(file, settings)?;
+serde_json::to_writer(file, settings)?;
 
-    Ok(())
+Ok(())
 }
 */
 
