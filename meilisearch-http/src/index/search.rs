@@ -232,7 +232,8 @@ fn compute_formatted<A: AsRef<[u8]>>(
     highlighter: &Highlighter<A>,
     matching_words: &impl Matcher,
     all_formatted: &[FieldId],
-    to_highlight_ids: &HashSet<FieldId>,
+    to_highlight_fields: &HashSet<FieldId>,
+    to_crop_fields: &HashSet<FieldId>,
 ) -> anyhow::Result<Document> {
     let mut document = Document::new();
 
@@ -240,8 +241,8 @@ fn compute_formatted<A: AsRef<[u8]>>(
         if let Some(value) = obkv.get(*field) {
             let mut value: Value = serde_json::from_slice(value)?;
 
-            if to_highlight_ids.contains(field) {
-                value = highlighter.highlight_value(value, matching_words);
+            if to_highlight_fields.contains(field) {
+                value = highlighter.format_value(value, matching_words, to_highlight_fields.contains(field));
             }
 
             // This unwrap must be safe since we got the ids from the fields_ids_map just
@@ -291,45 +292,54 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         Self { analyzer, marks }
     }
 
-    fn highlight_value(&self, value: Value, words_to_highlight: &impl Matcher) -> Value {
+    fn format_value(
+        &self,
+        value: Value,
+        matcher: &impl Matcher,
+        need_to_crop: Option<u32>,
+        need_to_highlight: bool,
+        ) -> Value {
         match value {
-            Value::Null => Value::Null,
-            Value::Bool(boolean) => Value::Bool(boolean),
-            Value::Number(number) => Value::Number(number),
             Value::String(old_string) => {
-                let mut string = String::new();
-                let analyzed = self.analyzer.analyze(&old_string);
-                for (word, token) in analyzed.reconstruct() {
-                    if token.is_word() {
-                        let to_highlight = words_to_highlight.matches(token.text());
-                        if to_highlight {
-                            string.push_str(&self.marks.0)
-                        }
-                        string.push_str(word);
-                        if to_highlight {
-                            string.push_str(&self.marks.1)
-                        }
-                    } else {
-                        string.push_str(word);
-                    }
-                }
-                Value::String(string)
+                let value = self.format_string(old_string, need_to_crop, need_to_highlight);
+                Value::String(value)
             }
             Value::Array(values) => Value::Array(
                 values
                     .into_iter()
-                    .map(|v| self.highlight_value(v, words_to_highlight))
+                    .map(|v| self.format_value(v, matcher, None, need_to_highlight))
                     .collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
+                    .map(|(k, v)| (k, self.format_value(value, matcher, None, need_to_highlight)))
                     .collect(),
             ),
+            value => value,
         }
     }
+    fn format_string(&self, s: String, need_to_crop: Option<u32>, need_to_highlight: bool) -> String {
+        let word_iter: Box<dyn Iterator<Item = (String, bool)>> = if let Some(_crop_len) = need_to_crop {
+            // cropping iterator
+            todo!()
+        } else {
+            // normal Iterator
+            todo!()
+        };
+
+        word_iter.map(|(word, is_match)| {
+            if need_to_highlight && is_match {
+                // highlight word
+                todo!()
+            } else {
+                word
+            }
+        })
+        .collect::<String>()
+    }
 }
+
 
 fn parse_facets(
     facets: &Value,
