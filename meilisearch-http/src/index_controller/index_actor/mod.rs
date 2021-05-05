@@ -178,8 +178,8 @@ mod test {
             self.as_ref().snapshot(uuid, path).await
         }
 
-        async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
-            self.as_ref().dump(uuid, path).await
+        async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+            self.as_ref().dump(uid, uuid, path).await
         }
 
         async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {

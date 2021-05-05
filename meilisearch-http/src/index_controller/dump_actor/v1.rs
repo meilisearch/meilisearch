@@ -89,7 +89,6 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
 
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
-    dbg!(&settings);
     let settings: index_controller::Settings = settings.into();
     let update_builder = UpdateBuilder::new(0);
     index.update_settings(&settings, update_builder)?;

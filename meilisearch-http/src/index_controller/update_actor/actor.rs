@@ -241,7 +241,7 @@ where
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             update_store.dump(&uuids, path.to_path_buf())?;
 
-            // Perform the snapshot of each index concurently. Only a third of the capabilities of
+            // Perform the dump of each index concurently. Only a third of the capabilities of
             // the index actor at a time not to put too much pressure on the index actor
             let path = &path;
             let handle = &index_handle;

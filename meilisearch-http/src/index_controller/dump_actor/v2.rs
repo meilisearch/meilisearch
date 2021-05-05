@@ -25,7 +25,6 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     let settings = import_settings(&dump_path)?;
     let update_builder = UpdateBuilder::new(0);
     index.update_settings(&settings, update_builder)?;
-    dbg!(settings);
 
     let update_builder = UpdateBuilder::new(1);
     let file = File::open(&dump_path.join("documents.jsonl"))?;

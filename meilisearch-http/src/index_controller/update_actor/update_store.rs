@@ -11,6 +11,7 @@ use arc_swap::ArcSwap;
 use heed::types::{ByteSlice, OwnedType, SerdeJson};
 use heed::zerocopy::U64;
 use heed::{BytesDecode, BytesEncode, CompactionOption, Database, Env, EnvOpenOptions};
+use log::error;
 use parking_lot::{Mutex, MutexGuard};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
@@ -77,6 +78,7 @@ pub enum State {
     Idle,
     Processing(Uuid, Processing),
     Snapshoting,
+    Dumping,
 }
 
 impl<'a> BytesEncode<'a> for NextIdCodec {
@@ -227,7 +229,7 @@ impl UpdateStore {
                             match res {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
-                                Err(e) => eprintln!("error while processing update: {}", e),
+                                Err(e) => error!("error while processing update: {}", e),
                             }
                         }
                         // the ownership on the arc has been taken, we need to exit.
@@ -520,7 +522,7 @@ impl UpdateStore {
     pub fn dump(&self, uuids: &HashSet<(String, Uuid)>, path: PathBuf) -> anyhow::Result<()> {
         use std::io::prelude::*;
         let state_lock = self.state.write();
-        state_lock.swap(State::Snapshoting); // TODO: TAMO rename the state somehow
+        state_lock.swap(State::Dumping);
 
         let txn = self.env.write_txn()?;
 

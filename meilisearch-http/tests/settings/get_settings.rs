@@ -82,9 +82,7 @@ async fn reset_all_settings() {
     assert_eq!(response["searchableAttributes"], json!(["bar"]));
     assert_eq!(response["stopWords"], json!(["the"]));
 
-    eprintln!("BEFORE");
     index.delete_settings().await;
-    eprintln!("AFTER");
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;
