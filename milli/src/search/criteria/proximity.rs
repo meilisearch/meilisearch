@@ -30,8 +30,8 @@ const PROXIMITY_THRESHOLD: u8 = 0;
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context<'t>,
-    /// ((max_proximity, query_tree), allowed_candidates)
-    state: Option<(Option<(usize, Operation)>, RoaringBitmap)>,
+    /// (max_proximity, query_tree, allowed_candidates)
+    state: Option<(u8, Operation, RoaringBitmap)>,
     proximity: u8,
     bucket_candidates: RoaringBitmap,
     parent: Box<dyn Criterion + 't>,
@@ -57,113 +57,89 @@ impl<'t> Criterion for Proximity<'t> {
     #[logging_timer::time("Proximity::{}")]
     fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
-        if let Some((_, candidates)) = self.state.as_mut() {
-            *candidates -= params.excluded_candidates;
+        if let Some((_, _, allowed_candidates)) = self.state.as_mut() {
+            *allowed_candidates -= params.excluded_candidates;
         }
 
         loop {
             debug!("Proximity at iteration {} (max prox {:?}) ({:?})",
                 self.proximity,
-                self.state.as_ref().map(|(qt, _)| qt.as_ref().map(|(mp, _)| mp)),
-                self.state.as_ref().map(|(_, cd)| cd),
+                self.state.as_ref().map(|(mp, _, _)| mp),
+                self.state.as_ref().map(|(_, _, cd)| cd),
             );
 
             match &mut self.state {
-                Some((_, candidates)) if candidates.is_empty() => {
+                Some((max_prox, _, allowed_candidates)) if allowed_candidates.is_empty() || self.proximity > *max_prox => {
                     self.state = None; // reset state
                 },
-                Some((Some((max_prox, query_tree)), candidates)) => {
-                    if self.proximity as usize > *max_prox {
-                        self.state = None; // reset state
-                    } else {
-                        let mut new_candidates = if candidates.len() <= CANDIDATES_THRESHOLD && self.proximity > PROXIMITY_THRESHOLD {
-                            if let Some(cache) = self.plane_sweep_cache.as_mut() {
-                                match cache.next() {
-                                    Some((p, candidates)) => {
-                                        self.proximity = p;
-                                        candidates
-                                    },
-                                    None => {
-                                        self.state = None; // reset state
-                                        continue
-                                    },
-                                }
-                            } else {
-                                let cache = resolve_plane_sweep_candidates(
-                                    self.ctx,
-                                    query_tree,
-                                    candidates,
-                                    params.wdcache,
-                                )?;
-                                self.plane_sweep_cache = Some(cache.into_iter());
-
-                                continue
+                Some((_, query_tree, allowed_candidates)) => {
+                    let mut new_candidates = if allowed_candidates.len() <= CANDIDATES_THRESHOLD && self.proximity > PROXIMITY_THRESHOLD {
+                        if let Some(cache) = self.plane_sweep_cache.as_mut() {
+                            match cache.next() {
+                                Some((p, candidates)) => {
+                                    self.proximity = p;
+                                    candidates
+                                },
+                                None => {
+                                    self.state = None; // reset state
+                                    continue
+                                },
                             }
-                        } else { // use set theory based algorithm
-                            resolve_candidates(
-                               self.ctx,
-                               &query_tree,
-                               self.proximity,
-                               &mut self.candidates_cache,
-                               params.wdcache,
-                           )?
-                        };
+                        } else {
+                            let cache = resolve_plane_sweep_candidates(
+                                self.ctx,
+                                query_tree,
+                                allowed_candidates,
+                                params.wdcache,
+                            )?;
+                            self.plane_sweep_cache = Some(cache.into_iter());
 
-                        new_candidates.intersect_with(&candidates);
-                        candidates.difference_with(&new_candidates);
-                        self.proximity += 1;
+                            continue
+                        }
+                    } else { // use set theory based algorithm
+                        resolve_candidates(
+                            self.ctx,
+                            &query_tree,
+                            self.proximity,
+                            &mut self.candidates_cache,
+                            params.wdcache,
+                        )?
+                    };
 
-                        return Ok(Some(CriterionResult {
-                            query_tree: Some(query_tree.clone()),
-                            candidates: Some(new_candidates),
-                            bucket_candidates: take(&mut self.bucket_candidates),
-                        }));
-                    }
-                },
-                Some((None, candidates)) => {
-                    let candidates = take(candidates);
-                    self.state = None; // reset state
+                    new_candidates &= &*allowed_candidates;
+                    *allowed_candidates -= &new_candidates;
+                    self.proximity += 1;
+
                     return Ok(Some(CriterionResult {
-                        query_tree: None,
-                        candidates: Some(candidates.clone()),
-                        bucket_candidates: candidates,
+                        query_tree: Some(query_tree.clone()),
+                        candidates: Some(new_candidates),
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
-                            return Ok(Some(CriterionResult {
-                                query_tree: None,
-                                candidates: None,
-                                bucket_candidates,
-                            }));
-                        },
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                            let candidates_is_some = candidates.is_some();
-                            let candidates = match (&query_tree, candidates) {
-                                (_, Some(candidates)) => candidates,
-                                (Some(qt), None) => {
-                                    let candidates = resolve_query_tree(self.ctx, qt, &mut HashMap::new(), params.wdcache)?;
-                                    candidates - params.excluded_candidates
-                                },
-                                (None, None) => RoaringBitmap::new(),
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
+                            let candidates = match candidates {
+                                Some(candidates) => candidates,
+                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
                             };
 
-                            // If our parent returns candidates it means that the bucket
-                            // candidates were already computed before and we can use them.
-                            //
-                            // If not, we must use the just computed candidates as our bucket
-                            // candidates.
-                            if candidates_is_some {
-                                self.bucket_candidates.union_with(&bucket_candidates);
-                            } else {
-                                self.bucket_candidates.union_with(&candidates);
+                            match bucket_candidates {
+                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                                None => self.bucket_candidates |= &candidates,
                             }
 
-                            let query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
-                            self.state = Some((query_tree, candidates));
+                            let maximum_proximity = maximum_proximity(&query_tree);
+                            self.state = Some((maximum_proximity as u8, query_tree, candidates));
                             self.proximity = 0;
                             self.plane_sweep_cache = None;
+                        },
+                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
+                            return Ok(Some(CriterionResult {
+                                query_tree: None,
+                                candidates,
+                                bucket_candidates,
+                            }));
                         },
                         None => return Ok(None),
                     }

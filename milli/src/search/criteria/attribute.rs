@@ -24,13 +24,12 @@ const LEVEL_EXPONENTIATION_BASE: u32 = 4;
 /// the system to choose between one algorithm or another.
 const CANDIDATES_THRESHOLD: u64 = 1000;
 
+type FlattenedQueryTree = Vec<Vec<Vec<Query>>>;
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
-    query_tree: Option<Operation>,
-    candidates: Option<RoaringBitmap>,
+    state: Option<(Operation, FlattenedQueryTree, RoaringBitmap)>,
     bucket_candidates: RoaringBitmap,
     parent: Box<dyn Criterion + 't>,
-    flattened_query_tree: Option<Vec<Vec<Vec<Query>>>>,
     current_buckets: Option<btree_map::IntoIter<u64, RoaringBitmap>>,
 }
 
@@ -38,11 +37,9 @@ impl<'t> Attribute<'t> {
     pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
         Attribute {
             ctx,
-            query_tree: None,
-            candidates: None,
+            state: None,
             bucket_candidates: RoaringBitmap::new(),
             parent,
-            flattened_query_tree: None,
             current_buckets: None,
         }
     }
@@ -52,29 +49,25 @@ impl<'t> Criterion for Attribute<'t> {
     #[logging_timer::time("Attribute::{}")]
     fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
-        if let Some(candidates) = self.candidates.as_mut() {
-            *candidates -= params.excluded_candidates;
+        if let Some((_, _, allowed_candidates)) = self.state.as_mut() {
+            *allowed_candidates -= params.excluded_candidates;
         }
 
         loop {
-            match (&self.query_tree, &mut self.candidates) {
-                (_, Some(candidates)) if candidates.is_empty() => {
+            match self.state.take() {
+                Some((query_tree, _, allowed_candidates)) if allowed_candidates.is_empty() => {
                     return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.take(),
-                        candidates: self.candidates.take(),
-                        bucket_candidates: take(&mut self.bucket_candidates),
+                        query_tree: Some(query_tree),
+                        candidates: Some(RoaringBitmap::new()),
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
-                (Some(qt), Some(candidates)) => {
-                    let flattened_query_tree = self.flattened_query_tree.get_or_insert_with(|| {
-                        flatten_query_tree(&qt)
-                    });
-
-                    let found_candidates = if candidates.len() < CANDIDATES_THRESHOLD {
+                Some((query_tree, flattened_query_tree, mut allowed_candidates)) => {
+                    let found_candidates = if allowed_candidates.len() < CANDIDATES_THRESHOLD {
                         let current_buckets = match self.current_buckets.as_mut() {
                             Some(current_buckets) => current_buckets,
                             None => {
-                                let new_buckets = linear_compute_candidates(self.ctx, flattened_query_tree, candidates)?;
+                                let new_buckets = linear_compute_candidates(self.ctx, &flattened_query_tree, &allowed_candidates)?;
                                 self.current_buckets.get_or_insert(new_buckets.into_iter())
                             },
                         };
@@ -83,61 +76,59 @@ impl<'t> Criterion for Attribute<'t> {
                             Some((_score, candidates)) => candidates,
                             None => {
                                 return Ok(Some(CriterionResult {
-                                    query_tree: self.query_tree.take(),
-                                    candidates: self.candidates.take(),
-                                    bucket_candidates: take(&mut self.bucket_candidates),
+                                    query_tree: Some(query_tree),
+                                    candidates: Some(RoaringBitmap::new()),
+                                    bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
                             },
                         }
                     } else {
-                        match set_compute_candidates(self.ctx, flattened_query_tree, candidates, params.wdcache)? {
+                        match set_compute_candidates(self.ctx, &flattened_query_tree, &allowed_candidates, params.wdcache)? {
                             Some(candidates) => candidates,
                             None => {
                                 return Ok(Some(CriterionResult {
-                                    query_tree: self.query_tree.take(),
-                                    candidates: self.candidates.take(),
-                                    bucket_candidates: take(&mut self.bucket_candidates),
+                                    query_tree: Some(query_tree),
+                                    candidates: Some(RoaringBitmap::new()),
+                                    bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
                             },
                         }
                     };
 
-                    candidates.difference_with(&found_candidates);
+                    allowed_candidates -= &found_candidates;
+
+                    self.state = Some((query_tree.clone(), flattened_query_tree, allowed_candidates));
 
                     return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.clone(),
+                        query_tree: Some(query_tree),
                         candidates: Some(found_candidates),
-                        bucket_candidates: take(&mut self.bucket_candidates),
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
-                (Some(qt), None) => {
-                    let mut query_tree_candidates = resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), params.wdcache)?;
-                    query_tree_candidates -= params.excluded_candidates;
-                    self.bucket_candidates |= &query_tree_candidates;
-                    self.candidates = Some(query_tree_candidates);
-                },
-                (None, Some(_)) => {
-                    return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.take(),
-                        candidates: self.candidates.take(),
-                        bucket_candidates: take(&mut self.bucket_candidates),
-                    }));
-                },
-                (None, None) => {
+                None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
+                            let candidates = match candidates {
+                                Some(candidates) => candidates,
+                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
+                            };
+
+                            let flattened_query_tree = flatten_query_tree(&query_tree);
+
+                            match bucket_candidates {
+                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                                None => self.bucket_candidates |= &candidates,
+                            }
+
+                            self.state = Some((query_tree, flattened_query_tree, candidates));
+                            self.current_buckets = None;
+                        },
+                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
-                                candidates: None,
+                                candidates,
                                 bucket_candidates,
                             }));
-                        },
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                            self.query_tree = query_tree;
-                            self.candidates = candidates;
-                            self.bucket_candidates |= bucket_candidates;
-                            self.flattened_query_tree = None;
-                            self.current_buckets = None;
                         },
                         None => return Ok(None),
                     }
@@ -467,7 +458,7 @@ impl<'t, 'q> Eq for Branch<'t, 'q> {}
 
 fn initialize_query_level_iterators<'t, 'q>(
     ctx: &'t dyn Context<'t>,
-    branches: &'q Vec<Vec<Vec<Query>>>,
+    branches: &'q FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<BinaryHeap<Branch<'t, 'q>>> {
@@ -517,7 +508,7 @@ fn initialize_query_level_iterators<'t, 'q>(
 
 fn set_compute_candidates<'t>(
     ctx: &'t dyn Context<'t>,
-    branches: &Vec<Vec<Vec<Query>>>,
+    branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<Option<RoaringBitmap>>
@@ -570,11 +561,11 @@ fn set_compute_candidates<'t>(
 
 fn linear_compute_candidates(
     ctx: &dyn Context,
-    branches: &Vec<Vec<Vec<Query>>>,
+    branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
 ) -> anyhow::Result<BTreeMap<u64, RoaringBitmap>>
 {
-    fn compute_candidate_rank(branches: &Vec<Vec<Vec<Query>>>, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
+    fn compute_candidate_rank(branches: &FlattenedQueryTree, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
         let mut min_rank = u64::max_value();
         for branch in branches {
 
@@ -659,10 +650,10 @@ fn linear_compute_candidates(
 }
 
 // TODO can we keep refs of Query
-fn flatten_query_tree(query_tree: &Operation) -> Vec<Vec<Vec<Query>>> {
+fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
     use crate::search::criteria::Operation::{And, Or, Consecutive};
 
-    fn and_recurse(head: &Operation, tail: &[Operation]) -> Vec<Vec<Vec<Query>>> {
+    fn and_recurse(head: &Operation, tail: &[Operation]) -> FlattenedQueryTree {
         match tail.split_first() {
             Some((thead, tail)) => {
                 let tail = and_recurse(thead, tail);
@@ -680,7 +671,7 @@ fn flatten_query_tree(query_tree: &Operation) -> Vec<Vec<Vec<Query>>> {
         }
     }
 
-    fn recurse(op: &Operation) -> Vec<Vec<Vec<Query>>> {
+    fn recurse(op: &Operation) -> FlattenedQueryTree {
         match op {
             And(ops) | Consecutive(ops) => {
                 ops.split_first().map_or_else(Vec::new, |(h, t)| and_recurse(h, t))

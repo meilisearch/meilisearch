@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use log::debug;
 use roaring::RoaringBitmap;
 
@@ -41,18 +39,14 @@ impl<'t> Final<'t> {
             };
 
             match self.parent.next(&mut criterion_parameters)? {
-                Some(CriterionResult { query_tree, candidates, mut bucket_candidates }) => {
-                    let candidates = match candidates {
-                        Some(candidates) => candidates,
-                        None => {
-                            let candidates = match query_tree.as_ref() {
-                                Some(qt) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), &mut self.wdcache)?,
-                                None => self.ctx.documents_ids()?,
-                            };
-                            bucket_candidates |= &candidates;
-                            candidates
-                        }
+                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                    let candidates = match (candidates, query_tree.as_ref()) {
+                        (Some(candidates), _) => candidates,
+                        (None, Some(qt)) => resolve_query_tree(self.ctx, qt, &mut self.wdcache)?,
+                        (None, None) => self.ctx.documents_ids()?,
                     };
+
+                    let bucket_candidates = bucket_candidates.unwrap_or_else(|| candidates.clone());
 
                     self.returned_candidates |= &candidates;
 

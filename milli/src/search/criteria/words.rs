@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::mem::take;
 
 use log::debug;
@@ -11,9 +10,9 @@ pub struct Words<'t> {
     ctx: &'t dyn Context<'t>,
     query_trees: Vec<Operation>,
     candidates: Option<RoaringBitmap>,
-    bucket_candidates: RoaringBitmap,
+    bucket_candidates: Option<RoaringBitmap>,
     parent: Box<dyn Criterion + 't>,
-    candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
+    compute_candidates: bool,
 }
 
 impl<'t> Words<'t> {
@@ -22,9 +21,9 @@ impl<'t> Words<'t> {
             ctx,
             query_trees: Vec::default(),
             candidates: None,
-            bucket_candidates: RoaringBitmap::new(),
+            bucket_candidates: None,
             parent,
-            candidates_cache: HashMap::default(),
+            compute_candidates: false,
         }
     }
 }
@@ -40,54 +39,47 @@ impl<'t> Criterion for Words<'t> {
         loop {
             debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
 
-            match (self.query_trees.pop(), &mut self.candidates) {
-                (query_tree, Some(candidates)) if candidates.is_empty() => {
-                    self.query_trees = Vec::new();
-                    return Ok(Some(CriterionResult {
-                        query_tree,
-                        candidates: self.candidates.take(),
-                        bucket_candidates: take(&mut self.bucket_candidates),
-                    }));
-                },
-                (Some(qt), Some(candidates)) => {
-                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, params.wdcache)?;
-                    found_candidates.intersect_with(&candidates);
-                    candidates.difference_with(&found_candidates);
+            match self.query_trees.pop() {
+                Some(query_tree) => {
+                    let candidates = match self.candidates.as_mut() {
+                        Some(allowed_candidates) if self.compute_candidates => {
+                            let mut candidates = resolve_query_tree(self.ctx, &query_tree, params.wdcache)?;
+                            candidates &= &*allowed_candidates;
+                            *allowed_candidates -= &candidates;
+                            Some(candidates)
+                        },
+                        candidates => candidates.cloned(),
+                    };
+
+                    let bucket_candidates = match self.bucket_candidates.as_mut() {
+                        Some(bucket_candidates) => Some(take(bucket_candidates)),
+                        None => None,
+                    };
 
                     return Ok(Some(CriterionResult {
-                        query_tree: Some(qt),
-                        candidates: Some(found_candidates),
-                        bucket_candidates: take(&mut self.bucket_candidates),
+                        query_tree: Some(query_tree),
+                        candidates,
+                        bucket_candidates,
                     }));
                 },
-                (Some(qt), None) => {
-                    return Ok(Some(CriterionResult {
-                        query_tree: Some(qt),
-                        candidates: None,
-                        bucket_candidates: take(&mut self.bucket_candidates),
-                    }));
-                },
-                (None, Some(_)) => {
-                    let candidates = self.candidates.take();
-                    return Ok(Some(CriterionResult {
-                        query_tree: None,
-                        candidates: candidates.clone(),
-                        bucket_candidates: candidates.unwrap_or_default(),
-                    }));
-                },
-                (None, None) => {
+                None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
+                            self.query_trees = explode_query_tree(query_tree);
+                            self.candidates = candidates;
+                            self.compute_candidates = bucket_candidates.is_some();
+
+                            self.bucket_candidates = match (self.bucket_candidates.take(), bucket_candidates) {
+                                (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
+                                (self_bc, parent_bc) => self_bc.or(parent_bc),
+                            };
+                        },
+                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
-                                candidates: None,
+                                candidates,
                                 bucket_candidates,
                             }));
-                        },
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                            self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
-                            self.candidates = candidates;
-                            self.bucket_candidates.union_with(&bucket_candidates);
                         },
                         None => return Ok(None),
                     }

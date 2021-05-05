@@ -12,8 +12,8 @@ impl Initial {
     pub fn new(query_tree: Option<Operation>, mut candidates: Option<RoaringBitmap>) -> Initial {
         let answer = CriterionResult {
             query_tree,
-            candidates: candidates.clone(),
-            bucket_candidates: candidates.take().unwrap_or_default(),
+            candidates: candidates.take(),
+            bucket_candidates: None,
         };
         Initial { answer: Some(answer) }
     }
