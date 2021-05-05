@@ -16,10 +16,11 @@ use parking_lot::{Mutex, MutexGuard};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use futures::StreamExt;
 
 use super::UpdateMeta;
 use crate::helpers::EnvSizer;
-use crate::index_controller::{IndexActorHandle, updates::*};
+use crate::index_controller::{IndexActorHandle, updates::*, index_actor::CONCURRENT_INDEX_MSG};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -519,7 +520,12 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn dump(&self, uuids: &HashSet<(String, Uuid)>, path: PathBuf) -> anyhow::Result<()> {
+    pub fn dump(
+        &self,
+        uuids: &HashSet<(String, Uuid)>,
+        path: PathBuf,
+        handle: impl IndexActorHandle
+        ) -> anyhow::Result<()> {
         use std::io::prelude::*;
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
@@ -555,7 +561,21 @@ impl UpdateStore {
             }
         }
 
-        Ok(())
+
+        // Perform the dump of each index concurently. Only a third of the capabilities of
+        // the index actor at a time not to put too much pressure on the index actor
+        let path = &path;
+
+        let mut stream = futures::stream::iter(uuids.iter())
+            .map(|(uid, uuid)| handle.dump(uid.clone(), *uuid, path.clone()))
+            .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+
+        Handle::current().block_on(async {
+            while let Some(res) = stream.next().await {
+                res?;
+            }
+            Ok(())
+        })
     }
 
     pub fn get_info(&self) -> anyhow::Result<UpdateStoreInfo> {

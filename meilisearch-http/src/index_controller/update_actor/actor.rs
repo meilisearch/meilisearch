@@ -239,28 +239,12 @@ where
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            update_store.dump(&uuids, path.to_path_buf())?;
-
-            // Perform the dump of each index concurently. Only a third of the capabilities of
-            // the index actor at a time not to put too much pressure on the index actor
-            let path = &path;
-            let handle = &index_handle;
-
-            let mut stream = futures::stream::iter(uuids.iter())
-                .map(|(uid, uuid)| handle.dump(uid.clone(), *uuid, path.clone()))
-                .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
-
-            Handle::current().block_on(async {
-                while let Some(res) = stream.next().await {
-                    res?;
-                }
-                Ok(())
-            })
+            update_store.dump(&uuids, path.to_path_buf(), index_handle)?;
+            Ok(())
         })
         .await
-        .map_err(|e| UpdateError::Error(e.into()))?
-        .map_err(|e| UpdateError::Error(e.into()))?;
-
+            .map_err(|e| UpdateError::Error(e.into()))?
+            .map_err(|e| UpdateError::Error(e.into()))?;
         Ok(())
     }
 
