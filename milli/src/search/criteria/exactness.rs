@@ -51,7 +51,7 @@ impl<'t> Criterion for Exactness<'t> {
         }
 
         loop {
-            debug!("Exactness for query {:?} at state {:?}", self.query, self.state);
+            debug!("Exactness at state {:?}", self.state);
 
             match self.state.as_mut() {
                 Some(state) if state.is_empty() => {
@@ -296,27 +296,12 @@ fn attribute_start_with_docids(ctx: &dyn Context, attribute_id: u32, query: &[Ex
     Ok(attribute_candidates_array)
 }
 
-fn intersection_of(mut to_intersect: Vec<&RoaringBitmap>) -> RoaringBitmap {
-    match to_intersect.len() {
-        0 => RoaringBitmap::new(),
-        1 => to_intersect[0].clone(),
-        2 => to_intersect[0] & to_intersect[1],
-        _ => {
-            to_intersect.sort_unstable_by(|a, b| a.len().cmp(&b.len()).reverse());
-
-            match to_intersect.pop() {
-                None => RoaringBitmap::new(),
-                Some(candidates)  => {
-                    let mut candidates = candidates.clone();
-                    while let Some(bitmap) = to_intersect.pop() {
-                        if candidates.is_empty() { break; }
-                        candidates &= bitmap;
-                    }
-
-                    candidates
-                },
-            }
-        }
+fn intersection_of(mut rbs: Vec<&RoaringBitmap>) -> RoaringBitmap {
+    rbs.sort_unstable_by_key(|rb| rb.len());
+    let mut iter = rbs.into_iter();
+    match iter.next() {
+        Some(first) => iter.fold(first.clone(), |acc, rb| acc & rb),
+        None => RoaringBitmap::new(),
     }
 }
 

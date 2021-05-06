@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use crate::{FieldId, TreeLevel, search::{word_derivations, WordDerivationsCache}};
 use crate::{Index, DocumentId};
 
-use super::query_tree::{Operation, PrimitiveQuery, PrimitiveQueryPart, Query, QueryKind};
+use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use self::asc_desc::AscDesc;
 use self::attribute::Attribute;
 use self::exactness::Exactness;
@@ -188,7 +188,7 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         }
     }
 
-    fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>> {
+    fn field_id_len_docids(&self, _field_id: FieldId, _len: u32) -> heed::Result<Option<RoaringBitmap>> {
         Ok(None)
     }
 
@@ -226,7 +226,6 @@ impl<'t> CriteriaBuilder<'t> {
                 Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
                 Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?),
                 Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?),
-                _otherwise => criterion,
             };
         }
 
@@ -486,7 +485,7 @@ pub mod test {
             todo!()
         }
 
-        fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>> {
+        fn synonyms(&self, _word: &str) -> heed::Result<Option<Vec<Vec<String>>>> {
             todo!()
         }
 
@@ -494,11 +493,11 @@ pub mod test {
             todo!()
         }
 
-        fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
+        fn word_level_position_docids(&self, _word: &str, _level: TreeLevel, _left: u32, _right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
             todo!()
         }
 
-        fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>> {
+        fn field_id_len_docids(&self, _field_id: FieldId, _len: u32) -> heed::Result<Option<RoaringBitmap>> {
             todo!()
         }
     }
