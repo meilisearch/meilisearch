@@ -333,16 +333,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
                 // Get write txn to wait for ongoing write transaction before dump.
                 let txn = index.write_txn()?;
-                let documents_ids = index.documents_ids(&txn)?;
-                // TODO: TAMO: calling this function here can consume **a lot** of RAM, we should
-                // use some kind of iterators -> waiting for a milli release
-                let documents = index.documents(&txn, documents_ids)?;
-
                 let fields_ids_map = index.fields_ids_map(&txn)?;
                 // we want to save **all** the fields in the dump.
                 let fields_to_dump: Vec<u8> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-                for (_doc_id, document) in documents {
+                for document in index.all_documents(&txn)? {
+                    let (_doc_id, document) = document?;
                     let json = milli::obkv_to_json(&fields_to_dump, &fields_ids_map, document)?;
                     file.write_all(serde_json::to_string(&json)?.as_bytes())?;
                     file.write_all(b"\n")?;
