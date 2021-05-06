@@ -250,21 +250,31 @@ impl UpdateStore {
             .get(txn, &NextIdKey::Global)?
             .map(U64::get)
             .unwrap_or_default();
+
+        self.next_update_id
+            .put(txn, &NextIdKey::Global, &BEU64::new(global_id + 1))?;
+
+        let update_id = self.next_update_id_raw(txn, index_uuid)?;
+
+        Ok((global_id, update_id))
+    }
+
+    /// Returns the next next update id for a given `index_uuid` without
+    /// incrementing the global update id. This is useful for the dumps.
+    fn next_update_id_raw(&self, txn: &mut heed::RwTxn, index_uuid: Uuid) -> heed::Result<u64> {
         let update_id = self
             .next_update_id
             .get(txn, &NextIdKey::Index(index_uuid))?
             .map(U64::get)
             .unwrap_or_default();
 
-        self.next_update_id
-            .put(txn, &NextIdKey::Global, &BEU64::new(global_id + 1))?;
         self.next_update_id.put(
             txn,
             &NextIdKey::Index(index_uuid),
             &BEU64::new(update_id + 1),
         )?;
 
-        Ok((global_id, update_id))
+        Ok(update_id)
     }
 
     /// Registers the update content in the pending store and the meta
@@ -291,17 +301,27 @@ impl UpdateStore {
         Ok(meta)
     }
 
-    /// Push already processed updates in the UpdateStore. This is useful for the dumps
-    pub fn register_already_processed_update (
+    /// Push already processed update in the UpdateStore without triggering the notification
+    /// process. This is useful for the dumps.
+    pub fn register_raw_updates (
         &self,
-        result: UpdateStatus,
+        wtxn: &mut heed::RwTxn,
+        update: UpdateStatus,
         index_uuid: Uuid,
     ) -> heed::Result<()> {
-        // TODO: TAMO: load already processed updates
-        let mut wtxn = self.env.write_txn()?;
-        let (_global_id, update_id) = self.next_update_id(&mut wtxn, index_uuid)?;
-        self.updates.remap_key_type::<UpdateKeyCodec>().put(&mut wtxn, &(index_uuid, update_id), &result)?;
-        wtxn.commit()
+        // TODO: TAMO: since I don't want to store anything I currently generate a new global ID
+        // everytime I encounter an enqueued update, can we do better?
+        match update {
+            UpdateStatus::Enqueued(enqueued) => {
+                let (global_id, update_id) = self.next_update_id(wtxn, index_uuid)?;
+                self.pending_queue.remap_key_type::<PendingKeyCodec>().put(wtxn, &(global_id, index_uuid, update_id), &enqueued)?;
+            }
+            _ => {
+                let update_id = self.next_update_id_raw(wtxn, index_uuid)?;
+                self.updates.remap_key_type::<UpdateKeyCodec>().put(wtxn, &(index_uuid, update_id), &update)?;
+            }
+        }
+        Ok(())
     }
 
     /// Executes the user provided function on the next pending update (the one with the lowest id).
@@ -542,9 +562,6 @@ impl UpdateStore {
             }
         }
 
-        // TODO: TAMO: the updates
-        // already processed updates seems to works, but I've not tried with currently running updates
-
         let update_files_path = path.join("update_files");
         create_dir_all(&update_files_path)?;
 
@@ -560,7 +577,6 @@ impl UpdateStore {
                 }
             }
         }
-
 
         // Perform the dump of each index concurently. Only a third of the capabilities of
         // the index actor at a time not to put too much pressure on the index actor

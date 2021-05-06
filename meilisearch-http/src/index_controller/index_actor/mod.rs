@@ -31,7 +31,7 @@ pub type IndexResult<T> = std::result::Result<T, IndexError>;
 pub struct IndexMeta {
     created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    primary_key: Option<String>,
+    pub primary_key: Option<String>,
 }
 
 impl IndexMeta {

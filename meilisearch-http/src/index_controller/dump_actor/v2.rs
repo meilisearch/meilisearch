@@ -1,5 +1,5 @@
 use heed::EnvOpenOptions;
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::{update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
 use crate::index::Index;
 use crate::index_controller::Settings;
 use std::{fs::File, path::Path, sync::Arc};
@@ -14,7 +14,7 @@ fn import_settings(dir_path: &Path) -> anyhow::Result<Settings> {
     Ok(metadata)
 }
 
-pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
+pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
     std::fs::create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
@@ -26,17 +26,21 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     let update_builder = UpdateBuilder::new(0);
     index.update_settings(&settings, update_builder)?;
 
+    // import the documents in the index
     let update_builder = UpdateBuilder::new(1);
     let file = File::open(&dump_path.join("documents.jsonl"))?;
     let reader = std::io::BufReader::new(file);
 
-    index.update_documents(
+    // TODO: TAMO: currently we ignore any error caused by the importation of the documents because
+    // if there is no documents nor primary key it'll throw an anyhow error, but we must remove
+    // this before the merge on main
+    let _ = index.update_documents(
         UpdateFormat::JsonStream,
         IndexDocumentsMethod::ReplaceDocuments,
         Some(reader),
         update_builder,
-        None,
-    )?;
+        primary_key,
+    );
 
     // the last step: we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)

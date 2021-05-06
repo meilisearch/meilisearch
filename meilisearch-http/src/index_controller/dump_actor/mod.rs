@@ -59,10 +59,11 @@ impl DumpVersion {
         size: usize,
         dump_path: &Path,
         index_path: &Path,
+        primary_key: Option<&str>,
     ) -> anyhow::Result<()> {
         match self {
-            Self::V1 => v1::import_index(size, dump_path, index_path),
-            Self::V2 => v2::import_index(size, dump_path, index_path),
+            Self::V1 => v1::import_index(size, dump_path, index_path, primary_key),
+            Self::V2 => v2::import_index(size, dump_path, index_path, primary_key),
         }
     }
 }
@@ -206,7 +207,26 @@ pub fn load_dump(
         // this cannot fail since we created all the missing uuid in the previous loop
         let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
-        // let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
+        // let update_path = db_path.join(&format!("updates"));
+
+        info!("importing the updates");
+        use crate::index_controller::update_actor::UpdateStore;
+        use std::io::BufRead;
+
+        let update_path = db_path.join("updates");
+        let options = EnvOpenOptions::new();
+        // create an UpdateStore to import the updates
+        std::fs::create_dir_all(&update_path)?;
+        let (update_store, _) = UpdateStore::create(options, update_path)?;
+        let file = File::open(&dump_path.join("updates.jsonl"))?;
+        let reader = std::io::BufReader::new(file);
+
+        let mut wtxn = update_store.env.write_txn()?;
+        for update in reader.lines() {
+            let update = serde_json::from_str(&update?)?;
+            update_store.register_raw_updates(&mut wtxn, update, uuid)?;
+        }
+        wtxn.commit()?;
 
         info!(
             "Importing dump from {} into {}...",
@@ -215,10 +235,11 @@ pub fn load_dump(
         );
         metadata
             .dump_version
-            .import_index(size, &dump_path, &index_path)
+            .import_index(size, &dump_path, &index_path, idx.meta.primary_key.as_ref().map(|s| s.as_ref()))
             .unwrap();
         info!("Dump importation from {} succeed", dump_path.display());
     }
+
 
     info!("Dump importation from {} succeed", dump_path.display());
     Ok(())

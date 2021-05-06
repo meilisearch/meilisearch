@@ -78,7 +78,7 @@ fn import_settings(dir_path: &Path) -> anyhow::Result<Settings> {
 }
 
 
-pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
+pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
     info!("Importing a dump from an old version of meilisearch with dump version 1");
 
     std::fs::create_dir_all(&index_path)?;
@@ -102,7 +102,7 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
         IndexDocumentsMethod::ReplaceDocuments,
         Some(reader),
         update_builder,
-        None,
+        primary_key,
     )?;
 
     // at this point we should handle the updates, but since the update logic is not handled in
