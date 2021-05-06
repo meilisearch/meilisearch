@@ -47,6 +47,10 @@ pub struct Transform<'t, 'i> {
     pub autogenerate_docids: bool,
 }
 
+fn is_primary_key(field: impl AsRef<str>) -> bool {
+    field.as_ref().to_lowercase().contains(DEFAULT_PRIMARY_KEY_NAME)
+}
+
 impl Transform<'_, '_> {
     pub fn output_from_json<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
     where
@@ -92,7 +96,7 @@ impl Transform<'_, '_> {
         // We extract the primary key from the first document in
         // the batch if it hasn't already been defined in the index
         let first = documents.peek().and_then(|r| r.as_ref().ok());
-        let alternative_name = first.and_then(|doc| doc.keys().find(|k| k.contains(DEFAULT_PRIMARY_KEY_NAME)).cloned());
+        let alternative_name = first.and_then(|doc| doc.keys().find(|f| is_primary_key(f)).cloned());
         let (primary_key_id, primary_key) = compute_primary_key_pair(
             self.index.primary_key(self.rtxn)?,
             &mut fields_ids_map,
@@ -232,7 +236,7 @@ impl Transform<'_, '_> {
                // The primary key is known so we must find the position in the CSV headers.
                headers.iter().position(|h| h == primary_key)
             },
-            None => headers.iter().position(|h| h.contains("id")),
+            None => headers.iter().position(|f| is_primary_key(&f)),
         };
 
         // Returns the field id in the fields ids map, create an "id" field

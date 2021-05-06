@@ -329,7 +329,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut reader = BufReader::new(reader);
         reader.fill_buf()?;
 
-        // Early return when there are no document to add
+        // Early return when there is no document to add
         if reader.buffer().is_empty() {
             return Ok(DocumentAdditionResult {
                 nb_documents: 0,
