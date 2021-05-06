@@ -423,6 +423,7 @@ mod test {
 
         let all_formatted = Vec::new();
         let to_highlight_ids = HashSet::new();
+        let to_crop_ids = HashSet::new();
 
         let matching_words = MatchingWords::default();
 
@@ -433,8 +434,8 @@ mod test {
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
-        )
-        .unwrap();
+            &to_crop_ids,
+        ).unwrap();
 
         assert!(value.is_empty());
     }
@@ -458,6 +459,7 @@ mod test {
 
         let all_formatted = vec![id];
         let to_highlight_ids = HashSet::new();
+        let to_crop_ids = HashSet::new();
 
         let matching_words = MatchingWords::default();
 
@@ -468,8 +470,8 @@ mod test {
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
-        )
-        .unwrap();
+            &to_crop_ids,
+        ).unwrap();
 
         assert_eq!(value["test"], "hello");
     }
@@ -493,6 +495,7 @@ mod test {
 
         let all_formatted = vec![id];
         let to_highlight_ids = HashSet::from_iter(Some(id));
+        let to_crop_ids = HashSet::new();
 
         let matching_words = HashSet::from_iter(Some(String::from("hello")));
 
@@ -503,8 +506,8 @@ mod test {
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
-        )
-        .unwrap();
+            &to_crop_ids,
+        ).unwrap();
 
         assert_eq!(value["test"], "<em>hello</em>");
     }
