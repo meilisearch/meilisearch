@@ -168,6 +168,7 @@ impl Index {
                 &matching_words,
                 all_formatted.as_ref().as_slice(),
                 &to_highlight_ids,
+                &to_crop_ids,
             )?;
             let hit = SearchHit {
                 document,
@@ -241,8 +242,14 @@ fn compute_formatted<A: AsRef<[u8]>>(
         if let Some(value) = obkv.get(*field) {
             let mut value: Value = serde_json::from_slice(value)?;
 
+            let need_to_crop = if to_crop_fields.contains(field) {
+                Some(200) // TO CHANGE
+            } else {
+                None
+            };
+
             if to_highlight_fields.contains(field) {
-                value = highlighter.format_value(value, matching_words, to_highlight_fields.contains(field));
+                value = highlighter.format_value(value, matching_words, need_to_crop, to_highlight_fields.contains(field));
             }
 
             // This unwrap must be safe since we got the ids from the fields_ids_map just
@@ -313,7 +320,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.format_value(value, matcher, None, need_to_highlight)))
+                    .map(|(k, v)| (k, self.format_value(v, matcher, None, need_to_highlight)))
                     .collect(),
             ),
             value => value,
