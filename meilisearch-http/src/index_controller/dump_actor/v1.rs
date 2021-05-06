@@ -51,7 +51,7 @@ impl From<Settings> for index_controller::Settings {
                         warn!("The criteria `words` and `wordsPosition` have been merged into a single criterion `words` so `wordsPositon` will be ignored");
                         Some(String::from("words"))
                     }
-                    "attribute" | "exactness" => {
+                    "exactness" => {
                         error!("The criterion `{}` is not implemented currently and thus will be ignored", criterion);
                         None
                     }
@@ -97,13 +97,14 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_ke
     let file = File::open(&dump_path.join("documents.jsonl"))?;
     let reader = std::io::BufReader::new(file);
 
-    index.update_documents(
+    // TODO: TAMO: waiting for milli. We should use the result
+    let _ = index.update_documents(
         UpdateFormat::JsonStream,
         IndexDocumentsMethod::ReplaceDocuments,
         Some(reader),
         update_builder,
         primary_key,
-    )?;
+    );
 
     // at this point we should handle the updates, but since the update logic is not handled in
     // meilisearch we are just going to ignore this part
