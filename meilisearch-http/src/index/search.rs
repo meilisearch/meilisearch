@@ -308,7 +308,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         ) -> Value {
         match value {
             Value::String(old_string) => {
-                let value = self.format_string(old_string, need_to_crop, need_to_highlight);
+                let value = self.format_string(old_string, matcher, need_to_crop, need_to_highlight);
                 Value::String(value)
             }
             Value::Array(values) => Value::Array(
@@ -326,19 +326,28 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             value => value,
         }
     }
-    fn format_string(&self, s: String, need_to_crop: Option<u32>, need_to_highlight: bool) -> String {
+    fn format_string(&self, s: String, matcher: &impl Matcher, need_to_crop: Option<u32>, need_to_highlight: bool) -> String {
+        let analyzed = self.analyzer.analyze(&s);
         let word_iter: Box<dyn Iterator<Item = (String, bool)>> = if let Some(_crop_len) = need_to_crop {
             // cropping iterator
             todo!()
         } else {
-            // normal Iterator
-            todo!()
+            Box::new(analyzed.reconstruct().map(|(word, token)| {
+                if token.is_word() && matcher.matches(token.text()){
+                    (word.to_string(), true)
+                } else {
+                    (word.to_string(), false)
+                }
+            }))
         };
 
         word_iter.map(|(word, is_match)| {
             if need_to_highlight && is_match {
-                // highlight word
-                todo!()
+                let mut new_word = String::new();
+                new_word.push_str(&self.marks.0);
+                new_word.push_str(&word);
+                new_word.push_str(&self.marks.1);
+                new_word
             } else {
                 word
             }
