@@ -65,6 +65,16 @@ impl FieldsIdsMap {
     pub fn iter(&self) -> impl Iterator<Item=(FieldId, &str)> {
         self.ids_names.iter().map(|(id, name)| (*id, name.as_str()))
     }
+
+    /// Iterate over the ids in the order of the ids.
+    pub fn ids<'a>(&'a self) -> impl Iterator<Item=FieldId> + 'a {
+        self.ids_names.keys().copied()
+    }
+
+    /// Iterate over the names in the order of the ids.
+    pub fn names(&self) -> impl Iterator<Item=&str> {
+        self.ids_names.values().map(AsRef::as_ref)
+    }
 }
 
 impl Default for FieldsIdsMap {

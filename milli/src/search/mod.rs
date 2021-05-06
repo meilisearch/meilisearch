@@ -97,7 +97,7 @@ impl<'a> Search<'a> {
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         // We create the query tree by spliting the query into tokens.
         let before = Instant::now();
-        let query_tree = match self.query.as_ref() {
+        let (query_tree, primitive_query) = match self.query.as_ref() {
             Some(query) => {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
@@ -113,9 +113,9 @@ impl<'a> Search<'a> {
                 let analyzer = Analyzer::new(config);
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
-                builder.build(tokens)?
+                builder.build(tokens)?.map_or((None, None), |(qt, pq)| (Some(qt), Some(pq)))
             },
-            None => None,
+            None => (None, None),
         };
 
         debug!("query tree: {:?} took {:.02?}", query_tree, before.elapsed());
@@ -135,7 +135,7 @@ impl<'a> Search<'a> {
         };
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let criteria = criteria_builder.build(query_tree, facet_candidates)?;
+        let criteria = criteria_builder.build(query_tree, primitive_query, facet_candidates)?;
 
         match self.index.distinct_attribute(self.rtxn)? {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
