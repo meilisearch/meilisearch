@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use crate::index_controller;
+use crate::index::{deserialize_wildcard, deserialize_some};
 use super::*;
 
 /// This is the settings used in the last version of meilisearch exporting dump in V1
@@ -13,10 +14,10 @@ struct Settings {
     pub ranking_rules: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub distinct_attribute: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
+    #[serde(default, deserialize_with = "deserialize_wildcard")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub displayed_attributes: Option<Option<BTreeSet<String>>>,
+    #[serde(default, deserialize_with = "deserialize_wildcard")]
+    pub displayed_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub stop_words: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]

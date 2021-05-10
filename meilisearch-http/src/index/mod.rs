@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Facets, Settings, Checked, Unchecked};
+use serde::{de::Deserializer, Deserialize};
 
 mod search;
 mod updates;
@@ -24,6 +25,22 @@ impl Deref for Index {
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
     }
+}
+
+pub fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
+}
+
+pub fn deserialize_wildcard<'de, D>(deserializer: D) -> Result<Option<Option<Vec<String>>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(<Option<Vec<String>> as Deserialize>::deserialize(deserializer)?
+        .map(|item: Vec<String>| (!item.iter().any(|s| s == "*")).then(|| item)))
 }
 
 impl Index {
@@ -87,6 +104,8 @@ impl Index {
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
         let mut documents = Vec::new();
+
+        println!("fields to display: {:?}", fields_to_display);
 
         for entry in iter {
             let (_id, obkv) = entry?;

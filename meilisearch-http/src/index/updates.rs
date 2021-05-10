@@ -5,11 +5,17 @@ use std::marker::PhantomData;
 
 use flate2::read::GzDecoder;
 use log::info;
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use serde::{Deserialize, Serialize};
 
-use super::Index;
-use crate::index_controller::UpdateResult;
+use super::{deserialize_some, deserialize_wildcard, Index};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateResult {
+    DocumentsAddition(DocumentAdditionResult),
+    DocumentDeletion { deleted: u64 },
+    Other,
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct Checked;
@@ -22,14 +28,14 @@ pub struct Unchecked;
 pub struct Settings<T> {
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
+        deserialize_with = "deserialize_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub displayed_attributes: Option<Option<Vec<String>>>,
 
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
+        deserialize_with = "deserialize_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,
@@ -116,14 +122,6 @@ impl Settings<Unchecked> {
 pub struct Facets {
     pub level_group_size: Option<NonZeroUsize>,
     pub min_level_size: Option<NonZeroUsize>,
-}
-
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
 }
 
 impl Index {

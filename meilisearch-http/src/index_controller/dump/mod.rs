@@ -19,14 +19,6 @@ use crate::index::Index;
 use crate::index_controller::uuid_resolver;
 use crate::{helpers::compression, index::Settings};
 
-pub (super) fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
-}
-
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 enum DumpVersion {
     V1,
