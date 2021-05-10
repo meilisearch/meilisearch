@@ -1,11 +1,11 @@
 use heed::EnvOpenOptions;
 use milli::{update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
-use crate::index::Index;
+use crate::index::{Checked, Index};
 use crate::index_controller::Settings;
 use std::{fs::File, path::Path, sync::Arc};
 
 /// Extract Settings from `settings.json` file present at provided `dir_path`
-fn import_settings(dir_path: &Path) -> anyhow::Result<Settings> {
+fn import_settings(dir_path: &Path) -> anyhow::Result<Settings<Checked>> {
     let path = dir_path.join("settings.json");
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);

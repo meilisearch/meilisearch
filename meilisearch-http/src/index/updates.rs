@@ -8,8 +8,9 @@ use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 
-use super::{deserialize_some, Index};
 use crate::index_controller::UpdateResult;
+
+use super::{deserialize_some, Index};
 
 
 #[derive(Clone, Default, Debug)]
@@ -35,7 +36,11 @@ pub struct Settings<T> {
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,
 
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub attributes_for_faceting: Option<Option<HashMap<String, String>>>,
 
     #[serde(

@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::{BTreeMap, BTreeSet}, marker::PhantomData};
 
 use log::warn;
 use serde::{Deserialize, Serialize};
-use crate::index_controller;
+use crate::{index::Unchecked, index_controller};
 use crate::index::deserialize_some;
 use super::*;
 
@@ -27,7 +27,7 @@ struct Settings {
 }
 
 /// we need to **always** be able to convert the old settings to the settings currently being used
-impl From<Settings> for index_controller::Settings {
+impl From<Settings> for index_controller::Settings<Unchecked> {
     fn from(settings: Settings) -> Self {
         if settings.synonyms.flatten().is_some() {
             error!("`synonyms` are not yet implemented and thus will be ignored");
@@ -63,6 +63,7 @@ impl From<Settings> for index_controller::Settings {
                 }).collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             stop_words: settings.stop_words.map(|o| o.map(|vec| vec.into_iter().collect())),
+            _kind: PhantomData,
         }
     }
 }
@@ -89,9 +90,9 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_ke
 
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
-    let settings: index_controller::Settings = settings.into();
+    let settings: index_controller::Settings<Unchecked> = settings.into();
     let update_builder = UpdateBuilder::new(0);
-    index.update_settings(&settings, update_builder)?;
+    index.update_settings(&settings.check(), update_builder)?;
 
     let update_builder = UpdateBuilder::new(1);
     let file = File::open(&dump_path.join("documents.jsonl"))?;

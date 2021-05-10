@@ -244,9 +244,6 @@ pub fn load_dump(
 
     // finally we can move all the unprocessed update file into our new DB
     let update_path = tmp_dir_path.join("update_files");
-    let files: Vec<_> = std::fs::read_dir(&db_path.join("updates"))?
-        .map(|file| file.unwrap().path())
-        .collect();
     let db_update_path = db_path.join("updates/update_files");
     eprintln!("path {:?} exists: {:?}", update_path, update_path.exists());
     eprintln!(

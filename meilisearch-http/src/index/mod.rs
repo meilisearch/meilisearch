@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, Checked, Unchecked, UpdateResult};
+pub use updates::{Facets, Settings, Checked, Unchecked};
 use serde::{de::Deserializer, Deserialize};
 
 mod search;
