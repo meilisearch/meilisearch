@@ -312,7 +312,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_dump(&self, uuid: Uuid, mut path: PathBuf) -> Result<()> {
+    async fn handle_dump(&self, uuid: Uuid, mut path: PathBuf) -> IndexResult<()> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
@@ -340,7 +340,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+    async fn handle_get_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
         let index = self
             .store
             .get(uuid)

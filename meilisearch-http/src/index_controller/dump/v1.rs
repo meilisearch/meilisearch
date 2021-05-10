@@ -29,13 +29,11 @@ struct Settings {
 /// we need to **always** be able to convert the old settings to the settings currently being used
 impl From<Settings> for index_controller::Settings {
     fn from(settings: Settings) -> Self {
-        if settings.distinct_attribute.flatten().is_some() {
-            error!("`distinct_attribute` are not yet implemented and thus will be ignored");
-        }
         if settings.synonyms.flatten().is_some() {
             error!("`synonyms` are not yet implemented and thus will be ignored");
         }
         Self {
+            distinct_attribute: settings.distinct_attribute,
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             displayed_attributes: settings.displayed_attributes.map(|o| o.map(|vec| vec.into_iter().collect())),
             searchable_attributes: settings.searchable_attributes,
@@ -109,7 +107,7 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     index.update_documents(
         UpdateFormat::JsonStream,
         IndexDocumentsMethod::ReplaceDocuments,
-        reader,
+        Some(reader),
         update_builder,
         None,
     )?;

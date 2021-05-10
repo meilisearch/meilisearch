@@ -85,7 +85,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
         self.store.snapshot(path).await
     }
 
-    async fn handle_dump(&self, path: PathBuf) -> Result<Vec<Uuid>> {
+    async fn handle_dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         self.store.dump(path).await
     }
 

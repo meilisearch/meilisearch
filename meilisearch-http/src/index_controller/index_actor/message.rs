@@ -63,7 +63,7 @@ pub enum IndexMsg {
     Dump {
         uuid: Uuid,
         path: PathBuf,
-        ret: oneshot::Sender<Result<()>>,
+        ret: oneshot::Sender<IndexResult<()>>,
     },
     GetStats {
         uuid: Uuid,

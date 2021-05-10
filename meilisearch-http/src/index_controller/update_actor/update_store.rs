@@ -499,31 +499,37 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn dump(
-        &self,
-        txn: &mut heed::RwTxn,
-        path: impl AsRef<Path>,
-        uuid: Uuid,
-    ) -> anyhow::Result<()> {
+    pub fn dump(&self, uuids: &HashSet<Uuid>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let state_lock = self.state.write();
+        state_lock.swap(State::Snapshoting); // TODO: rename the state
+
+        let txn = self.env.write_txn()?;
+
         let update_path = path.as_ref().join("updates");
         create_dir_all(&update_path)?;
 
-        let mut dump_path = update_path.join(format!("update-{}", uuid));
         // acquire write lock to prevent further writes during dump
-        create_dir_all(&dump_path)?;
-        dump_path.push("data.mdb");
+        create_dir_all(&update_path)?;
+        let db_path = update_path.join("data.mdb");
 
+        // TODO: everything
         // create db dump
-        self.env.copy_to_path(&dump_path, CompactionOption::Enabled)?;
+        self.env.copy_to_path(&db_path, CompactionOption::Enabled)?;
 
         let update_files_path = update_path.join("update_files");
         create_dir_all(&update_files_path)?;
 
-        for path in self.pending.iter(&txn)? {
-            let (_, path) = path?;
-            let name = path.file_name().unwrap();
-            let to = update_files_path.join(name);
-            copy(path, to)?;
+        let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
+
+        for entry in pendings {
+            let ((_, uuid, _), pending) = entry?;
+            if uuids.contains(&uuid) {
+                if let Some(path) = pending.decode()?.content_path() {
+                    let name = path.file_name().unwrap();
+                    let to = update_files_path.join(name);
+                    copy(path, to)?;
+                }
+            }
         }
 
         Ok(())
@@ -538,25 +544,6 @@ impl UpdateStore {
                 size += File::open(path)?.metadata()?.len();
             }
         }
-        let processing = match *self.state.read() {
-            State::Processing(uuid, _) => Some(uuid),
-            _ => None,
-        };
-
-        Ok(UpdateStoreInfo { size, processing })
-    }
-
-    pub fn get_size(&self, txn: &heed::RoTxn) -> anyhow::Result<u64> {
-        let mut size = self.env.size();
-        let txn = self.env.read_txn()?;
-
-        for entry in self.pending_queue.iter(&txn)? {
-            let (_, pending) = entry?;
-            if let Some(path) = pending.content_path() {
-                size += File::open(path)?.metadata()?.len();
-            }
-        }
-
         let processing = match *self.state.read() {
             State::Processing(uuid, _) => Some(uuid),
             _ => None,

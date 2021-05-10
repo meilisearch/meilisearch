@@ -9,8 +9,6 @@ use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-use tokio::fs;
-use tokio::task::spawn_blocking;
 
 use super::update_actor::UpdateActorHandle;
 use super::uuid_resolver::UuidResolverHandle;
@@ -109,6 +107,7 @@ where
     }
 
     async fn perform_dump(&self) -> anyhow::Result<()> {
+        /*
         info!("Performing dump.");
 
         let dump_dir = self.dump_path.clone();
@@ -144,6 +143,7 @@ where
         .await??;
 
         info!("Created dump in {:?}.", dump_path);
+        */
 
         Ok(())
     }

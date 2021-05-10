@@ -78,16 +78,9 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+    async fn dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::Dump { uuid, path, ret };
-        let _ = self.sender.send(msg).await;
-        receiver.await.expect("update actor killed.")
-    }
-
-    async fn get_size(&self, uuid: Uuid) -> Result<u64> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UpdateMsg::GetSize { uuid, ret };
+        let msg = UpdateMsg::Dump { uuids, path, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

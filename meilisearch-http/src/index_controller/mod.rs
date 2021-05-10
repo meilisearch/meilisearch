@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
 use anyhow::bail;
+use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
 use milli::FieldsDistribution;
@@ -21,6 +22,8 @@ use uuid_resolver::{UuidError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
+
+use self::dump::load_dump;
 
 mod index_actor;
 mod snapshot;

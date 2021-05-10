@@ -5,17 +5,12 @@ use std::marker::PhantomData;
 
 use flate2::read::GzDecoder;
 use log::info;
-use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 
 use super::{deserialize_some, deserialize_wildcard, Index};
+use crate::index_controller::UpdateResult;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: u64 },
-    Other,
-}
 
 #[derive(Clone, Default, Debug)]
 pub struct Checked;

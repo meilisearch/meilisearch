@@ -33,7 +33,7 @@ pub enum UuidResolveMsg {
     },
     DumpRequest {
         path: PathBuf,
-        ret: oneshot::Sender<Result<Vec<Uuid>>>,
+        ret: oneshot::Sender<Result<HashSet<Uuid>>>,
     },
     GetSize {
         ret: oneshot::Sender<Result<u64>>,

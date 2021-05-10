@@ -78,7 +78,7 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .expect("Uuid resolver actor has been killed")?)
     }
 
-    async fn dump(&self, path: PathBuf) -> Result<Vec<Uuid>> {
+    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::DumpRequest { path, ret };
         let _ = self.sender.send(msg).await;

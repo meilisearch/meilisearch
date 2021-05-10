@@ -34,7 +34,7 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     index.update_documents(
         UpdateFormat::JsonStream,
         IndexDocumentsMethod::ReplaceDocuments,
-        reader,
+        Some(reader),
         update_builder,
         None,
     )?;
