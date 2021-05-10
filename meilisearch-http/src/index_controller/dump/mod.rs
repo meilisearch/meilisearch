@@ -7,7 +7,7 @@ use anyhow::bail;
 use heed::EnvOpenOptions;
 use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use tokio::fs;
 use tokio::task::spawn_blocking;
@@ -159,7 +159,7 @@ fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> 
     Ok(())
 }
 
-pub async fn load_dump(
+pub fn load_dump(
     db_path: impl AsRef<Path>,
     dump_path: impl AsRef<Path>,
     size: usize,
@@ -167,7 +167,7 @@ pub async fn load_dump(
     info!("Importing dump from {}...", dump_path.as_ref().display());
     let db_path = db_path.as_ref();
     let dump_path = dump_path.as_ref();
-    let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&db_path)?;
+    let uuid_resolver = uuid_resolver::HeedUuidStore::new(&db_path)?;
 
     // extract the dump in a temporary directory
     let tmp_dir = TempDir::new()?;
@@ -178,7 +178,7 @@ pub async fn load_dump(
     let metadata = DumpMetadata::from_path(&tmp_dir_path)?;
 
     // remove indexes which have same `uuid` than indexes to import and create empty indexes
-    let existing_index_uids = uuid_resolver.list().await?;
+    let existing_index_uids = uuid_resolver.list()?;
 
     info!("Deleting indexes already present in the db and provided in the dump...");
     for idx in &metadata.indexes {
@@ -197,14 +197,15 @@ pub async fn load_dump(
             }
         } else {
             // if the index does not exist in the `uuid_resolver` we create it
-            uuid_resolver.create(idx.uid.clone()).await?;
+            uuid_resolver.create_uuid(idx.uid.clone(), false)?;
         }
     }
 
     // import each indexes content
     for idx in metadata.indexes {
         let dump_path = tmp_dir_path.join(&idx.uid);
-        let uuid = uuid_resolver.get(idx.uid).await?;
+        // this cannot fail since we created all the missing uuid in the previous loop
+        let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
         let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
 

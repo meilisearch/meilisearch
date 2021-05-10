@@ -17,7 +17,7 @@ struct Settings {
     #[serde(default, deserialize_with = "deserialize_wildcard")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_wildcard")]
-    pub displayed_attributes: Option<Option<Vec<String>>>,
+    pub displayed_attributes: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub stop_words: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -92,8 +92,13 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path) -> anyhow:
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
     dbg!(&settings);
-    let settings = settings.into();
-    dbg!(&settings);
+    let mut settings: index_controller::Settings = settings.into();
+    if settings.displayed_attributes.as_ref().map_or(false, |o| o.as_ref().map_or(false, |v| v.contains(&String::from("*")))) {
+        settings.displayed_attributes = None;
+    }
+    if settings.searchable_attributes.as_ref().map_or(false, |o| o.as_ref().map_or(false, |v| v.contains(&String::from("*")))) {
+        settings.searchable_attributes = None;
+    }
     let update_builder = UpdateBuilder::new(0);
     index.update_settings(&settings, update_builder)?;
 

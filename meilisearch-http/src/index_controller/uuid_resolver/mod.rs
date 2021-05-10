@@ -11,11 +11,12 @@ use uuid::Uuid;
 
 use actor::UuidResolverActor;
 use message::UuidResolveMsg;
-use store::{HeedUuidStore, UuidStore};
+use store::UuidStore;
 
 #[cfg(test)]
 use mockall::automock;
 
+pub use store::HeedUuidStore;
 pub use handle_impl::UuidResolverHandleImpl;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB

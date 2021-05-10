@@ -92,7 +92,7 @@ impl IndexController {
                 &options.db_path,
                 path,
                 index_size,
-            ).await?;
+            )?;
 
         }
 

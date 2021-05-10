@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, Checked, Unchecked};
+pub use updates::{Facets, Settings, Checked, Unchecked, UpdateResult};
 use serde::{de::Deserializer, Deserialize};
 
 mod search;
@@ -35,12 +35,13 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-pub fn deserialize_wildcard<'de, D>(deserializer: D) -> Result<Option<Option<Vec<String>>>, D::Error>
+pub fn deserialize_wildcard<'de, I, D>(deserializer: D) -> Result<Option<Option<I>>, D::Error>
 where
     D: Deserializer<'de>,
+    I: IntoIterator<Item = String> + Deserialize<'de> + Clone,
 {
-    Ok(<Option<Vec<String>> as Deserialize>::deserialize(deserializer)?
-        .map(|item: Vec<String>| (!item.iter().any(|s| s == "*")).then(|| item)))
+    Ok(<Option<I> as Deserialize>::deserialize(deserializer)?
+        .map(|item: I| (!item.clone().into_iter().any(|s| s == "*")).then(|| item)))
 }
 
 impl Index {
