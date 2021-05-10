@@ -73,7 +73,7 @@ fn import_updates(uuid: Uuid, dump_path: &Path, db_path: &Path) -> anyhow::Resul
         for update in reader.lines() {
             let mut update: UpdateStatus = serde_json::from_str(&update?)?;
             if let Some(path) = update.content_path_mut() {
-                *path = update_path.join("update_files").join(&path).into();
+                *path = update_path.join("update_files").join(&path);
             }
             update_store.register_raw_updates(&mut wtxn, update, uuid)?;
         }

@@ -86,7 +86,7 @@ pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, p
     std::fs::create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
-    let index = milli::Index::new(options.clone(), index_path)?;
+    let index = milli::Index::new(options, index_path)?;
     let index = Index(Arc::new(index));
 
     // extract `settings.json` file and import content
@@ -108,15 +108,15 @@ pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, p
         primary_key,
     );
 
-    // at this point we should handle the updates, but since the update logic is not handled in
-    // meilisearch we are just going to ignore this part
-
     // the last step: we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)
         .map_err(|_e| "[dumps] At this point no one is supposed to have a reference on the index")
         .unwrap()
         .prepare_for_closing()
         .wait();
+
+    // at this point we should handle the import of the updates, but since the update logic is not handled in
+    // meilisearch we are just going to ignore this part
 
     Ok(())
 }
