@@ -268,3 +268,42 @@ impl Index {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_setting_check() {
+        // test no changes
+        let settings = Settings {
+            displayed_attributes: Some(Some(vec![String::from("hello")])),
+            searchable_attributes: Some(Some(vec![String::from("hello")])),
+            attributes_for_faceting: None,
+            ranking_rules: None,
+            stop_words: None,
+            distinct_attribute: None,
+            _kind: PhantomData::<Unchecked>,
+        };
+
+        let checked = settings.clone().check();
+        assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
+        assert_eq!(settings.searchable_attributes, checked.searchable_attributes);
+
+        // test wildcard
+        // test no changes
+        let settings = Settings {
+            displayed_attributes: Some(Some(vec![String::from("*")])),
+            searchable_attributes: Some(Some(vec![String::from("hello"), String::from("*")])),
+            attributes_for_faceting: None,
+            ranking_rules: None,
+            stop_words: None,
+            distinct_attribute: None,
+            _kind: PhantomData::<Unchecked>,
+        };
+
+        let checked = settings.check();
+        assert_eq!(checked.displayed_attributes, Some(None));
+        assert_eq!(checked.searchable_attributes, Some(None));
+    }
+}
