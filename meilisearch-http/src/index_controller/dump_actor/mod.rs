@@ -1,33 +1,29 @@
+mod actor;
+mod handle_impl;
+mod message;
 mod v1;
 mod v2;
-mod handle_impl;
-mod actor;
-mod message;
 
-use std::{
-    fs::File,
-    path::Path,
-    sync::Arc,
-};
+use std::{fs::File, path::Path, sync::Arc};
 
-#[cfg(test)]
-use mockall::automock;
 use anyhow::bail;
-use thiserror::Error;
 use heed::EnvOpenOptions;
 use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+#[cfg(test)]
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::TempDir;
+use thiserror::Error;
 
 use super::IndexMetadata;
 use crate::helpers::compression;
 use crate::index::Index;
-use crate::index_controller::uuid_resolver;
+use crate::index_controller::{uuid_resolver, UpdateStatus};
 
-pub use handle_impl::*;
 pub use actor::DumpActor;
+pub use handle_impl::*;
 pub use message::DumpMsg;
 
 pub type DumpResult<T> = std::result::Result<T, DumpError>;
@@ -79,7 +75,6 @@ pub trait DumpActorHandle {
     /// Implementation: [handle_impl::DumpActorHandleImpl::dump_status]
     async fn dump_info(&self, uid: String) -> DumpResult<DumpInfo>;
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,7 +153,6 @@ impl DumpInfo {
     }
 }
 
-
 pub fn load_dump(
     db_path: impl AsRef<Path>,
     dump_path: impl AsRef<Path>,
@@ -209,6 +203,22 @@ pub fn load_dump(
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
         // let update_path = db_path.join(&format!("updates"));
 
+        info!(
+            "Importing dump from {} into {}...",
+            dump_path.display(),
+            index_path.display()
+        );
+        metadata
+            .dump_version
+            .import_index(
+                size,
+                &dump_path,
+                &index_path,
+                idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
+            )
+            .unwrap();
+        info!("Dump importation from {} succeed", dump_path.display());
+
         info!("importing the updates");
         use crate::index_controller::update_actor::UpdateStore;
         use std::io::BufRead;
@@ -217,29 +227,39 @@ pub fn load_dump(
         let options = EnvOpenOptions::new();
         // create an UpdateStore to import the updates
         std::fs::create_dir_all(&update_path)?;
-        let (update_store, _) = UpdateStore::create(options, update_path)?;
+        let (update_store, _) = UpdateStore::create(options, &update_path)?;
         let file = File::open(&dump_path.join("updates.jsonl"))?;
         let reader = std::io::BufReader::new(file);
 
         let mut wtxn = update_store.env.write_txn()?;
         for update in reader.lines() {
-            let update = serde_json::from_str(&update?)?;
+            let mut update: UpdateStatus = serde_json::from_str(&update?)?;
+            if let Some(path) = update.content_path_mut() {
+                *path = update_path.join("update_files").join(&path).into();
+            }
             update_store.register_raw_updates(&mut wtxn, update, uuid)?;
         }
         wtxn.commit()?;
-
-        info!(
-            "Importing dump from {} into {}...",
-            dump_path.display(),
-            index_path.display()
-        );
-        metadata
-            .dump_version
-            .import_index(size, &dump_path, &index_path, idx.meta.primary_key.as_ref().map(|s| s.as_ref()))
-            .unwrap();
-        info!("Dump importation from {} succeed", dump_path.display());
     }
 
+    // finally we can move all the unprocessed update file into our new DB
+    let update_path = tmp_dir_path.join("update_files");
+    let files: Vec<_> = std::fs::read_dir(&db_path.join("updates"))?
+        .map(|file| file.unwrap().path())
+        .collect();
+    let db_update_path = db_path.join("updates/update_files");
+    eprintln!("path {:?} exists: {:?}", update_path, update_path.exists());
+    eprintln!(
+        "path {:?} exists: {:?}",
+        db_update_path,
+        db_update_path.exists()
+    );
+    let _ = std::fs::remove_dir_all(db_update_path);
+    std::fs::rename(
+        tmp_dir_path.join("update_files"),
+        db_path.join("updates/update_files"),
+    )
+    .unwrap();
 
     info!("Dump importation from {} succeed", dump_path.display());
     Ok(())

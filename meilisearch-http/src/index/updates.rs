@@ -8,7 +8,7 @@ use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
 
-use super::{deserialize_some, deserialize_wildcard, Index};
+use super::{deserialize_some, Index};
 use crate::index_controller::UpdateResult;
 
 
@@ -23,14 +23,14 @@ pub struct Unchecked;
 pub struct Settings<T> {
     #[serde(
         default,
-        deserialize_with = "deserialize_wildcard",
+        deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
     pub displayed_attributes: Option<Option<Vec<String>>>,
 
     #[serde(
         default,
-        deserialize_with = "deserialize_wildcard",
+        deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,

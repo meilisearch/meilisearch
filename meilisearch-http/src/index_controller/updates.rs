@@ -188,7 +188,7 @@ impl Failed {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus {
     Processing(Processing),

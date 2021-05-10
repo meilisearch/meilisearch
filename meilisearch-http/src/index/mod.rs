@@ -35,15 +35,6 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-pub fn deserialize_wildcard<'de, I, D>(deserializer: D) -> Result<Option<Option<I>>, D::Error>
-where
-    D: Deserializer<'de>,
-    I: IntoIterator<Item = String> + Deserialize<'de> + Clone,
-{
-    Ok(<Option<I> as Deserialize>::deserialize(deserializer)?
-        .map(|item: I| (!item.clone().into_iter().any(|s| s == "*")).then(|| item)))
-}
-
 impl Index {
     pub fn settings(&self) -> anyhow::Result<Settings<Checked>> {
         let txn = self.read_txn()?;

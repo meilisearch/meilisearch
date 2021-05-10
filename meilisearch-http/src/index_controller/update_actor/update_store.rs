@@ -1,13 +1,14 @@
-use std::{borrow::Cow, path::PathBuf};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::fs::{copy, create_dir_all, remove_file, File};
 use std::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
+use std::{borrow::Cow, path::PathBuf};
 
 use anyhow::Context;
 use arc_swap::ArcSwap;
+use futures::StreamExt;
 use heed::types::{ByteSlice, OwnedType, SerdeJson};
 use heed::zerocopy::U64;
 use heed::{BytesDecode, BytesEncode, CompactionOption, Database, Env, EnvOpenOptions};
@@ -16,11 +17,10 @@ use parking_lot::{Mutex, MutexGuard};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use futures::StreamExt;
 
 use super::UpdateMeta;
 use crate::helpers::EnvSizer;
-use crate::index_controller::{IndexActorHandle, updates::*, index_actor::CONCURRENT_INDEX_MSG};
+use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -180,7 +180,10 @@ pub struct UpdateStore {
 }
 
 impl UpdateStore {
-    pub fn create(mut options: EnvOpenOptions, path: impl AsRef<Path>) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
+    pub fn create(
+        mut options: EnvOpenOptions,
+        path: impl AsRef<Path>,
+    ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
         let env = options.open(path)?;
@@ -194,7 +197,17 @@ impl UpdateStore {
         // Send a first notification to trigger the process.
         let _ = notification_sender.send(());
 
-        Ok((Self { env, pending_queue, next_update_id, updates, state, notification_sender }, notification_receiver))
+        Ok((
+            Self {
+                env,
+                pending_queue,
+                next_update_id,
+                updates,
+                state,
+                notification_sender,
+            },
+            notification_receiver,
+        ))
     }
 
     pub fn open(
@@ -208,7 +221,8 @@ impl UpdateStore {
         // Init update loop to perform any pending updates at launch.
         // Since we just launched the update store, and we still own the receiving end of the
         // channel, this call is guaranteed to succeed.
-        update_store.notification_sender
+        update_store
+            .notification_sender
             .try_send(())
             .expect("Failed to init update store");
 
@@ -303,22 +317,28 @@ impl UpdateStore {
 
     /// Push already processed update in the UpdateStore without triggering the notification
     /// process. This is useful for the dumps.
-    pub fn register_raw_updates (
+    pub fn register_raw_updates(
         &self,
         wtxn: &mut heed::RwTxn,
         update: UpdateStatus,
         index_uuid: Uuid,
     ) -> heed::Result<()> {
-        // TODO: TAMO: since I don't want to store anything I currently generate a new global ID
-        // everytime I encounter an enqueued update, can we do better?
         match update {
             UpdateStatus::Enqueued(enqueued) => {
-                let (global_id, update_id) = self.next_update_id(wtxn, index_uuid)?;
-                self.pending_queue.remap_key_type::<PendingKeyCodec>().put(wtxn, &(global_id, index_uuid, update_id), &enqueued)?;
+                let (global_id, _update_id) = self.next_update_id(wtxn, index_uuid)?;
+                self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
+                    wtxn,
+                    &(global_id, index_uuid, enqueued.id()),
+                    &enqueued,
+                )?;
             }
             _ => {
-                let update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.remap_key_type::<UpdateKeyCodec>().put(wtxn, &(index_uuid, update_id), &update)?;
+                let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
+                self.updates.remap_key_type::<UpdateKeyCodec>().put(
+                    wtxn,
+                    &(index_uuid, update.id()),
+                    &update,
+                )?;
             }
         }
         Ok(())
@@ -544,20 +564,39 @@ impl UpdateStore {
         &self,
         uuids: &HashSet<(String, Uuid)>,
         path: PathBuf,
-        handle: impl IndexActorHandle
-        ) -> anyhow::Result<()> {
+        handle: impl IndexActorHandle,
+    ) -> anyhow::Result<()> {
         use std::io::prelude::*;
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
 
         let txn = self.env.write_txn()?;
 
-        for (uid, uuid) in uuids.iter() {
-            let file = File::create(path.join(uid).join("updates.jsonl"))?;
+        for (index_uid, index_uuid) in uuids.iter() {
+            let file = File::create(path.join(index_uid).join("updates.jsonl"))?;
             let mut file = std::io::BufWriter::new(file);
 
-            for update in &self.list(*uuid)? {
-                serde_json::to_writer(&mut file, update)?;
+            let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
+            for entry in pendings {
+                let ((_, uuid, _), pending) = entry?;
+                if &uuid == index_uuid {
+                    let mut update: UpdateStatus = pending.decode()?.into();
+                    if let Some(path) = update.content_path_mut() {
+                        *path = path.file_name().expect("update path can't be empty").into();
+                    }
+                    serde_json::to_writer(&mut file, &update)?;
+                    file.write_all(b"\n")?;
+                }
+            }
+
+            let updates = self.updates.prefix_iter(&txn, index_uuid.as_bytes())?;
+            for entry in updates {
+                let (_, update) = entry?;
+                let mut update = update.clone();
+                if let Some(path) = update.content_path_mut() {
+                    *path = path.file_name().expect("update path can't be empty").into();
+                }
+                serde_json::to_writer(&mut file, &update)?;
                 file.write_all(b"\n")?;
             }
         }
