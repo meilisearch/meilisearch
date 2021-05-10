@@ -1,4 +1,8 @@
 use heed::EnvOpenOptions;
+use log::info;
+use uuid::Uuid;
+use crate::index_controller::{UpdateStatus, update_actor::UpdateStore};
+use std::io::BufRead;
 use milli::{update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
 use crate::index::{Checked, Index};
 use crate::index_controller::Settings;
@@ -14,13 +18,15 @@ fn import_settings(dir_path: &Path) -> anyhow::Result<Settings<Checked>> {
     Ok(metadata)
 }
 
-pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
+pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
+    let index_path = db_path.join(&format!("indexes/index-{}", uuid));
     std::fs::create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
     let index = milli::Index::new(options, index_path)?;
     let index = Index(Arc::new(index));
 
+    info!("importing the settings...");
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
     let update_builder = UpdateBuilder::new(0);
@@ -31,6 +37,7 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_ke
     let file = File::open(&dump_path.join("documents.jsonl"))?;
     let reader = std::io::BufReader::new(file);
 
+    info!("importing the documents...");
     // TODO: TAMO: currently we ignore any error caused by the importation of the documents because
     // if there is no documents nor primary key it'll throw an anyhow error, but we must remove
     // this before the merge on main
@@ -49,6 +56,27 @@ pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_ke
         .prepare_for_closing()
         .wait();
 
-    Ok(())
+    info!("importing the updates...");
+    import_updates(uuid, dump_path, db_path)
 }
 
+fn import_updates(uuid: Uuid, dump_path: &Path, db_path: &Path) -> anyhow::Result<()> {
+        let update_path = db_path.join("updates");
+        let options = EnvOpenOptions::new();
+        // create an UpdateStore to import the updates
+        std::fs::create_dir_all(&update_path)?;
+        let (update_store, _) = UpdateStore::create(options, &update_path)?;
+        let file = File::open(&dump_path.join("updates.jsonl"))?;
+        let reader = std::io::BufReader::new(file);
+
+        let mut wtxn = update_store.env.write_txn()?;
+        for update in reader.lines() {
+            let mut update: UpdateStatus = serde_json::from_str(&update?)?;
+            if let Some(path) = update.content_path_mut() {
+                *path = update_path.join("update_files").join(&path).into();
+            }
+            update_store.register_raw_updates(&mut wtxn, update, uuid)?;
+        }
+        wtxn.commit()?;
+    Ok(())
+}

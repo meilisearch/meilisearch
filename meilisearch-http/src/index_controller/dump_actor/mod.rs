@@ -16,11 +16,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::TempDir;
 use thiserror::Error;
+use uuid::Uuid;
 
 use super::IndexMetadata;
 use crate::helpers::compression;
 use crate::index::Index;
-use crate::index_controller::{uuid_resolver, UpdateStatus};
+use crate::index_controller::uuid_resolver;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
@@ -53,13 +54,14 @@ impl DumpVersion {
     pub fn import_index(
         self,
         size: usize,
+        uuid: Uuid,
         dump_path: &Path,
-        index_path: &Path,
+        db_path: &Path,
         primary_key: Option<&str>,
     ) -> anyhow::Result<()> {
         match self {
-            Self::V1 => v1::import_index(size, dump_path, index_path, primary_key),
-            Self::V2 => v2::import_index(size, dump_path, index_path, primary_key),
+            Self::V1 => v1::import_index(size, uuid, dump_path, db_path, primary_key),
+            Self::V2 => v2::import_index(size, uuid, dump_path, db_path, primary_key),
         }
     }
 }
@@ -200,46 +202,23 @@ pub fn load_dump(
         let dump_path = tmp_dir_path.join(&idx.uid);
         // this cannot fail since we created all the missing uuid in the previous loop
         let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
-        let index_path = db_path.join(&format!("indexes/index-{}", uuid));
-        // let update_path = db_path.join(&format!("updates"));
 
         info!(
             "Importing dump from {} into {}...",
             dump_path.display(),
-            index_path.display()
+            db_path.display()
         );
         metadata
             .dump_version
             .import_index(
                 size,
+                uuid,
                 &dump_path,
-                &index_path,
+                &db_path,
                 idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
             )
             .unwrap();
         info!("Dump importation from {} succeed", dump_path.display());
-
-        info!("importing the updates");
-        use crate::index_controller::update_actor::UpdateStore;
-        use std::io::BufRead;
-
-        let update_path = db_path.join("updates");
-        let options = EnvOpenOptions::new();
-        // create an UpdateStore to import the updates
-        std::fs::create_dir_all(&update_path)?;
-        let (update_store, _) = UpdateStore::create(options, &update_path)?;
-        let file = File::open(&dump_path.join("updates.jsonl"))?;
-        let reader = std::io::BufReader::new(file);
-
-        let mut wtxn = update_store.env.write_txn()?;
-        for update in reader.lines() {
-            let mut update: UpdateStatus = serde_json::from_str(&update?)?;
-            if let Some(path) = update.content_path_mut() {
-                *path = update_path.join("update_files").join(&path).into();
-            }
-            update_store.register_raw_updates(&mut wtxn, update, uuid)?;
-        }
-        wtxn.commit()?;
     }
 
     // finally we can move all the unprocessed update file into our new DB

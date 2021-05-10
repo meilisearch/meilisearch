@@ -79,7 +79,8 @@ fn import_settings(dir_path: &Path) -> anyhow::Result<Settings> {
 }
 
 
-pub fn import_index(size: usize, dump_path: &Path, index_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
+pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
+    let index_path = db_path.join(&format!("indexes/index-{}", uuid));
     info!("Importing a dump from an old version of meilisearch with dump version 1");
 
     std::fs::create_dir_all(&index_path)?;
