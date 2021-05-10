@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index::Settings;
+use crate::index::{Checked, Settings};
 use crate::index_controller::{IndexController, IndexStats, Stats};
 use crate::index_controller::{IndexMetadata, IndexSettings};
 use crate::option::Opt;
@@ -74,7 +74,7 @@ impl Data {
         Ok(Data { inner })
     }
 
-    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings> {
+    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings<Checked>> {
         self.index_controller.settings(uid).await
     }
 

@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::index::{Document, SearchQuery, SearchResult, Settings};
+use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{
     get_arc_ownership_blocking, update_handler::UpdateHandler, Failed, IndexStats, Processed,
     Processing,
@@ -164,7 +164,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .map_err(|e| IndexError::Error(e.into()))
     }
 
-    async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings> {
+    async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
         let index = self
             .store
             .get(uuid)

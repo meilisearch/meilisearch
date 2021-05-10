@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::{collections::{BTreeSet, HashSet}, marker::PhantomData};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings};
+pub use updates::{Facets, Settings, Checked, Unchecked};
 
 mod search;
 mod updates;
@@ -27,7 +27,7 @@ impl Deref for Index {
 }
 
 impl Index {
-    pub fn settings(&self) -> anyhow::Result<Settings> {
+    pub fn settings(&self) -> anyhow::Result<Settings<Checked>> {
         let txn = self.read_txn()?;
 
         let displayed_attributes = self
@@ -68,6 +68,7 @@ impl Index {
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
             distinct_attribute: Some(distinct_attribute),
+            _kind: PhantomData,
         })
     }
 

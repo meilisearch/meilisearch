@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io;
 use std::num::NonZeroUsize;
+use std::marker::PhantomData;
 
 use flate2::read::GzDecoder;
 use log::info;
@@ -10,10 +11,15 @@ use serde::{de::Deserializer, Deserialize, Serialize};
 use super::Index;
 use crate::index_controller::UpdateResult;
 
+#[derive(Clone, Default, Debug)]
+pub struct Checked;
+#[derive(Clone, Default, Debug)]
+pub struct Unchecked;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-pub struct Settings {
+pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
@@ -49,18 +55,28 @@ pub struct Settings {
         skip_serializing_if = "Option::is_none"
     )]
     pub distinct_attribute: Option<Option<String>>,
+
+    #[serde(skip)]
+    pub _kind: PhantomData<T>,
 }
 
-impl Settings {
-    pub fn cleared() -> Self {
-        Self {
+impl Settings<Checked> {
+    pub fn cleared() -> Settings<Checked> {
+        Settings {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
             attributes_for_faceting: Some(None),
             ranking_rules: Some(None),
             stop_words: Some(None),
             distinct_attribute: Some(None),
+            _kind: PhantomData,
         }
+    }
+}
+
+impl Settings<Unchecked> {
+    pub fn check(self) -> Settings<Checked> {
+        todo!()
     }
 }
 
@@ -137,7 +153,7 @@ impl Index {
 
     pub fn update_settings(
         &self,
-        settings: &Settings,
+        settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.

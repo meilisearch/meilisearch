@@ -20,7 +20,7 @@ use snapshot::{SnapshotService, load_snapshot};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::{UuidError, UuidResolverHandle};
 
-use crate::index::{Settings, Document, SearchQuery, SearchResult};
+use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
 mod index_actor;
@@ -202,7 +202,7 @@ impl IndexController {
     pub async fn update_settings(
         &self,
         uid: String,
-        settings: Settings,
+        settings: Settings<Checked>,
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
         let perform_udpate = |uuid| async move {
@@ -282,7 +282,7 @@ impl IndexController {
         Ok(ret)
     }
 
-    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings> {
+    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings<Checked>> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
