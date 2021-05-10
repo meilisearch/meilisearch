@@ -31,27 +31,32 @@ impl<'t> Final<'t> {
     #[logging_timer::time("Final::{}")]
     pub fn next(&mut self, excluded_candidates: &RoaringBitmap) -> anyhow::Result<Option<FinalResult>> {
         debug!("Final iteration");
+        let excluded_candidates = &self.returned_candidates | excluded_candidates;
         let mut criterion_parameters = CriterionParameters {
             wdcache: &mut self.wdcache,
             // returned_candidates is merged with excluded_candidates to avoid duplicas
-            excluded_candidates: &(&self.returned_candidates | excluded_candidates),
+            excluded_candidates: &excluded_candidates,
         };
 
         match self.parent.next(&mut criterion_parameters)? {
-            Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                let candidates = match (candidates, query_tree.as_ref()) {
+            Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
+                let mut candidates = match (candidates, query_tree.as_ref()) {
                     (Some(candidates), _) => candidates,
-                    (None, Some(qt)) => resolve_query_tree(self.ctx, qt, &mut self.wdcache)?,
-                    (None, None) => self.ctx.documents_ids()?,
+                    (None, Some(qt)) => resolve_query_tree(self.ctx, qt, &mut self.wdcache)? - excluded_candidates,
+                    (None, None) => self.ctx.documents_ids()? - excluded_candidates,
                 };
+
+                if let Some(filtered_candidates) = filtered_candidates {
+                    candidates &= filtered_candidates;
+                }
 
                 let bucket_candidates = bucket_candidates.unwrap_or_else(|| candidates.clone());
 
                 self.returned_candidates |= &candidates;
 
-                return Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }));
+                Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }))
             },
-            None => return Ok(None),
+            None => Ok(None),
         }
     }
 }

@@ -93,22 +93,21 @@ impl<'t> Criterion for AscDesc<'t> {
             match self.candidates.next().transpose()? {
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
                             self.query_tree = query_tree;
-                            let candidates = match (&self.query_tree, candidates) {
-                                (_, Some(mut candidates)) => {
-                                    candidates.intersect_with(&self.faceted_candidates);
-                                    candidates
-                                },
+                            let mut candidates = match (&self.query_tree, candidates) {
+                                (_, Some(candidates)) => candidates & &self.faceted_candidates,
                                 (Some(qt), None) => {
                                     let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
-                                    let mut candidates = resolve_query_tree(&context, qt, params.wdcache)?;
-                                    candidates -= params.excluded_candidates;
-                                    candidates.intersect_with(&self.faceted_candidates);
-                                    candidates
+                                    let candidates = resolve_query_tree(&context, qt, params.wdcache)?;
+                                    candidates & &self.faceted_candidates
                                 },
                                 (None, None) => take(&mut self.faceted_candidates),
                             };
+
+                            if let Some(filtered_candidates) = filtered_candidates {
+                                candidates &= filtered_candidates;
+                            }
 
                             match bucket_candidates {
                                 Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
@@ -136,6 +135,7 @@ impl<'t> Criterion for AscDesc<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
+                        filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },

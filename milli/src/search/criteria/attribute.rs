@@ -25,6 +25,7 @@ const LEVEL_EXPONENTIATION_BASE: u32 = 4;
 const CANDIDATES_THRESHOLD: u64 = 1000;
 
 type FlattenedQueryTree = Vec<Vec<Vec<Query>>>;
+
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
     state: Option<(Operation, FlattenedQueryTree, RoaringBitmap)>,
@@ -59,6 +60,7 @@ impl<'t> Criterion for Attribute<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree),
                         candidates: Some(RoaringBitmap::new()),
+                        filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
@@ -78,6 +80,7 @@ impl<'t> Criterion for Attribute<'t> {
                                 return Ok(Some(CriterionResult {
                                     query_tree: Some(query_tree),
                                     candidates: Some(RoaringBitmap::new()),
+                                    filtered_candidates: None,
                                     bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
                             },
@@ -89,6 +92,7 @@ impl<'t> Criterion for Attribute<'t> {
                                 return Ok(Some(CriterionResult {
                                     query_tree: Some(query_tree),
                                     candidates: Some(RoaringBitmap::new()),
+                                    filtered_candidates: None,
                                     bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
                             },
@@ -102,16 +106,21 @@ impl<'t> Criterion for Attribute<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree),
                         candidates: Some(found_candidates),
+                        filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
-                            let candidates = match candidates {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
+                            let mut candidates = match candidates {
                                 Some(candidates) => candidates,
                                 None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
                             };
+
+                            if let Some(filtered_candidates) = filtered_candidates {
+                                candidates &= filtered_candidates;
+                            }
 
                             let flattened_query_tree = flatten_query_tree(&query_tree);
 
@@ -123,10 +132,11 @@ impl<'t> Criterion for Attribute<'t> {
                             self.state = Some((query_tree, flattened_query_tree, candidates));
                             self.current_buckets = None;
                         },
-                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
                                 candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
                         },

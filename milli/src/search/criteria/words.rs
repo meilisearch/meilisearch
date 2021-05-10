@@ -11,8 +11,8 @@ pub struct Words<'t> {
     query_trees: Vec<Operation>,
     candidates: Option<RoaringBitmap>,
     bucket_candidates: Option<RoaringBitmap>,
+    filtered_candidates: Option<RoaringBitmap>,
     parent: Box<dyn Criterion + 't>,
-    compute_candidates: bool,
 }
 
 impl<'t> Words<'t> {
@@ -23,7 +23,7 @@ impl<'t> Words<'t> {
             candidates: None,
             bucket_candidates: None,
             parent,
-            compute_candidates: false,
+            filtered_candidates: None,
         }
     }
 }
@@ -42,13 +42,13 @@ impl<'t> Criterion for Words<'t> {
             match self.query_trees.pop() {
                 Some(query_tree) => {
                     let candidates = match self.candidates.as_mut() {
-                        Some(allowed_candidates) if self.compute_candidates => {
+                        Some(allowed_candidates) => {
                             let mut candidates = resolve_query_tree(self.ctx, &query_tree, params.wdcache)?;
                             candidates &= &*allowed_candidates;
                             *allowed_candidates -= &candidates;
                             Some(candidates)
                         },
-                        candidates => candidates.cloned(),
+                        None => None,
                     };
 
                     let bucket_candidates = match self.bucket_candidates.as_mut() {
@@ -59,25 +59,27 @@ impl<'t> Criterion for Words<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree),
                         candidates,
+                        filtered_candidates: self.filtered_candidates.clone(),
                         bucket_candidates,
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
                             self.query_trees = explode_query_tree(query_tree);
                             self.candidates = candidates;
-                            self.compute_candidates = bucket_candidates.is_some();
+                            self.filtered_candidates = filtered_candidates;
 
                             self.bucket_candidates = match (self.bucket_candidates.take(), bucket_candidates) {
                                 (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
                                 (self_bc, parent_bc) => self_bc.or(parent_bc),
                             };
                         },
-                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
                                 candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
                         },

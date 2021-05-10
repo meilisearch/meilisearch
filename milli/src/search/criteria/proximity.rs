@@ -113,16 +113,21 @@ impl<'t> Criterion for Proximity<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree.clone()),
                         candidates: Some(new_candidates),
+                        filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
-                            let candidates = match candidates {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
+                            let mut candidates = match candidates {
                                 Some(candidates) => candidates,
                                 None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
                             };
+
+                            if let Some(filtered_candidates) = filtered_candidates {
+                                candidates &= filtered_candidates;
+                            }
 
                             match bucket_candidates {
                                 Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
@@ -134,10 +139,11 @@ impl<'t> Criterion for Proximity<'t> {
                             self.proximity = 0;
                             self.plane_sweep_cache = None;
                         },
-                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
                                 candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
                         },

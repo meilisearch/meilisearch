@@ -119,30 +119,33 @@ impl<'t> Criterion for Typo<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: Some(new_query_tree),
                         candidates: Some(candidates),
+                        filtered_candidates: None,
                         bucket_candidates: Some(bucket_candidates),
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
                             self.bucket_candidates = match (self.bucket_candidates.take(), bucket_candidates) {
                                 (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
                                 (self_bc, parent_bc) => self_bc.or(parent_bc),
                             };
 
-                            let candidates = candidates.map_or_else(|| {
-                                Candidates::Forbidden(params.excluded_candidates.clone())
-                            }, Candidates::Allowed);
+                            let candidates = match candidates.or(filtered_candidates) {
+                                Some(candidates) => Candidates::Allowed(candidates - params.excluded_candidates),
+                                None => Candidates::Forbidden(params.excluded_candidates.clone()),
+                            };
 
                             let maximum_typos = maximum_typo(&query_tree) as u8;
                             self.state = Some((maximum_typos, query_tree, candidates));
                             self.typos = 0;
 
                         },
-                        Some(CriterionResult { query_tree: None, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
                                 candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
                         },
@@ -377,6 +380,7 @@ mod test {
             ])),
             candidates: Some(candidates_1.clone()),
             bucket_candidates: Some(candidates_1),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
@@ -399,6 +403,7 @@ mod test {
             ])),
             candidates: Some(candidates_2.clone()),
             bucket_candidates: Some(candidates_2),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
@@ -419,8 +424,9 @@ mod test {
 
         let expected = CriterionResult {
             query_tree: None,
-            candidates: Some(facet_candidates.clone()),
+            candidates: None,
             bucket_candidates: None,
+            filtered_candidates: Some(facet_candidates.clone()),
         };
 
         // first iteration, returns the facet candidates
@@ -464,6 +470,7 @@ mod test {
             ])),
             candidates: Some(&candidates_1 & &facet_candidates),
             bucket_candidates: Some(&candidates_1 & &facet_candidates),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
@@ -486,6 +493,7 @@ mod test {
             ])),
             candidates: Some(&candidates_2 & &facet_candidates),
             bucket_candidates: Some(&candidates_2 & &facet_candidates),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));

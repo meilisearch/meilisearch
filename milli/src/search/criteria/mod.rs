@@ -38,6 +38,8 @@ pub struct CriterionResult {
     /// The candidates that this criterion is allowed to return subsets of,
     /// if None, it is up to the child to compute the candidates itself.
     candidates: Option<RoaringBitmap>,
+    /// The candidates, coming from facet filters, that this criterion is allowed to return subsets of.
+    filtered_candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
     bucket_candidates: Option<RoaringBitmap>,
 }

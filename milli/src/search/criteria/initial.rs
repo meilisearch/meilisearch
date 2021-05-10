@@ -9,10 +9,11 @@ pub struct Initial {
 }
 
 impl Initial {
-    pub fn new(query_tree: Option<Operation>, mut candidates: Option<RoaringBitmap>) -> Initial {
+    pub fn new(query_tree: Option<Operation>, filtered_candidates: Option<RoaringBitmap>) -> Initial {
         let answer = CriterionResult {
             query_tree,
-            candidates: candidates.take(),
+            candidates: None,
+            filtered_candidates,
             bucket_candidates: None,
         };
         Initial { answer: Some(answer) }
