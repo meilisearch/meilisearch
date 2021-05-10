@@ -70,22 +70,24 @@ impl<'t> Criterion for Typo<'t> {
                 },
                 Some((_, query_tree, candidates_authorization)) => {
                     let fst = self.ctx.words_fst();
-                    let new_query_tree = if self.typos < MAX_TYPOS_PER_WORD {
-                        alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?
-                    } else if self.typos == MAX_TYPOS_PER_WORD {
-                        // When typos >= MAX_TYPOS_PER_WORD, no more alteration of the query tree is possible,
-                        // we keep the altered query tree
-                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?;
-                        // we compute the allowed candidates
-                        let query_tree_allowed_candidates = resolve_query_tree(self.ctx, query_tree, params.wdcache)?;
-                        // we assign the allowed candidates to the candidates authorization.
-                        *candidates_authorization = match take(candidates_authorization) {
-                            Allowed(allowed_candidates) => Allowed(query_tree_allowed_candidates & allowed_candidates),
-                            Forbidden(forbidden_candidates) => Allowed(query_tree_allowed_candidates - forbidden_candidates),
-                        };
-                        query_tree.clone()
-                    } else {
-                        query_tree.clone()
+                    let new_query_tree = match self.typos {
+                        typos if typos < MAX_TYPOS_PER_WORD => {
+                            alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?
+                        },
+                        MAX_TYPOS_PER_WORD => {
+                            // When typos >= MAX_TYPOS_PER_WORD, no more alteration of the query tree is possible,
+                            // we keep the altered query tree
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?;
+                            // we compute the allowed candidates
+                            let query_tree_allowed_candidates = resolve_query_tree(self.ctx, query_tree, params.wdcache)?;
+                            // we assign the allowed candidates to the candidates authorization.
+                            *candidates_authorization = match take(candidates_authorization) {
+                                Allowed(allowed_candidates) => Allowed(query_tree_allowed_candidates & allowed_candidates),
+                                Forbidden(forbidden_candidates) => Allowed(query_tree_allowed_candidates - forbidden_candidates),
+                            };
+                            query_tree.clone()
+                        },
+                        _otherwise => query_tree.clone(),
                     };
 
                     let mut candidates = resolve_candidates(
@@ -187,7 +189,7 @@ fn alterate_query_tree(
                     } else {
                         let typo = *typo.min(&number_typos);
                         let words = word_derivations(word, q.prefix, typo, words_fst, wdcache)?;
-                        let queries = words.into_iter().map(|(word, typo)| {
+                        let queries = words.iter().map(|(word, typo)| {
                             Operation::Query(Query {
                                 prefix: false,
                                 kind: QueryKind::Exact { original_typo: *typo, word: word.to_string() },

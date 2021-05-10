@@ -215,7 +215,7 @@ fn iterative_facet_ordered_iter<'t>(
             docids_values.push((docid, OrderedFloat(value)));
         }
     }
-    docids_values.sort_unstable_by_key(|(_, v)| v.clone());
+    docids_values.sort_unstable_by_key(|(_, v)| *v);
     let iter = docids_values.into_iter();
     let iter = if ascending {
         Box::new(iter) as Box<dyn Iterator<Item = _>>
@@ -226,7 +226,7 @@ fn iterative_facet_ordered_iter<'t>(
     // The itertools GroupBy iterator doesn't provide an owned version, we are therefore
     // required to collect the result into an owned collection (a Vec).
     // https://github.com/rust-itertools/itertools/issues/499
-    let vec: Vec<_> = iter.group_by(|(_, v)| v.clone())
+    let vec: Vec<_> = iter.group_by(|(_, v)| *v)
         .into_iter()
         .map(|(_, ids)| ids.map(|(id, _)| id).collect())
         .collect();

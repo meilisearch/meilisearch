@@ -155,7 +155,7 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
     fn new(ctx: &'t dyn Context<'t>, word: Cow<'q, str>, in_prefix_cache: bool) -> heed::Result<Option<Self>> {
         match ctx.word_position_last_level(&word, in_prefix_cache)? {
             Some(level) =>  {
-                let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level.clone()) as u32);
+                let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
                 let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, None, None)?;
                 Ok(Some(Self { inner, level, interval_size, word, in_prefix_cache, inner_next: None, current_interval: None }))
             },
@@ -164,8 +164,8 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
     }
 
     fn dig(&self, ctx: &'t dyn Context<'t>, level: &TreeLevel, left_interval: Option<u32>) -> heed::Result<Self> {
-        let level = level.min(&self.level).clone();
-        let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level.clone()) as u32);
+        let level = *level.min(&self.level);
+        let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
         let word = self.word.clone();
         let in_prefix_cache = self.in_prefix_cache;
         let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, left_interval, None)?;
@@ -214,7 +214,7 @@ struct QueryLevelIterator<'t, 'q> {
 }
 
 impl<'t, 'q> QueryLevelIterator<'t, 'q> {
-    fn new(ctx: &'t dyn Context<'t>, queries: &'q Vec<Query>, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<Self>> {
+    fn new(ctx: &'t dyn Context<'t>, queries: &'q [Query], wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<Self>> {
         let mut inner = Vec::with_capacity(queries.len());
         for query in queries {
             match &query.kind {
@@ -244,7 +244,7 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
             }
         }
 
-        let highest = inner.iter().max_by_key(|wli| wli.level).map(|wli| wli.level.clone());
+        let highest = inner.iter().max_by_key(|wli| wli.level).map(|wli| wli.level);
         match highest {
             Some(level) => Ok(Some(Self {
                 parent: None,
@@ -287,7 +287,7 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
         let u8_level = Into::<u8>::into(level);
         let interval_size = LEVEL_EXPONENTIATION_BASE.pow(u8_level as u32);
         for wli in self.inner.iter_mut() {
-            let wli_u8_level = Into::<u8>::into(wli.level.clone());
+            let wli_u8_level = Into::<u8>::into(wli.level);
             let accumulated_count = LEVEL_EXPONENTIATION_BASE.pow((u8_level - wli_u8_level) as u32);
             for _ in 0..accumulated_count {
                 if let Some((next_left, _, next_docids)) =  wli.next()? {
@@ -364,8 +364,8 @@ fn interval_to_skip(
     already_skiped: usize,
     allowed_candidates: &RoaringBitmap,
 ) -> usize {
-    parent_accumulator.into_iter()
-        .zip(current_accumulator.into_iter())
+    parent_accumulator.iter()
+        .zip(current_accumulator.iter())
         .skip(already_skiped)
         .take_while(|(parent, current)| {
             let skip_parent = parent.as_ref().map_or(true, |(_, _, docids)| docids.is_empty());
@@ -410,7 +410,7 @@ impl<'t, 'q> Branch<'t, 'q> {
     /// update inner interval in order to be ranked by the binary_heap without computing it,
     /// the next() method should be called when the real interval is needed.
     fn lazy_next(&mut self) {
-        let u8_level = Into::<u8>::into(self.tree_level.clone());
+        let u8_level = Into::<u8>::into(self.tree_level);
         let interval_size = LEVEL_EXPONENTIATION_BASE.pow(u8_level as u32);
         let (left, right, _) = self.last_result;
 
@@ -679,7 +679,7 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
             Or(_, ops) => if ops.iter().all(|op| op.query().is_some()) {
                 vec![vec![ops.iter().flat_map(|op| op.query()).cloned().collect()]]
             } else {
-                ops.into_iter().map(recurse).flatten().collect()
+                ops.iter().map(recurse).flatten().collect()
             },
             Operation::Query(query) => vec![vec![vec![query.clone()]]],
         }
