@@ -1,6 +1,6 @@
 use actix_web::{delete, get, post, web, HttpResponse};
 
-use crate::error::ResponseError;
+use crate::{error::ResponseError, index::Unchecked};
 use crate::helpers::Authentication;
 use crate::index::Settings;
 use crate::Data;
@@ -138,10 +138,11 @@ create_services!(
 async fn update_all(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
-    body: web::Json<Settings>,
+    body: web::Json<Settings<Unchecked>>,
 ) -> Result<HttpResponse, ResponseError> {
+    let settings = body.into_inner().check();
     match data
-        .update_settings(index_uid.into_inner(), body.into_inner(), true)
+        .update_settings(index_uid.into_inner(), settings, true)
         .await
     {
         Ok(update_result) => Ok(

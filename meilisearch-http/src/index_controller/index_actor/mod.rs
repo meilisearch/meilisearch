@@ -14,7 +14,7 @@ pub use handle_impl::IndexActorHandleImpl;
 use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
 
-use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
+use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, Processed, Processing, IndexStats};
 
 use super::IndexSettings;
@@ -74,7 +74,7 @@ pub trait IndexActorHandle {
         data: Option<File>,
     ) -> anyhow::Result<Result<Processed, Failed>>;
     async fn search(&self, uuid: Uuid, query: SearchQuery) -> IndexResult<SearchResult>;
-    async fn settings(&self, uuid: Uuid) -> IndexResult<Settings>;
+    async fn settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>>;
 
     async fn documents(
         &self,
@@ -130,7 +130,7 @@ mod test {
             self.as_ref().search(uuid, query).await
         }
 
-        async fn settings(&self, uuid: Uuid) -> IndexResult<Settings> {
+        async fn settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
             self.as_ref().settings(uuid).await
         }
 

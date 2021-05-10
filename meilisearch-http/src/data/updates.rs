@@ -2,7 +2,7 @@ use actix_web::web::Payload;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
 use super::Data;
-use crate::index::Settings;
+use crate::index::{Checked, Settings};
 use crate::index_controller::{IndexMetadata, IndexSettings, UpdateStatus};
 
 impl Data {
@@ -24,7 +24,7 @@ impl Data {
     pub async fn update_settings(
         &self,
         index: String,
-        settings: Settings,
+        settings: Settings<Checked>,
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
         let update = self

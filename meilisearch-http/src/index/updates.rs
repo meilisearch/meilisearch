@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io;
 use std::num::NonZeroUsize;
+use std::marker::PhantomData;
 
 use flate2::read::GzDecoder;
 use log::info;
@@ -10,10 +11,15 @@ use serde::{de::Deserializer, Deserialize, Serialize};
 use super::Index;
 use crate::index_controller::UpdateResult;
 
+#[derive(Clone, Default, Debug)]
+pub struct Checked;
+#[derive(Clone, Default, Debug)]
+pub struct Unchecked;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-pub struct Settings {
+pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
@@ -49,17 +55,57 @@ pub struct Settings {
         skip_serializing_if = "Option::is_none"
     )]
     pub distinct_attribute: Option<Option<String>>,
+
+    #[serde(skip)]
+    pub _kind: PhantomData<T>,
 }
 
-impl Settings {
-    pub fn cleared() -> Self {
-        Self {
+impl Settings<Checked> {
+    pub fn cleared() -> Settings<Checked> {
+        Settings {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
             attributes_for_faceting: Some(None),
             ranking_rules: Some(None),
             stop_words: Some(None),
             distinct_attribute: Some(None),
+            _kind: PhantomData,
+        }
+    }
+}
+
+impl Settings<Unchecked> {
+    pub fn check(mut self) -> Settings<Checked> {
+        let displayed_attributes = match self.displayed_attributes.take() {
+            Some(Some(fields)) => {
+                if fields.iter().any(|f| f == "*") {
+                    Some(None)
+                } else {
+                    Some(Some(fields))
+                }
+            }
+            otherwise => otherwise,
+        };
+
+        let searchable_attributes = match self.searchable_attributes.take() {
+            Some(Some(fields)) => {
+                if fields.iter().any(|f| f == "*") {
+                    Some(None)
+                } else {
+                    Some(Some(fields))
+                }
+            }
+            otherwise => otherwise,
+        };
+
+        Settings {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting: self.attributes_for_faceting,
+            ranking_rules: self.ranking_rules,
+            stop_words: self.stop_words,
+            distinct_attribute: self.distinct_attribute,
+            _kind: PhantomData,
         }
     }
 }
@@ -137,7 +183,7 @@ impl Index {
 
     pub fn update_settings(
         &self,
-        settings: &Settings,
+        settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
@@ -220,5 +266,44 @@ impl Index {
                 .map_err(Into::into),
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_setting_check() {
+        // test no changes
+        let settings = Settings {
+            displayed_attributes: Some(Some(vec![String::from("hello")])),
+            searchable_attributes: Some(Some(vec![String::from("hello")])),
+            attributes_for_faceting: None,
+            ranking_rules: None,
+            stop_words: None,
+            distinct_attribute: None,
+            _kind: PhantomData::<Unchecked>,
+        };
+
+        let checked = settings.clone().check();
+        assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
+        assert_eq!(settings.searchable_attributes, checked.searchable_attributes);
+
+        // test wildcard
+        // test no changes
+        let settings = Settings {
+            displayed_attributes: Some(Some(vec![String::from("*")])),
+            searchable_attributes: Some(Some(vec![String::from("hello"), String::from("*")])),
+            attributes_for_faceting: None,
+            ranking_rules: None,
+            stop_words: None,
+            distinct_attribute: None,
+            _kind: PhantomData::<Unchecked>,
+        };
+
+        let checked = settings.check();
+        assert_eq!(checked.displayed_attributes, Some(None));
+        assert_eq!(checked.searchable_attributes, Some(None));
     }
 }
