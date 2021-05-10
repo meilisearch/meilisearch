@@ -75,8 +75,38 @@ impl Settings<Checked> {
 }
 
 impl Settings<Unchecked> {
-    pub fn check(self) -> Settings<Checked> {
-        todo!()
+    pub fn check(mut self) -> Settings<Checked> {
+        let displayed_attributes = match self.displayed_attributes.take() {
+            Some(Some(fields)) => {
+                if fields.iter().any(|f| f == "*") {
+                    Some(None)
+                } else {
+                    Some(Some(fields))
+                }
+            }
+            otherwise => otherwise,
+        };
+
+        let searchable_attributes = match self.searchable_attributes.take() {
+            Some(Some(fields)) => {
+                if fields.iter().any(|f| f == "*") {
+                    Some(None)
+                } else {
+                    Some(Some(fields))
+                }
+            }
+            otherwise => otherwise,
+        };
+
+        Settings {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting: self.attributes_for_faceting,
+            ranking_rules: self.ranking_rules,
+            stop_words: self.stop_words,
+            distinct_attribute: self.distinct_attribute,
+            _kind: PhantomData,
+        }
     }
 }
 
