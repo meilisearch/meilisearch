@@ -1,23 +1,48 @@
 mod v1;
 mod v2;
+mod handle_impl;
+mod actor;
+mod message;
 
-use std::{collections::HashSet, fs::{File}, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    fs::File,
+    path::Path,
+    sync::Arc,
+};
 
+#[cfg(test)]
+use mockall::automock;
 use anyhow::bail;
-use chrono::Utc;
+use thiserror::Error;
 use heed::EnvOpenOptions;
 use log::{error, info};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tempfile::TempDir;
-use tokio::task::spawn_blocking;
-use tokio::fs;
-use uuid::Uuid;
 
-use super::{IndexController, IndexMetadata, update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
+use super::IndexMetadata;
+use crate::helpers::compression;
 use crate::index::Index;
 use crate::index_controller::uuid_resolver;
-use crate::helpers::compression;
+
+pub use handle_impl::*;
+pub use actor::DumpActor;
+pub use message::DumpMsg;
+
+pub type DumpResult<T> = std::result::Result<T, DumpError>;
+
+#[derive(Error, Debug)]
+pub enum DumpError {
+    #[error("error with index: {0}")]
+    Error(#[from] anyhow::Error),
+    #[error("Heed error: {0}")]
+    HeedError(#[from] heed::Error),
+    #[error("dump already running")]
+    DumpAlreadyRunning,
+    #[error("dump `{0}` does not exist")]
+    DumpDoesNotExist(String),
+}
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 enum DumpVersion {
@@ -29,13 +54,31 @@ impl DumpVersion {
     const CURRENT: Self = Self::V2;
 
     /// Select the good importation function from the `DumpVersion` of metadata
-    pub fn import_index(self, size: usize, dump_path: &Path, index_path: &Path) -> anyhow::Result<()> {
+    pub fn import_index(
+        self,
+        size: usize,
+        dump_path: &Path,
+        index_path: &Path,
+    ) -> anyhow::Result<()> {
         match self {
             Self::V1 => v1::import_index(size, dump_path, index_path),
             Self::V2 => v2::import_index(size, dump_path, index_path),
         }
     }
 }
+
+#[async_trait::async_trait]
+#[cfg_attr(test, automock)]
+pub trait DumpActorHandle {
+    /// Start the creation of a dump
+    /// Implementation: [handle_impl::DumpActorHandleImpl::create_dump]
+    async fn create_dump(&self) -> DumpResult<DumpInfo>;
+
+    /// Return the status of an already created dump
+    /// Implementation: [handle_impl::DumpActorHandleImpl::dump_status]
+    async fn dump_info(&self, uid: String) -> DumpResult<DumpInfo>;
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,66 +117,46 @@ impl Metadata {
     }
 }
 
-/// Generate uid from creation date
-fn generate_uid() -> String {
-    Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum DumpStatus {
+    Done,
+    InProgress,
+    Failed,
 }
 
-pub async fn perform_dump(index_controller: &IndexController, dump_path: PathBuf) -> anyhow::Result<String> {
-    info!("Performing dump.");
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DumpInfo {
+    pub uid: String,
+    pub status: DumpStatus,
+    #[serde(skip_serializing_if = "Option::is_none", flatten)]
+    pub error: Option<serde_json::Value>,
+}
 
-    let dump_dir = dump_path.clone();
-    let uid = generate_uid();
-    fs::create_dir_all(&dump_dir).await?;
-    let temp_dump_dir = spawn_blocking(move || tempfile::tempdir_in(dump_dir)).await??;
-    let temp_dump_path = temp_dump_dir.path().to_owned();
-
-    let uuids = index_controller.uuid_resolver.list().await?;
-    // maybe we could just keep the vec as-is
-    let uuids: HashSet<(String, Uuid)> = uuids.into_iter().collect();
-
-    if uuids.is_empty() {
-        return Ok(uid);
+impl DumpInfo {
+    pub fn new(uid: String, status: DumpStatus) -> Self {
+        Self {
+            uid,
+            status,
+            error: None,
+        }
     }
 
-    let indexes = index_controller.list_indexes().await?;
-
-    // we create one directory by index
-    for meta in indexes.iter() {
-        tokio::fs::create_dir(temp_dump_path.join(&meta.uid)).await?;
+    pub fn with_error(&mut self, error: String) {
+        self.status = DumpStatus::Failed;
+        self.error = Some(json!(error));
     }
 
-    let metadata = Metadata::new(indexes, env!("CARGO_PKG_VERSION").to_string());
-    metadata.to_path(&temp_dump_path).await?;
+    pub fn done(&mut self) {
+        self.status = DumpStatus::Done;
+    }
 
-    index_controller.update_handle.dump(uuids, temp_dump_path.clone()).await?;
-    let dump_dir = dump_path.clone();
-    let dump_path = dump_path.join(format!("{}.dump", uid));
-    let dump_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-        let temp_dump_file = tempfile::NamedTempFile::new_in(dump_dir)?;
-        let temp_dump_file_path = temp_dump_file.path().to_owned();
-        compression::to_tar_gz(temp_dump_path, temp_dump_file_path)?;
-        temp_dump_file.persist(&dump_path)?;
-        Ok(dump_path)
-    })
-    .await??;
-
-    info!("Created dump in {:?}.", dump_path);
-
-    Ok(uid)
+    pub fn dump_already_in_progress(&self) -> bool {
+        self.status == DumpStatus::InProgress
+    }
 }
 
-/*
-/// Write Settings in `settings.json` file at provided `dir_path`
-fn settings_to_path(settings: &Settings, dir_path: &Path) -> anyhow::Result<()> {
-let path = dir_path.join("settings.json");
-let file = File::create(path)?;
-
-serde_json::to_writer(file, settings)?;
-
-Ok(())
-}
-*/
 
 pub fn load_dump(
     db_path: impl AsRef<Path>,
@@ -185,11 +208,17 @@ pub fn load_dump(
         let index_path = db_path.join(&format!("indexes/index-{}", uuid));
         // let update_path = db_path.join(&format!("updates/updates-{}", uuid)); // TODO: add the update db
 
-        info!("Importing dump from {} into {}...", dump_path.display(), index_path.display());
-        metadata.dump_version.import_index(size, &dump_path, &index_path).unwrap();
+        info!(
+            "Importing dump from {} into {}...",
+            dump_path.display(),
+            index_path.display()
+        );
+        metadata
+            .dump_version
+            .import_index(size, &dump_path, &index_path)
+            .unwrap();
         info!("Dump importation from {} succeed", dump_path.display());
     }
-
 
     info!("Dump importation from {} succeed", dump_path.display());
     Ok(())

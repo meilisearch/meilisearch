@@ -7,18 +7,17 @@ use crate::helpers::Authentication;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(trigger_dump)
+    cfg.service(create_dump)
         .service(get_dump_status);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
-async fn trigger_dump(
+async fn create_dump(
     data: web::Data<Data>,
 ) -> Result<HttpResponse, ResponseError> {
-    eprintln!("dump started");
-    let res = data.dump().await?;
+    let res = data.create_dump().await?;
 
-    Ok(HttpResponse::Ok().body(res))
+    Ok(HttpResponse::Ok().json(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -29,13 +28,15 @@ struct DumpStatusResponse {
 
 #[derive(Deserialize)]
 struct DumpParam {
-    _dump_uid: String,
+    dump_uid: String,
 }
 
 #[get("/dumps/{dump_uid}/status", wrap = "Authentication::Private")]
 async fn get_dump_status(
-    _data: web::Data<Data>,
-    _path: web::Path<DumpParam>,
+    data: web::Data<Data>,
+    path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let res = data.dump_status(path.dump_uid.clone()).await?;
+
+    Ok(HttpResponse::Ok().json(res))
 }

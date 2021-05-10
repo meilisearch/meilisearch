@@ -4,8 +4,7 @@ use std::sync::Arc;
 use sha2::Digest;
 
 use crate::index::{Checked, Settings};
-use crate::index_controller::{IndexController, IndexStats, Stats};
-use crate::index_controller::{IndexMetadata, IndexSettings};
+use crate::index_controller::{IndexController, IndexStats, Stats, DumpInfo, IndexMetadata, IndexSettings};
 use crate::option::Opt;
 
 pub mod search;
@@ -108,8 +107,12 @@ impl Data {
         Ok(self.index_controller.get_all_stats().await?)
     }
 
-    pub async fn dump(&self) -> anyhow::Result<String> {
-        Ok(self.index_controller.dump(self.options.dumps_dir.clone()).await?)
+    pub async fn create_dump(&self) -> anyhow::Result<DumpInfo> {
+        Ok(self.index_controller.create_dump().await?)
+    }
+
+    pub async fn dump_status(&self, uid: String) -> anyhow::Result<DumpInfo> {
+        Ok(self.index_controller.dump_info(uid).await?)
     }
 
     #[inline]

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,6 +15,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 pub use updates::*;
+pub use dump_actor::{DumpInfo, DumpStatus};
+use dump_actor::DumpActorHandle;
 use index_actor::IndexActorHandle;
 use snapshot::{SnapshotService, load_snapshot};
 use update_actor::UpdateActorHandle;
@@ -23,11 +25,11 @@ use uuid_resolver::{UuidError, UuidResolverHandle};
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
-use self::dump::load_dump;
+use dump_actor::load_dump;
 
 mod index_actor;
 mod snapshot;
-mod dump;
+mod dump_actor;
 mod update_actor;
 mod update_handler;
 mod updates;
@@ -63,10 +65,12 @@ pub struct IndexStats {
     pub fields_distribution: FieldsDistribution,
 }
 
+#[derive(Clone)]
 pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
     index_handle: index_actor::IndexActorHandleImpl,
     update_handle: update_actor::UpdateActorHandleImpl<Bytes>,
+    dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
 #[derive(Serialize)]
@@ -108,6 +112,7 @@ impl IndexController {
             &path,
             update_store_size,
         )?;
+        let dump_handle = dump_actor::DumpActorHandleImpl::new(&options.dumps_dir, uuid_resolver.clone(), index_handle.clone(), update_handle.clone())?;
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
@@ -129,6 +134,7 @@ impl IndexController {
             uuid_resolver,
             index_handle,
             update_handle,
+            dump_handle,
         })
     }
 
@@ -378,13 +384,6 @@ impl IndexController {
         Ok(stats)
     }
 
-    pub async fn dump(&self, path: PathBuf) -> anyhow::Result<String> {
-        eprintln!("index_controller::mod called");
-        let res = dump::perform_dump(self, path).await?;
-        eprintln!("index_controller::mod finished");
-        Ok(res)
-    }
-
     pub async fn get_all_stats(&self) -> anyhow::Result<Stats> {
         let update_infos = self.update_handle.get_info().await?;
         let mut database_size = self.get_uuids_size().await? + update_infos.size;
@@ -409,6 +408,14 @@ impl IndexController {
             last_update,
             indexes,
         })
+    }
+
+    pub async fn create_dump(&self) -> anyhow::Result<DumpInfo> {
+        Ok(self.dump_handle.create_dump().await?)
+    }
+
+    pub async fn dump_info(&self, uid: String) -> anyhow::Result<DumpInfo> {
+        Ok(self.dump_handle.dump_info(uid).await?)
     }
 }
 

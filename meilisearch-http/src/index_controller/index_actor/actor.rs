@@ -315,8 +315,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     /// Create a `documents.jsonl` and a `settings.json` in `path/uid/` with a dump of all the
     /// documents and all the settings.
     async fn handle_dump(&self, uid: &str, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
-        use tokio::fs::create_dir_all;
         use std::io::prelude::*;
+        use tokio::fs::create_dir_all;
 
         create_dir_all(&path)
             .await
@@ -348,7 +348,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                     file.write_all(b"\n")?;
                 }
 
-
                 // then we dump all the settings
                 let file = File::create(settings_path)?;
                 let mut file = std::io::BufWriter::new(file);
@@ -356,7 +355,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
                 file.write_all(serde_json::to_string(&settings)?.as_bytes())?;
                 file.write_all(b"\n")?;
-
 
                 Ok(())
             })
