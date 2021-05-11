@@ -7,7 +7,7 @@ use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{FilterCondition, FieldId, FieldsIdsMap, MatchingWords};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -303,7 +303,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         &self,
         value: Value,
         matcher: &impl Matcher,
-        need_to_crop: Option<u32>,
+        need_to_crop: Option<usize>,
         need_to_highlight: bool,
         ) -> Value {
         match value {
@@ -326,30 +326,34 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             value => value,
         }
     }
-    fn format_string(&self, s: String, matcher: &impl Matcher, need_to_crop: Option<u32>, need_to_highlight: bool) -> String {
+    fn format_string(&self, s: String, matcher: &impl Matcher, need_to_crop: Option<usize>, need_to_highlight: bool) -> String {
         let analyzed = self.analyzer.analyze(&s);
-        let word_iter: Box<dyn Iterator<Item = (String, bool)>> = if let Some(_crop_len) = need_to_crop {
-            // cropping iterator
-            todo!()
-        } else {
-            Box::new(analyzed.reconstruct().map(|(word, token)| {
-                if token.is_word() && matcher.matches(token.text()){
-                    (word.to_string(), true)
-                } else {
-                    (word.to_string(), false)
-                }
-            }))
+
+        let tokens: Box<dyn Iterator<Item=(&str, Token)>> = match need_to_crop {
+            Some(crop_len) => {
+                let mut taken = 0;
+                let iter = analyzed
+                    .reconstruct()
+                    .skip_while(|(_, token)| !matcher.matches(token.text()))
+                    .take_while(move |(word, _)| {
+                        let take = taken < crop_len;
+                        taken += word.chars().count();
+                        take
+                    });
+                Box::new(iter)
+            },
+            None => Box::new(analyzed.reconstruct()),
         };
 
-        word_iter.map(|(word, is_match)| {
-            if need_to_highlight && is_match {
+        tokens.map(|(word, token)| {
+            if need_to_highlight && token.is_word() && matcher.matches(token.text()){
                 let mut new_word = String::new();
                 new_word.push_str(&self.marks.0);
                 new_word.push_str(&word);
                 new_word.push_str(&self.marks.1);
                 new_word
             } else {
-                word
+                word.to_string()
             }
         })
         .collect::<String>()
