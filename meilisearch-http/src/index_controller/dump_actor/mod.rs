@@ -208,34 +208,27 @@ pub fn load_dump(
             dump_path.display(),
             db_path.display()
         );
-        metadata
-            .dump_version
-            .import_index(
-                size,
-                uuid,
-                &dump_path,
-                &db_path,
-                idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
-            )
-            .unwrap();
+        metadata.dump_version.import_index(
+            size,
+            uuid,
+            &dump_path,
+            &db_path,
+            idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
+        )?;
         info!("Dump importation from {} succeed", dump_path.display());
     }
 
     // finally we can move all the unprocessed update file into our new DB
+    // this directory may not exists
     let update_path = tmp_dir_path.join("update_files");
     let db_update_path = db_path.join("updates/update_files");
-    eprintln!("path {:?} exists: {:?}", update_path, update_path.exists());
-    eprintln!(
-        "path {:?} exists: {:?}",
-        db_update_path,
-        db_update_path.exists()
-    );
-    let _ = std::fs::remove_dir_all(db_update_path);
-    std::fs::rename(
-        tmp_dir_path.join("update_files"),
-        db_path.join("updates/update_files"),
-    )
-    .unwrap();
+    if update_path.exists() {
+        let _ = std::fs::remove_dir_all(db_update_path);
+        std::fs::rename(
+            tmp_dir_path.join("update_files"),
+            db_path.join("updates/update_files"),
+        )?;
+    }
 
     info!("Dump importation from {} succeed", dump_path.display());
     Ok(())
