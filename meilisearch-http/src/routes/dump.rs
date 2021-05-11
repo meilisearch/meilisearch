@@ -17,7 +17,7 @@ async fn create_dump(
 ) -> Result<HttpResponse, ResponseError> {
     let res = data.create_dump().await?;
 
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Accepted().json(res))
 }
 
 #[derive(Debug, Serialize)]
