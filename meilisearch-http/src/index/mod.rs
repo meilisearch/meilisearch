@@ -41,13 +41,11 @@ impl Index {
 
         let displayed_attributes = self
             .displayed_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
+            .map(|fields| fields.into_iter().map(String::from).collect());
 
         let searchable_attributes = self
             .searchable_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
+            .map(|fields| fields.into_iter().map(String::from).collect());
 
         let faceted_attributes = self
             .faceted_fields(&txn)?
@@ -71,8 +69,8 @@ impl Index {
         let distinct_attribute = self.distinct_attribute(&txn)?.map(String::from);
 
         Ok(Settings {
-            displayed_attributes: Some(Some(displayed_attributes)),
-            searchable_attributes: Some(Some(searchable_attributes)),
+            displayed_attributes: Some(displayed_attributes),
+            searchable_attributes: Some(searchable_attributes),
             attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
