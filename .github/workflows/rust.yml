@@ -1,6 +1,7 @@
 name: Rust
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     # trying and staging branches are for Bors config

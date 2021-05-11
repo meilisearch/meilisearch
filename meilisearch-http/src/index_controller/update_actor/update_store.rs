@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use arc_swap::ArcSwap;
+use futures::StreamExt;
 use heed::types::{ByteSlice, OwnedType, SerdeJson};
 use heed::zerocopy::U64;
 use heed::{BytesDecode, BytesEncode, CompactionOption, Database, Env, EnvOpenOptions};
@@ -17,8 +18,11 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::UpdateMeta;
-use crate::helpers::EnvSizer;
-use crate::index_controller::{IndexActorHandle, updates::*};
+use crate::index_controller::{updates::*, IndexActorHandle};
+use crate::{
+    helpers::EnvSizer,
+    index_controller::index_actor::{IndexResult, CONCURRENT_INDEX_MSG},
+};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -202,7 +206,14 @@ impl UpdateStore {
             .try_send(())
             .expect("Failed to init update store");
 
-        let update_store = Arc::new(UpdateStore { env, pending_queue, next_update_id, updates, state, notification_sender });
+        let update_store = Arc::new(UpdateStore {
+            env,
+            pending_queue,
+            next_update_id,
+            updates,
+            state,
+            notification_sender,
+        });
 
         // We need a weak reference so we can take ownership on the arc later when we
         // want to close the index.
@@ -464,7 +475,12 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn snapshot(&self, uuids: &HashSet<Uuid>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn snapshot(
+        &self,
+        uuids: &HashSet<Uuid>,
+        path: impl AsRef<Path>,
+        handle: impl IndexActorHandle + Clone,
+    ) -> anyhow::Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
 
@@ -495,6 +511,21 @@ impl UpdateStore {
                 }
             }
         }
+
+        let path = &path.as_ref().to_path_buf();
+        let handle = &handle;
+        // Perform the snapshot of each index concurently. Only a third of the capabilities of
+        // the index actor at a time not to put too much pressure on the index actor
+        let mut stream = futures::stream::iter(uuids.iter())
+            .map(move |uuid| handle.snapshot(*uuid, path.clone()))
+            .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+
+        Handle::current().block_on(async {
+            while let Some(res) = stream.next().await {
+                res?;
+            }
+            Ok(()) as IndexResult<()>
+        })?;
 
         Ok(())
     }
