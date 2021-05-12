@@ -324,18 +324,30 @@ fn resolve_plane_sweep_candidates(
             // take the inner proximity of the first group as initial
             let (_, (_, mut proximity, _)) = groups.first()?;
             let (_, (left_most_pos, _, _)) = groups.first()?;
-            let (_, (_, _, right_most_pos)) = groups.last()?;
+            let (_, (_, _, right_most_pos)) = groups.iter().max_by_key(|(_, (_, _, right_most_pos))| right_most_pos)?;
 
             for pair in groups.windows(2) {
-                if let [(i1, (_, _, rpos1)), (i2, (lpos2, prox2, _))] = pair {
-                    // if a pair overlap, meaning that they share at least a word, we return None
-                    if rpos1 >= lpos2 { return None }
+                if let [(i1, (lpos1, _, rpos1)), (i2, (lpos2, prox2, rpos2))] = pair {
+                    // if two positions are equal, meaning that they share at least a word, we return None
+                    if rpos1 == rpos2 || lpos1 == lpos2 || rpos1 == lpos2 || lpos1 == rpos2 {
+                        return None
+                    }
+
+                    let pair_proximity = {
+                        // if intervals are disjoint [..].(..)
+                        if lpos2 > rpos1 { lpos2 - rpos1 }
+                        // if the second interval is a subset of the first [.(..).]
+                        else if rpos2 < rpos1 { (lpos2 - lpos1).min(rpos1 - rpos2) }
+                        // if intervals overlaps [.(..].)
+                        else { (lpos2 - lpos1).min(rpos2 - rpos1) }
+                    };
+
                     // if groups are in the good order (query order) we remove 1 to the proximity
                     // the proximity is clamped to 7
                     let pair_proximity = if i1 < i2 {
-                        (*lpos2 - *rpos1 - 1).min(7)
+                        (pair_proximity - 1).min(7)
                     } else {
-                        (*lpos2 - *rpos1).min(7)
+                        pair_proximity.min(7)
                     };
 
                     proximity += pair_proximity as u8 + prox2;
@@ -385,26 +397,21 @@ fn resolve_plane_sweep_candidates(
             // let q be the position q of second group of the interval.
             let q = current[1];
 
-            let mut leftmost_index = 0;
-
             // If p > r, then the interval [l, r] is minimal and
             // we insert it into the heap according to its size.
             if p.map_or(true, |p| p.1 > rightmost.1) {
-                leftmost_index = current[0].0;
                 if let Some(group) = compute_groups_proximity(&current, consecutive) {
                     output.push(group);
                 }
             }
 
-            // TODO not sure about breaking here or when the p list is found empty.
             let p = match p {
                 Some(p) => p,
                 None => break,
             };
 
-            // Remove the leftmost group P in the interval,
-            // and pop the same group from a list.
-            current[leftmost_index] = p;
+            // Replace the leftmost group P in the interval.
+            current[0] = p;
 
             if p.1 > rightmost.1 {
                 // if [l, r] is minimal, let r = p and l = q.
