@@ -1,7 +1,7 @@
 use heed::EnvOpenOptions;
 use log::info;
 use uuid::Uuid;
-use crate::index_controller::{UpdateStatus, update_actor::UpdateStore};
+use crate::{index::Unchecked, index_controller::{UpdateStatus, update_actor::UpdateStore}};
 use std::io::BufRead;
 use milli::{update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat}};
 use crate::index::{Checked, Index};
@@ -13,9 +13,11 @@ fn import_settings(dir_path: &Path) -> anyhow::Result<Settings<Checked>> {
     let path = dir_path.join("settings.json");
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);
-    let metadata = serde_json::from_reader(reader)?;
+    let metadata: Settings<Unchecked> = serde_json::from_reader(reader)?;
 
-    Ok(metadata)
+    println!("Meta: {:?}", metadata);
+
+    Ok(metadata.check())
 }
 
 pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, primary_key: Option<&str>) -> anyhow::Result<()> {
@@ -26,11 +28,13 @@ pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, p
     let index = milli::Index::new(options, index_path)?;
     let index = Index(Arc::new(index));
 
+    let mut txn = index.write_txn()?;
+
     info!("importing the settings...");
     // extract `settings.json` file and import content
     let settings = import_settings(&dump_path)?;
     let update_builder = UpdateBuilder::new(0);
-    index.update_settings(&settings, update_builder)?;
+    index.update_settings_txn(&mut txn, &settings, update_builder)?;
 
     // import the documents in the index
     let update_builder = UpdateBuilder::new(1);
@@ -41,13 +45,16 @@ pub fn import_index(size: usize, uuid: Uuid, dump_path: &Path, db_path: &Path, p
     // TODO: TAMO: currently we ignore any error caused by the importation of the documents because
     // if there is no documents nor primary key it'll throw an anyhow error, but we must remove
     // this before the merge on main
-    let _ = index.update_documents(
+    index.update_documents_txn(
+        &mut txn,
         UpdateFormat::JsonStream,
         IndexDocumentsMethod::ReplaceDocuments,
         Some(reader),
         update_builder,
         primary_key,
-    );
+    )?;
+
+    txn.commit()?;
 
     // the last step: we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)

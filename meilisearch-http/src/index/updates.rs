@@ -133,16 +133,29 @@ impl Index {
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> anyhow::Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
+        let result = self.update_documents_txn(&mut txn, format, method, content, update_builder, primary_key)?;
+        txn.commit()?;
+        Ok(result)
+    }
+
+    pub fn update_documents_txn<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
+        format: UpdateFormat,
+        method: IndexDocumentsMethod,
+        content: Option<impl io::Read>,
+        update_builder: UpdateBuilder,
+        primary_key: Option<&str>,
+    ) -> anyhow::Result<UpdateResult> {
         info!("performing document addition");
-        // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
 
         // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(ref primary_key)) = (self.primary_key(&wtxn)?, primary_key) {
-            self.put_primary_key(&mut wtxn, primary_key)?;
+        if let (None, Some(ref primary_key)) = (self.primary_key(txn)?, primary_key) {
+            self.put_primary_key(txn, primary_key)?;
         }
 
-        let mut builder = update_builder.index_documents(&mut wtxn, self);
+        let mut builder = update_builder.index_documents(txn, self);
         builder.update_format(format);
         builder.index_documents_method(method);
 
@@ -150,19 +163,15 @@ impl Index {
             |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
         let gzipped = false;
-        let result = match content {
-            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback),
-            Some(content) => builder.execute(content, indexing_callback),
-            None => builder.execute(std::io::empty(), indexing_callback),
+        let addition = match content {
+            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback)?,
+            Some(content) => builder.execute(content, indexing_callback)?,
+            None => builder.execute(std::io::empty(), indexing_callback)?,
         };
 
-        info!("document addition done: {:?}", result);
+        info!("document addition done: {:?}", addition);
 
-        result.and_then(|addition_result| {
-            wtxn.commit()
-                .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
-                .map_err(Into::into)
-        })
+        Ok(UpdateResult::DocumentsAddition(addition))
     }
 
     pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
@@ -179,14 +188,14 @@ impl Index {
         }
     }
 
-    pub fn update_settings(
-        &self,
+    pub fn update_settings_txn<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
-        let mut builder = update_builder.settings(&mut wtxn, self);
+        let mut builder = update_builder.settings(txn, self);
 
         if let Some(ref names) = settings.searchable_attributes {
             match names {
@@ -228,16 +237,20 @@ impl Index {
             }
         }
 
-        let result = builder
-            .execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
+        builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step))?;
 
-        match result {
-            Ok(()) => wtxn
-                .commit()
-                .and(Ok(UpdateResult::Other))
-                .map_err(Into::into),
-            Err(e) => Err(e),
-        }
+        Ok(UpdateResult::Other)
+    }
+
+    pub fn update_settings(
+        &self,
+        settings: &Settings<Checked>,
+        update_builder: UpdateBuilder,
+    ) -> anyhow::Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
+        let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
+        txn.commit()?;
+        Ok(result)
     }
 
     pub fn delete_documents(
