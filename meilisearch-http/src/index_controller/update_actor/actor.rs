@@ -3,17 +3,15 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use futures::StreamExt;
 use log::info;
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore, UpdateStoreInfo};
-use crate::index_controller::index_actor::{IndexActorHandle, CONCURRENT_INDEX_MSG};
+use crate::index_controller::index_actor::{IndexActorHandle};
 use crate::index_controller::{UpdateMeta, UpdateStatus};
 
 pub struct UpdateActor<D, I> {
@@ -207,25 +205,8 @@ where
     async fn handle_snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
-        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            update_store.snapshot(&uuids, &path)?;
 
-            // Perform the snapshot of each index concurently. Only a third of the capabilities of
-            // the index actor at a time not to put too much pressure on the index actor
-            let path = &path;
-            let handle = &index_handle;
-
-            let mut stream = futures::stream::iter(uuids.iter())
-                .map(|&uuid| handle.snapshot(uuid, path.clone()))
-                .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
-
-            Handle::current().block_on(async {
-                while let Some(res) = stream.next().await {
-                    res?;
-                }
-                Ok(())
-            })
-        })
+        tokio::task::spawn_blocking(move ||  update_store.snapshot(&uuids, &path, index_handle))
         .await
         .map_err(|e| UpdateError::Error(e.into()))?
         .map_err(|e| UpdateError::Error(e.into()))?;
