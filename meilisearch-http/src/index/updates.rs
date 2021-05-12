@@ -1,17 +1,24 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io;
-use std::num::NonZeroUsize;
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
 use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::index_controller::UpdateResult;
 
 use super::{deserialize_some, Index};
 
+fn serialize_with_wildcard<S>(field: &Option<Option<Vec<String>>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let wildcard = vec!["*".to_string()];
+    s.serialize_some(&field.as_ref().map(|o| o.as_ref().unwrap_or(&wildcard)))
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct Checked;
@@ -25,6 +32,7 @@ pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
+        serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub displayed_attributes: Option<Option<Vec<String>>>,
@@ -32,6 +40,7 @@ pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
+        serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,
@@ -134,7 +143,14 @@ impl Index {
         primary_key: Option<&str>,
     ) -> anyhow::Result<UpdateResult> {
         let mut txn = self.write_txn()?;
-        let result = self.update_documents_txn(&mut txn, format, method, content, update_builder, primary_key)?;
+        let result = self.update_documents_txn(
+            &mut txn,
+            format,
+            method,
+            content,
+            update_builder,
+            primary_key,
+        )?;
         txn.commit()?;
         Ok(result)
     }
@@ -164,7 +180,9 @@ impl Index {
 
         let gzipped = false;
         let addition = match content {
-            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback)?,
+            Some(content) if gzipped => {
+                builder.execute(GzDecoder::new(content), indexing_callback)?
+            }
             Some(content) => builder.execute(content, indexing_callback)?,
             None => builder.execute(std::io::empty(), indexing_callback)?,
         };
@@ -237,7 +255,9 @@ impl Index {
             }
         }
 
-        builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step))?;
+        builder.execute(|indexing_step, update_id| {
+            info!("update {}: {:?}", update_id, indexing_step)
+        })?;
 
         Ok(UpdateResult::Other)
     }
@@ -299,7 +319,10 @@ mod test {
 
         let checked = settings.clone().check();
         assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
-        assert_eq!(settings.searchable_attributes, checked.searchable_attributes);
+        assert_eq!(
+            settings.searchable_attributes,
+            checked.searchable_attributes
+        );
 
         // test wildcard
         // test no changes
