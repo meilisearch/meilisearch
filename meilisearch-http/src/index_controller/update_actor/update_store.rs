@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::UpdateMeta;
-use crate::helpers::EnvSizer;
+use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
 #[allow(clippy::upper_case_acronyms)]
@@ -525,7 +525,12 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn snapshot(&self, uuids: &HashSet<Uuid>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn snapshot(
+        &self,
+        uuids: &HashSet<Uuid>,
+        path: impl AsRef<Path>,
+        handle: impl IndexActorHandle + Clone,
+    ) -> anyhow::Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
 
@@ -556,6 +561,21 @@ impl UpdateStore {
                 }
             }
         }
+
+        let path = &path.as_ref().to_path_buf();
+        let handle = &handle;
+        // Perform the snapshot of each index concurently. Only a third of the capabilities of
+        // the index actor at a time not to put too much pressure on the index actor
+        let mut stream = futures::stream::iter(uuids.iter())
+            .map(move |uuid| handle.snapshot(*uuid, path.clone()))
+            .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+
+        Handle::current().block_on(async {
+            while let Some(res) = stream.next().await {
+                res?;
+            }
+            Ok(()) as IndexResult<()>
+        })?;
 
         Ok(())
     }
