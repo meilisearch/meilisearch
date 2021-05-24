@@ -1,5 +1,5 @@
-use std::collections::HashSet;
-use std::fs::create_dir_all;
+use std::{collections::HashSet, io::Write};
+use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 
 use heed::{
@@ -8,7 +8,7 @@ use heed::{
 };
 use uuid::Uuid;
 
-use super::{Result, UuidError, UUID_STORE_SIZE};
+use super::{Result, UuidResolverError, UUID_STORE_SIZE};
 use crate::helpers::EnvSizer;
 
 #[async_trait::async_trait]
@@ -22,6 +22,7 @@ pub trait UuidStore {
     async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
+    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
 }
 
 #[derive(Clone)]
@@ -48,7 +49,7 @@ impl HeedUuidStore {
         match db.get(&txn, &name)? {
             Some(uuid) => {
                 if err {
-                    Err(UuidError::NameAlreadyExist)
+                    Err(UuidResolverError::NameAlreadyExist)
                 } else {
                     let uuid = Uuid::from_slice(uuid)?;
                     Ok(uuid)
@@ -138,6 +139,25 @@ impl HeedUuidStore {
     pub fn get_size(&self) -> Result<u64> {
         Ok(self.env.size())
     }
+
+    pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
+        let dump_path = path.join("index_uuids");
+        create_dir_all(&dump_path)?;
+        let dump_file_path = dump_path.join("data.jsonl");
+        let mut dump_file = File::create(&dump_file_path)?;
+        let mut uuids = HashSet::new();
+
+        let txn = self.env.read_txn()?;
+        for entry in self.db.iter(&txn)? {
+            let entry = entry?;
+            let uuid = Uuid::from_slice(entry.1)?;
+            uuids.insert(uuid);
+            serde_json::to_writer(&mut dump_file, &serde_json::json!({ "uid": entry.0, "uuid": uuid }))?;
+            dump_file.write(b"\n").unwrap();
+        }
+
+        Ok(uuids)
+    }
 }
 
 #[async_trait::async_trait]
@@ -174,5 +194,10 @@ impl UuidStore for HeedUuidStore {
 
     async fn get_size(&self) -> Result<u64> {
         self.get_size()
+    }
+
+    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || this.dump(path)).await?
     }
 }

@@ -20,7 +20,7 @@ use dump_actor::DumpActorHandle;
 use index_actor::IndexActorHandle;
 use snapshot::{SnapshotService, load_snapshot};
 use update_actor::UpdateActorHandle;
-use uuid_resolver::{UuidError, UuidResolverHandle};
+use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
@@ -176,7 +176,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_update(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) => {
+            Err(UuidResolverError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let status = perform_update(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created
@@ -230,7 +230,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_udpate(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) if create => {
+            Err(UuidResolverError::UnexistingIndex(name)) if create => {
                 let uuid = Uuid::new_v4();
                 let status = perform_udpate(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created
