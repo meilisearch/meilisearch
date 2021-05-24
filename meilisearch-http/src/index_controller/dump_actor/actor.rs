@@ -182,10 +182,18 @@ where
 
     async fn handle_dump_info(&self, uid: String) -> DumpResult<DumpInfo> {
         match &*self.dump_info.lock().await {
-            None => Err(DumpError::DumpDoesNotExist(uid)),
-            Some(DumpInfo { uid: ref s, .. }) if &uid != s => Err(DumpError::DumpDoesNotExist(uid)),
+            None => self.dump_from_fs(uid).await,
+            Some(DumpInfo { uid: ref s, .. }) if &uid != s => self.dump_from_fs(uid).await,
             Some(info) => Ok(info.clone()),
         }
+    }
+
+    async fn dump_from_fs(&self, uid: String) -> DumpResult<DumpInfo> {
+        self.dump_path
+            .join(format!("{}.dump", &uid))
+            .exists()
+            .then(|| DumpInfo::new(uid.clone(), DumpStatus::Done))
+            .ok_or(DumpError::DumpDoesNotExist(uid))
     }
 
     async fn is_running(&self) -> bool {
