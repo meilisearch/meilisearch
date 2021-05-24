@@ -56,8 +56,7 @@ impl IndexStore for MapIndexStore {
             }
             Ok(index)
         })
-        .await
-        .map_err(|e| IndexError::Error(e.into()))??;
+        .await??;
 
         self.index_store.write().await.insert(uuid, index.clone());
 
@@ -78,8 +77,7 @@ impl IndexStore for MapIndexStore {
 
                 let index_size = self.index_size;
                 let index = spawn_blocking(move || open_index(path, index_size))
-                    .await
-                    .map_err(|e| IndexError::Error(e.into()))??;
+                    .await??;
                 self.index_store.write().await.insert(uuid, index.clone());
                 Ok(Some(index))
             }
@@ -88,18 +86,16 @@ impl IndexStore for MapIndexStore {
 
     async fn delete(&self, uuid: Uuid) -> IndexResult<Option<Index>> {
         let db_path = self.path.join(format!("index-{}", uuid));
-        fs::remove_dir_all(db_path)
-            .await
-            .map_err(|e| IndexError::Error(e.into()))?;
+        fs::remove_dir_all(db_path).await?;
         let index = self.index_store.write().await.remove(&uuid);
         Ok(index)
     }
 }
 
 fn open_index(path: impl AsRef<Path>, size: usize) -> IndexResult<Index> {
-    std::fs::create_dir_all(&path).map_err(|e| IndexError::Error(e.into()))?;
+    std::fs::create_dir_all(&path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
-    let index = milli::Index::new(options, &path).map_err(IndexError::Error)?;
+    let index = milli::Index::new(options, &path)?;
     Ok(Index(Arc::new(index)))
 }

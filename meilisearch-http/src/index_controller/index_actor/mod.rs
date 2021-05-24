@@ -50,17 +50,29 @@ impl IndexMeta {
 
 #[derive(Error, Debug)]
 pub enum IndexError {
-    #[error("error with index: {0}")]
-    Error(#[from] anyhow::Error),
     #[error("index already exists")]
     IndexAlreadyExists,
     #[error("Index doesn't exists")]
     UnexistingIndex,
-    #[error("Heed error: {0}")]
-    HeedError(#[from] heed::Error),
     #[error("Existing primary key")]
     ExistingPrimaryKey,
+    #[error("Internal Index Error: {0}")]
+    Internal(String)
 }
+
+macro_rules! internal_error {
+    ($($other:path), *) => {
+        $(
+            impl From<$other> for IndexError {
+                fn from(other: $other) -> Self {
+                    Self::Internal(other.to_string())
+                }
+            }
+        )*
+    }
+}
+
+internal_error!(anyhow::Error, heed::Error, tokio::task::JoinError, std::io::Error);
 
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
