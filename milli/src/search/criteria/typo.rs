@@ -13,15 +13,19 @@ use super::{
     CriterionParameters,
     CriterionResult,
     query_docids,
-    query_pair_proximity_docids
+    query_pair_proximity_docids,
+    resolve_query_tree,
 };
+
+/// Maximum number of typo for a word of any length.
+const MAX_TYPOS_PER_WORD: u8 = 2;
 
 pub struct Typo<'t> {
     ctx: &'t dyn Context<'t>,
-    query_tree: Option<(usize, Operation)>,
-    number_typos: u8,
-    candidates: Candidates,
-    bucket_candidates: RoaringBitmap,
+    /// (max_typos, query_tree, candidates)
+    state: Option<(u8, Operation, Candidates)>,
+    typos: u8,
+    bucket_candidates: Option<RoaringBitmap>,
     parent: Box<dyn Criterion + 't>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
 }
@@ -30,10 +34,9 @@ impl<'t> Typo<'t> {
     pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
         Typo {
             ctx,
-            query_tree: None,
-            number_typos: 0,
-            candidates: Candidates::default(),
-            bucket_candidates: RoaringBitmap::new(),
+            state: None,
+            typos: 0,
+            bucket_candidates: None,
             parent,
             candidates_cache: HashMap::new(),
         }
@@ -45,113 +48,106 @@ impl<'t> Criterion for Typo<'t> {
     fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         // remove excluded candidates when next is called, instead of doing it in the loop.
-        match &mut self.candidates {
-            Allowed(candidates) => *candidates -= params.excluded_candidates,
-            Forbidden(candidates) => *candidates |= params.excluded_candidates,
+        match self.state.as_mut() {
+            Some((_, _, Allowed(candidates))) => *candidates -= params.excluded_candidates,
+            Some((_, _, Forbidden(candidates))) => *candidates |= params.excluded_candidates,
+            None => (),
         }
 
         loop {
-            debug!("Typo at iteration {} ({:?})", self.number_typos, self.candidates);
+            debug!("Typo at iteration {} (max typos {:?}) ({:?})",
+                self.typos,
+                self.state.as_ref().map(|(mt, _, _)| mt),
+                self.state.as_ref().map(|(_, _, cd)| cd),
+            );
 
-            match (&mut self.query_tree, &mut self.candidates) {
-                (_, Allowed(candidates)) if candidates.is_empty() => {
+            match self.state.as_mut() {
+                Some((max_typos, _, _)) if self.typos > *max_typos => {
+                    self.state = None; // reset state
+                },
+                Some((_, _, Allowed(allowed_candidates))) if allowed_candidates.is_empty() => {
+                    self.state = None; // reset state
+                },
+                Some((_, query_tree, candidates_authorization)) => {
+                    let fst = self.ctx.words_fst();
+                    let new_query_tree = match self.typos {
+                        typos if typos < MAX_TYPOS_PER_WORD => {
+                            alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?
+                        },
+                        MAX_TYPOS_PER_WORD => {
+                            // When typos >= MAX_TYPOS_PER_WORD, no more alteration of the query tree is possible,
+                            // we keep the altered query tree
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.typos, params.wdcache)?;
+                            // we compute the allowed candidates
+                            let query_tree_allowed_candidates = resolve_query_tree(self.ctx, query_tree, params.wdcache)?;
+                            // we assign the allowed candidates to the candidates authorization.
+                            *candidates_authorization = match take(candidates_authorization) {
+                                Allowed(allowed_candidates) => Allowed(query_tree_allowed_candidates & allowed_candidates),
+                                Forbidden(forbidden_candidates) => Allowed(query_tree_allowed_candidates - forbidden_candidates),
+                            };
+                            query_tree.clone()
+                        },
+                        _otherwise => query_tree.clone(),
+                    };
+
+                    let mut candidates = resolve_candidates(
+                        self.ctx,
+                        &new_query_tree,
+                        self.typos,
+                        &mut self.candidates_cache,
+                        params.wdcache,
+                    )?;
+
+                    match candidates_authorization {
+                        Allowed(allowed_candidates) => {
+                            candidates &= &*allowed_candidates;
+                            *allowed_candidates -= &candidates;
+                        },
+                        Forbidden(forbidden_candidates) => {
+                            candidates -= &*forbidden_candidates;
+                            *forbidden_candidates |= &candidates;
+                        },
+                    }
+
+                    let bucket_candidates = match self.bucket_candidates.as_mut() {
+                        Some(bucket_candidates) => take(bucket_candidates),
+                        None => candidates.clone(),
+                    };
+
+                    self.typos += 1;
+
                     return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: Some(take(&mut self.candidates).into_inner()),
-                        bucket_candidates: take(&mut self.bucket_candidates),
+                        query_tree: Some(new_query_tree),
+                        candidates: Some(candidates),
+                        filtered_candidates: None,
+                        bucket_candidates: Some(bucket_candidates),
                     }));
                 },
-                (Some((max_typos, query_tree)), Allowed(candidates)) => {
-                    if self.number_typos as usize > *max_typos {
-                        self.query_tree = None;
-                        self.candidates = Candidates::default();
-                    } else {
-                        let fst = self.ctx.words_fst();
-                        let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?
-                        } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?;
-                            query_tree.clone()
-                        } else {
-                            query_tree.clone()
-                        };
-
-                        let mut new_candidates = resolve_candidates(
-                            self.ctx,
-                            &new_query_tree,
-                            self.number_typos,
-                            &mut self.candidates_cache,
-                            params.wdcache,
-                        )?;
-                        new_candidates.intersect_with(&candidates);
-                        candidates.difference_with(&new_candidates);
-                        self.number_typos += 1;
-
-                        return Ok(Some(CriterionResult {
-                            query_tree: Some(new_query_tree),
-                            candidates: Some(new_candidates),
-                            bucket_candidates: take(&mut self.bucket_candidates),
-                        }));
-                    }
-                },
-                (Some((max_typos, query_tree)), Forbidden(candidates)) => {
-                    if self.number_typos as usize > *max_typos {
-                        self.query_tree = None;
-                        self.candidates = Candidates::default();
-                    } else {
-                        let fst = self.ctx.words_fst();
-                        let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?
-                        } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, params.wdcache)?;
-                            query_tree.clone()
-                        } else {
-                            query_tree.clone()
-                        };
-
-                        let mut new_candidates = resolve_candidates(
-                            self.ctx,
-                            &new_query_tree,
-                            self.number_typos,
-                            &mut self.candidates_cache,
-                            params.wdcache,
-                        )?;
-                        new_candidates.difference_with(&candidates);
-                        candidates.union_with(&new_candidates);
-                        self.number_typos += 1;
-                        self.bucket_candidates.union_with(&new_candidates);
-
-                        return Ok(Some(CriterionResult {
-                            query_tree: Some(new_query_tree),
-                            candidates: Some(new_candidates),
-                            bucket_candidates: take(&mut self.bucket_candidates),
-                        }));
-                    }
-                },
-                (None, Allowed(_)) => {
-                    let candidates = take(&mut self.candidates).into_inner();
-                    return Ok(Some(CriterionResult {
-                        query_tree: None,
-                        candidates: Some(candidates.clone()),
-                        bucket_candidates: candidates,
-                    }));
-                },
-                (None, Forbidden(_)) => {
+                None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: None, candidates: None, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
+                            self.bucket_candidates = match (self.bucket_candidates.take(), bucket_candidates) {
+                                (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
+                                (self_bc, parent_bc) => self_bc.or(parent_bc),
+                            };
+
+                            let candidates = match candidates.or(filtered_candidates) {
+                                Some(candidates) => Candidates::Allowed(candidates - params.excluded_candidates),
+                                None => Candidates::Forbidden(params.excluded_candidates.clone()),
+                            };
+
+                            let maximum_typos = maximum_typo(&query_tree) as u8;
+                            self.state = Some((maximum_typos, query_tree, candidates));
+                            self.typos = 0;
+
+                        },
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
                                 query_tree: None,
-                                candidates: None,
+                                candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
-                        },
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                            self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
-                            self.number_typos = 0;
-                            self.candidates = candidates.map_or_else(|| {
-                                Candidates::Forbidden(params.excluded_candidates.clone())
-                            }, Candidates::Allowed);
-                            self.bucket_candidates.union_with(&bucket_candidates);
                         },
                         None => return Ok(None),
                     }
@@ -185,7 +181,6 @@ fn alterate_query_tree(
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, wdcache))
             },
             Operation::Query(q) => {
-                // TODO may be optimized when number_typos == 0
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
                     // if no typo is allowed we don't call word_derivations function,
                     // and directly create an Exact query
@@ -197,7 +192,7 @@ fn alterate_query_tree(
                     } else {
                         let typo = *typo.min(&number_typos);
                         let words = word_derivations(word, q.prefix, typo, words_fst, wdcache)?;
-                        let queries = words.into_iter().map(|(word, typo)| {
+                        let queries = words.iter().map(|(word, typo)| {
                             Operation::Query(Query {
                                 prefix: false,
                                 kind: QueryKind::Exact { original_typo: *typo, word: word.to_string() },
@@ -384,7 +379,8 @@ mod test {
                 ]),
             ])),
             candidates: Some(candidates_1.clone()),
-            bucket_candidates: candidates_1,
+            bucket_candidates: Some(candidates_1),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
@@ -406,7 +402,8 @@ mod test {
                 ]),
             ])),
             candidates: Some(candidates_2.clone()),
-            bucket_candidates: candidates_2,
+            bucket_candidates: Some(candidates_2),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
@@ -427,8 +424,9 @@ mod test {
 
         let expected = CriterionResult {
             query_tree: None,
-            candidates: Some(facet_candidates.clone()),
-            bucket_candidates: facet_candidates,
+            candidates: None,
+            bucket_candidates: None,
+            filtered_candidates: Some(facet_candidates.clone()),
         };
 
         // first iteration, returns the facet candidates
@@ -471,7 +469,8 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_1 & &facet_candidates),
-            bucket_candidates: facet_candidates.clone(),
+            bucket_candidates: Some(&candidates_1 & &facet_candidates),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
@@ -493,7 +492,8 @@ mod test {
                 ]),
             ])),
             candidates: Some(&candidates_2 & &facet_candidates),
-            bucket_candidates: RoaringBitmap::new(),
+            bucket_candidates: Some(&candidates_2 & &facet_candidates),
+            filtered_candidates: None,
         };
 
         assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));

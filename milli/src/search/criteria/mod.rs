@@ -38,8 +38,10 @@ pub struct CriterionResult {
     /// The candidates that this criterion is allowed to return subsets of,
     /// if None, it is up to the child to compute the candidates itself.
     candidates: Option<RoaringBitmap>,
+    /// The candidates, coming from facet filters, that this criterion is allowed to return subsets of.
+    filtered_candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
-    bucket_candidates: RoaringBitmap,
+    bucket_candidates: Option<RoaringBitmap>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -55,15 +57,6 @@ pub struct CriterionParameters<'a> {
 enum Candidates {
     Allowed(RoaringBitmap),
     Forbidden(RoaringBitmap)
-}
-
-impl Candidates {
-    fn into_inner(self) -> RoaringBitmap {
-        match self {
-            Self::Allowed(inner) => inner,
-            Self::Forbidden(inner) => inner,
-        }
-    }
 }
 
 impl Default for Candidates {
@@ -236,14 +229,12 @@ impl<'t> CriteriaBuilder<'t> {
 pub fn resolve_query_tree<'t>(
     ctx: &'t dyn Context,
     query_tree: &Operation,
-    cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
-        cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
@@ -252,7 +243,7 @@ pub fn resolve_query_tree<'t>(
         match query_tree {
             And(ops) => {
                 let mut ops = ops.iter().map(|op| {
-                    resolve_operation(ctx, op, cache, wdcache)
+                    resolve_operation(ctx, op, wdcache)
                 }).collect::<anyhow::Result<Vec<_>>>()?;
 
                 ops.sort_unstable_by_key(|cds| cds.len());
@@ -296,7 +287,7 @@ pub fn resolve_query_tree<'t>(
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
-                    let docids = resolve_operation(ctx, op, cache, wdcache)?;
+                    let docids = resolve_operation(ctx, op, wdcache)?;
                     candidates.union_with(&docids);
                 }
                 Ok(candidates)
@@ -305,7 +296,7 @@ pub fn resolve_query_tree<'t>(
         }
     }
 
-    resolve_operation(ctx, query_tree, cache, wdcache)
+    resolve_operation(ctx, query_tree, wdcache)
 }
 
 

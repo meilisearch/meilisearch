@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use log::debug;
 use roaring::RoaringBitmap;
 
@@ -32,34 +30,33 @@ impl<'t> Final<'t> {
 
     #[logging_timer::time("Final::{}")]
     pub fn next(&mut self, excluded_candidates: &RoaringBitmap) -> anyhow::Result<Option<FinalResult>> {
-        loop {
-            debug!("Final iteration");
-            let mut criterion_parameters = CriterionParameters {
-                wdcache: &mut self.wdcache,
-                // returned_candidates is merged with excluded_candidates to avoid duplicas
-                excluded_candidates: &(&self.returned_candidates | excluded_candidates),
-            };
+        debug!("Final iteration");
+        let excluded_candidates = &self.returned_candidates | excluded_candidates;
+        let mut criterion_parameters = CriterionParameters {
+            wdcache: &mut self.wdcache,
+            // returned_candidates is merged with excluded_candidates to avoid duplicas
+            excluded_candidates: &excluded_candidates,
+        };
 
-            match self.parent.next(&mut criterion_parameters)? {
-                Some(CriterionResult { query_tree, candidates, mut bucket_candidates }) => {
-                    let candidates = match candidates {
-                        Some(candidates) => candidates,
-                        None => {
-                            let candidates = match query_tree.as_ref() {
-                                Some(qt) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), &mut self.wdcache)?,
-                                None => self.ctx.documents_ids()?,
-                            };
-                            bucket_candidates |= &candidates;
-                            candidates
-                        }
-                    };
+        match self.parent.next(&mut criterion_parameters)? {
+            Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
+                let mut candidates = match (candidates, query_tree.as_ref()) {
+                    (Some(candidates), _) => candidates,
+                    (None, Some(qt)) => resolve_query_tree(self.ctx, qt, &mut self.wdcache)? - excluded_candidates,
+                    (None, None) => self.ctx.documents_ids()? - excluded_candidates,
+                };
 
-                    self.returned_candidates |= &candidates;
+                if let Some(filtered_candidates) = filtered_candidates {
+                    candidates &= filtered_candidates;
+                }
 
-                    return Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }));
-                },
-                None => return Ok(None),
-            }
+                let bucket_candidates = bucket_candidates.unwrap_or_else(|| candidates.clone());
+
+                self.returned_candidates |= &candidates;
+
+                Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }))
+            },
+            None => Ok(None),
         }
     }
 }

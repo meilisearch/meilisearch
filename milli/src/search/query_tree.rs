@@ -241,7 +241,7 @@ impl<'a> QueryTreeBuilder<'a> {
 }
 
 /// Split the word depending on the frequency of subwords in the database documents.
-fn split_best_frequency<'a>(ctx: &impl Context, word: &'a str) -> heed::Result<Option<Operation>> {
+fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<Operation>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
@@ -438,14 +438,14 @@ fn create_query_tree(
         let start = number_phrases + (number_phrases == 0) as usize;
         for len in start..=query.len() {
             let mut word_count = len - number_phrases;
-            let query: Vec<_> = query.iter().filter_map(|p| {
+            let query: Vec<_> = query.iter().filter(|p| {
                 if p.is_phrase() {
-                    Some(p)
+                    true
                 } else if word_count != 0 {
                     word_count -= 1;
-                    Some(p)
+                    true
                 } else {
-                    None
+                    false
                 }
             })
             .cloned()

@@ -93,33 +93,25 @@ impl<'t> Criterion for AscDesc<'t> {
             match self.candidates.next().transpose()? {
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
-                            let candidates_is_some = candidates.is_some();
+                        Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
                             self.query_tree = query_tree;
-                            let candidates = match (&self.query_tree, candidates) {
-                                (_, Some(mut candidates)) => {
-                                    candidates.intersect_with(&self.faceted_candidates);
-                                    candidates
-                                },
+                            let mut candidates = match (&self.query_tree, candidates) {
+                                (_, Some(candidates)) => candidates & &self.faceted_candidates,
                                 (Some(qt), None) => {
                                     let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
-                                    let mut candidates = resolve_query_tree(&context, qt, &mut HashMap::new(), params.wdcache)?;
-                                    candidates -= params.excluded_candidates;
-                                    candidates.intersect_with(&self.faceted_candidates);
-                                    candidates
+                                    let candidates = resolve_query_tree(&context, qt, params.wdcache)?;
+                                    candidates & &self.faceted_candidates
                                 },
                                 (None, None) => take(&mut self.faceted_candidates),
                             };
 
-                            // If our parent returns candidates it means that the bucket
-                            // candidates were already computed before and we can use them.
-                            //
-                            // If not, we must use the just computed candidates as our bucket
-                            // candidates.
-                            if candidates_is_some {
-                                self.bucket_candidates.union_with(&bucket_candidates);
-                            } else {
-                                self.bucket_candidates.union_with(&candidates);
+                            if let Some(filtered_candidates) = filtered_candidates {
+                                candidates &= filtered_candidates;
+                            }
+
+                            match bucket_candidates {
+                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                                None => self.bucket_candidates |= &candidates,
                             }
 
                             if candidates.is_empty() {
@@ -143,7 +135,8 @@ impl<'t> Criterion for AscDesc<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
-                        bucket_candidates: take(&mut self.bucket_candidates),
+                        filtered_candidates: None,
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
             }
@@ -222,7 +215,7 @@ fn iterative_facet_ordered_iter<'t>(
             docids_values.push((docid, OrderedFloat(value)));
         }
     }
-    docids_values.sort_unstable_by_key(|(_, v)| v.clone());
+    docids_values.sort_unstable_by_key(|(_, v)| *v);
     let iter = docids_values.into_iter();
     let iter = if ascending {
         Box::new(iter) as Box<dyn Iterator<Item = _>>
@@ -233,7 +226,7 @@ fn iterative_facet_ordered_iter<'t>(
     // The itertools GroupBy iterator doesn't provide an owned version, we are therefore
     // required to collect the result into an owned collection (a Vec).
     // https://github.com/rust-itertools/itertools/issues/499
-    let vec: Vec<_> = iter.group_by(|(_, v)| v.clone())
+    let vec: Vec<_> = iter.group_by(|(_, v)| *v)
         .into_iter()
         .map(|(_, ids)| ids.map(|(id, _)| id).collect())
         .collect();

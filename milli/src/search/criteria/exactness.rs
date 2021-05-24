@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem};
+use std::mem::take;
 
 use log::debug;
 use roaring::RoaringBitmap;
@@ -60,30 +60,41 @@ impl<'t> Criterion for Exactness<'t> {
                     self.query_tree = None;
                 },
                 Some(state) => {
-                    let (candidates, state) = resolve_state(self.ctx, mem::take(state), &self.query)?;
+                    let (candidates, state) = resolve_state(self.ctx, take(state), &self.query)?;
                     self.state = state;
 
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
-                        bucket_candidates: mem::take(&mut self.bucket_candidates),
+                        filtered_candidates: None,
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
                 },
                 None => {
                     match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, bucket_candidates }) => {
-                            let candidates = match candidates {
+                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
+                            let mut candidates = match candidates {
                                 Some(candidates) => candidates,
-                                None => resolve_query_tree(self.ctx, &query_tree, &mut HashMap::new(), params.wdcache)?,
+                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
                             };
+
+                            if let Some(filtered_candidates) = filtered_candidates {
+                                candidates &= filtered_candidates;
+                            }
+
+                            match bucket_candidates {
+                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                                None => self.bucket_candidates |= &candidates,
+                            }
+
                             self.state = Some(State::new(candidates));
                             self.query_tree = Some(query_tree);
-                            self.bucket_candidates |= bucket_candidates;
                         },
-                        Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
                             return Ok(Some(CriterionResult {
-                                query_tree,
+                                query_tree: None,
                                 candidates,
+                                filtered_candidates,
                                 bucket_candidates,
                             }));
                         },
