@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex};
 use uuid::Uuid;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
@@ -88,7 +88,7 @@ where
 
         match msg {
             CreateDump { ret } => {
-                let _ = ret.send(self.inner.clone().handle_create_dump().await);
+                let _ = self.inner.clone().handle_create_dump(ret).await;
             }
             DumpInfo { ret, uid } => {
                 let _ = ret.send(self.inner.handle_dump_info(uid).await);
@@ -103,38 +103,45 @@ where
     Index: index_actor::IndexActorHandle + Send + Sync + Clone + 'static,
     Update: update_actor::UpdateActorHandle + Send + Sync + Clone + 'static,
 {
-    async fn handle_create_dump(self) -> DumpResult<DumpInfo> {
+    async fn handle_create_dump(self, ret: oneshot::Sender<DumpResult<DumpInfo>>) {
         if self.is_running().await {
-            return Err(DumpError::DumpAlreadyRunning);
+            ret.send(Err(DumpError::DumpAlreadyRunning))
+                .expect("Dump actor is dead");
+            return;
         }
         let uid = generate_uid();
         let info = DumpInfo::new(uid.clone(), DumpStatus::InProgress);
         *self.dump_info.lock().await = Some(info.clone());
 
-        let this = self.clone();
+        ret.send(Ok(info)).expect("Dump actor is dead");
 
-        tokio::task::spawn(async move {
-            match this.perform_dump(uid).await {
-                Ok(()) => {
-                    if let Some(ref mut info) = *self.dump_info.lock().await {
-                        info.done();
-                    } else {
-                        warn!("dump actor was in an inconsistant state");
-                    }
-                    info!("Dump succeed");
-                }
-                Err(e) => {
-                    if let Some(ref mut info) = *self.dump_info.lock().await {
-                        info.with_error(e.to_string());
-                    } else {
-                        warn!("dump actor was in an inconsistant state");
-                    }
-                    error!("Dump failed: {}", e);
-                }
-            };
-        });
+        let dump_info = self.dump_info.clone();
+        let cloned_uid = uid.clone();
 
-        Ok(info)
+        let task_result = tokio::task::spawn(self.clone().perform_dump(cloned_uid)).await;
+
+        match task_result {
+            Ok(Ok(())) => {
+                if let Some(ref mut info) = *dump_info.lock().await {
+                    info.done();
+                } else {
+                    warn!("dump actor was in an inconsistant state");
+                }
+                info!("Dump succeed");
+            }
+            Ok(Err(e)) => {
+                if let Some(ref mut info) = *dump_info.lock().await {
+                    info.with_error(e.to_string());
+                } else {
+                    warn!("dump actor was in an inconsistant state");
+                }
+                error!("Dump failed: {}", e);
+            }
+            Err(_) => {
+                error!("Dump panicked. Dump status set to failed");
+                *dump_info.lock().await = Some(DumpInfo::new(uid, DumpStatus::Failed));
+            }
+        };
     }
 
     async fn perform_dump(self, uid: String) -> anyhow::Result<()> {

@@ -13,7 +13,6 @@ use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tempfile::TempDir;
 use thiserror::Error;
 use uuid::Uuid;
@@ -129,7 +128,7 @@ pub struct DumpInfo {
     pub uid: String,
     pub status: DumpStatus,
     #[serde(skip_serializing_if = "Option::is_none", flatten)]
-    pub error: Option<serde_json::Value>,
+    pub error: Option<String>,
 }
 
 impl DumpInfo {
@@ -143,7 +142,7 @@ impl DumpInfo {
 
     pub fn with_error(&mut self, error: String) {
         self.status = DumpStatus::Failed;
-        self.error = Some(json!(error));
+        self.error = Some(error);
     }
 
     pub fn done(&mut self) {
