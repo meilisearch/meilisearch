@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
@@ -21,7 +21,7 @@ pub struct DumpActor<UuidResolver, Index, Update> {
     index: Index,
     update: Update,
     dump_path: PathBuf,
-    dump_info: Arc<Mutex<Option<DumpInfo>>>,
+    dump_info: Arc<RwLock<Option<DumpInfo>>>,
 }
 
 /// Generate uid from creation date
@@ -48,7 +48,7 @@ where
             index,
             update,
             dump_path: dump_path.as_ref().into(),
-            dump_info: Arc::new(Mutex::new(None)),
+            dump_info: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -97,7 +97,7 @@ where
         }
         let uid = generate_uid();
         let info = DumpInfo::new(uid.clone(), DumpStatus::InProgress);
-        *self.dump_info.lock().await = Some(info.clone());
+        *self.dump_info.write().await = Some(info.clone());
 
         ret.send(Ok(info)).expect("Dump actor is dead");
 
@@ -114,7 +114,7 @@ where
 
         match task_result {
             Ok(Ok(())) => {
-                if let Some(ref mut info) = *dump_info.lock().await {
+                if let Some(ref mut info) = *dump_info.write().await {
                     info.done();
                 } else {
                     warn!("dump actor was in an inconsistant state");
@@ -122,7 +122,7 @@ where
                 info!("Dump succeed");
             }
             Ok(Err(e)) => {
-                if let Some(ref mut info) = *dump_info.lock().await {
+                if let Some(ref mut info) = *dump_info.write().await {
                     info.with_error(e.to_string());
                 } else {
                     warn!("dump actor was in an inconsistant state");
@@ -131,13 +131,13 @@ where
             }
             Err(_) => {
                 error!("Dump panicked. Dump status set to failed");
-                *dump_info.lock().await = Some(DumpInfo::new(uid, DumpStatus::Failed));
+                *dump_info.write().await = Some(DumpInfo::new(uid, DumpStatus::Failed));
             }
         };
     }
 
     async fn handle_dump_info(&self, uid: String) -> DumpResult<DumpInfo> {
-        match &*self.dump_info.lock().await {
+        match &*self.dump_info.read().await {
             None => self.dump_from_fs(uid).await,
             Some(DumpInfo { uid: ref s, .. }) if &uid != s => self.dump_from_fs(uid).await,
             Some(info) => Ok(info.clone()),
@@ -154,7 +154,7 @@ where
 
     async fn is_running(&self) -> bool {
         matches!(
-            *self.dump_info.lock().await,
+            *self.dump_info.read().await,
             Some(DumpInfo {
                 status: DumpStatus::InProgress,
                 ..
