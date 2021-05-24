@@ -1,4 +1,4 @@
-use std::path::{Path};
+use std::path::Path;
 use actix_web::web::Bytes;
 use tokio::sync::{mpsc, oneshot};
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg, DumpResult};

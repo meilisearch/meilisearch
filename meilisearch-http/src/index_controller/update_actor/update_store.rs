@@ -642,7 +642,7 @@ impl UpdateStore {
         let path = &path;
 
         let mut stream = futures::stream::iter(uuids.iter())
-            .map(|(uid, uuid)| handle.dump(uid.clone(), *uuid, path.clone()))
+            .map(|(uid, uuid)| handle.dump(*uuid, path.clone()))
             .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
 
         Handle::current().block_on(async {

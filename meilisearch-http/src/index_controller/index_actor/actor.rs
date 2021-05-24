@@ -6,7 +6,7 @@ use async_stream::stream;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::mpsc;
+use tokio::{fs, sync::mpsc};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
@@ -126,13 +126,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Snapshot { uuid, path, ret } => {
                 let _ = ret.send(self.handle_snapshot(uuid, path).await);
             }
-            Dump {
-                uid,
-                uuid,
-                path,
-                ret,
-            } => {
-                let _ = ret.send(self.handle_dump(&uid, uuid, path).await);
+            Dump { uuid, path, ret } => {
+                let _ = ret.send(self.handle_dump(uuid, path).await);
             }
             GetStats { uuid, ret } => {
                 let _ = ret.send(self.handle_get_stats(uuid).await);
@@ -312,46 +307,17 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
     /// Create a `documents.jsonl` and a `settings.json` in `path/uid/` with a dump of all the
     /// documents and all the settings.
-    async fn handle_dump(&self, uid: &str, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
-        use std::io::prelude::*;
-        use tokio::fs::create_dir_all;
+    async fn handle_dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+        let index = self
+            .store
+            .get(uuid)
+            .await?
+            .ok_or(IndexError::UnexistingIndex)?;
 
-        create_dir_all(&path).await?;
+        let path = path.join(format!("indexes/index-{}/", uuid));
+        fs::create_dir_all(&path).await?;
 
-        if let Some(index) = self.store.get(uuid).await? {
-            let documents_path = path.join(uid).join("documents.jsonl");
-            let settings_path = path.join(uid).join("settings.json");
-
-            spawn_blocking(move || -> anyhow::Result<()> {
-                // first we dump all the documents
-                let file = File::create(documents_path)?;
-                let mut file = std::io::BufWriter::new(file);
-
-                // Get write txn to wait for ongoing write transaction before dump.
-                let txn = index.write_txn()?;
-                let fields_ids_map = index.fields_ids_map(&txn)?;
-                // we want to save **all** the fields in the dump.
-                let fields_to_dump: Vec<u8> = fields_ids_map.iter().map(|(id, _)| id).collect();
-
-                for document in index.all_documents(&txn)? {
-                    let (_doc_id, document) = document?;
-                    let json = milli::obkv_to_json(&fields_to_dump, &fields_ids_map, document)?;
-                    file.write_all(serde_json::to_string(&json)?.as_bytes())?;
-                    file.write_all(b"\n")?;
-                }
-
-                // then we dump all the settings
-                let file = File::create(settings_path)?;
-                let mut file = std::io::BufWriter::new(file);
-                let settings = index.settings()?;
-
-                file.write_all(serde_json::to_string(&settings)?.as_bytes())?;
-                file.write_all(b"\n")?;
-
-                Ok(())
-            })
-            .await??;
-        }
+        tokio::task::spawn_blocking(move || index.dump(path)).await??;
 
         Ok(())
     }

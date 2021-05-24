@@ -152,8 +152,8 @@ impl HeedUuidStore {
             let entry = entry?;
             let uuid = Uuid::from_slice(entry.1)?;
             uuids.insert(uuid);
-            serde_json::to_writer(&mut dump_file, &serde_json::json!({ "uid": entry.0, "uuid": uuid }))?;
-            dump_file.write(b"\n").unwrap();
+            serde_json::to_writer(&mut dump_file, &serde_json::json!({ "uid": entry.0, "uuid": uuid
+            }))?; dump_file.write(b"\n").unwrap();
         }
 
         Ok(uuids)

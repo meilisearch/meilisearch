@@ -109,7 +109,7 @@ pub trait IndexActorHandle {
         index_settings: IndexSettings,
     ) -> IndexResult<IndexMeta>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
-    async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
     async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats>;
 }
 
