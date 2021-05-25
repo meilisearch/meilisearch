@@ -106,7 +106,6 @@ where
         let task_result = tokio::task::spawn(perform_dump(
             self.dump_path.clone(),
             self.uuid_resolver.clone(),
-            self.index.clone(),
             self.update.clone(),
             uid.clone(),
         ))
@@ -155,50 +154,28 @@ where
     }
 }
 
-async fn perform_dump<UuidResolver, Index, Update>(
+async fn perform_dump<UuidResolver, Update>(
     dump_path: PathBuf,
     uuid_resolver: UuidResolver,
-    index: Index,
-    update: Update,
+    update_handle: Update,
     uid: String,
 ) -> anyhow::Result<()>
 where
     UuidResolver: uuid_resolver::UuidResolverHandle + Send + Sync + Clone + 'static,
-    Index: index_actor::IndexActorHandle + Send + Sync + Clone + 'static,
     Update: update_actor::UpdateActorHandle + Send + Sync + Clone + 'static,
 {
     info!("Performing dump.");
 
-    let dump_dir = dump_path.clone();
-    tokio::fs::create_dir_all(&dump_dir).await?;
-    let temp_dump_dir =
-        tokio::task::spawn_blocking(move || tempfile::tempdir_in(dump_dir)).await??;
-    let temp_dump_path = temp_dump_dir.path().to_owned();
+    let dump_path_clone = dump_path.clone();
+    let temp_dump_path = tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(dump_path_clone)).await??;
 
-    let uuids = uuid_resolver.list().await?;
-    // maybe we could just keep the vec as-is
-    let uuids: HashSet<(String, Uuid)> = uuids.into_iter().collect();
+    let uuids = uuid_resolver.dump(temp_dump_path.path().to_owned()).await?;
 
-    if uuids.is_empty() {
-        return Ok(());
-    }
+    update_handle.dump(uuids, temp_dump_path.path().to_owned()).await?;
 
-    let indexes = list_indexes(&uuid_resolver, &index).await?;
-
-    // we create one directory by index
-    for meta in indexes.iter() {
-        tokio::fs::create_dir(temp_dump_path.join(&meta.uid)).await?;
-    }
-
-    let metadata = super::Metadata::new(indexes, env!("CARGO_PKG_VERSION").to_string());
-    metadata.to_path(&temp_dump_path).await?;
-
-    update.dump(uuids, temp_dump_path.clone()).await?;
-
-    let dump_dir = dump_path.clone();
     let dump_path = dump_path.join(format!("{}.dump", uid));
     let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
-        let temp_dump_file = tempfile::NamedTempFile::new_in(dump_dir)?;
+        let temp_dump_file = tempfile::NamedTempFile::new_in(&dump_path)?;
         let temp_dump_file_path = temp_dump_file.path().to_owned();
         compression::to_tar_gz(temp_dump_path, temp_dump_file_path)?;
         temp_dump_file.persist(&dump_path)?;
