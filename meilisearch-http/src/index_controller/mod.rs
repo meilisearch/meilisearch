@@ -158,13 +158,7 @@ impl IndexController {
             // prevent dead_locking between the update_handle::update that waits for the update to be
             // registered and the update_actor that waits for the the payload to be sent to it.
             tokio::task::spawn_local(async move {
-                payload
-                    .map(|bytes| {
-                        bytes.map_err(|e| {
-                            Box::new(e) as Box<dyn std::error::Error + Sync + Send + 'static>
-                        })
-                    })
-                    .for_each(|r| async {
+                payload.for_each(|r| async {
                         let _ = sender.send(r).await;
                     })
                     .await
