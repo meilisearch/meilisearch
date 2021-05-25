@@ -117,7 +117,7 @@ where
                 if let Some(ref mut info) = *dump_info.write().await {
                     info.done();
                 } else {
-                    warn!("dump actor was in an inconsistant state");
+                    warn!("Dump actor is in an inconsistent state");
                 }
                 info!("Dump succeed");
             }
