@@ -127,7 +127,7 @@ pub enum DumpStatus {
 pub struct DumpInfo {
     pub uid: String,
     pub status: DumpStatus,
-    #[serde(skip_serializing_if = "Option::is_none", flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
