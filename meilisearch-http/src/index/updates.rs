@@ -178,6 +178,7 @@ impl Index {
         let indexing_callback =
             |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
+
         let gzipped = false;
         let addition = match content {
             Some(content) if gzipped => {

@@ -1,7 +1,7 @@
 mod actor;
 mod handle_impl;
 mod message;
-mod update_store;
+mod store;
 
 use std::{collections::HashSet, path::PathBuf};
 
@@ -16,7 +16,7 @@ use actor::UpdateActor;
 use message::UpdateMsg;
 
 pub use handle_impl::UpdateActorHandleImpl;
-pub use update_store::{UpdateStore, UpdateStoreInfo};
+pub use store::{UpdateStore, UpdateStoreInfo};
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type PayloadData<D> = std::result::Result<D, PayloadError>;
@@ -62,7 +62,7 @@ pub trait UpdateActorHandle {
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn snapshot(&self, uuid: HashSet<Uuid>, path: PathBuf) -> Result<()>;
-    async fn dump(&self, uuid: HashSet<(String, Uuid)>, path: PathBuf) -> Result<()>;
+    async fn dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()>;
     async fn get_info(&self) -> Result<UpdateStoreInfo>;
     async fn update(
         &self,

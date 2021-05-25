@@ -194,9 +194,10 @@ where
         Ok(())
     }
 
-    async fn handle_dump(&self, uuids: HashSet<(String, Uuid)>, path: PathBuf) -> Result<()> {
+    async fn handle_dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
+        println!("starting dump");
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             update_store.dump(&uuids, path.to_path_buf(), index_handle)?;
             Ok(())
