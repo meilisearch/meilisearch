@@ -53,17 +53,8 @@ tinytemplate = "=1.1.0"
 
 [dev-dependencies]
 big_s = "1.0.2"
-criterion = "0.3.4"
 maplit = "1.0.2"
 rand = "0.8.3"
 
 [features]
 default = []
-
-[[bench]]
-name = "songs"
-harness = false
-
-[[bench]]
-name = "wiki"
-harness = false

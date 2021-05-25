@@ -7,15 +7,6 @@ use milli::{
     FacetCondition, Index,
 };
 
-/// The name of the environment variable used to select the path
-/// of the directory containing the datasets
-const BASE_DATASETS_PATH_KEY: &str = "MILLI_BENCH_DATASETS_PATH";
-
-/// The default path for the dataset if nothing is specified
-/// By default we chose `milli/benches` because any cargo command ran in `milli/milli/**` will be
-/// executed with a pwd of `milli/milli`
-const DEFAULT_DATASETS_PATH: &str = "milli/benches";
-
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
     /// each benchmark will first try to delete it and then recreate it
@@ -33,6 +24,8 @@ pub struct Conf<'a> {
     pub facet_condition: Option<&'a str>,
     /// enable or disable the optional words on the query
     pub optional_words: bool,
+    /// primary key, if there is None we'll auto-generate docids for every documents
+    pub primary_key: Option<&'a str>,
 }
 
 impl Conf<'_> {
@@ -47,6 +40,7 @@ impl Conf<'_> {
         configure: Self::nop,
         facet_condition: None,
         optional_words: true,
+        primary_key: None,
     };
 }
 
@@ -86,13 +80,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut builder = update_builder.index_documents(&mut wtxn, &index);
     builder.update_format(UpdateFormat::Csv);
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-    // we called from cargo the current directory is supposed to be milli/milli
-    let base_dataset_path = std::env::vars()
-        .find(|var| var.0 == BASE_DATASETS_PATH_KEY)
-        .map_or(DEFAULT_DATASETS_PATH.to_owned(), |(_key, value)| value);
-    let dataset_path = format!("{}/{}", base_dataset_path, conf.dataset);
-    let reader = File::open(&dataset_path)
-        .expect(&format!("could not find the dataset in: {}", &dataset_path));
+    let reader = File::open(conf.dataset)
+        .expect(&format!("could not find the dataset in: {}", conf.dataset));
     builder.execute(reader, |_, _| ()).unwrap();
     wtxn.commit().unwrap();
 

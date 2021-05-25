@@ -1,3 +1,4 @@
+mod datasets_paths;
 mod utils;
 
 use criterion::{criterion_group, criterion_main};
@@ -33,7 +34,7 @@ fn base_conf(builder: &mut Settings) {
 }
 
 const BASE_CONF: Conf = Conf {
-    dataset: "smol-songs.csv",
+    dataset: datasets_paths::SMOL_SONGS,
     queries: &[
         "john ",             // 9097
         "david ",            // 4794
