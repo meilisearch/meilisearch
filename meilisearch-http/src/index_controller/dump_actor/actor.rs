@@ -114,11 +114,11 @@ where
 
         match task_result {
             Ok(Ok(())) => {
-                (*dump_info.write().await).as_mut().expect("Dump actor should have an inbox").done();
+                (*dump_info.write().await).as_mut().expect("Inconsistent dump service state").done();
                 info!("Dump succeed");
             }
             Ok(Err(e)) => {
-                (*dump_info.write().await).as_mut().expect("Dump actor should have an inbox").with_error(e.to_string());
+                (*dump_info.write().await).as_mut().expect("Inconsistent dump service state").with_error(e.to_string());
                 error!("Dump failed: {}", e);
             }
             Err(_) => {
