@@ -48,6 +48,7 @@ const BASE_CONF: Conf = Conf {
         "Notstandskomitee ", // 4
     ],
     configure: base_conf,
+    primary_key: Some("id"),
     ..Conf::BASE
 };
 
