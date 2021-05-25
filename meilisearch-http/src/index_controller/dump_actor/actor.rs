@@ -4,7 +4,7 @@ use crate::index_controller::{index_actor, update_actor, uuid_resolver, IndexMet
 use async_stream::stream;
 use chrono::Utc;
 use futures::stream::StreamExt;
-use log::{error, info, warn};
+use log::{error, info};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -114,19 +114,11 @@ where
 
         match task_result {
             Ok(Ok(())) => {
-                if let Some(ref mut info) = *dump_info.write().await {
-                    info.done();
-                } else {
-                    warn!("dump actor was in an inconsistant state");
-                }
+                (*dump_info.write().await).as_mut().expect("Dump actor should have an inbox").done();
                 info!("Dump succeed");
             }
             Ok(Err(e)) => {
-                if let Some(ref mut info) = *dump_info.write().await {
-                    info.with_error(e.to_string());
-                } else {
-                    warn!("dump actor was in an inconsistant state");
-                }
+                (*dump_info.write().await).as_mut().expect("Dump actor should have an inbox").with_error(e.to_string());
                 error!("Dump failed: {}", e);
             }
             Err(_) => {
