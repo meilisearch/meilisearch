@@ -1,30 +1,105 @@
 Benchmarks
 ==========
 
-For our benchmark we are using a small subset of the dataset `songs.csv`. It was generated with this command:
-```
+## TOC
+
+- [Datasets](#datasets)
+- [Run the benchmarks](#run-the-benchmarks)
+- [Comparison between benchmarks](#comparison-between-benchmarks)
+
+## Datasets
+
+The benchmarks are available for the following datasets:
+- `songs`
+- `wiki`
+
+### Songs
+
+`songs` is a subset of the [`songs.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/songs.csv.gz).
+
+It was generated with this command:
+
+```bash
 xsv sample --seed 42 1000000 songs.csv -o smol-songs.csv
 ```
-You can download it [here](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-songs.csv.gz)
-And the original `songs.csv` dataset is available [here](https://meili-datasets.s3.fr-par.scw.cloud/songs.csv.gz).
 
-We also use a subset of `wikipedia-articles.csv` that was generated with the following command:
-```
+_[Download the generated `songs` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-songs.csv.gz)._
+
+### Wiki
+
+`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/wikipedia-articles.csv.gz).
+
+It was generated with the following command:
+
+```bash
 xsv sample --seed 42 500000 wikipedia-articles.csv -o smol-wikipedia-articles.csv
 ```
-You can download the original [here](https://meili-datasets.s3.fr-par.scw.cloud/wikipedia-articles.csv.gz) and the subset [here](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-wikipedia-articles.csv.gz).
 
------
+_[Download the generated `wiki` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-wikipedia-articles.csv.gz)._
 
-- To run all the benchmarks we recommand using `cargo bench`, this should takes around ~4h
-- You can also run the benchmarks on the `songs` dataset with `cargo bench --bench songs`, it should takes around 1h
-- And on the `wiki` dataset with `cargo bench --bench wiki`, it should takes around 3h
+## Run the benchmarks
 
-By default the benchmarks will be downloaded and uncompressed automatically in the target directory.
-If you don't want to download the datasets everytime you updates something on the code you can specify a custom directory with the env variable `MILLI_BENCH_DATASETS_PATH`:
+### On our private server
+
+The Meili team has self-hosted his own GitHub runner to run benchmarks on our dedicated bare metal server.
+
+To trigger the benchmark workflow:
+- Go to the `Actions` tab of this repository.
+- Select the `Benchmarks` workflow on the left.
+- Click on `Run workflow` in the blue banner.
+- Select the branch on which you want to run the benchmarks and select the dataset you want (default: `songs`).
+- Finally, click on `Run workflow`.
+
+This GitHub workflow will run the benchmarks and push the `critcmp` report to a DigitalOcean Space (= S3).
+
+_[More about critcmp](https://github.com/BurntSushi/critcmp)._
+
+### On your machine
+
+To run all the benchmarks (~4h):
+
+```bash
+cargo bench
 ```
+
+To run only the `songs` (~1h) or `wiki` (~3h) benchmark:
+
+```bash
+cargo bench --bench <dataset name>
+```
+
+By default, the benchmarks will be downloaded and uncompressed automatically in the target directory.<br>
+If you don't want to download the datasets every time you update something on the code, you can specify a custom directory with the environment variable `MILLI_BENCH_DATASETS_PATH`:
+
+```bash
 mkdir ~/datasets
 MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the two datasets are downloaded
 touch build.rs
 MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the code is compiled again but the datasets are not downloaded
+```
+
+## Comparison between benchmarks
+
+The benchmark reports we push are generated with `critcmp`. Thus, we use `critcmp` to generate comparison results between 2 benchmarks.
+
+We provide a script to download and display the comparison report.
+
+Requirements:
+- [`s3cmd`](https://github.com/s3tools/s3cmd) and being logged to the DigitalOcean Space "milli-benchmarks". See the [DigitalOcean guide](https://docs.digitalocean.com/products/spaces/resources/s3cmd/)
+- [`critcmp`](https://github.com/BurntSushi/critcmp)
+
+List the available file in the DO Space:
+
+```bash
+s3cmd ls s3://milli-benchmarks/critcmp_results/
+```
+```bash
+2021-05-31 14:40       279890  s3://milli-benchmarks/critcmp_results/songs_main_09a4321.json
+2021-05-31 13:49       279576  s3://milli-benchmarks/critcmp_results/songs_geosearch_24ec456.json
+```
+
+Run the comparison script:
+
+```bash
+bash benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
 ```
