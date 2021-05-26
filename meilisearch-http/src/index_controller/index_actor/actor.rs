@@ -10,9 +10,9 @@ use tokio::{fs, sync::mpsc};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
+use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings, update_handler::UpdateHandler};
 use crate::index_controller::{
-    get_arc_ownership_blocking, update_handler::UpdateHandler, Failed, IndexStats, Processed,
+    get_arc_ownership_blocking, Failed, IndexStats, Processed,
     Processing,
 };
 use crate::option::IndexerOpts;

@@ -1,8 +1,3 @@
-mod actor;
-mod handle_impl;
-mod message;
-mod loaders;
-
 use std::{fs::File, path::Path};
 
 use log::error;
@@ -17,6 +12,15 @@ use loaders::v2::MetadataV2;
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
+
+use crate::option::IndexerOpts;
+
+use super::uuid_resolver::store::UuidStore;
+
+mod actor;
+mod handle_impl;
+mod loaders;
+mod message;
 
 pub type DumpResult<T> = std::result::Result<T, DumpError>;
 
@@ -117,11 +121,12 @@ impl DumpInfo {
     }
 }
 
-pub fn load_dump(
+pub fn load_dump<U: UuidStore>(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
     _index_db_size: u64,
     _update_db_size: u64,
+    indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
     let meta_path = src_path.as_ref().join("metadat.json");
     let mut meta_file = File::open(&meta_path)?;
@@ -129,7 +134,7 @@ pub fn load_dump(
 
     match meta {
         Metadata::V1 { meta } => meta.load_dump(src_path, dst_path)?,
-        Metadata::V2 { meta } => meta.load_dump(src_path, dst_path)?,
+        Metadata::V2 { meta } => meta.load_dump(src_path.as_ref(), dst_path.as_ref(), indexer_opts)?,
     }
 
     Ok(())

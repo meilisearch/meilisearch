@@ -1,11 +1,9 @@
-use std::{collections::{BTreeSet, HashSet}, io::Write, marker::PhantomData, path::{Path, PathBuf}};
+use std::{collections::{BTreeSet, HashSet}, marker::PhantomData, path::Path};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::fs::File;
 
 use anyhow::{bail, Context};
-use heed::RoTxn;
-use indexmap::IndexMap;
+use heed::{EnvOpenOptions, RoTxn};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
 
@@ -16,6 +14,8 @@ use serde::{de::Deserializer, Deserialize};
 
 mod search;
 mod updates;
+mod dump;
+pub mod update_handler;
 
 pub type Document = Map<String, Value>;
 
@@ -39,6 +39,14 @@ where
 }
 
 impl Index {
+    pub fn open(path: impl AsRef<Path>, size: usize) -> anyhow::Result<Self> {
+        std::fs::create_dir_all(&path)?;
+        let mut options = EnvOpenOptions::new();
+        options.map_size(size);
+        let index = milli::Index::new(options, &path)?;
+        Ok(Index(Arc::new(index)))
+    }
+
     pub fn settings(&self) -> anyhow::Result<Settings<Checked>> {
         let txn = self.read_txn()?;
         self.settings_txn(&txn)
@@ -166,58 +174,5 @@ impl Index {
 
         displayed_fields_ids.retain(|fid| attributes_to_retrieve_ids.contains(fid));
         Ok(displayed_fields_ids)
-    }
-
-    pub fn dump(&self, path: PathBuf) -> anyhow::Result<()> {
-        // acquire write txn make sure any ongoing write is finnished before we start.
-        let txn = self.env.write_txn()?;
-
-        self.dump_documents(&txn, &path)?;
-        self.dump_meta(&txn, &path)?;
-
-        Ok(())
-    }
-
-    fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        println!("dumping documents");
-        let document_file_path = path.as_ref().join("documents.jsonl");
-        let mut document_file = File::create(&document_file_path)?;
-
-        let documents = self.all_documents(txn)?;
-        let fields_ids_map = self.fields_ids_map(txn)?;
-
-        // dump documents
-        let mut json_map = IndexMap::new();
-        for document in documents {
-            let (_, reader) = document?;
-
-            for (fid, bytes) in reader.iter() {
-                if let Some(name) = fields_ids_map.name(fid) {
-                    json_map.insert(name, serde_json::from_slice::<serde_json::Value>(bytes)?);
-                }
-            }
-
-            serde_json::to_writer(&mut document_file, &json_map)?;
-            document_file.write(b"\n")?;
-
-            json_map.clear();
-        }
-
-        Ok(())
-    }
-
-    fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        println!("dumping settings");
-        let meta_file_path = path.as_ref().join("meta.json");
-        let mut meta_file = File::create(&meta_file_path)?;
-
-        let settings = self.settings_txn(txn)?;
-        let json = serde_json::json!({
-            "settings": settings,
-        });
-
-        serde_json::to_writer(&mut meta_file, &json)?;
-
-        Ok(())
     }
 }

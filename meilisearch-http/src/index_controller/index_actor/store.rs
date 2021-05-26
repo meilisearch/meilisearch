@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use heed::EnvOpenOptions;
 use tokio::fs;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -48,7 +47,7 @@ impl IndexStore for MapIndexStore {
 
         let index_size = self.index_size;
         let index = spawn_blocking(move || -> IndexResult<Index> {
-            let index = open_index(&path, index_size)?;
+            let index = Index::open(path, index_size)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
                 index.put_primary_key(&mut txn, &primary_key)?;
@@ -76,8 +75,7 @@ impl IndexStore for MapIndexStore {
                 }
 
                 let index_size = self.index_size;
-                let index = spawn_blocking(move || open_index(path, index_size))
-                    .await??;
+                let index = spawn_blocking(move || Index::open(path, index_size)).await??;
                 self.index_store.write().await.insert(uuid, index.clone());
                 Ok(Some(index))
             }
@@ -90,12 +88,4 @@ impl IndexStore for MapIndexStore {
         let index = self.index_store.write().await.remove(&uuid);
         Ok(index)
     }
-}
-
-fn open_index(path: impl AsRef<Path>, size: usize) -> IndexResult<Index> {
-    std::fs::create_dir_all(&path)?;
-    let mut options = EnvOpenOptions::new();
-    options.map_size(size);
-    let index = milli::Index::new(options, &path)?;
-    Ok(Index(Arc::new(index)))
 }

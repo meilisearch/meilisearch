@@ -1,12 +1,7 @@
-use std::{
-    collections::HashSet,
-    fs::{copy, create_dir_all, File},
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, fs::{copy, create_dir_all, File}, io::{BufRead, BufReader, Write}, path::{Path, PathBuf}};
 
 use anyhow::Context;
-use heed::RoTxn;
+use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,7 +10,7 @@ use super::UpdateStore;
 use crate::index_controller::{index_actor::IndexActorHandle, UpdateStatus};
 
 #[derive(Serialize, Deserialize)]
-pub struct UpdateEntry {
+struct UpdateEntry {
     uuid: Uuid,
     update: UpdateStatus,
 }
@@ -118,6 +113,48 @@ impl UpdateStore {
                 file.write(b"\n")?;
             }
         }
+
+        Ok(())
+    }
+
+    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>, db_size: u64) -> anyhow::Result<()> {
+        let dst_updates_path = dst.as_ref().join("updates/");
+        create_dir_all(&dst_updates_path)?;
+        let dst_update_files_path = dst_updates_path.join("update_files/");
+        create_dir_all(&dst_update_files_path)?;
+
+        let mut options = EnvOpenOptions::new();
+        options.map_size(db_size as usize);
+        let (store, _) = UpdateStore::new(options, &dst_updates_path)?;
+
+        let src_update_path = src.as_ref().join("updates");
+        let src_update_files_path = src_update_path.join("update_files");
+        let update_data = File::open(&src_update_path.join("data.jsonl"))?;
+        let mut update_data = BufReader::new(update_data);
+
+        let mut wtxn = store.env.write_txn()?;
+        let mut line = String::new();
+        loop {
+            match update_data.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let UpdateEntry { uuid, mut update } = serde_json::from_str(&line)?;
+
+                    if let Some(path) = update.content_path_mut() {
+                        let dst_file_path = dst_update_files_path.join(&path);
+                        let src_file_path = src_update_files_path.join(&path);
+                        *path = dst_update_files_path.join(&path);
+                        std::fs::copy(src_file_path, dst_file_path)?;
+                    }
+
+                    store.register_raw_updates(&mut wtxn, update, uuid)?;
+                }
+                _ => break,
+            }
+
+            line.clear();
+        }
+        wtxn.commit()?;
 
         Ok(())
     }

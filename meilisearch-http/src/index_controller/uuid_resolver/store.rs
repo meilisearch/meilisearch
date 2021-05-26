@@ -30,7 +30,6 @@ pub trait UuidStore: Sized {
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
-    fn load_dump(src: &Path, dst: &Path) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -46,14 +45,7 @@ impl HeedUuidStore {
         let mut options = EnvOpenOptions::new();
         options.map_size(UUID_STORE_SIZE); // 1GB
         let env = options.open(path)?;
-        let db = env.create_database(None)?;
-        Ok(Self { env, db })
-    }
-
-    pub fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
-        let env = self.env.clone();
-        let db = self.db;
-        let mut txn = env.write_txn()?;
+        let db = env.create_database(None)?; Ok(Self { env, db }) } pub fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> { let env = self.env.clone(); let db = self.db; let mut txn = env.write_txn()?;
         match db.get(&txn, &name)? {
             Some(uuid) => {
                 if err {
@@ -154,16 +146,50 @@ impl HeedUuidStore {
         let txn = self.env.read_txn()?;
         for entry in self.db.iter(&txn)? {
             let (uid, uuid) = entry?;
-            let uuid = Uuid::from_slice(entry.1)?;
-            uuids.insert(uuid);
+            let uid = uid.to_string();
+            let uuid = Uuid::from_slice(uuid)?;
+
             let entry = DumpEntry {
                 uuid, uid
             };
             serde_json::to_writer(&mut dump_file, &entry)?;
             dump_file.write(b"\n").unwrap();
+
+            uuids.insert(uuid);
         }
 
         Ok(uuids)
+    }
+
+    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+        let uuid_resolver_path = dst.as_ref().join("uuid_resolver/");
+        std::fs::create_dir_all(&uuid_resolver_path)?;
+
+        let src_indexes = src.as_ref().join("index_uuids/data.jsonl");
+        let indexes = File::open(&src_indexes)?;
+        let mut indexes = BufReader::new(indexes);
+        let mut line = String::new();
+
+        let db = Self::new(dst)?;
+        let mut txn = db.env.write_txn()?;
+
+        loop {
+            match indexes.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
+                    db.db.put(&mut txn, &uid, uuid.as_bytes())?;
+                }
+                Err(e) => Err(e)?,
+            }
+
+            line.clear();
+        }
+        txn.commit()?;
+
+        db.env.prepare_for_closing().wait();
+
+        Ok(())
     }
 }
 
@@ -206,34 +232,5 @@ impl UuidStore for HeedUuidStore {
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.dump(path)).await?
-    }
-
-    async fn load_dump(src: &Path, dst: &Path) -> Result<()> {
-        let uuid_resolver_path = dst.join("uuid_resolver/");
-        std::fs::create_dir_all(&uuid_resolver_path)?;
-
-        let src_indexes = src.join("index_uuids/data.jsonl");
-        let indexes = File::Open(&src_indexes)?;
-        let mut indexes = BufReader::new(indexes);
-        let mut line = String::new();
-
-        let db = Self::new(dst)?;
-        let mut txn = db.env.write_txn()?;
-
-        loop {
-            match indexes.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
-                    db.db.put(&mut txn, &uid, uuid.as_bytes())?;
-                }
-                Err(e) => Err(e)?,
-            }
-
-            line.clear();
-        }
-        txn.commit()?;
-
-        Ok(())
     }
 }

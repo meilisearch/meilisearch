@@ -100,7 +100,7 @@ pub struct UpdateStore {
 }
 
 impl UpdateStore {
-    pub fn create(
+    fn new(
         mut options: EnvOpenOptions,
         path: impl AsRef<Path>,
     ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
@@ -114,7 +114,6 @@ impl UpdateStore {
         let state = Arc::new(StateLock::from_state(State::Idle));
 
         let (notification_sender, notification_receiver) = mpsc::channel(10);
-        // Send a first notification to trigger the process.
 
         Ok((
             Self {
@@ -134,10 +133,10 @@ impl UpdateStore {
         path: impl AsRef<Path>,
         index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
     ) -> anyhow::Result<Arc<Self>> {
-        let (update_store, mut notification_receiver) = Self::create(options, path)?;
+        let (update_store, mut notification_receiver) = Self::new(options, path)?;
         let update_store = Arc::new(update_store);
 
-        // trigger the update loop
+        // Send a first notification to trigger the process.
         let _ = update_store.notification_sender.send(());
 
         // Init update loop to perform any pending updates at launch.

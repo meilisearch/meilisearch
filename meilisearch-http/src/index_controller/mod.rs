@@ -29,7 +29,6 @@ mod dump_actor;
 mod index_actor;
 mod snapshot;
 mod update_actor;
-mod update_handler;
 mod updates;
 mod uuid_resolver;
 
