@@ -15,7 +15,7 @@ use super::UpdateStore;
 use crate::index_controller::{index_actor::IndexActorHandle, UpdateStatus};
 
 #[derive(Serialize, Deserialize)]
-struct UpdateEntry {
+pub struct UpdateEntry {
     uuid: Uuid,
     update: UpdateStatus,
 }

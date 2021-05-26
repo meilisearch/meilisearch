@@ -1,27 +1,26 @@
 use super::{DumpError, DumpInfo, DumpMsg, DumpResult, DumpStatus};
 use crate::helpers::compression;
-use crate::index_controller::{index_actor, update_actor, uuid_resolver, IndexMetadata};
+use crate::index_controller::{update_actor, uuid_resolver};
 use async_stream::stream;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use log::{error, info};
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{mpsc, oneshot, RwLock};
-use uuid::Uuid;
+use tokio::{fs::create_dir_all, sync::{mpsc, oneshot, RwLock}};
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
-pub struct DumpActor<UuidResolver, Index, Update> {
+pub struct DumpActor<UuidResolver, Update> {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
     uuid_resolver: UuidResolver,
-    index: Index,
     update: Update,
     dump_path: PathBuf,
     dump_info: Arc<RwLock<Option<DumpInfo>>>,
+    _update_db_size: u64,
+    _index_db_size: u64,
 }
 
 /// Generate uid from creation date
@@ -29,26 +28,27 @@ fn generate_uid() -> String {
     Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
 }
 
-impl<UuidResolver, Index, Update> DumpActor<UuidResolver, Index, Update>
+impl<UuidResolver, Update> DumpActor<UuidResolver, Update>
 where
     UuidResolver: uuid_resolver::UuidResolverHandle + Send + Sync + Clone + 'static,
-    Index: index_actor::IndexActorHandle + Send + Sync + Clone + 'static,
     Update: update_actor::UpdateActorHandle + Send + Sync + Clone + 'static,
 {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
         uuid_resolver: UuidResolver,
-        index: Index,
         update: Update,
         dump_path: impl AsRef<Path>,
+        _index_db_size: u64,
+        _update_db_size: u64,
     ) -> Self {
         Self {
             inbox: Some(inbox),
             uuid_resolver,
-            index,
             update,
             dump_path: dump_path.as_ref().into(),
             dump_info: Arc::new(RwLock::new(None)),
+            _index_db_size,
+            _update_db_size,
         }
     }
 
@@ -155,7 +155,7 @@ where
 }
 
 async fn perform_dump<UuidResolver, Update>(
-    dump_path: PathBuf,
+    path: PathBuf,
     uuid_resolver: UuidResolver,
     update_handle: Update,
     uid: String,
@@ -166,19 +166,23 @@ where
 {
     info!("Performing dump.");
 
-    let dump_path_clone = dump_path.clone();
-    let temp_dump_path = tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(dump_path_clone)).await??;
+    create_dir_all(&path).await?;
 
-    let uuids = uuid_resolver.dump(temp_dump_path.path().to_owned()).await?;
+    let path_clone = path.clone();
+    let temp_dump_dir = tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(path_clone)).await??;
+    let temp_dump_path = temp_dump_dir.path().to_owned();
 
-    update_handle.dump(uuids, temp_dump_path.path().to_owned()).await?;
+    let uuids = uuid_resolver.dump(temp_dump_path.clone()).await?;
 
-    let dump_path = dump_path.join(format!("{}.dump", uid));
+    update_handle.dump(uuids, temp_dump_path.clone()).await?;
+
     let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
-        let temp_dump_file = tempfile::NamedTempFile::new_in(&dump_path)?;
-        let temp_dump_file_path = temp_dump_file.path().to_owned();
-        compression::to_tar_gz(temp_dump_path, temp_dump_file_path)?;
+        let temp_dump_file = tempfile::NamedTempFile::new_in(&path)?;
+        compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
+
+        let dump_path = path.join(format!("{}.dump", uid));
         temp_dump_file.persist(&dump_path)?;
+
         Ok(dump_path)
     })
     .await??;
@@ -186,30 +190,4 @@ where
     info!("Created dump in {:?}.", dump_path);
 
     Ok(())
-}
-
-async fn list_indexes<UuidResolver, Index>(
-    uuid_resolver: &UuidResolver,
-    index: &Index,
-) -> anyhow::Result<Vec<IndexMetadata>>
-where
-    UuidResolver: uuid_resolver::UuidResolverHandle,
-    Index: index_actor::IndexActorHandle,
-{
-    let uuids = uuid_resolver.list().await?;
-
-    let mut ret = Vec::new();
-
-    for (uid, uuid) in uuids {
-        let meta = index.get_index_meta(uuid).await?;
-        let meta = IndexMetadata {
-            uuid,
-            name: uid.clone(),
-            uid,
-            meta,
-        };
-        ret.push(meta);
-    }
-
-    Ok(ret)
 }

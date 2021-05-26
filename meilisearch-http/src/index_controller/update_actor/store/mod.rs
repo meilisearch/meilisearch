@@ -1,4 +1,4 @@
-mod dump;
+pub mod dump;
 mod codec;
 
 use std::collections::{BTreeMap, HashSet};
@@ -115,7 +115,6 @@ impl UpdateStore {
 
         let (notification_sender, notification_receiver) = mpsc::channel(10);
         // Send a first notification to trigger the process.
-        let _ = notification_sender.send(());
 
         Ok((
             Self {
@@ -137,6 +136,9 @@ impl UpdateStore {
     ) -> anyhow::Result<Arc<Self>> {
         let (update_store, mut notification_receiver) = Self::create(options, path)?;
         let update_store = Arc::new(update_store);
+
+        // trigger the update loop
+        let _ = update_store.notification_sender.send(());
 
         // Init update loop to perform any pending updates at launch.
         // Since we just launched the update store, and we still own the receiving end of the

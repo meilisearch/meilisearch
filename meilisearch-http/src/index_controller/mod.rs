@@ -14,22 +14,20 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-pub use updates::*;
-pub use dump_actor::{DumpInfo, DumpStatus};
 use dump_actor::DumpActorHandle;
+pub use dump_actor::{DumpInfo, DumpStatus};
 use index_actor::IndexActorHandle;
-use snapshot::{SnapshotService, load_snapshot};
+use snapshot::{load_snapshot, SnapshotService};
 use update_actor::UpdateActorHandle;
+pub use updates::*;
 use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
-use dump_actor::load_dump;
-
+mod dump_actor;
 mod index_actor;
 mod snapshot;
-mod dump_actor;
 mod update_actor;
 mod update_handler;
 mod updates;
@@ -94,13 +92,8 @@ impl IndexController {
                 options.ignore_snapshot_if_db_exists,
                 options.ignore_missing_snapshot,
             )?;
-        } else if let Some(ref path) = options.import_dump {
-            load_dump(
-                &options.db_path,
-                path,
-                index_size,
-            )?;
-
+        } else if let Some(ref _path) = options.import_dump {
+            todo!("implement load dump")
         }
 
         std::fs::create_dir_all(&path)?;
@@ -112,7 +105,13 @@ impl IndexController {
             &path,
             update_store_size,
         )?;
-        let dump_handle = dump_actor::DumpActorHandleImpl::new(&options.dumps_dir, uuid_resolver.clone(), index_handle.clone(), update_handle.clone())?;
+        let dump_handle = dump_actor::DumpActorHandleImpl::new(
+            &options.dumps_dir,
+            uuid_resolver.clone(),
+            update_handle.clone(),
+            options.max_mdb_size.get_bytes(),
+            options.max_udb_size.get_bytes(),
+        )?;
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
@@ -158,7 +157,8 @@ impl IndexController {
             // prevent dead_locking between the update_handle::update that waits for the update to be
             // registered and the update_actor that waits for the the payload to be sent to it.
             tokio::task::spawn_local(async move {
-                payload.for_each(|r| async {
+                payload
+                    .for_each(|r| async {
                         let _ = sender.send(r).await;
                     })
                     .await

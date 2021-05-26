@@ -1,26 +1,18 @@
 mod actor;
 mod handle_impl;
 mod message;
-mod v1;
-mod v2;
+mod loaders;
 
-use std::{fs::File, path::Path, sync::Arc};
+use std::{fs::File, path::Path};
 
-use anyhow::bail;
-use heed::EnvOpenOptions;
-use log::{error, info};
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use log::error;
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 use thiserror::Error;
-use uuid::Uuid;
 
-use super::IndexMetadata;
-use crate::helpers::compression;
-use crate::index::Index;
-use crate::index_controller::uuid_resolver;
+use loaders::v1::MetadataV1;
+use loaders::v2::MetadataV2;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
@@ -40,31 +32,6 @@ pub enum DumpError {
     DumpDoesNotExist(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-enum DumpVersion {
-    V1,
-    V2,
-}
-
-impl DumpVersion {
-    const CURRENT: Self = Self::V2;
-
-    /// Select the good importation function from the `DumpVersion` of metadata
-    pub fn import_index(
-        self,
-        size: usize,
-        uuid: Uuid,
-        dump_path: &Path,
-        db_path: &Path,
-        primary_key: Option<&str>,
-    ) -> anyhow::Result<()> {
-        match self {
-            Self::V1 => v1::import_index(size, uuid, dump_path, db_path, primary_key),
-            Self::V2 => v2::import_index(size, uuid, dump_path, db_path, primary_key),
-        }
-    }
-}
-
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait DumpActorHandle {
@@ -78,23 +45,19 @@ pub trait DumpActorHandle {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Metadata {
-    indexes: Vec<IndexMetadata>,
-    db_version: String,
-    dump_version: DumpVersion,
+#[serde(rename_all = "camelCase", tag = "dump_version")]
+pub enum Metadata {
+    V1 {
+        #[serde(flatten)]
+        meta: MetadataV1,
+    },
+    V2 {
+        #[serde(flatten)]
+        meta: MetadataV2,
+    },
 }
 
 impl Metadata {
-    /// Create a Metadata with the current dump version of meilisearch.
-    pub fn new(indexes: Vec<IndexMetadata>, db_version: String) -> Self {
-        Metadata {
-            indexes,
-            db_version,
-            dump_version: DumpVersion::CURRENT,
-        }
-    }
-
     /// Extract Metadata from `metadata.json` file present at provided `dir_path`
     fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
         let path = dir_path.join("metadata.json");
@@ -155,80 +118,19 @@ impl DumpInfo {
 }
 
 pub fn load_dump(
-    db_path: impl AsRef<Path>,
-    dump_path: impl AsRef<Path>,
-    size: usize,
+    dst_path: impl AsRef<Path>,
+    src_path: impl AsRef<Path>,
+    _index_db_size: u64,
+    _update_db_size: u64,
 ) -> anyhow::Result<()> {
-    info!("Importing dump from {}...", dump_path.as_ref().display());
-    let db_path = db_path.as_ref();
-    let dump_path = dump_path.as_ref();
-    let uuid_resolver = uuid_resolver::HeedUuidStore::new(&db_path)?;
+    let meta_path = src_path.as_ref().join("metadat.json");
+    let mut meta_file = File::open(&meta_path)?;
+    let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
-    // extract the dump in a temporary directory
-    let tmp_dir = TempDir::new_in(db_path)?;
-    let tmp_dir_path = tmp_dir.path();
-    compression::from_tar_gz(dump_path, tmp_dir_path)?;
-
-    // read dump metadata
-    let metadata = Metadata::from_path(&tmp_dir_path)?;
-
-    // remove indexes which have same `uuid` than indexes to import and create empty indexes
-    let existing_index_uids = uuid_resolver.list()?;
-
-    info!("Deleting indexes already present in the db and provided in the dump...");
-    for idx in &metadata.indexes {
-        if let Some((_, uuid)) = existing_index_uids.iter().find(|(s, _)| s == &idx.uid) {
-            // if we find the index in the `uuid_resolver` it's supposed to exist on the file system
-            // and we want to delete it
-            let path = db_path.join(&format!("indexes/index-{}", uuid));
-            info!("Deleting {}", path.display());
-            use std::io::ErrorKind::*;
-            match std::fs::remove_dir_all(path) {
-                Ok(()) => (),
-                // if an index was present in the metadata but missing of the fs we can ignore the
-                // problem because we are going to create it later
-                Err(e) if e.kind() == NotFound => (),
-                Err(e) => bail!(e),
-            }
-        } else {
-            // if the index does not exist in the `uuid_resolver` we create it
-            uuid_resolver.create_uuid(idx.uid.clone(), false)?;
-        }
+    match meta {
+        Metadata::V1 { meta } => meta.load_dump(src_path, dst_path)?,
+        Metadata::V2 { meta } => meta.load_dump(src_path, dst_path)?,
     }
 
-    // import each indexes content
-    for idx in metadata.indexes {
-        let dump_path = tmp_dir_path.join(&idx.uid);
-        // this cannot fail since we created all the missing uuid in the previous loop
-        let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
-
-        info!(
-            "Importing dump from {} into {}...",
-            dump_path.display(),
-            db_path.display()
-        );
-        metadata.dump_version.import_index(
-            size,
-            uuid,
-            &dump_path,
-            &db_path,
-            idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
-        )?;
-        info!("Dump importation from {} succeed", dump_path.display());
-    }
-
-    // finally we can move all the unprocessed update file into our new DB
-    // this directory may not exists
-    let update_path = tmp_dir_path.join("update_files");
-    let db_update_path = db_path.join("updates/update_files");
-    if update_path.exists() {
-        let _ = std::fs::remove_dir_all(db_update_path);
-        std::fs::rename(
-            tmp_dir_path.join("update_files"),
-            db_path.join("updates/update_files"),
-        )?;
-    }
-
-    info!("Dump importation from {} succeed", dump_path.display());
     Ok(())
 }

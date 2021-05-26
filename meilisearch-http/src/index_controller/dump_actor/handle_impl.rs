@@ -29,13 +29,15 @@ impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
         uuid_resolver: crate::index_controller::uuid_resolver::UuidResolverHandleImpl,
-        index: crate::index_controller::index_actor::IndexActorHandleImpl,
         update: crate::index_controller::update_actor::UpdateActorHandleImpl<Bytes>,
+        index_db_size: u64,
+        update_db_size: u64,
     ) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(10);
-        let actor = DumpActor::new(receiver, uuid_resolver, index, update, path);
+        let actor = DumpActor::new(receiver, uuid_resolver, update, path, index_db_size, update_db_size);
 
         tokio::task::spawn(actor.run());
+
         Ok(Self { sender })
     }
 }

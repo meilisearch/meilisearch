@@ -1,7 +1,7 @@
 mod actor;
 mod handle_impl;
 mod message;
-mod store;
+pub mod store;
 
 use std::collections::HashSet;
 use std::path::PathBuf;

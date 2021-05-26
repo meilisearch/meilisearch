@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Write};
+use std::{collections::HashSet, io::{BufReader, BufRead,  Write}};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 
@@ -7,12 +7,19 @@ use heed::{
     CompactionOption, Database, Env, EnvOpenOptions,
 };
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 
 use super::{Result, UuidResolverError, UUID_STORE_SIZE};
 use crate::helpers::EnvSizer;
 
+#[derive(Serialize, Deserialize)]
+struct DumpEntry {
+    uuid: Uuid,
+    uid: String,
+}
+
 #[async_trait::async_trait]
-pub trait UuidStore {
+pub trait UuidStore: Sized {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
     async fn create_uuid(&self, uid: String, err: bool) -> Result<Uuid>;
@@ -23,6 +30,7 @@ pub trait UuidStore {
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
+    fn load_dump(src: &Path, dst: &Path) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -62,11 +70,7 @@ impl HeedUuidStore {
                 Ok(uuid)
             }
         }
-    }
-
-    pub fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
-        let env = self.env.clone();
-        let db = self.db;
+    } pub fn get_uuid(&self, name: String) -> Result<Option<Uuid>> { let env = self.env.clone(); let db = self.db;
         let txn = env.read_txn()?;
         match db.get(&txn, &name)? {
             Some(uuid) => {
@@ -149,11 +153,14 @@ impl HeedUuidStore {
 
         let txn = self.env.read_txn()?;
         for entry in self.db.iter(&txn)? {
-            let entry = entry?;
+            let (uid, uuid) = entry?;
             let uuid = Uuid::from_slice(entry.1)?;
             uuids.insert(uuid);
-            serde_json::to_writer(&mut dump_file, &serde_json::json!({ "uid": entry.0, "uuid": uuid
-            }))?; dump_file.write(b"\n").unwrap();
+            let entry = DumpEntry {
+                uuid, uid
+            };
+            serde_json::to_writer(&mut dump_file, &entry)?;
+            dump_file.write(b"\n").unwrap();
         }
 
         Ok(uuids)
@@ -199,5 +206,34 @@ impl UuidStore for HeedUuidStore {
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.dump(path)).await?
+    }
+
+    async fn load_dump(src: &Path, dst: &Path) -> Result<()> {
+        let uuid_resolver_path = dst.join("uuid_resolver/");
+        std::fs::create_dir_all(&uuid_resolver_path)?;
+
+        let src_indexes = src.join("index_uuids/data.jsonl");
+        let indexes = File::Open(&src_indexes)?;
+        let mut indexes = BufReader::new(indexes);
+        let mut line = String::new();
+
+        let db = Self::new(dst)?;
+        let mut txn = db.env.write_txn()?;
+
+        loop {
+            match indexes.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
+                    db.db.put(&mut txn, &uid, uuid.as_bytes())?;
+                }
+                Err(e) => Err(e)?,
+            }
+
+            line.clear();
+        }
+        txn.commit()?;
+
+        Ok(())
     }
 }
