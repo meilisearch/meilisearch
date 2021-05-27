@@ -16,6 +16,15 @@ pub struct MetadataV2 {
 }
 
 impl MetadataV2 {
+    pub fn new(index_db_size: u64, update_db_size: u64) -> Self {
+        Self {
+            db_version: env!("CARGO_PKG_VERSION").to_string(),
+            index_db_size,
+            update_db_size,
+            dump_date: Utc::now(),
+        }
+    }
+
     pub fn load_dump(
         self,
         src: impl AsRef<Path>,

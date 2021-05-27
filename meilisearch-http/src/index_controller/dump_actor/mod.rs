@@ -62,6 +62,10 @@ pub enum Metadata {
 }
 
 impl Metadata {
+    pub fn new_v2(index_db_size: u64, update_db_size: u64) -> Self {
+        let meta = MetadataV2::new(index_db_size, update_db_size);
+        Self::V2 { meta }
+    }
     /// Extract Metadata from `metadata.json` file present at provided `dir_path`
     fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
         let path = dir_path.join("metadata.json");
