@@ -78,7 +78,7 @@ pub trait Context<'c> {
     fn word_position_last_level(&self, word: &str, in_prefix_cache: bool) -> heed::Result<Option<TreeLevel>>;
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn searchable_fields_ids(&self) ->  heed::Result<Vec<FieldId>>;
-    fn field_id_len_docids(&self, field_id: FieldId, len: u32) -> heed::Result<Option<RoaringBitmap>>;
+    fn field_id_word_count_docids(&self, field_id: FieldId, word_count: u8) -> heed::Result<Option<RoaringBitmap>>;
     fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error>;
 }
 pub struct CriteriaBuilder<'t> {
@@ -181,8 +181,9 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         }
     }
 
-    fn field_id_len_docids(&self, _field_id: FieldId, _len: u32) -> heed::Result<Option<RoaringBitmap>> {
-        Ok(None)
+    fn field_id_word_count_docids(&self, field_id: FieldId, word_count: u8) -> heed::Result<Option<RoaringBitmap>> {
+        let key = (field_id, word_count);
+        self.index.field_id_word_count_docids.get(self.rtxn, &key)
     }
 
     fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
@@ -488,7 +489,7 @@ pub mod test {
             todo!()
         }
 
-        fn field_id_len_docids(&self, _field_id: FieldId, _len: u32) -> heed::Result<Option<RoaringBitmap>> {
+        fn field_id_word_count_docids(&self, _field_id: FieldId, _word_count: u8) -> heed::Result<Option<RoaringBitmap>> {
             todo!()
         }
     }
