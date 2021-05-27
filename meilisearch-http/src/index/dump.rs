@@ -9,12 +9,11 @@ use anyhow::bail;
 
 use crate::option::IndexerOpts;
 
-use super::update_handler::UpdateHandler;
-use super::{Checked, Index, Settings};
+use super::{Unchecked, Index, Settings, update_handler::UpdateHandler};
 
 #[derive(Serialize, Deserialize)]
 struct DumpMeta {
-    settings: Settings<Checked>,
+    settings: Settings<Unchecked>,
     primary_key: Option<String>,
 }
 
@@ -33,7 +32,6 @@ impl Index {
     }
 
     fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        println!("dumping documents");
         let document_file_path = path.as_ref().join(DATA_FILE_NAME);
         let mut document_file = File::create(&document_file_path)?;
 
@@ -61,11 +59,10 @@ impl Index {
     }
 
     fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        println!("dumping settings");
         let meta_file_path = path.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_file_path)?;
 
-        let settings = self.settings_txn(txn)?;
+        let settings = self.settings_txn(txn)?.into_unchecked();
         let primary_key = self.primary_key(txn)?.map(String::from);
         let meta = DumpMeta { settings, primary_key };
 
@@ -84,12 +81,13 @@ impl Index {
             .as_ref()
             .file_name()
             .with_context(|| format!("invalid dump index: {}", src.as_ref().display()))?;
-        let dst_dir_path = dst.as_ref().join(dir_name);
+        let dst_dir_path = dst.as_ref().join("indexes").join(dir_name);
         create_dir_all(&dst_dir_path)?;
 
         let meta_path = src.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::open(meta_path)?;
         let DumpMeta { settings, primary_key } = serde_json::from_reader(&mut meta_file)?;
+        let settings = settings.check();
         let index = Self::open(&dst_dir_path, size as usize)?;
         let mut txn = index.write_txn()?;
 

@@ -1,6 +1,7 @@
-use std::{fs::File, path::Path};
+use std::fs::File;
+use std::path::{Path, PathBuf};
 
-use log::error;
+use log::{error, info};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
@@ -12,15 +13,17 @@ use loaders::v2::MetadataV2;
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
+use tokio::fs::create_dir_all;
 
-use crate::option::IndexerOpts;
-
-use super::uuid_resolver::store::UuidStore;
+use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
+use crate::{helpers::compression, option::IndexerOpts};
 
 mod actor;
 mod handle_impl;
 mod loaders;
 mod message;
+
+const META_FILE_NAME: &'static str = "metadata.json";
 
 pub type DumpResult<T> = std::result::Result<T, DumpError>;
 
@@ -66,23 +69,6 @@ impl Metadata {
         let meta = MetadataV2::new(index_db_size, update_db_size);
         Self::V2 { meta }
     }
-    /// Extract Metadata from `metadata.json` file present at provided `dir_path`
-    fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
-        let path = dir_path.join("metadata.json");
-        let file = File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let metadata = serde_json::from_reader(reader)?;
-
-        Ok(metadata)
-    }
-
-    /// Write Metadata in `metadata.json` file at provided `dir_path`
-    pub async fn to_path(&self, dir_path: &Path) -> anyhow::Result<()> {
-        let path = dir_path.join("metadata.json");
-        tokio::fs::write(path, serde_json::to_string(self)?).await?;
-
-        Ok(())
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -125,21 +111,84 @@ impl DumpInfo {
     }
 }
 
-pub fn load_dump<U: UuidStore>(
+pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
-    _index_db_size: u64,
-    _update_db_size: u64,
+    index_db_size: u64,
+    update_db_size: u64,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    let meta_path = src_path.as_ref().join("metadat.json");
+    let tmp_src = tempfile::tempdir_in(".")?;
+    let tmp_src_path = tmp_src.path();
+
+    compression::from_tar_gz(&src_path, tmp_src_path)?;
+
+    let meta_path = tmp_src_path.join(META_FILE_NAME);
     let mut meta_file = File::open(&meta_path)?;
     let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
     match meta {
-        Metadata::V1 { meta } => meta.load_dump(src_path, dst_path)?,
-        Metadata::V2 { meta } => meta.load_dump(src_path.as_ref(), dst_path.as_ref(), indexer_opts)?,
+        Metadata::V1 { meta } => meta.load_dump(&tmp_src_path, dst_path)?,
+        Metadata::V2 { meta } => meta.load_dump(
+            &tmp_src_path,
+            dst_path.as_ref(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?,
     }
 
     Ok(())
+}
+
+struct DumpTask<U, P> {
+    path: PathBuf,
+    uuid_resolver: U,
+    update_handle: P,
+    uid: String,
+    update_db_size: u64,
+    index_db_size: u64,
+}
+
+impl<U, P> DumpTask<U, P>
+where
+    U: UuidResolverHandle + Send + Sync + Clone + 'static,
+    P: UpdateActorHandle + Send + Sync + Clone + 'static,
+{
+    async fn run(self) -> anyhow::Result<()> {
+        info!("Performing dump.");
+
+        create_dir_all(&self.path).await?;
+
+        let path_clone = self.path.clone();
+        let temp_dump_dir =
+            tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(path_clone)).await??;
+        let temp_dump_path = temp_dump_dir.path().to_owned();
+
+        let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);
+        let meta_path = temp_dump_path.join(META_FILE_NAME);
+        let mut meta_file = File::create(&meta_path)?;
+        serde_json::to_writer(&mut meta_file, &meta)?;
+
+        let uuids = self.uuid_resolver.dump(temp_dump_path.clone()).await?;
+
+        self.update_handle
+            .dump(uuids, temp_dump_path.clone())
+            .await?;
+
+        let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
+            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
+
+            let dump_path = self.path.join(format!("{}.dump", self.uid));
+            temp_dump_file.persist(&dump_path)?;
+
+            Ok(dump_path)
+        })
+        .await??;
+
+        info!("Created dump in {:?}.", dump_path);
+
+        Ok(())
+    }
 }

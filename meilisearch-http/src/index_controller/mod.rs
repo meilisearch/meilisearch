@@ -25,6 +25,8 @@ use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
+use self::dump_actor::load_dump;
+
 mod dump_actor;
 mod index_actor;
 mod snapshot;
@@ -91,8 +93,14 @@ impl IndexController {
                 options.ignore_snapshot_if_db_exists,
                 options.ignore_missing_snapshot,
             )?;
-        } else if let Some(ref _path) = options.import_dump {
-            todo!("implement load dump")
+        } else if let Some(ref src_path) = options.import_dump {
+            load_dump(
+                &options.db_path,
+                src_path,
+                options.max_mdb_size.get_bytes(),
+                options.max_udb_size.get_bytes(),
+                &options.indexer_options,
+            )?;
         }
 
         std::fs::create_dir_all(&path)?;

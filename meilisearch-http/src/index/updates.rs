@@ -87,6 +87,28 @@ impl Settings<Checked> {
             _kind: PhantomData,
         }
     }
+
+    pub fn into_unchecked(self) -> Settings<Unchecked> {
+        let Self {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting,
+            ranking_rules,
+            stop_words,
+            distinct_attribute,
+            ..
+        } = self;
+
+        Settings {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting,
+            ranking_rules,
+            stop_words,
+            distinct_attribute,
+            _kind: PhantomData,
+        }
+    }
 }
 
 impl Settings<Unchecked> {

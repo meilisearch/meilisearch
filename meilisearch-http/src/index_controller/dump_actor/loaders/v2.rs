@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use log::info;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::{index::Index, index_controller::{update_actor::UpdateStore, uuid_resolver::HeedUuidStore}, option::IndexerOpts};
@@ -29,6 +29,8 @@ impl MetadataV2 {
         self,
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
+        _index_db_size: u64,
+        _update_db_size: u64,
         indexing_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
         info!(
@@ -44,23 +46,26 @@ impl MetadataV2 {
         let tmp_dst = tempfile::tempdir_in(dst_dir)?;
 
         info!("Loading index database.");
-        let uuid_resolver_path = dst.as_ref().join("uuid_resolver/");
-        std::fs::create_dir_all(&uuid_resolver_path)?;
-        HeedUuidStore::load_dump(src.as_ref(), tmp_dst.as_ref())?;
+        HeedUuidStore::load_dump(src.as_ref(), &tmp_dst)?;
 
         info!("Loading updates.");
-        UpdateStore::load_dump(&src, &tmp_dst.as_ref(), self.update_db_size)?;
+        UpdateStore::load_dump(&src, &tmp_dst, self.update_db_size)?;
 
         info!("Loading indexes");
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
         for index in indexes {
             let index = index?;
-            Index::load_dump(&index.path(), &dst, self.index_db_size, indexing_options)?;
+            Index::load_dump(&index.path(), &tmp_dst, self.index_db_size, indexing_options)?;
         }
 
         // Persist and atomically rename the db
         let persisted_dump = tmp_dst.into_path();
+        if dst.as_ref().exists() {
+            warn!("Overwriting database at {}", dst.as_ref().display());
+            std::fs::remove_dir_all(&dst)?;
+        }
+
         std::fs::rename(&persisted_dump, &dst)?;
 
         Ok(())

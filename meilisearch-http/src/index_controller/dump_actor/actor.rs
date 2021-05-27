@@ -1,17 +1,18 @@
-use super::{DumpError, DumpInfo, DumpMsg, DumpResult, DumpStatus};
-use crate::{helpers::compression, index_controller::dump_actor::Metadata};
-use crate::index_controller::{update_actor, uuid_resolver};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use async_stream::stream;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use log::{error, info};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
-use std::{fs::File, path::{Path, PathBuf}, sync::Arc};
-use tokio::{fs::create_dir_all, sync::{mpsc, oneshot, RwLock}};
+use tokio::sync::{mpsc, oneshot, RwLock};
+
+use super::{DumpError, DumpInfo, DumpMsg, DumpResult, DumpStatus, DumpTask};
+use crate::index_controller::{update_actor, uuid_resolver};
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
-const META_FILE_NAME: &'static str = "metadata.json";
 
 pub struct DumpActor<UuidResolver, Update> {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
@@ -154,55 +155,5 @@ where
                 ..
             })
         )
-    }
-
-}
-
-struct DumpTask<U, P> {
-    path: PathBuf,
-    uuid_resolver: U,
-    update_handle: P,
-    uid: String,
-    update_db_size: u64,
-    index_db_size: u64,
-}
-
-impl<U, P> DumpTask<U, P>
-where
-    U: UuidResolverHandle + Send + Sync + Clone + 'static,
-    P: UpdateActorHandle + Send + Sync + Clone + 'static,
-{
-    async fn run(self) -> anyhow::Result<()> {
-        info!("Performing dump.");
-
-        create_dir_all(&self.path).await?;
-
-        let path_clone = self.path.clone();
-        let temp_dump_dir = tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(path_clone)).await??;
-        let temp_dump_path = temp_dump_dir.path().to_owned();
-
-        let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);
-        let meta_path = temp_dump_path.join(META_FILE_NAME);
-        let mut meta_file = File::create(&meta_path)?;
-        serde_json::to_writer(&mut meta_file, &meta)?;
-
-        let uuids = self.uuid_resolver.dump(temp_dump_path.clone()).await?;
-
-        self.update_handle.dump(uuids, temp_dump_path.clone()).await?;
-
-        let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
-            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
-
-            let dump_path = self.path.join(format!("{}.dump", self.uid));
-            temp_dump_file.persist(&dump_path)?;
-
-            Ok(dump_path)
-        })
-        .await??;
-
-        info!("Created dump in {:?}.", dump_path);
-
-        Ok(())
     }
 }
