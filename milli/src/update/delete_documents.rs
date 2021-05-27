@@ -86,6 +86,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            field_id_word_count_docids,
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
@@ -311,6 +312,20 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 iter.del_current()?;
             } else if docids.len() != previous_len {
                 iter.put_current(bytes, &docids)?;
+            }
+        }
+
+        drop(iter);
+
+        // Remove the documents ids from field id word count database.
+        let mut iter = field_id_word_count_docids.iter_mut(self.wtxn)?;
+        while let Some((key, mut docids)) = iter.next().transpose()? {
+            let previous_len = docids.len();
+            docids.difference_with(&self.documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+            } else if docids.len() != previous_len {
+                iter.put_current(&key, &docids)?;
             }
         }
 

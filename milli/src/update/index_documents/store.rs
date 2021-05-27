@@ -29,7 +29,7 @@ use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     word_level_position_docids_merge, facet_field_value_docids_merge,
-    field_id_docid_facet_values_merge,
+    field_id_docid_facet_values_merge, field_id_word_count_docids_merge,
 };
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
@@ -44,6 +44,7 @@ pub struct Readers {
     pub docid_word_positions: Reader<FileFuse>,
     pub words_pairs_proximities_docids: Reader<FileFuse>,
     pub word_level_position_docids: Reader<FileFuse>,
+    pub field_id_word_count_docids: Reader<FileFuse>,
     pub facet_field_numbers_docids: Reader<FileFuse>,
     pub facet_field_strings_docids: Reader<FileFuse>,
     pub field_id_docid_facet_numbers: Reader<FileFuse>,
@@ -58,6 +59,7 @@ pub struct Store<'s, A> {
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
+    field_id_word_count_docids: HashMap<(u8, u8), RoaringBitmap>,
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
     facet_field_number_docids: LinkedHashMap<(FieldId, OrderedFloat<f64>), RoaringBitmap>,
@@ -72,6 +74,7 @@ pub struct Store<'s, A> {
     word_docids_sorter: Sorter<MergeFn>,
     words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
     word_level_position_docids_sorter: Sorter<MergeFn>,
+    field_id_word_count_docids_sorter: Sorter<MergeFn>,
     facet_field_numbers_docids_sorter: Sorter<MergeFn>,
     facet_field_strings_docids_sorter: Sorter<MergeFn>,
     field_id_docid_facet_numbers_sorter: Sorter<MergeFn>,
@@ -132,6 +135,14 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_nb_chunks,
             max_memory,
         );
+        let field_id_word_count_docids_sorter = create_sorter(
+            field_id_word_count_docids_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            chunk_fusing_shrink_size,
+            max_nb_chunks,
+            max_memory,
+        );
         let facet_field_numbers_docids_sorter = create_sorter(
             facet_field_value_docids_merge,
             chunk_compression_type,
@@ -184,6 +195,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             faceted_fields,
             // Caches
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
+            field_id_word_count_docids: HashMap::new(),
             word_docids_limit: linked_hash_map_size,
             words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             words_pairs_proximities_docids_limit: linked_hash_map_size,
@@ -199,6 +211,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             word_docids_sorter,
             words_pairs_proximities_docids_sorter,
             word_level_position_docids_sorter,
+            field_id_word_count_docids_sorter,
             facet_field_numbers_docids_sorter,
             facet_field_strings_docids_sorter,
             field_id_docid_facet_numbers_sorter,
@@ -620,9 +633,16 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                             let analyzed = self.analyzer.analyze(&content);
                             let tokens = process_tokens(analyzed.tokens());
 
+                            let mut last_pos = None;
                             for (pos, token) in tokens.take_while(|(pos, _)| *pos < MAX_POSITION) {
+                                last_pos = Some(pos);
                                 let position = (attr as usize * MAX_POSITION + pos) as u32;
                                 words_positions.entry(token.text().to_string()).or_insert_with(SmallVec32::new).push(position);
+                            }
+
+                            if let Some(last_pos) = last_pos.filter(|p| *p <= 10) {
+                                let key = (attr, last_pos as u8 + 1);
+                                self.field_id_word_count_docids.entry(key).or_insert_with(RoaringBitmap::new).insert(document_id);
                             }
                         }
                     }
@@ -683,6 +703,13 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             word_docids_wtr.insert(word, val)?;
         }
 
+        let mut docids_buffer = Vec::new();
+        for ((fid, count), docids) in self.field_id_word_count_docids {
+            docids_buffer.clear();
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut docids_buffer)?;
+            self.field_id_word_count_docids_sorter.insert([fid, count], &docids_buffer)?;
+        }
+
         let fst = builder.into_set();
         self.main_sorter.insert(WORDS_FST_KEY, fst.as_fst().as_bytes())?;
 
@@ -694,6 +721,9 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         let mut word_level_position_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         self.word_level_position_docids_sorter.write_into(&mut word_level_position_docids_wtr)?;
+
+        let mut field_id_word_count_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
+        self.field_id_word_count_docids_sorter.write_into(&mut field_id_word_count_docids_wtr)?;
 
         let mut facet_field_numbers_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         self.facet_field_numbers_docids_sorter.write_into(&mut facet_field_numbers_docids_wtr)?;
@@ -711,6 +741,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         let word_docids = writer_into_reader(word_docids_wtr, shrink_size)?;
         let words_pairs_proximities_docids = writer_into_reader(words_pairs_proximities_docids_wtr, shrink_size)?;
         let word_level_position_docids = writer_into_reader(word_level_position_docids_wtr, shrink_size)?;
+        let field_id_word_count_docids = writer_into_reader(field_id_word_count_docids_wtr, shrink_size)?;
         let facet_field_numbers_docids = writer_into_reader(facet_field_numbers_docids_wtr, shrink_size)?;
         let facet_field_strings_docids = writer_into_reader(facet_field_strings_docids_wtr, shrink_size)?;
         let field_id_docid_facet_numbers = writer_into_reader(field_id_docid_facet_numbers_wtr, shrink_size)?;
@@ -724,6 +755,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             docid_word_positions,
             words_pairs_proximities_docids,
             word_level_position_docids,
+            field_id_word_count_docids,
             facet_field_numbers_docids,
             facet_field_strings_docids,
             field_id_docid_facet_numbers,
