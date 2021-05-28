@@ -1,12 +1,17 @@
-use std::{collections::HashSet, fs::{copy, create_dir_all, File}, io::{BufRead, BufReader, Write}, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    fs::{create_dir_all, File},
+    io::{BufRead, BufReader, Write},
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{State, codec::UpdateKeyCodec};
 use super::UpdateStore;
+use super::{codec::UpdateKeyCodec, State};
 use crate::index_controller::{index_actor::IndexActorHandle, UpdateStatus};
 
 #[derive(Serialize, Deserialize)]
@@ -50,10 +55,10 @@ impl UpdateStore {
         let dump_data_path = path.as_ref().join("data.jsonl");
         let mut dump_data_file = File::create(dump_data_path)?;
 
-        let update_files_path = path.as_ref().join("update_files");
+        let update_files_path = path.as_ref().join(super::UPDATE_DIR);
         create_dir_all(&update_files_path)?;
 
-        self.dump_pending(&txn, uuids, &mut dump_data_file, &update_files_path)?;
+        self.dump_pending(&txn, uuids, &mut dump_data_file, &path)?;
         self.dump_completed(&txn, uuids, &mut dump_data_file)?;
 
         Ok(())
@@ -64,18 +69,23 @@ impl UpdateStore {
         txn: &RoTxn,
         uuids: &HashSet<Uuid>,
         mut file: &mut File,
-        update_files_path: impl AsRef<Path>,
+        dst_update_files: impl AsRef<Path>,
     ) -> anyhow::Result<()> {
         let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
 
         for pending in pendings {
             let ((_, uuid, _), data) = pending?;
             if uuids.contains(&uuid) {
-                let mut update = data.decode()?;
+                let update = data.decode()?;
 
-                if let Some(content) = update.content.take() {
-                    update.content = Some(dump_update_file(content, &update_files_path)?);
+                if let Some(ref update_uuid) = update.content {
+                    let src = dbg!(super::update_uuid_to_file_path(&self.path, *update_uuid));
+                    let dst = dbg!(super::update_uuid_to_file_path(&dst_update_files, *update_uuid));
+                    assert!(src.exists());
+                    dbg!(std::fs::copy(src, dst))?;
                 }
+
+                println!("copied files");
 
                 let update_json = UpdateEntry {
                     uuid,
@@ -117,18 +127,20 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>, db_size: u64) -> anyhow::Result<()> {
-        let dst_updates_path = dst.as_ref().join("updates/");
-        create_dir_all(&dst_updates_path)?;
-        let dst_update_files_path = dst_updates_path.join("update_files/");
-        create_dir_all(&dst_update_files_path)?;
+    pub fn load_dump(
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        db_size: u64,
+    ) -> anyhow::Result<()> {
+        let dst_update_path = dst.as_ref().join("updates/");
+        create_dir_all(&dst_update_path)?;
+
 
         let mut options = EnvOpenOptions::new();
         options.map_size(db_size as usize);
-        let (store, _) = UpdateStore::new(options, &dst_updates_path)?;
+        let (store, _) = UpdateStore::new(options, &dst_update_path)?;
 
         let src_update_path = src.as_ref().join("updates");
-        let src_update_files_path = src_update_path.join("update_files");
         let update_data = File::open(&src_update_path.join("data.jsonl"))?;
         let mut update_data = BufReader::new(update_data);
 
@@ -138,15 +150,7 @@ impl UpdateStore {
             match update_data.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    let UpdateEntry { uuid, mut update } = serde_json::from_str(&line)?;
-
-                    if let Some(path) = update.content_path_mut() {
-                        let dst_file_path = dst_update_files_path.join(&path);
-                        let src_file_path = src_update_files_path.join(&path);
-                        *path = dst_update_files_path.join(&path);
-                        std::fs::copy(src_file_path, dst_file_path)?;
-                    }
-
+                    let UpdateEntry { uuid, update } = serde_json::from_str(&line)?;
                     store.register_raw_updates(&mut wtxn, update, uuid)?;
                 }
                 _ => break,
@@ -154,30 +158,25 @@ impl UpdateStore {
 
             line.clear();
         }
+
+        let dst_update_files_path = dst_update_path.join("update_files/");
+        let src_update_files_path = src_update_path.join("update_files/");
+        std::fs::copy(src_update_files_path, dst_update_files_path)?;
+
         wtxn.commit()?;
 
         Ok(())
     }
 }
 
-async fn dump_indexes(uuids: &HashSet<Uuid>, handle: impl IndexActorHandle, path: impl AsRef<Path>)-> anyhow::Result<()> {
+async fn dump_indexes(
+    uuids: &HashSet<Uuid>,
+    handle: impl IndexActorHandle,
+    path: impl AsRef<Path>,
+) -> anyhow::Result<()> {
     for uuid in uuids {
         handle.dump(*uuid, path.as_ref().to_owned()).await?;
     }
 
     Ok(())
-}
-
-fn dump_update_file(
-    file_path: impl AsRef<Path>,
-    dump_path: impl AsRef<Path>,
-) -> anyhow::Result<PathBuf> {
-    let filename: PathBuf = file_path
-        .as_ref()
-        .file_name()
-        .context("invalid update file name")?
-        .into();
-    let dump_file_path = dump_path.as_ref().join(&filename);
-    copy(file_path, dump_file_path)?;
-    Ok(filename)
 }

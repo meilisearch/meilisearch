@@ -117,7 +117,7 @@ where
                 if file_len != 0 {
                     file.flush().await?;
                     let file = file.into_std().await;
-                    Some((file, path))
+                    Some((file, update_file_id))
                 } else {
                     // empty update, delete the empty file.
                     fs::remove_file(&path).await?;
@@ -133,7 +133,7 @@ where
             use std::io::{copy, sink, BufReader, Seek};
 
             // If the payload is empty, ignore the check.
-            let path = if let Some((mut file, path)) = file_path {
+            let update_uuid = if let Some((mut file, uuid)) = file_path {
                 // set the file back to the beginning
                 file.seek(SeekFrom::Start(0))?;
                 // Check that the json payload is valid:
@@ -145,14 +145,14 @@ where
                     file.seek(SeekFrom::Start(0))?;
                     let _: serde_json::Value = serde_json::from_reader(file)?;
                 }
-                Some(path)
+                Some(uuid)
             } else {
                 None
             };
 
             // The payload is valid, we can register it to the update store.
             let status = update_store
-                .register_update(meta, path, uuid)
+                .register_update(meta, update_uuid, uuid)
                 .map(UpdateStatus::Enqueued)?;
             Ok(status)
         })
