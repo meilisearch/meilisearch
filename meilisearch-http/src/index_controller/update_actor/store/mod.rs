@@ -168,7 +168,7 @@ impl UpdateStore {
                             match res {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
-                                Err(e) => panic!("error while processing update: {}", e),
+                                Err(e) => error!("error while processing update: {}", e),
                             }
                         }
                         // the ownership on the arc has been taken, we need to exit.

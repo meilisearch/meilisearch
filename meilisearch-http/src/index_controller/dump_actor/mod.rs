@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Utc};
 use log::{error, info};
 #[cfg(test)]
 use mockall::automock;
@@ -86,6 +87,9 @@ pub struct DumpInfo {
     pub status: DumpStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    started_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finished_at: Option<DateTime<Utc>>,
 }
 
 impl DumpInfo {
@@ -94,15 +98,19 @@ impl DumpInfo {
             uid,
             status,
             error: None,
+            started_at: Utc::now(),
+            finished_at: None,
         }
     }
 
     pub fn with_error(&mut self, error: String) {
         self.status = DumpStatus::Failed;
+        self.finished_at = Some(Utc::now());
         self.error = Some(error);
     }
 
     pub fn done(&mut self) {
+        self.finished_at = Some(Utc::now());
         self.status = DumpStatus::Done;
     }
 

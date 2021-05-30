@@ -97,7 +97,9 @@ where
             return;
         }
         let uid = generate_uid();
+
         let info = DumpInfo::new(uid.clone(), DumpStatus::InProgress);
+
         *self.dump_info.write().await = Some(info.clone());
 
         ret.send(Ok(info)).expect("Dump actor is dead");
@@ -126,7 +128,7 @@ where
             }
             Err(_) => {
                 error!("Dump panicked. Dump status set to failed");
-                *dump_info.write().await = Some(DumpInfo::new(uid, DumpStatus::Failed));
+                (*dump_info.write().await).as_mut().expect("Inconsistent dump service state").with_error("Unexpected error while performing dump.".to_string());
             }
         };
     }

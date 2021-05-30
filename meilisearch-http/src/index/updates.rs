@@ -197,9 +197,10 @@ impl Index {
         builder.update_format(format);
         builder.index_documents_method(method);
 
-        let indexing_callback =
-            |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
+        //let indexing_callback =
+            //|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
+        let indexing_callback = |_, _| ();
 
         let gzipped = false;
         let addition = match content {

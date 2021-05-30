@@ -5,7 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Context;
 use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -83,8 +82,6 @@ impl UpdateStore {
                     let dst = super::update_uuid_to_file_path(&dst_path, *update_uuid);
                     std::fs::copy(src, dst)?;
                 }
-
-                println!("copied files");
 
                 let update_json = UpdateEntry {
                     uuid,
