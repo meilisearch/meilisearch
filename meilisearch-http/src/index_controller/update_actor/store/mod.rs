@@ -244,7 +244,7 @@ impl UpdateStore {
     pub fn register_raw_updates(
         &self,
         wtxn: &mut heed::RwTxn,
-        update: UpdateStatus,
+        update: &UpdateStatus,
         index_uuid: Uuid,
     ) -> heed::Result<()> {
         match update {

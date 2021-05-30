@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::UpdateStore;
 use super::{codec::UpdateKeyCodec, State};
-use crate::index_controller::{index_actor::IndexActorHandle, UpdateStatus};
+use crate::index_controller::{Enqueued, UpdateStatus, index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -69,7 +69,7 @@ impl UpdateStore {
         txn: &RoTxn,
         uuids: &HashSet<Uuid>,
         mut file: &mut File,
-        dst_update_files: impl AsRef<Path>,
+        dst_path: impl AsRef<Path>,
     ) -> anyhow::Result<()> {
         let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
 
@@ -79,10 +79,9 @@ impl UpdateStore {
                 let update = data.decode()?;
 
                 if let Some(ref update_uuid) = update.content {
-                    let src = dbg!(super::update_uuid_to_file_path(&self.path, *update_uuid));
-                    let dst = dbg!(super::update_uuid_to_file_path(&dst_update_files, *update_uuid));
-                    assert!(src.exists());
-                    dbg!(std::fs::copy(src, dst))?;
+                    let src = super::update_uuid_to_file_path(&self.path, *update_uuid);
+                    let dst = super::update_uuid_to_file_path(&dst_path, *update_uuid);
+                    std::fs::copy(src, dst)?;
                 }
 
                 println!("copied files");
@@ -144,6 +143,8 @@ impl UpdateStore {
         let update_data = File::open(&src_update_path.join("data.jsonl"))?;
         let mut update_data = BufReader::new(update_data);
 
+        std::fs::create_dir_all(dst_update_path.join("update_files/"))?;
+
         let mut wtxn = store.env.write_txn()?;
         let mut line = String::new();
         loop {
@@ -151,17 +152,20 @@ impl UpdateStore {
                 Ok(0) => break,
                 Ok(_) => {
                     let UpdateEntry { uuid, update } = serde_json::from_str(&line)?;
-                    store.register_raw_updates(&mut wtxn, update, uuid)?;
+                    store.register_raw_updates(&mut wtxn, &update, uuid)?;
+
+                    // Copy ascociated update path if it exists
+                    if let UpdateStatus::Enqueued(Enqueued { content: Some(uuid), .. }) = update {
+                        let src = update_uuid_to_file_path(&src_update_path, uuid);
+                        let dst = update_uuid_to_file_path(&dst_update_path, uuid);
+                        std::fs::copy(src, dst)?;
+                    }
                 }
                 _ => break,
             }
 
             line.clear();
         }
-
-        let dst_update_files_path = dst_update_path.join("update_files/");
-        let src_update_files_path = src_update_path.join("update_files/");
-        std::fs::copy(src_update_files_path, dst_update_files_path)?;
 
         wtxn.commit()?;
 
