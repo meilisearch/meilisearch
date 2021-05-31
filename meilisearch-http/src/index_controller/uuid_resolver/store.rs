@@ -1,13 +1,16 @@
-use std::{collections::HashSet, io::{BufReader, BufRead,  Write}};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    io::{BufRead, BufReader, Write},
+};
 
 use heed::{
     types::{ByteSlice, Str},
     CompactionOption, Database, Env, EnvOpenOptions,
 };
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use super::{Result, UuidResolverError, UUID_STORE_SIZE};
 use crate::helpers::EnvSizer;
@@ -45,7 +48,14 @@ impl HeedUuidStore {
         let mut options = EnvOpenOptions::new();
         options.map_size(UUID_STORE_SIZE); // 1GB
         let env = options.open(path)?;
-        let db = env.create_database(None)?; Ok(Self { env, db }) } pub fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> { let env = self.env.clone(); let db = self.db; let mut txn = env.write_txn()?;
+        let db = env.create_database(None)?;
+        Ok(Self { env, db })
+    }
+
+    pub fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
+        let env = self.env.clone();
+        let db = self.db;
+        let mut txn = env.write_txn()?;
         match db.get(&txn, &name)? {
             Some(uuid) => {
                 if err {
@@ -62,7 +72,10 @@ impl HeedUuidStore {
                 Ok(uuid)
             }
         }
-    } pub fn get_uuid(&self, name: String) -> Result<Option<Uuid>> { let env = self.env.clone(); let db = self.db;
+    }
+    pub fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
+        let env = self.env.clone();
+        let db = self.db;
         let txn = env.read_txn()?;
         match db.get(&txn, &name)? {
             Some(uuid) => {
@@ -149,9 +162,7 @@ impl HeedUuidStore {
             let uid = uid.to_string();
             let uuid = Uuid::from_slice(uuid)?;
 
-            let entry = DumpEntry {
-                uuid, uid
-            };
+            let entry = DumpEntry { uuid, uid };
             serde_json::to_writer(&mut dump_file, &entry)?;
             dump_file.write(b"\n").unwrap();
 

@@ -2,11 +2,12 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use log::{error, info};
+use log::{error, info, warn};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use anyhow::Context;
 
 use loaders::v1::MetadataV1;
 use loaders::v2::MetadataV2;
@@ -53,22 +54,16 @@ pub trait DumpActorHandle {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "dump_version")]
+#[serde(tag = "dumpVersion")]
 pub enum Metadata {
-    V1 {
-        #[serde(flatten)]
-        meta: MetadataV1,
-    },
-    V2 {
-        #[serde(flatten)]
-        meta: MetadataV2,
-    },
+    V1(MetadataV1),
+    V2(MetadataV2),
 }
 
 impl Metadata {
     pub fn new_v2(index_db_size: u64, update_db_size: u64) -> Self {
         let meta = MetadataV2::new(index_db_size, update_db_size);
-        Self::V2 { meta }
+        Self::V2(meta)
     }
 }
 
@@ -135,16 +130,31 @@ pub fn load_dump(
     let mut meta_file = File::open(&meta_path)?;
     let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
+    let dst_dir = dst_path
+        .as_ref()
+        .parent()
+        .with_context(|| format!("Invalid db path: {}", dst_path.as_ref().display()))?;
+
+    let tmp_dst = tempfile::tempdir_in(dst_dir)?;
+
     match meta {
-        Metadata::V1 { meta } => meta.load_dump(&tmp_src_path, dst_path)?,
-        Metadata::V2 { meta } => meta.load_dump(
+        Metadata::V1(meta) => meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size as usize)?,
+        Metadata::V2(meta) => meta.load_dump(
             &tmp_src_path,
-            dst_path.as_ref(),
+            tmp_dst.path(),
             index_db_size,
             update_db_size,
             indexer_opts,
         )?,
     }
+    // Persist and atomically rename the db
+    let persisted_dump = tmp_dst.into_path();
+    if dst_path.as_ref().exists() {
+        warn!("Overwriting database at {}", dst_path.as_ref().display());
+        std::fs::remove_dir_all(&dst_path)?;
+    }
+
+    std::fs::rename(&persisted_dump, &dst_path)?;
 
     Ok(())
 }
