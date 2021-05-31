@@ -1,8 +1,6 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
 
 use async_stream::stream;
 use chrono::Utc;
@@ -24,8 +22,8 @@ pub struct DumpActor<UuidResolver, Update> {
     dump_path: PathBuf,
     lock: Arc<Mutex<()>>,
     dump_infos: Arc<RwLock<HashMap<String, DumpInfo>>>,
-    update_db_size: u64,
-    index_db_size: u64,
+    update_db_size: usize,
+    index_db_size: usize,
 }
 
 /// Generate uid from creation date
@@ -43,8 +41,8 @@ where
         uuid_resolver: UuidResolver,
         update: Update,
         dump_path: impl AsRef<Path>,
-        index_db_size: u64,
-        update_db_size: u64,
+        index_db_size: usize,
+        update_db_size: usize,
     ) -> Self {
         let dump_infos = Arc::new(RwLock::new(HashMap::new()));
         let lock = Arc::new(Mutex::new(()));

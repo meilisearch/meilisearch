@@ -97,8 +97,8 @@ impl IndexController {
             load_dump(
                 &options.db_path,
                 src_path,
-                options.max_mdb_size.get_bytes(),
-                options.max_udb_size.get_bytes(),
+                options.max_mdb_size.get_bytes() as usize,
+                options.max_udb_size.get_bytes() as usize,
                 &options.indexer_options,
             )?;
         }
@@ -116,8 +116,8 @@ impl IndexController {
             &options.dumps_dir,
             uuid_resolver.clone(),
             update_handle.clone(),
-            options.max_mdb_size.get_bytes(),
-            options.max_udb_size.get_bytes(),
+            options.max_mdb_size.get_bytes() as usize,
+            options.max_udb_size.get_bytes() as usize,
         )?;
 
         if options.schedule_snapshot {

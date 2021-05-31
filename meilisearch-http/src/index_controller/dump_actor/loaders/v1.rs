@@ -1,22 +1,20 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs::File,
-    io::BufRead,
-    marker::PhantomData,
-    path::Path,
-    sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs::{create_dir_all, File};
+use std::io::BufRead;
+use std::marker::PhantomData;
+use std::path::Path;
+use std::sync::Arc;
 
 use heed::EnvOpenOptions;
 use log::{error, info, warn};
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{index::deserialize_some, index_controller::uuid_resolver::HeedUuidStore};
+use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata};
 use crate::{
-    index::{Index, Unchecked},
-    index_controller::{self, IndexMetadata},
+    index::{deserialize_some, update_handler::UpdateHandler, Index, Unchecked},
+    option::IndexerOpts,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -32,28 +30,33 @@ impl MetadataV1 {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         size: usize,
+        indexer_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
         info!(
             "Loading dump, dump database version: {}, dump version: V1",
             self.db_version
         );
 
-        dbg!("here");
-
         let uuid_store = HeedUuidStore::new(&dst)?;
-        dbg!("here");
         for index in self.indexes {
             let uuid = Uuid::new_v4();
             uuid_store.insert(index.uid.clone(), uuid)?;
             let src = src.as_ref().join(index.uid);
-            load_index(&src, &dst, uuid, index.meta.primary_key.as_deref(), size)?;
+            load_index(
+                &src,
+                &dst,
+                uuid,
+                index.meta.primary_key.as_deref(),
+                size,
+                indexer_options,
+            )?;
         }
 
         Ok(())
     }
 }
 
-//This is the settings used in the last version of meilisearch exporting dump in V1
+// These are the settings used in legacy meilisearch (<v0.21.0).
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Settings {
@@ -87,10 +90,11 @@ fn load_index(
     uuid: Uuid,
     primary_key: Option<&str>,
     size: usize,
+    indexer_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
     let index_path = dst.as_ref().join(&format!("indexes/index-{}", uuid));
 
-    std::fs::create_dir_all(&index_path)?;
+    create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
     options.map_size(size);
     let index = milli::Index::new(options, index_path)?;
@@ -99,31 +103,37 @@ fn load_index(
     // extract `settings.json` file and import content
     let settings = import_settings(&src)?;
     let settings: index_controller::Settings<Unchecked> = settings.into();
-    let update_builder = UpdateBuilder::new(0);
-    index.update_settings(&settings.check(), update_builder)?;
 
-    let update_builder = UpdateBuilder::new(0);
+    let mut txn = index.write_txn()?;
+
+    let handler = UpdateHandler::new(&indexer_options)?;
+
+    index.update_settings_txn(&mut txn, &settings.check(), handler.update_builder(0))?;
+
     let file = File::open(&src.as_ref().join("documents.jsonl"))?;
     let mut reader = std::io::BufReader::new(file);
     reader.fill_buf()?;
     if !reader.buffer().is_empty() {
-        index.update_documents(
+        index.update_documents_txn(
+            &mut txn,
             UpdateFormat::JsonStream,
             IndexDocumentsMethod::ReplaceDocuments,
             Some(reader),
-            update_builder,
+            handler.update_builder(0),
             primary_key,
         )?;
     }
 
-    // the last step: we extract the original milli::Index and close it
+    txn.commit()?;
+
+    // Finaly, we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)
-        .map_err(|_e| "[dumps] At this point no one is supposed to have a reference on the index")
+        .map_err(|_e| "Couln't close index properly")
         .unwrap()
         .prepare_for_closing()
         .wait();
 
-    // Ignore updates in v1.
+    // Updates are ignored in dumps V1.
 
     Ok(())
 }
@@ -172,7 +182,7 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
 
 /// Extract Settings from `settings.json` file present at provided `dir_path`
 fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
-    let path = dbg!(dir_path.as_ref().join("settings.json"));
+    let path = dir_path.as_ref().join("settings.json");
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);
     let metadata = serde_json::from_reader(reader)?;

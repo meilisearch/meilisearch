@@ -1,10 +1,9 @@
+use std::collections::{BTreeSet, HashSet};
+use std::fs::create_dir_all;
+use std::marker::PhantomData;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
-use std::{
-    collections::{BTreeSet, HashSet},
-    marker::PhantomData,
-    path::Path,
-};
 
 use anyhow::{bail, Context};
 use heed::{EnvOpenOptions, RoTxn};
@@ -44,7 +43,7 @@ where
 
 impl Index {
     pub fn open(path: impl AsRef<Path>, size: usize) -> anyhow::Result<Self> {
-        std::fs::create_dir_all(&path)?;
+        create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         let index = milli::Index::new(options, &path)?;
@@ -112,8 +111,6 @@ impl Index {
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
         let mut documents = Vec::new();
-
-        println!("fields to display: {:?}", fields_to_display);
 
         for entry in iter {
             let (_id, obkv) = entry?;

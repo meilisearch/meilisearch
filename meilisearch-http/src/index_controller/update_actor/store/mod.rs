@@ -589,9 +589,7 @@ mod test {
         let uuid = Uuid::new_v4();
         let store_clone = update_store.clone();
         tokio::task::spawn_blocking(move || {
-            store_clone
-                .register_update(meta, None, uuid)
-                .unwrap();
+            store_clone.register_update(meta, None, uuid).unwrap();
         })
         .await
         .unwrap();

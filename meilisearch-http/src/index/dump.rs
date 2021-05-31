@@ -1,12 +1,9 @@
-use std::{
-    fs::{create_dir_all, File},
-    io::{BufRead, BufReader},
-    path::Path,
-    sync::Arc,
-};
+use std::fs::{create_dir_all, File};
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
+use std::sync::Arc;
 
-use anyhow::bail;
-use anyhow::Context;
+use anyhow::{bail, Context};
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
@@ -55,7 +52,7 @@ impl Index {
             }
 
             serde_json::to_writer(&mut document_file, &json_map)?;
-            std::io::Write::write(&mut document_file, b"\n")?;
+            document_file.write_all(b"\n")?;
 
             json_map.clear();
         }
@@ -82,7 +79,7 @@ impl Index {
     pub fn load_dump(
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
-        size: u64,
+        size: usize,
         indexing_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
         let dir_name = src
@@ -99,7 +96,7 @@ impl Index {
             primary_key,
         } = serde_json::from_reader(&mut meta_file)?;
         let settings = settings.check();
-        let index = Self::open(&dst_dir_path, size as usize)?;
+        let index = Self::open(&dst_dir_path, size)?;
         let mut txn = index.write_txn()?;
 
         let handler = UpdateHandler::new(&indexing_options)?;

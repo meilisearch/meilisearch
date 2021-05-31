@@ -129,7 +129,7 @@ impl UpdateStore {
     pub fn load_dump(
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
-        db_size: u64,
+        db_size: usize,
     ) -> anyhow::Result<()> {
         let dst_update_path = dst.as_ref().join("updates/");
         create_dir_all(&dst_update_path)?;

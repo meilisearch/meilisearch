@@ -8,6 +8,7 @@ use log::{error, info, warn};
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::fs::create_dir_all;
 
 use loaders::v1::MetadataV1;
 use loaders::v2::MetadataV2;
@@ -15,7 +16,6 @@ use loaders::v2::MetadataV2;
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
-use tokio::fs::create_dir_all;
 
 use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
 use crate::{helpers::compression, option::IndexerOpts};
@@ -61,7 +61,7 @@ pub enum Metadata {
 }
 
 impl Metadata {
-    pub fn new_v2(index_db_size: u64, update_db_size: u64) -> Self {
+    pub fn new_v2(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = MetadataV2::new(index_db_size, update_db_size);
         Self::V2(meta)
     }
@@ -117,8 +117,8 @@ impl DumpInfo {
 pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
-    index_db_size: u64,
-    update_db_size: u64,
+    index_db_size: usize,
+    update_db_size: usize,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
     let tmp_src = tempfile::tempdir_in(".")?;
@@ -139,7 +139,7 @@ pub fn load_dump(
 
     match meta {
         Metadata::V1(meta) => {
-            meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size as usize)?
+            meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
         Metadata::V2(meta) => meta.load_dump(
             &tmp_src_path,
@@ -166,8 +166,8 @@ struct DumpTask<U, P> {
     uuid_resolver: U,
     update_handle: P,
     uid: String,
-    update_db_size: u64,
-    index_db_size: u64,
+    update_db_size: usize,
+    index_db_size: usize,
 }
 
 impl<U, P> DumpTask<U, P>

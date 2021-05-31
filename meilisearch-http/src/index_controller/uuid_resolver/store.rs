@@ -1,14 +1,10 @@
+use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::{
-    collections::HashSet,
-    io::{BufRead, BufReader, Write},
-};
 
-use heed::{
-    types::{ByteSlice, Str},
-    CompactionOption, Database, Env, EnvOpenOptions,
-};
+use heed::types::{ByteSlice, Str};
+use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +16,8 @@ struct DumpEntry {
     uuid: Uuid,
     uid: String,
 }
+
+const UUIDS_DB_PATH: &str = "index_uuids";
 
 #[async_trait::async_trait]
 pub trait UuidStore: Sized {
@@ -43,7 +41,7 @@ pub struct HeedUuidStore {
 
 impl HeedUuidStore {
     pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let path = path.as_ref().join("index_uuids");
+        let path = path.as_ref().join(UUIDS_DB_PATH);
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(UUID_STORE_SIZE); // 1GB
@@ -137,7 +135,7 @@ impl HeedUuidStore {
 
         // only perform snapshot if there are indexes
         if !entries.is_empty() {
-            path.push("index_uuids");
+            path.push(UUIDS_DB_PATH);
             create_dir_all(&path).unwrap();
             path.push("data.mdb");
             env.copy_to_path(path, CompactionOption::Enabled)?;
@@ -150,7 +148,7 @@ impl HeedUuidStore {
     }
 
     pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
-        let dump_path = path.join("index_uuids");
+        let dump_path = path.join(UUIDS_DB_PATH);
         create_dir_all(&dump_path)?;
         let dump_file_path = dump_path.join("data.jsonl");
         let mut dump_file = File::create(&dump_file_path)?;
@@ -173,10 +171,10 @@ impl HeedUuidStore {
     }
 
     pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
-        let uuid_resolver_path = dst.as_ref().join("uuid_resolver/");
+        let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
         std::fs::create_dir_all(&uuid_resolver_path)?;
 
-        let src_indexes = src.as_ref().join("index_uuids/data.jsonl");
+        let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
         let indexes = File::open(&src_indexes)?;
         let mut indexes = BufReader::new(indexes);
         let mut line = String::new();
