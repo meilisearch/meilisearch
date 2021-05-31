@@ -1,13 +1,16 @@
-use std::{collections::HashMap, path::{Path, PathBuf}};
 use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use async_stream::stream;
 use chrono::Utc;
 use futures::{lock::Mutex, stream::StreamExt};
 use log::{error, info};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
-use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::{DumpError, DumpInfo, DumpMsg, DumpResult, DumpStatus, DumpTask};
 use crate::index_controller::{update_actor, uuid_resolver};
@@ -107,7 +110,10 @@ where
             }
         };
 
-        self.dump_infos.write().await.insert(uid.clone(), info.clone());
+        self.dump_infos
+            .write()
+            .await
+            .insert(uid.clone(), info.clone());
 
         ret.send(Ok(info)).expect("Dump actor is dead");
 
@@ -122,11 +128,8 @@ where
 
         let task_result = tokio::task::spawn(task.run()).await;
 
-        let mut dump_infos = self.dump_infos
-            .write()
-            .await;
-        let dump_infos =
-            dump_infos
+        let mut dump_infos = self.dump_infos.write().await;
+        let dump_infos = dump_infos
             .get_mut(&uid)
             .expect("dump entry deleted while lock was acquired");
 

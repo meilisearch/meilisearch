@@ -1,20 +1,17 @@
-use actix_web::{post, get, web};
 use actix_web::HttpResponse;
-use serde::{Serialize, Deserialize};
+use actix_web::{get, post, web};
+use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(create_dump)
-        .service(get_dump_status);
+    cfg.service(create_dump).service(get_dump_status);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
-async fn create_dump(
-    data: web::Data<Data>,
-) -> Result<HttpResponse, ResponseError> {
+async fn create_dump(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let res = data.create_dump().await?;
 
     Ok(HttpResponse::Accepted().json(res))

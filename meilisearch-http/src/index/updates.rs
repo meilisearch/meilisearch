@@ -198,7 +198,7 @@ impl Index {
         builder.index_documents_method(method);
 
         //let indexing_callback =
-            //|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
+        //|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
         let indexing_callback = |_, _| ();
 

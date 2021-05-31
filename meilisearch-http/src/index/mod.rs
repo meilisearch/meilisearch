@@ -1,6 +1,10 @@
-use std::{collections::{BTreeSet, HashSet}, marker::PhantomData, path::Path};
 use std::ops::Deref;
 use std::sync::Arc;
+use std::{
+    collections::{BTreeSet, HashSet},
+    marker::PhantomData,
+    path::Path,
+};
 
 use anyhow::{bail, Context};
 use heed::{EnvOpenOptions, RoTxn};
@@ -9,13 +13,13 @@ use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, Checked, Unchecked};
 use serde::{de::Deserializer, Deserialize};
+pub use updates::{Checked, Facets, Settings, Unchecked};
 
-mod search;
-mod updates;
 mod dump;
+mod search;
 pub mod update_handler;
+mod updates;
 
 pub type Document = Map<String, Value>;
 

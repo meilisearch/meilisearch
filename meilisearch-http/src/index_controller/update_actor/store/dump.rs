@@ -11,7 +11,10 @@ use uuid::Uuid;
 
 use super::UpdateStore;
 use super::{codec::UpdateKeyCodec, State};
-use crate::index_controller::{Enqueued, UpdateStatus, index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path};
+use crate::index_controller::{
+    index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path, Enqueued,
+    UpdateStatus,
+};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -89,7 +92,7 @@ impl UpdateStore {
                 };
 
                 serde_json::to_writer(&mut file, &update_json)?;
-                file.write(b"\n")?;
+                file.write_all(b"\n")?;
             }
         }
 
@@ -111,12 +114,12 @@ impl UpdateStore {
         for update in updates {
             let ((uuid, _), data) = update?;
             if uuids.contains(&uuid) {
-                let update = data.decode()?.into();
+                let update = data.decode()?;
 
                 let update_json = UpdateEntry { uuid, update };
 
                 serde_json::to_writer(&mut file, &update_json)?;
-                file.write(b"\n")?;
+                file.write_all(b"\n")?;
             }
         }
 
@@ -130,7 +133,6 @@ impl UpdateStore {
     ) -> anyhow::Result<()> {
         let dst_update_path = dst.as_ref().join("updates/");
         create_dir_all(&dst_update_path)?;
-
 
         let mut options = EnvOpenOptions::new();
         options.map_size(db_size as usize);
@@ -152,7 +154,11 @@ impl UpdateStore {
                     store.register_raw_updates(&mut wtxn, &update, uuid)?;
 
                     // Copy ascociated update path if it exists
-                    if let UpdateStatus::Enqueued(Enqueued { content: Some(uuid), .. }) = update {
+                    if let UpdateStatus::Enqueued(Enqueued {
+                        content: Some(uuid),
+                        ..
+                    }) = update
+                    {
                         let src = update_uuid_to_file_path(&src_update_path, uuid);
                         let dst = update_uuid_to_file_path(&dst_update_path, uuid);
                         std::fs::copy(src, dst)?;

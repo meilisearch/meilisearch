@@ -1,7 +1,7 @@
-use std::path::Path;
-use actix_web::web::Bytes;
-use tokio::sync::{mpsc, oneshot};
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg, DumpResult};
+use actix_web::web::Bytes;
+use std::path::Path;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
 pub struct DumpActorHandleImpl {
@@ -34,7 +34,14 @@ impl DumpActorHandleImpl {
         update_db_size: u64,
     ) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(10);
-        let actor = DumpActor::new(receiver, uuid_resolver, update, path, index_db_size, update_db_size);
+        let actor = DumpActor::new(
+            receiver,
+            uuid_resolver,
+            update,
+            path,
+            index_db_size,
+            update_db_size,
+        );
 
         tokio::task::spawn(actor.run());
 

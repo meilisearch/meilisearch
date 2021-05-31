@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::{index::Checked, index_controller::{IndexSettings, IndexStats, Processing}};
+use crate::{
+    index::Checked,
+    index_controller::{IndexSettings, IndexStats, Processing},
+};
 use crate::{
     index::{Document, SearchQuery, SearchResult, Settings},
     index_controller::{Failed, Processed},

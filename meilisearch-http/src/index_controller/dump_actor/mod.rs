@@ -1,13 +1,13 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use log::{error, info, warn};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use anyhow::Context;
 
 use loaders::v1::MetadataV1;
 use loaders::v2::MetadataV2;
@@ -25,7 +25,7 @@ mod handle_impl;
 mod loaders;
 mod message;
 
-const META_FILE_NAME: &'static str = "metadata.json";
+const META_FILE_NAME: &str = "metadata.json";
 
 pub type DumpResult<T> = std::result::Result<T, DumpError>;
 
@@ -138,7 +138,9 @@ pub fn load_dump(
     let tmp_dst = tempfile::tempdir_in(dst_dir)?;
 
     match meta {
-        Metadata::V1(meta) => meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size as usize)?,
+        Metadata::V1(meta) => {
+            meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size as usize)?
+        }
         Metadata::V2(meta) => meta.load_dump(
             &tmp_src_path,
             tmp_dst.path(),

@@ -1,4 +1,11 @@
-use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::BufRead, marker::PhantomData, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs::File,
+    io::BufRead,
+    marker::PhantomData,
+    path::Path,
+    sync::Arc,
+};
 
 use heed::EnvOpenOptions;
 use log::{error, info, warn};

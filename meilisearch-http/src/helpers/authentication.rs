@@ -1,16 +1,16 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use actix_web::body::Body;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::web;
-use actix_web::body::Body;
-use futures::ready;
-use futures::future::{ok, Future, Ready};
 use actix_web::ResponseError as _;
+use futures::future::{ok, Future, Ready};
+use futures::ready;
 use pin_project::pin_project;
 
-use crate::Data;
 use crate::error::{Error, ResponseError};
+use crate::Data;
 
 #[derive(Clone, Copy)]
 pub enum Authentication {
@@ -59,19 +59,15 @@ where
         let data = req.app_data::<web::Data<Data>>().unwrap();
 
         if data.api_keys().master.is_none() {
-            return AuthenticationFuture::Authenticated(self.service.call(req))
+            return AuthenticationFuture::Authenticated(self.service.call(req));
         }
 
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
-                Err(_) => {
-                    return AuthenticationFuture::NoHeader(Some(req))
-                }
+                Err(_) => return AuthenticationFuture::NoHeader(Some(req)),
             },
-            None => {
-                return AuthenticationFuture::NoHeader(Some(req))
-            }
+            None => return AuthenticationFuture::NoHeader(Some(req)),
         };
 
         let authenticated = match self.acl {
@@ -111,15 +107,13 @@ where
 {
     type Output = Result<ServiceResponse<Body>, actix_web::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) ->Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this {
-            AuthProj::Authenticated(fut) => {
-                match ready!(fut.poll(cx)) {
-                    Ok(resp) => Poll::Ready(Ok(resp)),
-                    Err(e) => Poll::Ready(Err(e)),
-                }
-            }
+            AuthProj::Authenticated(fut) => match ready!(fut.poll(cx)) {
+                Ok(resp) => Poll::Ready(Ok(resp)),
+                Err(e) => Poll::Ready(Err(e)),
+            },
             AuthProj::NoHeader(req) => {
                 match req.take() {
                     Some(req) => {
@@ -135,7 +129,8 @@ where
             AuthProj::Refused(req) => {
                 match req.take() {
                     Some(req) => {
-                        let bad_token = req.headers()
+                        let bad_token = req
+                            .headers()
                             .get("X-Meili-API-Key")
                             .map(|h| h.to_str().map(String::from).unwrap_or_default())
                             .unwrap_or_default();

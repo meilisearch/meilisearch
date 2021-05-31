@@ -37,5 +37,5 @@ pub enum UuidResolveMsg {
     DumpRequest {
         path: PathBuf,
         ret: oneshot::Sender<Result<HashSet<Uuid>>>,
-    }
+    },
 }

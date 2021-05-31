@@ -2,6 +2,7 @@ use actix_web::{get, HttpResponse};
 use serde::{Deserialize, Serialize};
 
 pub mod document;
+pub mod dump;
 pub mod health;
 pub mod index;
 pub mod key;
@@ -9,7 +10,6 @@ pub mod search;
 pub mod settings;
 pub mod stats;
 pub mod synonym;
-pub mod dump;
 
 #[derive(Deserialize)]
 pub struct IndexParam {

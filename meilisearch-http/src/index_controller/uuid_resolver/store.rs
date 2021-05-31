@@ -164,7 +164,7 @@ impl HeedUuidStore {
 
             let entry = DumpEntry { uuid, uid };
             serde_json::to_writer(&mut dump_file, &entry)?;
-            dump_file.write(b"\n").unwrap();
+            dump_file.write_all(b"\n").unwrap();
 
             uuids.insert(uuid);
         }
@@ -192,7 +192,7 @@ impl HeedUuidStore {
                     println!("importing {} {}", uid, uuid);
                     db.db.put(&mut txn, &uid, uuid.as_bytes())?;
                 }
-                Err(e) => Err(e)?,
+                Err(e) => return Err(e.into()),
             }
 
             line.clear();

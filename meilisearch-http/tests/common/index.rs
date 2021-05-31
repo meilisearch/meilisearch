@@ -47,7 +47,7 @@ impl Index<'_> {
         update_id as u64
     }
 
-    pub async fn create(& self, primary_key: Option<&str>) -> (Value, StatusCode) {
+    pub async fn create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
         let body = json!({
             "uid": self.uid,
             "primaryKey": primary_key,

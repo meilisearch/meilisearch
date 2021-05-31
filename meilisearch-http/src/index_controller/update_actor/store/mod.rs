@@ -1,10 +1,13 @@
-pub mod dump;
 mod codec;
+pub mod dump;
 
-use std::{collections::{BTreeMap, HashSet}, path::PathBuf};
 use std::fs::{copy, create_dir_all, remove_file, File};
 use std::path::Path;
 use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+};
 
 use arc_swap::ArcSwap;
 use futures::StreamExt;
@@ -20,13 +23,13 @@ use uuid::Uuid;
 use codec::*;
 
 use super::UpdateMeta;
-use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
+use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
 
-const UPDATE_DIR: &'static str = "update_files";
+const UPDATE_DIR: &str = "update_files";
 
 pub struct UpdateStoreInfo {
     /// Size of the update store in bytes.
@@ -441,11 +444,12 @@ impl UpdateStore {
 
         txn.commit()?;
 
-        uuids_to_remove.iter()
+        uuids_to_remove
+            .iter()
             .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
             .for_each(|path| {
-            let _ = remove_file(path);
-        });
+                let _ = remove_file(path);
+            });
 
         // We don't care about the currently processing update, since it will be removed by itself
         // once its done processing, and we can't abort a running update.
@@ -482,7 +486,11 @@ impl UpdateStore {
         for entry in pendings {
             let ((_, uuid, _), pending) = entry?;
             if uuids.contains(&uuid) {
-                if let Enqueued { content: Some(uuid), .. } = pending.decode()? {
+                if let Enqueued {
+                    content: Some(uuid),
+                    ..
+                } = pending.decode()?
+                {
                     let path = update_uuid_to_file_path(&self.path, uuid);
                     copy(path, &update_files_path)?;
                 }
@@ -507,13 +515,16 @@ impl UpdateStore {
         Ok(())
     }
 
-
     pub fn get_info(&self) -> anyhow::Result<UpdateStoreInfo> {
         let mut size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
             let (_, pending) = entry?;
-            if let Enqueued { content: Some(uuid), .. } = pending {
+            if let Enqueued {
+                content: Some(uuid),
+                ..
+            } = pending
+            {
                 let path = update_uuid_to_file_path(&self.path, uuid);
                 size += File::open(path)?.metadata()?.len();
             }
@@ -528,7 +539,9 @@ impl UpdateStore {
 }
 
 fn update_uuid_to_file_path(root: impl AsRef<Path>, uuid: Uuid) -> PathBuf {
-    root.as_ref().join(UPDATE_DIR).join(format!("update_{}", uuid))
+    root.as_ref()
+        .join(UPDATE_DIR)
+        .join(format!("update_{}", uuid))
 }
 
 #[cfg(test)]
@@ -577,7 +590,7 @@ mod test {
         let store_clone = update_store.clone();
         tokio::task::spawn_blocking(move || {
             store_clone
-                .register_update(meta, Some("here"), uuid)
+                .register_update(meta, None, uuid)
                 .unwrap();
         })
         .await

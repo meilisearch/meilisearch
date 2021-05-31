@@ -4,7 +4,11 @@ use chrono::{DateTime, Utc};
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::{index::Index, index_controller::{update_actor::UpdateStore, uuid_resolver::HeedUuidStore}, option::IndexerOpts};
+use crate::{
+    index::Index,
+    index_controller::{update_actor::UpdateStore, uuid_resolver::HeedUuidStore},
+    option::IndexerOpts,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

@@ -1,4 +1,9 @@
-use std::{fs::{create_dir_all, File}, io::{BufRead, BufReader}, path::Path, sync::Arc};
+use std::{
+    fs::{create_dir_all, File},
+    io::{BufRead, BufReader},
+    path::Path,
+    sync::Arc,
+};
 
 use anyhow::bail;
 use anyhow::Context;
@@ -17,8 +22,8 @@ struct DumpMeta {
     primary_key: Option<String>,
 }
 
-const META_FILE_NAME: &'static str = "meta.json";
-const DATA_FILE_NAME: &'static str = "documents.jsonl";
+const META_FILE_NAME: &str = "meta.json";
+const DATA_FILE_NAME: &str = "documents.jsonl";
 
 impl Index {
     pub fn dump(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {

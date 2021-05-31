@@ -15,7 +15,7 @@ use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
 
 use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{Failed, Processed, Processing, IndexStats};
+use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
 use super::IndexSettings;
 
@@ -44,7 +44,11 @@ impl IndexMeta {
         let created_at = index.created_at(&txn)?;
         let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
-        Ok(Self { created_at, updated_at, primary_key })
+        Ok(Self {
+            created_at,
+            updated_at,
+            primary_key,
+        })
     }
 }
 
@@ -57,7 +61,7 @@ pub enum IndexError {
     #[error("Existing primary key")]
     ExistingPrimaryKey,
     #[error("Internal Index Error: {0}")]
-    Internal(String)
+    Internal(String),
 }
 
 macro_rules! internal_error {
@@ -72,7 +76,12 @@ macro_rules! internal_error {
     }
 }
 
-internal_error!(anyhow::Error, heed::Error, tokio::task::JoinError, std::io::Error);
+internal_error!(
+    anyhow::Error,
+    heed::Error,
+    tokio::task::JoinError,
+    std::io::Error
+);
 
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
@@ -190,8 +199,8 @@ mod test {
             self.as_ref().snapshot(uuid, path).await
         }
 
-        async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
-            self.as_ref().dump(uid, uuid, path).await
+        async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+            self.as_ref().dump(uuid, path).await
         }
 
         async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
