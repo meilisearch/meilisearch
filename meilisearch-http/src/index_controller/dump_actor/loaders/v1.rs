@@ -1,10 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs::File,
-    marker::PhantomData,
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::BufRead, marker::PhantomData, path::Path, sync::Arc};
 
 use heed::EnvOpenOptions;
 use log::{error, info, warn};
@@ -103,15 +97,17 @@ fn load_index(
 
     let update_builder = UpdateBuilder::new(0);
     let file = File::open(&src.as_ref().join("documents.jsonl"))?;
-    let reader = std::io::BufReader::new(file);
-
-    index.update_documents(
-        UpdateFormat::JsonStream,
-        IndexDocumentsMethod::ReplaceDocuments,
-        Some(reader),
-        update_builder,
-        primary_key,
-    )?;
+    let mut reader = std::io::BufReader::new(file);
+    reader.fill_buf()?;
+    if !reader.buffer().is_empty() {
+        index.update_documents(
+            UpdateFormat::JsonStream,
+            IndexDocumentsMethod::ReplaceDocuments,
+            Some(reader),
+            update_builder,
+            primary_key,
+        )?;
+    }
 
     // the last step: we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)

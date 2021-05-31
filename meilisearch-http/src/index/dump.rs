@@ -1,15 +1,15 @@
-use std::{fs::{create_dir_all, File}, path::Path, sync::Arc};
+use std::{fs::{create_dir_all, File}, io::{BufRead, BufReader}, path::Path, sync::Arc};
 
+use anyhow::bail;
 use anyhow::Context;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
 use serde::{Deserialize, Serialize};
-use anyhow::bail;
 
 use crate::option::IndexerOpts;
 
-use super::{Unchecked, Index, Settings, update_handler::UpdateHandler};
+use super::{update_handler::UpdateHandler, Index, Settings, Unchecked};
 
 #[derive(Serialize, Deserialize)]
 struct DumpMeta {
@@ -64,7 +64,10 @@ impl Index {
 
         let settings = self.settings_txn(txn)?.into_unchecked();
         let primary_key = self.primary_key(txn)?.map(String::from);
-        let meta = DumpMeta { settings, primary_key };
+        let meta = DumpMeta {
+            settings,
+            primary_key,
+        };
 
         serde_json::to_writer(&mut meta_file, &meta)?;
 
@@ -86,7 +89,10 @@ impl Index {
 
         let meta_path = src.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::open(meta_path)?;
-        let DumpMeta { settings, primary_key } = serde_json::from_reader(&mut meta_file)?;
+        let DumpMeta {
+            settings,
+            primary_key,
+        } = serde_json::from_reader(&mut meta_file)?;
         let settings = settings.check();
         let index = Self::open(&dst_dir_path, size as usize)?;
         let mut txn = index.write_txn()?;
@@ -96,15 +102,21 @@ impl Index {
         index.update_settings_txn(&mut txn, &settings, handler.update_builder(0))?;
 
         let document_file_path = src.as_ref().join(DATA_FILE_NAME);
-        let document_file = File::open(&document_file_path)?;
-        index.update_documents_txn(
-            &mut txn,
-            JsonStream,
-            IndexDocumentsMethod::UpdateDocuments,
-            Some(document_file),
-            handler.update_builder(0),
-            primary_key.as_deref(),
-        )?;
+        let reader = File::open(&document_file_path)?;
+        let mut reader = BufReader::new(reader);
+        reader.fill_buf()?;
+        // If the document file is empty, we don't perform the document addition, to prevent
+        // a primary key error to be thrown.
+        if !reader.buffer().is_empty() {
+            index.update_documents_txn(
+                &mut txn,
+                JsonStream,
+                IndexDocumentsMethod::UpdateDocuments,
+                Some(reader),
+                handler.update_builder(0),
+                primary_key.as_deref(),
+            )?;
+        }
 
         txn.commit()?;
 
