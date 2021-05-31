@@ -240,9 +240,7 @@ impl FacetCondition {
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
 
-        // TODO we must normalize instead of lowercase.
         let svalue = svalue.to_lowercase();
-
         Ok(Operator(fid, Equal(result.ok(), svalue)))
     }
 

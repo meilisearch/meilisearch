@@ -98,7 +98,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &string_documents_ids)?;
             self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &number_documents_ids)?;
 
-            // Store the
             write_into_lmdb_database(
                 self.wtxn,
                 *self.index.facet_id_f64_docids.as_polymorph(),

@@ -816,7 +816,6 @@ fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<String>) {
                 output_numbers.push(float);
             },
             Value::String(string) => {
-                // TODO must be normalized and not only lowercased.
                 let string = string.trim().to_lowercase();
                 output_strings.push(string);
             },
