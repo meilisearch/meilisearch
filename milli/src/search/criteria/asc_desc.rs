@@ -1,18 +1,15 @@
-use std::collections::HashMap;
 use std::mem::take;
 
-use anyhow::{bail, Context as _};
+use anyhow::Context;
 use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
-use crate::heed_codec::facet::FieldDocIdFacetF64Codec;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::{FieldsIdsMap, FieldId, Index};
+use crate::{FieldId, Index};
 use super::{Criterion, CriterionParameters, CriterionResult};
 
 /// Threshold on the number of candidates that will make
@@ -24,7 +21,6 @@ pub struct AscDesc<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     field_name: String,
     field_id: FieldId,
-    facet_type: FacetType,
     ascending: bool,
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
@@ -39,8 +35,7 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
-    ) -> anyhow::Result<Self>
-    {
+    ) -> anyhow::Result<Self> {
         Self::new(index, rtxn, parent, field_name, true)
     }
 
@@ -49,8 +44,7 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
-    ) -> anyhow::Result<Self>
-    {
+    ) -> anyhow::Result<Self> {
         Self::new(index, rtxn, parent, field_name, false)
     }
 
@@ -60,22 +54,21 @@ impl<'t> AscDesc<'t> {
         parent: Box<dyn Criterion + 't>,
         field_name: String,
         ascending: bool,
-    ) -> anyhow::Result<Self>
-    {
+    ) -> anyhow::Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields(rtxn)?;
-        let (field_id, facet_type) = field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+        let field_id = fields_ids_map
+            .id(&field_name)
+            .with_context(|| format!("field {:?} isn't registered", field_name))?;
 
         Ok(AscDesc {
             index,
             rtxn,
             field_name,
             field_id,
-            facet_type,
             ascending,
             query_tree: None,
             candidates: Box::new(std::iter::empty()),
-            faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
+            faceted_candidates: index.number_faceted_documents_ids(rtxn, field_id)?,
             bucket_candidates: RoaringBitmap::new(),
             parent,
         })
@@ -86,8 +79,10 @@ impl<'t> Criterion for AscDesc<'t> {
     #[logging_timer::time("AscDesc::{}")]
     fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
         loop {
-            debug!("Facet {}({}) iteration",
-                if self.ascending { "Asc" } else { "Desc" }, self.field_name
+            debug!(
+                "Facet {}({}) iteration",
+                if self.ascending { "Asc" } else { "Desc" },
+                self.field_name
             );
 
             match self.candidates.next().transpose()? {
@@ -122,7 +117,6 @@ impl<'t> Criterion for AscDesc<'t> {
                                 self.index,
                                 self.rtxn,
                                 self.field_id,
-                                self.facet_type,
                                 self.ascending,
                                 candidates,
                             )?;
@@ -138,25 +132,10 @@ impl<'t> Criterion for AscDesc<'t> {
                         filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
-                },
+                }
             }
         }
     }
-}
-
-fn field_id_facet_type(
-    fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashMap<String, FacetType>,
-    field: &str,
-) -> anyhow::Result<(FieldId, FacetType)>
-{
-    let id = fields_ids_map.id(field).with_context(|| {
-        format!("field {:?} isn't registered", field)
-    })?;
-    let facet_type = faceted_fields.get(field).with_context(|| {
-        format!("field {:?} isn't faceted", field)
-    })?;
-    Ok((id, *facet_type))
 }
 
 /// Returns an iterator over groups of the given candidates in ascending or descending order.
@@ -167,29 +146,20 @@ fn facet_ordered<'t>(
     index: &'t Index,
     rtxn: &'t heed::RoTxn,
     field_id: FieldId,
-    facet_type: FacetType,
     ascending: bool,
     candidates: RoaringBitmap,
-) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>>
-{
-    match facet_type {
-        FacetType::Number => {
-            if candidates.len() <= CANDIDATES_THRESHOLD {
-                let iter = iterative_facet_ordered_iter(
-                    index, rtxn, field_id, ascending, candidates,
-                )?;
-                Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
-            } else {
-                let facet_fn = if ascending {
-                    FacetIter::new_reducing
-                } else {
-                    FacetIter::new_reverse_reducing
-                };
-                let iter = facet_fn(rtxn, index, field_id, candidates)?;
-                Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
-            }
-        },
-        FacetType::String => bail!("criteria facet type must be a number"),
+) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
+    if candidates.len() <= CANDIDATES_THRESHOLD {
+        let iter = iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
+        Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
+    } else {
+        let facet_fn = if ascending {
+            FacetIter::new_reducing
+        } else {
+            FacetIter::new_reverse_reducing
+        };
+        let iter = facet_fn(rtxn, index, field_id, candidates)?;
+        Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
     }
 }
 
@@ -202,14 +172,14 @@ fn iterative_facet_ordered_iter<'t>(
     field_id: FieldId,
     ascending: bool,
     candidates: RoaringBitmap,
-) -> anyhow::Result<impl Iterator<Item = RoaringBitmap> + 't>
-{
-    let db = index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetF64Codec>();
+) -> anyhow::Result<impl Iterator<Item = RoaringBitmap> + 't> {
     let mut docids_values = Vec::with_capacity(candidates.len() as usize);
     for docid in candidates.iter() {
         let left = (field_id, docid, f64::MIN);
         let right = (field_id, docid, f64::MAX);
-        let mut iter = db.range(rtxn, &(left..=right))?;
+        let mut iter = index
+            .field_id_docid_facet_f64s
+            .range(rtxn, &(left..=right))?;
         let entry = if ascending { iter.next() } else { iter.last() };
         if let Some(((_, _, value), ())) = entry.transpose()? {
             docids_values.push((docid, OrderedFloat(value)));
@@ -226,7 +196,8 @@ fn iterative_facet_ordered_iter<'t>(
     // The itertools GroupBy iterator doesn't provide an owned version, we are therefore
     // required to collect the result into an owned collection (a Vec).
     // https://github.com/rust-itertools/itertools/issues/499
-    let vec: Vec<_> = iter.group_by(|(_, v)| *v)
+    let vec: Vec<_> = iter
+        .group_by(|(_, v)| v.clone())
         .into_iter()
         .map(|(_, ids)| ids.map(|(id, _)| id).collect())
         .collect();

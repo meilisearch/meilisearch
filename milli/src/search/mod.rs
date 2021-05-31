@@ -16,9 +16,7 @@ use distinct::{Distinct, DocIter, FacetDistinct, MapDistinct, NoopDistinct};
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId};
 
-pub use self::facet::{
-    FacetCondition, FacetDistribution, FacetIter, FacetNumberOperator, FacetStringOperator,
-};
+pub use self::facet::{FacetCondition, FacetDistribution, FacetIter, Operator};
 pub use self::query_tree::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 
@@ -143,15 +141,12 @@ impl<'a> Search<'a> {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 let id = field_ids_map.id(name).expect("distinct not present in field map");
                 let faceted_fields = self.index.faceted_fields(self.rtxn)?;
-                match faceted_fields.get(name) {
-                    Some(facet_type) => {
-                        let distinct = FacetDistinct::new(id, self.index, self.rtxn, *facet_type);
-                        self.perform_sort(distinct, matching_words, criteria)
-                    }
-                    None => {
-                        let distinct = MapDistinct::new(id, self.index, self.rtxn);
-                        self.perform_sort(distinct, matching_words, criteria)
-                    }
+                if faceted_fields.contains(name) {
+                    let distinct = FacetDistinct::new(id, self.index, self.rtxn);
+                    self.perform_sort(distinct, matching_words, criteria)
+                } else {
+                    let distinct = MapDistinct::new(id, self.index, self.rtxn);
+                    self.perform_sort(distinct, matching_words, criteria)
                 }
             }
         }

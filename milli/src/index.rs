@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Context;
@@ -14,24 +14,28 @@ use crate::{
     BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
     ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
 };
-use crate::facet::FacetType;
+use crate::heed_codec::facet::{
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    FacetValueStringCodec, FacetLevelValueF64Codec,
+};
 use crate::fields_ids_map::FieldsIdsMap;
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
-pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
 pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
-pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
+pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
+pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
+pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
-pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
 pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
-pub const WORDS_FST_KEY: &str = "words-fst";
 pub const STOP_WORDS_KEY: &str = "stop-words";
+pub const STRING_FACETED_DOCUMENTS_IDS_PREFIX: &str = "string-faceted-documents-ids";
 pub const SYNONYMS_KEY: &str = "synonyms";
+pub const WORDS_FST_KEY: &str = "words-fst";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 const CREATED_AT_KEY: &str = "created-at";
 const UPDATED_AT_KEY: &str = "updated-at";
@@ -40,33 +44,45 @@ const UPDATED_AT_KEY: &str = "updated-at";
 pub struct Index {
     /// The LMDB environment which this index is associated with.
     pub env: heed::Env,
+
     /// Contains many different types (e.g. the fields ids map).
     pub main: PolyDatabase,
+
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
+
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
     pub word_prefix_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    
     /// Maps the word, level and position range with the docids that corresponds to it.
     pub word_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
     /// Maps the level positions of a word prefix with all the docids where this prefix appears.
     pub word_prefix_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
-    /// Maps the facet field id and the globally ordered value with the docids that corresponds to it.
-    pub facet_field_id_value_docids: Database<ByteSlice, CboRoaringBitmapCodec>,
-    /// Maps the document id, the facet field id and the globally ordered value.
-    pub field_id_docid_facet_values: Database<ByteSlice, Unit>,
+
+    /// Maps the facet field id, level and the number with the docids that corresponds to it.
+    pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+    /// Maps the facet field id and the string with the docids that corresponds to it.
+    pub facet_id_string_docids: Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
+
+    /// Maps the document id, the facet field id and the numbers.
+    pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
+    /// Maps the document id, the facet field id and the strings.
+    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Unit>,
+
     /// Maps the document id to the document as an obkv store.
     pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(11);
+        options.max_dbs(13);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
@@ -77,20 +93,13 @@ impl Index {
         let word_prefix_pair_proximity_docids = env.create_database(Some("word-prefix-pair-proximity-docids"))?;
         let word_level_position_docids = env.create_database(Some("word-level-position-docids"))?;
         let word_prefix_level_position_docids = env.create_database(Some("word-prefix-level-position-docids"))?;
-        let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
-        let field_id_docid_facet_values = env.create_database(Some("field-id-docid-facet-values"))?;
+        let facet_id_f64_docids = env.create_database(Some("facet-id-f64-docids"))?;
+        let facet_id_string_docids = env.create_database(Some("facet-id-string-docids"))?;
+        let field_id_docid_facet_f64s = env.create_database(Some("field-id-docid-facet-f64s"))?;
+        let field_id_docid_facet_strings = env.create_database(Some("field-id-docid-facet-strings"))?;
         let documents = env.create_database(Some("documents"))?;
 
-        {
-            let mut txn = env.write_txn()?;
-            // The db was just created, we update its metadata with the relevant information.
-            if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, CREATED_AT_KEY)?.is_none() {
-                let now = Utc::now();
-                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, UPDATED_AT_KEY, &now)?;
-                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, CREATED_AT_KEY, &now)?;
-                txn.commit()?;
-            }
-        }
+        Index::initialize_creation_dates(&env, main)?;
 
         Ok(Index {
             env,
@@ -102,10 +111,24 @@ impl Index {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
-            facet_field_id_value_docids,
-            field_id_docid_facet_values,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
             documents,
         })
+    }
+
+    fn initialize_creation_dates(env: &heed::Env, main: PolyDatabase) -> heed::Result<()> {
+        let mut txn = env.write_txn()?;
+        // The db was just created, we update its metadata with the relevant information.
+        if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, CREATED_AT_KEY)?.is_none() {
+            let now = Utc::now();
+            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, UPDATED_AT_KEY, &now)?;
+            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, CREATED_AT_KEY, &now)?;
+            txn.commit()?;
+        }
+        Ok(())
     }
 
     /// Create a write transaction to be able to write into the index.
@@ -298,53 +321,97 @@ impl Index {
 
     /* faceted fields */
 
-    /// Writes the facet fields associated with their facet type or `None` if
-    /// the facet type is currently unknown.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<String, FacetType>) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields_types)
+    /// Writes the facet fields names in the database.
+    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields)
     }
 
-    /// Deletes the facet fields ids associated with their facet type.
+    /// Deletes the facet fields ids in the database.
     pub fn delete_faceted_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, FACETED_FIELDS_KEY)
     }
 
-    /// Returns the facet fields names associated with their facet type.
-    pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashMap<String, FacetType>> {
+    /// Returns the facet fields names.
+    pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
     }
 
     /// Same as `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashMap<FieldId, FacetType>> {
+    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashSet<FieldId>> {
         let faceted_fields = self.faceted_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
         let faceted_fields = faceted_fields
             .iter()
-            .map(|(k, v)| {
-                let kid = fields_ids_map
+            .map(|k| {
+                fields_ids_map
                     .id(k)
                     .ok_or_else(|| format!("{:?} should be present in the field id map", k))
-                    .expect("corrupted data: ");
-                (kid, *v)
+                    .expect("corrupted data: ")
             })
             .collect();
+
         Ok(faceted_fields)
     }
 
     /* faceted documents ids */
 
-    /// Writes the documents ids that are faceted under this field id.
-    pub fn put_faceted_documents_ids(&self, wtxn: &mut RwTxn, field_id: FieldId, docids: &RoaringBitmap) -> heed::Result<()> {
-        let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
-        buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+    /// Writes the documents ids that are faceted with numbers under this field id.
+    pub fn put_number_faceted_documents_ids(
+        &self,
+        wtxn: &mut RwTxn,
+        field_id: FieldId,
+        docids: &RoaringBitmap,
+    ) -> heed::Result<()>
+    {
+        let mut buffer = [0u8; STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         *buffer.last_mut().unwrap() = field_id;
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
 
-    /// Retrieve all the documents ids that faceted under this field id.
-    pub fn faceted_documents_ids(&self, rtxn: &RoTxn, field_id: FieldId) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
-        buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+    /// Retrieve all the documents ids that faceted with numbers under this field id.
+    pub fn number_faceted_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        field_id: FieldId,
+    ) -> heed::Result<RoaringBitmap>
+    {
+        let mut buffer = [0u8; STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        *buffer.last_mut().unwrap() = field_id;
+        match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
+            Some(docids) => Ok(docids),
+            None => Ok(RoaringBitmap::new()),
+        }
+    }
+
+    /// Writes the documents ids that are faceted with strings under this field id.
+    pub fn put_string_faceted_documents_ids(
+        &self,
+        wtxn: &mut RwTxn,
+        field_id: FieldId,
+        docids: &RoaringBitmap,
+    ) -> heed::Result<()>
+    {
+        let mut buffer = [0u8; NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        *buffer.last_mut().unwrap() = field_id;
+        self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
+    }
+
+    /// Retrieve all the documents ids that faceted with strings under this field id.
+    pub fn string_faceted_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        field_id: FieldId,
+    ) -> heed::Result<RoaringBitmap>
+    {
+        let mut buffer = [0u8; NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         *buffer.last_mut().unwrap() = field_id;
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),

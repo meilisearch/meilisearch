@@ -30,8 +30,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
-            facet_field_id_value_docids,
-            field_id_docid_facet_values,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
             documents,
         } = self.index;
 
@@ -47,8 +49,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_fields_distribution(self.wtxn, &FieldsDistribution::default())?;
 
         // We clean all the faceted documents ids.
-        for (field_id, _) in faceted_fields {
-            self.index.put_faceted_documents_ids(self.wtxn, field_id, &RoaringBitmap::default())?;
+        let empty = RoaringBitmap::default();
+        for field_id in faceted_fields {
+            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &empty)?;
+            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &empty)?;
         }
 
         // Clear the other databases.
@@ -59,8 +63,10 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         word_prefix_pair_proximity_docids.clear(self.wtxn)?;
         word_level_position_docids.clear(self.wtxn)?;
         word_prefix_level_position_docids.clear(self.wtxn)?;
-        facet_field_id_value_docids.clear(self.wtxn)?;
-        field_id_docid_facet_values.clear(self.wtxn)?;
+        facet_id_f64_docids.clear(self.wtxn)?;
+        facet_id_string_docids.clear(self.wtxn)?;
+        field_id_docid_facet_f64s.clear(self.wtxn)?;
+        field_id_docid_facet_strings.clear(self.wtxn)?;
         documents.clear(self.wtxn)?;
 
         Ok(number_of_documents)
@@ -112,8 +118,10 @@ mod tests {
         assert!(index.docid_word_positions.is_empty(&rtxn).unwrap());
         assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
-        assert!(index.facet_field_id_value_docids.is_empty(&rtxn).unwrap());
-        assert!(index.field_id_docid_facet_values.is_empty(&rtxn).unwrap());
+        assert!(index.facet_id_f64_docids.is_empty(&rtxn).unwrap());
+        assert!(index.facet_id_string_docids.is_empty(&rtxn).unwrap());
+        assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());
+        assert!(index.field_id_docid_facet_strings.is_empty(&rtxn).unwrap());
         assert!(index.documents.is_empty(&rtxn).unwrap());
     }
 }

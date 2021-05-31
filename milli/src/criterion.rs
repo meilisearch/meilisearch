@@ -1,12 +1,10 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 
 use anyhow::{Context, bail};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
 use once_cell::sync::Lazy;
-
-use crate::facet::FacetType;
 
 static ASC_DESC_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap()
@@ -33,7 +31,7 @@ pub enum Criterion {
 }
 
 impl Criterion {
-    pub fn from_str(faceted_attributes: &HashMap<String, FacetType>, txt: &str) -> anyhow::Result<Criterion> {
+    pub fn from_str(faceted_attributes: &HashSet<String>, txt: &str) -> anyhow::Result<Criterion> {
         match txt {
             "words" => Ok(Criterion::Words),
             "typo" => Ok(Criterion::Typo),
@@ -44,7 +42,9 @@ impl Criterion {
                 let caps = ASC_DESC_REGEX.captures(text).with_context(|| format!("unknown criterion name: {}", text))?;
                 let order = caps.get(1).unwrap().as_str();
                 let field_name = caps.get(2).unwrap().as_str();
-                faceted_attributes.get(field_name).with_context(|| format!("Can't use {:?} as a criterion as it isn't a faceted field.", field_name))?;
+                faceted_attributes.get(field_name).with_context(|| {
+                    format!("Can't use {:?} as a criterion as it isn't a faceted field.", field_name)
+                })?;
                 match order {
                     "asc" => Ok(Criterion::Asc(field_name.to_string())),
                     "desc" => Ok(Criterion::Desc(field_name.to_string())),

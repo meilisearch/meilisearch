@@ -1,5 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
-use std::str::FromStr;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Context;
 use chrono::Utc;
@@ -11,7 +10,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{FieldsIdsMap, Index};
 use crate::criterion::Criterion;
-use crate::facet::FacetType;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
 
@@ -68,7 +66,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    faceted_fields: Setting<HashMap<String, String>>,
+    faceted_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
     distinct_attribute: Setting<String>,
@@ -123,7 +121,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.faceted_fields = Setting::Reset;
     }
 
-    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
+    pub fn set_faceted_fields(&mut self, names_facet_types: HashSet<String>) {
         self.faceted_fields = Setting::Set(names_facet_types);
     }
 
@@ -387,11 +385,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.faceted_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-                let mut new_facets = HashMap::new();
-                for (name, ty) in fields {
+                let mut new_facets = HashSet::new();
+                for name in fields {
                     fields_ids_map.insert(name).context("field id limit exceeded")?;
-                    let ty = FacetType::from_str(&ty)?;
-                    new_facets.insert(name.clone(), ty);
+                    new_facets.insert(name.clone());
                 }
                 self.index.put_faceted_fields(self.wtxn, &new_facets)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -445,9 +442,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 #[cfg(test)]
 mod tests {
     use heed::EnvOpenOptions;
-    use maplit::{btreeset, hashmap};
+    use heed::types::ByteSlice;
+    use maplit::{btreeset, hashmap, hashset};
+    use big_s::S;
 
-    use crate::facet::FacetType;
     use crate::update::{IndexDocuments, UpdateFormat};
 
     use super::*;
@@ -622,37 +620,53 @@ mod tests {
         // Set the faceted fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashmap!{ "age".into() => "number".into() });
+        builder.set_faceted_fields(hashset!{ S("age") });
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = &br#"[
+            { "name": "kevin",  "age": 23 },
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.faceted_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashmap!{ "age".to_string() => FacetType::Number });
+        assert_eq!(fields_ids, hashset!{ S("age") });
         // Only count the field_id 0 and level 0 facet values.
-        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[0, 0]).unwrap().count();
+        // TODO we must support typed CSVs for numbers to be understood.
+        let count = index.facet_id_f64_docids
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 3);
         drop(rtxn);
 
         // Index a little more documents with new and current facets values.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin2,23\nkevina2,21\nbenoit2,35\n"[..];
+        let content = &br#"[
+            { "name": "kevin2",  "age": 23 },
+            { "name": "kevina2", "age": 21 },
+            { "name": "benoit",  "age": 35 }
+        ]"#[..];
+
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 2);
-        builder.update_format(UpdateFormat::Csv);
+        builder.enable_autogenerate_docids();
+        builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 0 and level 0 facet values.
-        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[0, 0]).unwrap().count();
+        // TODO we must support typed CSVs for numbers to be understood.
+        let count = index.facet_id_f64_docids
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 4);
     }
 
@@ -819,10 +833,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
-        builder.set_faceted_fields(hashmap!{
-            "age".into() => "number".into(),
-            "toto".into() => "number".into(),
-        });
+        builder.set_faceted_fields(hashset!{ S("age"), S("toto") });
         builder.set_criteria(vec!["asc(toto)".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();

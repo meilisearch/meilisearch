@@ -110,7 +110,7 @@ impl<'a, 'b> Distinct<'b> for MapDistinct<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+    use std::collections::HashSet;
 
     use super::*;
     use super::super::test::{generate_index, validate_distinct_candidates};
@@ -119,7 +119,7 @@ mod test {
         ($name:ident, $distinct:literal) => {
             #[test]
             fn $name() {
-                let (index, fid, candidates) = generate_index($distinct, HashMap::new());
+                let (index, fid, candidates) = generate_index($distinct, HashSet::new());
                 let txn = index.read_txn().unwrap();
                 let mut map_distinct = MapDistinct::new(fid, &index, &txn);
                 let excluded = RoaringBitmap::new();
