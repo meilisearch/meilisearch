@@ -294,48 +294,6 @@ fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operat
     }))
 }
 
-/// The query tree builder is the interface to build a query tree.
-#[derive(Default)]
-pub struct MatchingWords {
-    dfas: Vec<(DFA, u8)>,
-}
-
-impl MatchingWords {
-    /// List all words which can be considered as a match for the query tree.
-    pub fn from_query_tree(tree: &Operation) -> Self {
-        Self {
-            dfas: fetch_queries(tree).into_iter().map(|(w, t, p)| (build_dfa(w, t, p), t)).collect()
-        }
-    }
-
-    /// Return true if the word match.
-    pub fn matches(&self, word: &str) -> bool {
-        self.dfas.iter().any(|(dfa, typo)| match dfa.eval(word) {
-            Distance::Exact(t) => t <= *typo,
-            Distance::AtLeast(_) => false,
-        })
-    }
-}
-
-/// Lists all words which can be considered as a match for the query tree.
-fn fetch_queries(tree: &Operation) -> HashSet<(&str, u8, IsPrefix)> {
-    fn resolve_ops<'a>(tree: &'a Operation, out: &mut HashSet<(&'a str, u8, IsPrefix)>) {
-        match tree {
-            Operation::Or(_, ops) | Operation::And(ops) | Operation::Consecutive(ops) => {
-                ops.as_slice().iter().for_each(|op| resolve_ops(op, out));
-            },
-            Operation::Query(Query { prefix, kind }) => {
-                let typo = if kind.is_exact() { 0 } else { kind.typo() };
-                out.insert((kind.word(), typo, *prefix));
-            },
-        }
-    }
-
-    let mut queries = HashSet::new();
-    resolve_ops(tree, &mut queries);
-    queries
-}
-
 /// Main function that creates the final query tree from the primitive query.
 fn create_query_tree(
     ctx: &impl Context,
@@ -949,39 +907,6 @@ mod test {
         let (query_tree, _) = TestContext::default().build(false, false, None, tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
-    }
-
-    #[test]
-    fn fetching_words() {
-        let query = "wordsplit nyc world";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
-
-        let context = TestContext::default();
-        let (query_tree, _) = context.build(false, true, None, tokens).unwrap().unwrap();
-
-        let expected = hashset!{
-            ("word",                0, false),
-            ("nyc",                 0, false),
-            ("wordsplit",           2, false),
-            ("wordsplitnycworld",   2, true),
-            ("nature",              0, false),
-            ("new",                 0, false),
-            ("city",                0, false),
-            ("world",               1, true),
-            ("york",                0, false),
-            ("split",               0, false),
-            ("nycworld",            1, true),
-            ("earth",               0, false),
-            ("wordsplitnyc",        2, false),
-        };
-
-        let mut keys = context.postings.keys().collect::<Vec<_>>();
-        keys.sort_unstable();
-
-        let words = fetch_queries(&query_tree);
-        assert_eq!(expected, words);
     }
 
     #[test]

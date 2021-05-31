@@ -17,7 +17,7 @@ use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId};
 
 pub use self::facet::{FacetCondition, FacetDistribution, FacetIter, Operator};
-pub use self::query_tree::MatchingWords;
+pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
@@ -29,6 +29,7 @@ mod criteria;
 mod distinct;
 mod facet;
 mod query_tree;
+mod matching_words;
 
 pub struct Search<'a> {
     query: Option<String>,
