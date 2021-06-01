@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Requirements:
 # - s3cmd and being logged to the DO Space "milli-benchmarks". See: https://docs.digitalocean.com/products/spaces/resources/s3cmd/
