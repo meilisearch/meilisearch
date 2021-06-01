@@ -144,7 +144,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed = self.analyzer.analyze(&old_string);
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
-                        let to_highlight = matching_words.matches(token.text());
+                        let to_highlight = matching_words.matching_bytes(token.text()).is_some();
                         if to_highlight { string.push_str("<mark>") }
                         string.push_str(word);
                         if to_highlight { string.push_str("</mark>") }
