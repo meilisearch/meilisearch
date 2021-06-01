@@ -172,7 +172,7 @@ impl DocIter for FacetDistinctIter<'_> {
     }
 }
 
-impl<'a> Distinct<'_> for FacetDistinct<'a> {
+impl<'a> Distinct for FacetDistinct<'a> {
     type Iter = FacetDistinctIter<'a>;
 
     fn distinct(&mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter {

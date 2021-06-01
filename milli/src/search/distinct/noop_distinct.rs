@@ -26,7 +26,7 @@ impl DocIter for NoopDistinctIter {
     }
 }
 
-impl Distinct<'_> for NoopDistinct {
+impl Distinct for NoopDistinct {
     type Iter = NoopDistinctIter;
 
     fn distinct(&mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter {

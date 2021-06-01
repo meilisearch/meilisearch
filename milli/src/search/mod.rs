@@ -147,12 +147,13 @@ impl<'a> Search<'a> {
         }
     }
 
-    fn perform_sort(
+    fn perform_sort<D: Distinct>(
         &self,
-        mut distinct: impl for<'c> Distinct<'c>,
+        mut distinct: D,
         matching_words: MatchingWords,
         mut criteria: Final,
-    ) -> anyhow::Result<SearchResult> {
+    ) -> anyhow::Result<SearchResult>
+    {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
         let mut excluded_candidates = RoaringBitmap::new();

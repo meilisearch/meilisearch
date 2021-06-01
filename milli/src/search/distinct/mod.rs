@@ -18,10 +18,10 @@ pub trait DocIter: Iterator<Item = anyhow::Result<DocumentId>> {
 /// must return an iterator containing only distinct documents, and add the discarded documents to
 /// the excluded set. The excluded set can later be retrieved by calling `DocIter::excluded` on the
 /// returned iterator.
-pub trait Distinct<'a> {
+pub trait Distinct {
     type Iter: DocIter;
 
-    fn distinct(&'a mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter;
+    fn distinct(&mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter;
 }
 
 #[cfg(test)]
