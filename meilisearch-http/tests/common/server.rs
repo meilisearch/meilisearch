@@ -68,7 +68,6 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
     Opt {
         db_path: dir.as_ref().join("db"),
         dumps_dir: dir.as_ref().join("dump"),
-        dump_batch_size: 16,
         http_addr: "127.0.0.1:7700".to_owned(),
         master_key: None,
         env: "development".to_owned(),
