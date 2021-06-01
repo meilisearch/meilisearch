@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use std::fmt;
+use std::str::FromStr;
 
 use anyhow::{Context, bail};
 use regex::Regex;
@@ -30,8 +30,10 @@ pub enum Criterion {
     Desc(String),
 }
 
-impl Criterion {
-    pub fn from_str(faceted_attributes: &HashSet<String>, txt: &str) -> anyhow::Result<Criterion> {
+impl FromStr for Criterion {
+    type Err = anyhow::Error;
+
+    fn from_str(txt: &str) -> Result<Criterion, Self::Err> {
         match txt {
             "words" => Ok(Criterion::Words),
             "typo" => Ok(Criterion::Typo),
@@ -42,9 +44,6 @@ impl Criterion {
                 let caps = ASC_DESC_REGEX.captures(text).with_context(|| format!("unknown criterion name: {}", text))?;
                 let order = caps.get(1).unwrap().as_str();
                 let field_name = caps.get(2).unwrap().as_str();
-                faceted_attributes.get(field_name).with_context(|| {
-                    format!("Can't use {:?} as a criterion as it isn't a faceted field.", field_name)
-                })?;
                 match order {
                     "asc" => Ok(Criterion::Asc(field_name.to_string())),
                     "desc" => Ok(Criterion::Desc(field_name.to_string())),

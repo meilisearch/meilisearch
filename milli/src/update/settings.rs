@@ -9,7 +9,6 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{FieldsIdsMap, Index};
-use crate::criterion::Criterion;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
 
@@ -402,10 +401,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_criteria(&mut self) -> anyhow::Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
-                let filterable_fields = self.index.filterable_fields(&self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
-                    let criterion = Criterion::from_str(&filterable_fields, &name)?;
+                    let criterion = name.parse()?;
                     new_criteria.push(criterion);
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
@@ -446,6 +444,7 @@ mod tests {
     use maplit::{btreeset, hashmap, hashset};
     use big_s::S;
 
+    use crate::{Criterion, FilterCondition};
     use crate::update::{IndexDocuments, UpdateFormat};
 
     use super::*;
@@ -857,5 +856,25 @@ mod tests {
         assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
         assert!(index.primary_key(&rtxn).unwrap().is_none());
         assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
+    }
+
+    #[test]
+    fn setting_not_filterable_cant_filter() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set all the settings except searchable
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_displayed_fields(vec!["hello".to_string()]);
+        // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
+        builder.set_criteria(vec!["asc(toto)".to_string()]);
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        FilterCondition::from_str(&rtxn, &index, "toto = 32").unwrap_err();
     }
 }
