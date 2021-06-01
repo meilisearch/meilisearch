@@ -317,7 +317,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
-        // Remove the documents ids from field id word count database.
+        // Remove the documents ids from the field id word count database.
         let mut iter = field_id_word_count_docids.iter_mut(self.wtxn)?;
         while let Some((key, mut docids)) = iter.next().transpose()? {
             let previous_len = docids.len();
