@@ -3,7 +3,7 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::index::{Checked, Settings};
+use crate::index::{Unchecked, Settings};
 
 pub type UpdateError = String;
 
@@ -24,7 +24,7 @@ pub enum UpdateMeta {
     },
     ClearDocuments,
     DeleteDocuments,
-    Settings(Settings<Checked>),
+    Settings(Settings<Unchecked>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

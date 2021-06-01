@@ -20,14 +20,15 @@ where
     s.serialize_some(&field.as_ref().map(|o| o.as_ref().unwrap_or(&wildcard)))
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize)]
 pub struct Checked;
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Unchecked;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
 pub struct Settings<T> {
     #[serde(
         default,

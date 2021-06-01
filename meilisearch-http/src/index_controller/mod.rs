@@ -223,7 +223,7 @@ impl IndexController {
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
         let perform_udpate = |uuid| async move {
-            let meta = UpdateMeta::Settings(settings);
+            let meta = UpdateMeta::Settings(settings.into_unchecked());
             // Nothing so send, drop the sender right away, as not to block the update actor.
             let (_, receiver) = mpsc::channel(1);
             self.update_handle.update(meta, receiver, uuid).await
