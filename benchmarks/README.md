@@ -52,7 +52,11 @@ To trigger the benchmark workflow:
 
 This GitHub workflow will run the benchmarks and push the `critcmp` report to a DigitalOcean Space (= S3).
 
+The name of the uploaded file is displayed in the workflow.
+
 _[More about critcmp](https://github.com/BurntSushi/critcmp)._
+
+💡 To compare the just-uploaded benchmark with another one, check out the [next section](#comparison-between-benchmarks).
 
 ### On your machine
 
@@ -85,13 +89,14 @@ The benchmark reports we push are generated with `critcmp`. Thus, we use `critcm
 We provide a script to download and display the comparison report.
 
 Requirements:
-- [`s3cmd`](https://github.com/s3tools/s3cmd) and being logged to the DigitalOcean Space "milli-benchmarks". See the [DigitalOcean guide](https://docs.digitalocean.com/products/spaces/resources/s3cmd/)
+- `grep`
+- `curl`
 - [`critcmp`](https://github.com/BurntSushi/critcmp)
 
 List the available file in the DO Space:
 
 ```bash
-s3cmd ls s3://milli-benchmarks/critcmp_results/
+./benchmarks/script/list.sh
 ```
 ```bash
 2021-05-31 14:40       279890  s3://milli-benchmarks/critcmp_results/songs_main_09a4321.json
@@ -101,5 +106,5 @@ s3cmd ls s3://milli-benchmarks/critcmp_results/
 Run the comparison script:
 
 ```bash
-bash benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
+./benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
 ```

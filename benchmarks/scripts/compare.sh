@@ -2,7 +2,7 @@
 
 # Requirements:
 # - critcmp. See: https://github.com/BurntSushi/critcmp
-# - wget
+# - curl
 
 # Usage
 # $ bash compare.sh json_file1 json_file1
@@ -14,13 +14,6 @@ if [[ "$?" -ne 0 ]]; then
     echo 'You must install critcmp to make this script working.'
     echo '$ cargo install critcmp'
     echo 'See: https://github.com/BurntSushi/critcmp'
-    exit 1
-fi
-
-# Checking that wget is installed
-command -v wget > /dev/null 2>&1
-if [[ "$?" -ne 0 ]]; then
-    echo 'You must install wget to make this script working.'
     exit 1
 fi
 
@@ -43,9 +36,9 @@ file1_local_path="/tmp/$file1"
 file2_local_path="/tmp/$file2"
 
 if [[ ! -f "$file1_local_path" ]]; then
-    wget "$file1_s3_url" -O "$file1_local_path"
+    curl "$file1_s3_url" -O "$file1_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 'wget command failed. Check your configuration'
+	    echo 'curl command failed. Check your configuration'
 	    exit 1
     fi
 else
@@ -53,9 +46,9 @@ else
 fi
 
 if [[ ! -f "$file2_local_path" ]]; then
-    wget "$file2_s3_url" -O "$file2_local_path"
+    curl "$file2_s3_url" -O "$file2_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 'wget command failed. Check your configuration'
+	    echo 'curl command failed. Check your configuration'
 	    exit 1
     fi
 else

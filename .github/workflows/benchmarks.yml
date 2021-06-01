@@ -39,12 +39,12 @@ jobs:
         id: file
 
       # Run benchmarks
-      - name: Run benchmarks - Dataset ${{ github.event.inputs.dataset_name }} -  Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
+      - name: Run benchmarks - Dataset ${{ github.event.inputs.dataset_name }} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
         run: |
           cd benchmarks
           cargo bench --bench ${{ github.event.inputs.dataset_name }} -- --save-baseline ${{ steps.file.outputs.basename }}
 
-      # Generate critcmpf files
+      # Generate critcmp files
       - name: Install critcmp
         run: cargo install critcmp
       - name: Export cripcmp file
@@ -52,7 +52,7 @@ jobs:
           critcmp --export ${{ steps.file.outputs.basename }} > ${{ steps.file.outputs.basename }}.json
 
       # Upload benchmarks
-      - name: Upload to DO Spaces # DigitalOcean Spaces = S3
+      - name: Upload ${{ steps.file.outputs.basename }}.json to DO Spaces # DigitalOcean Spaces = S3
         uses: BetaHuhn/do-spaces-action@v2
         with:
           access_key: ${{ secrets.DO_SPACES_ACCESS_KEY }}
@@ -61,3 +61,11 @@ jobs:
           space_region: ${{ secrets.DO_SPACES_SPACE_REGION }}
           source: ${{ steps.file.outputs.basename }}.json
           out_dir: critcmp_results
+
+      # Helper
+      - name: 'README: compare with another benchmark'
+        run: |
+          echo "${{ steps.file.outputs.basename }}.json has just been pushed."
+          echo 'How to compare this benchmark with another one?'
+          echo '  - Check the available files with: ./benchmarks/scripts/list.sh'
+          echo "  - Run the following command: ./benchmaks/scipts/compare.sh ${{ steps.file.outputs.basename }}.json <file-to-compare-with>"
