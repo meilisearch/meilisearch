@@ -79,7 +79,7 @@ mod test {
         // set distinct and faceted attributes for the index.
         let builder = UpdateBuilder::new(0);
         let mut update = builder.settings(&mut txn, &index);
-        update.set_distinct_attribute(distinct.to_string());
+        update.set_distinct_field(distinct.to_string());
         update.execute(|_, _| ()).unwrap();
 
         // add documents to the index

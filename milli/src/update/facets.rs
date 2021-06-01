@@ -57,14 +57,14 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 
     pub fn execute(self) -> anyhow::Result<()> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
-        // We get the filterable fields to be able to create the facet levels.
-        let filterable_fields = self.index.filterable_fields_ids(self.wtxn)?;
+        // We get the faceted fields to be able to create the facet levels.
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
 
-        for field_id in filterable_fields {
-            // Compute and store the filterable strings documents ids.
-            let string_documents_ids = compute_filterable_documents_ids(
+        for field_id in faceted_fields {
+            // Compute and store the faceted strings documents ids.
+            let string_documents_ids = compute_faceted_documents_ids(
                 self.wtxn,
                 self.index.facet_id_string_docids.remap_key_type::<ByteSlice>(),
                 field_id,
@@ -77,8 +77,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 field_id,
             )?;
 
-            // Compute and store the filterable numbers documents ids.
-            let number_documents_ids = compute_filterable_documents_ids(
+            // Compute and store the faceted numbers documents ids.
+            let number_documents_ids = compute_faceted_documents_ids(
                 self.wtxn,
                 self.index.facet_id_f64_docids.remap_key_type::<ByteSlice>(),
                 field_id,
@@ -191,7 +191,7 @@ fn compute_facet_number_levels<'t>(
     writer_into_reader(writer, shrink_size)
 }
 
-fn compute_filterable_documents_ids(
+fn compute_faceted_documents_ids(
     rtxn: &heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     field_id: u8,

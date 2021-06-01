@@ -23,7 +23,7 @@ use crate::fields_ids_map::FieldsIdsMap;
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
-pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
+pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
 pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
@@ -365,7 +365,7 @@ impl Index {
     /// Faceted fields are the union of all the filterable, distinct, and Asc/Desc fields.
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         let filterable_fields = self.filterable_fields(rtxn)?;
-        let distinct_field = self.distinct_attribute(rtxn)?;
+        let distinct_field = self.distinct_field(rtxn)?;
         let asc_desc_fields = self.criteria(rtxn)?
             .into_iter()
             .filter_map(|criterion| match criterion {
@@ -465,18 +465,18 @@ impl Index {
         }
     }
 
-    /* Distinct attribute */
+    /* distinct field */
 
-    pub(crate) fn put_distinct_attribute(&self, wtxn: &mut RwTxn, distinct_attribute: &str) -> heed::Result<()> {
-        self.main.put::<_, Str, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY, distinct_attribute)
+    pub(crate) fn put_distinct_field(&self, wtxn: &mut RwTxn, distinct_field: &str) -> heed::Result<()> {
+        self.main.put::<_, Str, Str>(wtxn, DISTINCT_FIELD_KEY, distinct_field)
     }
 
-    pub fn distinct_attribute<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
-        self.main.get::<_, Str, Str>(rtxn, DISTINCT_ATTRIBUTE_KEY)
+    pub fn distinct_field<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
+        self.main.get::<_, Str, Str>(rtxn, DISTINCT_FIELD_KEY)
     }
 
-    pub(crate) fn delete_distinct_attribute(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY)
+    pub(crate) fn delete_distinct_field(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, DISTINCT_FIELD_KEY)
     }
 
     /* criteria */

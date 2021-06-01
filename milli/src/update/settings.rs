@@ -68,7 +68,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     filterable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
-    distinct_attribute: Setting<String>,
+    distinct_field: Setting<String>,
     synonyms: Setting<HashMap<String, Vec<String>>>,
 }
 
@@ -94,7 +94,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             filterable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
-            distinct_attribute: Setting::NotSet,
+            distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             update_id,
         }
@@ -144,12 +144,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
-    pub fn reset_distinct_attribute(&mut self) {
-        self.distinct_attribute = Setting::Reset;
+    pub fn reset_distinct_field(&mut self) {
+        self.distinct_field = Setting::Reset;
     }
 
-    pub fn set_distinct_attribute(&mut self, distinct_attribute: String) {
-        self.distinct_attribute = Setting::Set(distinct_attribute);
+    pub fn set_distinct_field(&mut self, distinct_field: String) {
+        self.distinct_field = Setting::Set(distinct_field);
     }
 
     pub fn reset_synonyms(&mut self) {
@@ -165,8 +165,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
-        where
-            F: Fn(UpdateIndexingStep, u64) + Sync
+    where
+        F: Fn(UpdateIndexingStep, u64) + Sync
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let update_id = self.update_id;
@@ -197,7 +197,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let output = transform.remap_index_documents(
             primary_key.to_string(),
             old_fields_ids_map,
-            fields_ids_map.clone())?;
+            fields_ids_map.clone(),
+        )?;
 
         // We clear the full database (words-fst, documents ids and documents content).
         ClearDocuments::new(self.wtxn, self.index, self.update_id).execute()?;
@@ -214,6 +215,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         indexing_builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         indexing_builder.thread_pool = self.thread_pool;
         indexing_builder.execute_raw(output, &cb)?;
+
         Ok(())
     }
 
@@ -242,18 +244,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(true)
     }
 
-    fn update_distinct_attribute(&mut self) -> anyhow::Result<bool> {
-        match self.distinct_attribute {
+    fn update_distinct_field(&mut self) -> anyhow::Result<bool> {
+        match self.distinct_field {
             Setting::Set(ref attr) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 fields_ids_map
                     .insert(attr)
                     .context("field id limit exceeded")?;
 
-                self.index.put_distinct_attribute(self.wtxn, &attr)?;
+                self.index.put_distinct_field(self.wtxn, &attr)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_distinct_attribute(self.wtxn)?; },
+            Setting::Reset => { self.index.delete_distinct_field(self.wtxn)?; },
             Setting::NotSet => return Ok(false),
         }
         Ok(true)
@@ -380,7 +382,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
-    fn update_facets(&mut self) -> anyhow::Result<bool> {
+    fn update_filterable(&mut self) -> anyhow::Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -393,9 +395,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => { self.index.delete_filterable_fields(self.wtxn)?; }
-            Setting::NotSet => return Ok(false)
+            Setting::NotSet => (),
         }
-        Ok(true)
+        Ok(())
     }
 
     fn update_criteria(&mut self) -> anyhow::Result<()> {
@@ -419,20 +421,29 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             F: Fn(UpdateIndexingStep, u64) + Sync
     {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
+
+        let old_faceted_fields = self.index.faceted_fields(&self.wtxn)?;
         let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
+
         self.update_displayed()?;
-        let stop_words_updated = self.update_stop_words()?;
-        let facets_updated = self.update_facets()?;
-        self.update_distinct_attribute()?;
-        // update_criteria MUST be called after update_facets, since criterion fields must be set
-        // as facets.
+        self.update_filterable()?;
+        self.update_distinct_field()?;
         self.update_criteria()?;
+
+        // If there is new faceted fields we indicate that we must reindex as we must
+        // index new fields as facets. It means that the distinct attribute,
+        // an Asc/Desc criterion or a filtered attribute as be added or removed.
+        let new_faceted_fields = self.index.faceted_fields(&self.wtxn)?;
+        let faceted_updated = old_faceted_fields != new_faceted_fields;
+
+        let stop_words_updated = self.update_stop_words()?;
         let synonyms_updated = self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
 
-        if stop_words_updated || facets_updated || synonyms_updated || searchable_updated {
+        if stop_words_updated || faceted_updated || synonyms_updated || searchable_updated {
             self.reindex(&progress_callback, old_fields_ids_map)?;
         }
+
         Ok(())
     }
 }
@@ -444,7 +455,7 @@ mod tests {
     use maplit::{btreeset, hashmap, hashset};
     use big_s::S;
 
-    use crate::{Criterion, FilterCondition};
+    use crate::{Criterion, FilterCondition, SearchResult};
     use crate::update::{IndexDocuments, UpdateFormat};
 
     use super::*;
@@ -667,6 +678,88 @@ mod tests {
             .remap_key_type::<ByteSlice>()
             .prefix_iter(&rtxn, &[0, 0]).unwrap().count();
         assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn set_asc_desc_field() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the age.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        // Don't display the generated `id` field.
+        builder.set_displayed_fields(vec![S("name"), S("age")]);
+        builder.set_criteria(vec![S("asc(age)")]);
+        builder.execute(|_, _| ()).unwrap();
+
+        // Then index some documents.
+        let content = &br#"[
+            { "name": "kevin",  "age": 23 },
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.enable_autogenerate_docids();
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Run an empty query just to ensure that the search results are ordered.
+        let rtxn = index.read_txn().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+        let documents = index.documents(&rtxn, documents_ids).unwrap();
+
+        // Fetch the documents "age" field in the ordre in which the documents appear.
+        let age_field_id = index.fields_ids_map(&rtxn).unwrap().id("age").unwrap();
+        let iter = documents.into_iter().map(|(_, doc)| {
+            let bytes = doc.get(age_field_id).unwrap();
+            let string = std::str::from_utf8(bytes).unwrap();
+            string.parse::<u32>().unwrap()
+        });
+
+        assert_eq!(iter.collect::<Vec<_>>(), vec![21, 23, 34]);
+    }
+
+    #[test]
+    fn set_distinct_field() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the age.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        // Don't display the generated `id` field.
+        builder.set_displayed_fields(vec![S("name"), S("age")]);
+        builder.set_distinct_field(S("age"));
+        builder.execute(|_, _| ()).unwrap();
+
+        // Then index some documents.
+        let content = &br#"[
+            { "name": "kevin",  "age": 23 },
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 },
+            { "name": "bernard", "age": 34 },
+            { "name": "bertrand", "age": 34 },
+            { "name": "bernie", "age": 34 },
+            { "name": "ben", "age": 34 }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.enable_autogenerate_docids();
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Run an empty query just to ensure that the search results are ordered.
+        let rtxn = index.read_txn().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+
+        // There must be at least one document with a 34 as the age.
+        assert_eq!(documents_ids.len(), 3);
     }
 
     #[test]
