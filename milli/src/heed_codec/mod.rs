@@ -4,6 +4,7 @@ mod roaring_bitmap;
 mod roaring_bitmap_length;
 mod str_level_position_codec;
 mod str_str_u8_codec;
+mod field_id_word_count_codec;
 pub mod facet;
 
 pub use self::beu32_str_codec::BEU32StrCodec;
@@ -12,3 +13,4 @@ pub use self::roaring_bitmap::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, Roar
 pub use self::roaring_bitmap_length::{BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec, RoaringBitmapLenCodec};
 pub use self::str_level_position_codec::StrLevelPositionCodec;
 pub use self::str_str_u8_codec::StrStrU8Codec;
+pub use self::field_id_word_count_codec::FieldIdWordCountCodec;

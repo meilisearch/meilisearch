@@ -23,6 +23,7 @@ const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const WORD_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-level-position-docids";
 const WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-prefix-level-position-docids";
+const FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME: &str = "field-id-word-count-docids";
 const FACET_ID_F64_DOCIDS_DB_NAME: &str = "facet-id-f64-docids";
 const FACET_ID_STRING_DOCIDS_DB_NAME: &str = "facet-id-string-docids";
 const FIELD_ID_DOCID_FACET_F64S_DB_NAME: &str = "field-id-docid-facet-f64s";
@@ -39,6 +40,7 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     WORD_LEVEL_POSITION_DOCIDS_DB_NAME,
     WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME,
+    FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME,
     FACET_ID_F64_DOCIDS_DB_NAME,
     FACET_ID_STRING_DOCIDS_DB_NAME,
     FIELD_ID_DOCID_FACET_F64S_DB_NAME,
@@ -153,6 +155,17 @@ enum Command {
 
         /// Prefixes of words appearing in the documents.
         prefixes: Vec<String>,
+    },
+
+    /// Outputs a CSV with the documents ids along with
+    /// the field id and the word count where it appears.
+    FieldIdWordCountDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The field name in the document.
+        field_name: String,
     },
 
     /// Outputs a CSV with the documents ids, words and the positions where this word appears.
@@ -271,6 +284,9 @@ fn main() -> anyhow::Result<()> {
         WordPrefixesLevelPositionsDocids { full_display, prefixes } => {
             word_prefixes_level_positions_docids(&index, &rtxn, !full_display, prefixes)
         },
+        FieldIdWordCountDocids { full_display, field_name } => {
+            field_id_word_count_docids(&index, &rtxn, !full_display, field_name)
+        },
         DocidsWordsPositions { full_display, internal_documents_ids } => {
             docids_words_positions(&index, &rtxn, !full_display, internal_documents_ids)
         },
@@ -357,6 +373,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         word_prefix_pair_proximity_docids,
         word_level_position_docids,
         word_prefix_level_position_docids,
+        field_id_word_count_docids,
         facet_id_f64_docids,
         facet_id_string_docids,
         field_id_docid_facet_f64s: _,
@@ -372,6 +389,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
     let word_level_position_docids_name = "word_level_position_docids";
     let word_prefix_level_position_docids_name = "word_prefix_level_position_docids";
+    let field_id_word_count_docids_name = "field_id_word_count_docids";
     let facet_id_f64_docids_name = "facet_id_f64_docids";
     let facet_id_string_docids_name = "facet_id_string_docids";
     let documents_name = "documents";
@@ -440,6 +458,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let ((word, level, left, right), value) = result?;
             let key = format!("{} {} {:?}", word, level, left..=right);
             heap.push(Reverse((value.len(), key, word_prefix_level_position_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in field_id_word_count_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((field_id, word_count), docids) = result?;
+            let key = format!("{} {}", field_id, word_count);
+            heap.push(Reverse((docids.len(), key, field_id_word_count_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
@@ -676,6 +701,39 @@ fn word_prefixes_level_positions_docids(
     Ok(wtr.flush()?)
 }
 
+fn field_id_word_count_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    field_name: String
+) -> anyhow::Result<()>
+{
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["field_name", "word_count", "docids"])?;
+
+    let field_id = index.fields_ids_map(rtxn)?
+        .id(&field_name)
+        .with_context(|| format!("unknown field name: {}", &field_name))?;
+
+    let left = (field_id, 0);
+    let right = (field_id, u8::max_value());
+    let iter = index.field_id_word_count_docids
+        .range(rtxn, &(left..=right))?;
+
+    for result in iter {
+        let ((_, word_count), docids) = result?;
+        let docids = if debug {
+            format!("{:?}", docids)
+        } else {
+            format!("{:?}", docids.iter().collect::<Vec<_>>())
+        };
+        wtr.write_record(&[&field_name, &format!("{}", word_count), &docids])?;
+    }
+
+    Ok(wtr.flush()?)
+}
+
 fn docids_words_positions(
     index: &Index,
     rtxn: &heed::RoTxn,
@@ -870,6 +928,7 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         word_prefix_pair_proximity_docids,
         word_level_position_docids,
         word_prefix_level_position_docids,
+        field_id_word_count_docids,
         facet_id_f64_docids,
         facet_id_string_docids,
         field_id_docid_facet_f64s,
@@ -893,6 +952,7 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => word_prefix_pair_proximity_docids.as_polymorph(),
             WORD_LEVEL_POSITION_DOCIDS_DB_NAME => word_level_position_docids.as_polymorph(),
             WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME => word_prefix_level_position_docids.as_polymorph(),
+            FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME => field_id_word_count_docids.as_polymorph(),
             FACET_ID_F64_DOCIDS_DB_NAME => facet_id_f64_docids.as_polymorph(),
             FACET_ID_STRING_DOCIDS_DB_NAME => facet_id_string_docids.as_polymorph(),
             FIELD_ID_DOCID_FACET_F64S_DB_NAME => field_id_docid_facet_f64s.as_polymorph(),
@@ -997,6 +1057,10 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         },
         WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
             let db = index.word_prefix_pair_proximity_docids.as_polymorph();
+            compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
+        },
+        FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME => {
+            let db = index.field_id_word_count_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
         unknown => anyhow::bail!("unknown database {:?}", unknown),

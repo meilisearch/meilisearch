@@ -29,6 +29,7 @@ pub use self::merge_function::{
     docid_word_positions_merge, documents_merge,
     word_level_position_docids_merge, word_prefix_level_positions_docids_merge,
     facet_field_value_docids_merge, field_id_docid_facet_values_merge,
+    field_id_word_count_docids_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -412,6 +413,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             Main,
             WordDocids,
             WordLevel0PositionDocids,
+            FieldIdWordCountDocids,
             FacetLevel0NumbersDocids,
         }
 
@@ -476,6 +478,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let mut docid_word_positions_readers = Vec::with_capacity(readers.len());
             let mut words_pairs_proximities_docids_readers = Vec::with_capacity(readers.len());
             let mut word_level_position_docids_readers = Vec::with_capacity(readers.len());
+            let mut field_id_word_count_docids_readers = Vec::with_capacity(readers.len());
             let mut facet_field_numbers_docids_readers = Vec::with_capacity(readers.len());
             let mut facet_field_strings_docids_readers = Vec::with_capacity(readers.len());
             let mut field_id_docid_facet_numbers_readers = Vec::with_capacity(readers.len());
@@ -488,6 +491,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     docid_word_positions,
                     words_pairs_proximities_docids,
                     word_level_position_docids,
+                    field_id_word_count_docids,
                     facet_field_numbers_docids,
                     facet_field_strings_docids,
                     field_id_docid_facet_numbers,
@@ -499,6 +503,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 docid_word_positions_readers.push(docid_word_positions);
                 words_pairs_proximities_docids_readers.push(words_pairs_proximities_docids);
                 word_level_position_docids_readers.push(word_level_position_docids);
+                field_id_word_count_docids_readers.push(field_id_word_count_docids);
                 facet_field_numbers_docids_readers.push(facet_field_numbers_docids);
                 facet_field_strings_docids_readers.push(facet_field_strings_docids);
                 field_id_docid_facet_numbers_readers.push(field_id_docid_facet_numbers);
@@ -535,6 +540,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         DatabaseType::WordLevel0PositionDocids,
                         word_level_position_docids_readers,
                         word_level_position_docids_merge,
+                    ),
+                    (
+                        DatabaseType::FieldIdWordCountDocids,
+                        field_id_word_count_docids_readers,
+                        field_id_word_count_docids_merge,
                     ),
                 ]
                 .into_par_iter()
@@ -595,7 +605,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
-        let total_databases = 10;
+        let total_databases = 11;
 
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: 0,
@@ -724,6 +734,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         db,
                         content,
                         facet_field_value_docids_merge,
+                        write_method,
+                    )?;
+                },
+                DatabaseType::FieldIdWordCountDocids => {
+                    debug!("Writing the field id word count docids into LMDB on disk...");
+                    let db = *self.index.field_id_word_count_docids.as_polymorph();
+                    write_into_lmdb_database(
+                        self.wtxn,
+                        db,
+                        content,
+                        field_id_word_count_docids_merge,
                         write_method,
                     )?;
                 },

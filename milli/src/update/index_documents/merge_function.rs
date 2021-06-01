@@ -60,6 +60,10 @@ pub fn word_level_position_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> an
     cbo_roaring_bitmap_merge(values)
 }
 
+pub fn field_id_word_count_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    cbo_roaring_bitmap_merge(values)
+}
+
 pub fn facet_field_value_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     cbo_roaring_bitmap_merge(values)
 }

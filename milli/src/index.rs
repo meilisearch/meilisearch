@@ -13,6 +13,7 @@ use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId};
 use crate::{
     BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
     ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
+    FieldIdWordCountCodec,
 };
 use crate::heed_codec::facet::{
     FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
@@ -60,9 +61,11 @@ pub struct Index {
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
     pub word_prefix_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
-    
+
     /// Maps the word, level and position range with the docids that corresponds to it.
     pub word_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
+    /// Maps the field id and the word count with the docids that corresponds to it.
+    pub field_id_word_count_docids: Database<FieldIdWordCountCodec, CboRoaringBitmapCodec>,
     /// Maps the level positions of a word prefix with all the docids where this prefix appears.
     pub word_prefix_level_position_docids: Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
 
@@ -82,7 +85,7 @@ pub struct Index {
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(13);
+        options.max_dbs(14);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
@@ -92,6 +95,7 @@ impl Index {
         let word_pair_proximity_docids = env.create_database(Some("word-pair-proximity-docids"))?;
         let word_prefix_pair_proximity_docids = env.create_database(Some("word-prefix-pair-proximity-docids"))?;
         let word_level_position_docids = env.create_database(Some("word-level-position-docids"))?;
+        let field_id_word_count_docids = env.create_database(Some("field-id-word-count-docids"))?;
         let word_prefix_level_position_docids = env.create_database(Some("word-prefix-level-position-docids"))?;
         let facet_id_f64_docids = env.create_database(Some("facet-id-f64-docids"))?;
         let facet_id_string_docids = env.create_database(Some("facet-id-string-docids"))?;
@@ -111,6 +115,7 @@ impl Index {
             word_prefix_pair_proximity_docids,
             word_level_position_docids,
             word_prefix_level_position_docids,
+            field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
             field_id_docid_facet_f64s,
