@@ -27,7 +27,7 @@ pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, StrLevelPositionCodec, 
 pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec};
 pub use self::index::Index;
-pub use self::search::{Search, FacetDistribution, FacetCondition, SearchResult, MatchingWords};
+pub use self::search::{Search, FacetDistribution, FilterCondition, SearchResult, MatchingWords};
 pub use self::tree_level::TreeLevel;
 pub use self::update_store::UpdateStore;
 

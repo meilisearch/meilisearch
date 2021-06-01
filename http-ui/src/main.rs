@@ -29,7 +29,7 @@ use tokio::sync::broadcast;
 use warp::{Filter, http::Response};
 use warp::filters::ws::Message;
 
-use milli::{FacetCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
+use milli::{FilterCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use milli::update::UpdateIndexingStep::*;
 
@@ -690,7 +690,7 @@ async fn main() -> anyhow::Result<()> {
 
             let filters = match query.filters {
                 Some(condition) if !condition.trim().is_empty() => {
-                    Some(FacetCondition::from_str(&rtxn, &index, &condition).unwrap())
+                    Some(FilterCondition::from_str(&rtxn, &index, &condition).unwrap())
                 }
                 _otherwise => None,
             };
@@ -698,21 +698,21 @@ async fn main() -> anyhow::Result<()> {
             let facet_filters = match query.facet_filters {
                 Some(array) => {
                     let eithers = array.into_iter().map(Into::into);
-                    FacetCondition::from_array(&rtxn, &index, eithers).unwrap()
+                    FilterCondition::from_array(&rtxn, &index, eithers).unwrap()
                 }
                 _otherwise => None,
             };
 
             let condition = match (filters, facet_filters) {
                 (Some(filters), Some(facet_filters)) => {
-                    Some(FacetCondition::And(Box::new(filters), Box::new(facet_filters)))
+                    Some(FilterCondition::And(Box::new(filters), Box::new(facet_filters)))
                 }
                 (Some(condition), None) | (None, Some(condition)) => Some(condition),
                 _otherwise => None,
             };
 
             if let Some(condition) = condition {
-                search.facet_condition(condition);
+                search.filter(condition);
             }
 
             let SearchResult { matching_words, candidates, documents_ids } = search.execute().unwrap();

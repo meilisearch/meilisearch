@@ -16,7 +16,7 @@ use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId};
 
-pub use self::facet::{FacetCondition, FacetDistribution, FacetIter, Operator};
+pub use self::facet::{FilterCondition, FacetDistribution, FacetIter, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 
@@ -33,7 +33,7 @@ mod matching_words;
 
 pub struct Search<'a> {
     query: Option<String>,
-    facet_condition: Option<FacetCondition>,
+    filter: Option<FilterCondition>,
     offset: usize,
     limit: usize,
     optional_words: bool,
@@ -47,7 +47,7 @@ impl<'a> Search<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
         Search {
             query: None,
-            facet_condition: None,
+            filter: None,
             offset: 0,
             limit: 20,
             optional_words: true,
@@ -88,8 +88,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn facet_condition(&mut self, condition: FacetCondition) -> &mut Search<'a> {
-        self.facet_condition = Some(condition);
+    pub fn filter(&mut self, condition: FilterCondition) -> &mut Search<'a> {
+        self.filter = Some(condition);
         self
     }
 
@@ -121,12 +121,12 @@ impl<'a> Search<'a> {
 
         // We create the original candidates with the facet conditions results.
         let before = Instant::now();
-        let facet_candidates = match &self.facet_condition {
+        let filtered_candidates = match &self.filter {
             Some(condition) => Some(condition.evaluate(self.rtxn, self.index)?),
             None => None,
         };
 
-        debug!("facet candidates: {:?} took {:.02?}", facet_candidates, before.elapsed());
+        debug!("facet candidates: {:?} took {:.02?}", filtered_candidates, before.elapsed());
 
         let matching_words = match query_tree.as_ref() {
             Some(query_tree) => MatchingWords::from_query_tree(&query_tree),
@@ -134,7 +134,7 @@ impl<'a> Search<'a> {
         };
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let criteria = criteria_builder.build(query_tree, primitive_query, facet_candidates)?;
+        let criteria = criteria_builder.build(query_tree, primitive_query, filtered_candidates)?;
 
         match self.index.distinct_attribute(self.rtxn)? {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
@@ -188,7 +188,7 @@ impl fmt::Debug for Search<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Search {
             query,
-            facet_condition,
+            filter,
             offset,
             limit,
             optional_words,
@@ -199,7 +199,7 @@ impl fmt::Debug for Search<'_> {
         } = self;
         f.debug_struct("Search")
             .field("query", query)
-            .field("facet_condition", facet_condition)
+            .field("filter", filter)
             .field("offset", offset)
             .field("limit", limit)
             .field("optional_words", optional_words)

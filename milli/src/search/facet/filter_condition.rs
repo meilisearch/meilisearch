@@ -18,7 +18,7 @@ use super::FacetRange;
 use super::parser::Rule;
 use super::parser::{PREC_CLIMBER, FilterParser};
 
-use self::FacetCondition::*;
+use self::FilterCondition::*;
 use self::Operator::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,18 +49,18 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FacetCondition {
+pub enum FilterCondition {
     Operator(FieldId, Operator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 }
 
-impl FacetCondition {
+impl FilterCondition {
     pub fn from_array<I, J, A, B>(
         rtxn: &heed::RoTxn,
         index: &Index,
         array: I,
-    ) -> anyhow::Result<Option<FacetCondition>>
+    ) -> anyhow::Result<Option<FilterCondition>>
     where I: IntoIterator<Item=Either<J, B>>,
           J: IntoIterator<Item=A>,
           A: AsRef<str>,
@@ -73,7 +73,7 @@ impl FacetCondition {
                 Either::Left(array) => {
                     let mut ors = None;
                     for rule in array {
-                        let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
+                        let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
                         ors = match ors.take() {
                             Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
                             None => Some(condition),
@@ -88,7 +88,7 @@ impl FacetCondition {
                     }
                 },
                 Either::Right(rule) => {
-                    let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
+                    let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
                     ands = match ands.take() {
                         Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
                         None => Some(condition),
@@ -104,12 +104,12 @@ impl FacetCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         expression: &str,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields_ids(rtxn)?;
         let lexed = FilterParser::parse(Rule::prgm, expression)?;
-        FacetCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
+        FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
     fn from_pairs(
@@ -143,7 +143,7 @@ impl FacetCondition {
         )
     }
 
-    fn negate(self) -> FacetCondition {
+    fn negate(self) -> FilterCondition {
         match self {
             Operator(fid, op) => match op.negate() {
                 (op, None) => Operator(fid, op),
@@ -158,7 +158,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -176,7 +176,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -192,7 +192,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -207,7 +207,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -222,7 +222,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -237,7 +237,7 @@ impl FacetCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
@@ -249,7 +249,7 @@ impl FacetCondition {
     }
 }
 
-impl FacetCondition {
+impl FilterCondition {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_number_levels(
@@ -502,15 +502,15 @@ mod tests {
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
         let expected = Operator(0, Operator::Equal(None, S("ponce")));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
     }
@@ -531,11 +531,11 @@ mod tests {
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
         let expected = Operator(0, Between(22.0, 44.0));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected = Or(
             Box::new(Operator(0, LowerThan(22.0))),
             Box::new(Operator(0, GreaterThan(44.0))),
@@ -560,7 +560,7 @@ mod tests {
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(
+        let condition = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
@@ -573,7 +573,7 @@ mod tests {
         );
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(
+        let condition = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
@@ -607,11 +607,11 @@ mod tests {
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_array(
+        let condition = FilterCondition::from_array(
             &rtxn, &index,
             vec![Either::Right("channel = gotaga"), Either::Left(vec!["timestamp = 44", "channel != ponce"])],
         ).unwrap().unwrap();
-        let expected = FacetCondition::from_str(
+        let expected = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
         ).unwrap();
