@@ -251,7 +251,7 @@ struct Settings {
     searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    faceted_attributes: Setting<HashSet<String>>,
+    filterable_attributes: Setting<HashSet<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     criteria: Setting<Vec<String>>,
@@ -420,9 +420,9 @@ async fn main() -> anyhow::Result<()> {
                     }
 
                     // We transpose the settings JSON struct into a real setting update.
-                    match settings.faceted_attributes {
-                        Setting::Set(faceted_attributes) => builder.set_faceted_fields(faceted_attributes),
-                        Setting::Reset => builder.reset_faceted_fields(),
+                    match settings.filterable_attributes {
+                        Setting::Set(filterable_attributes) => builder.set_filterable_fields(filterable_attributes),
+                        Setting::Reset => builder.reset_filterable_fields(),
                         Setting::NotSet => ()
                     }
 
@@ -996,7 +996,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
             searchable_attributes: Setting::Set(vec!["age".to_string()]),
-            faceted_attributes: Setting::Set(hashset!{ "age".to_string() }),
+            filterable_attributes: Setting::Set(hashset!{ "age".to_string() }),
             criteria: Setting::Set(vec!["asc(age)".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
             synonyms: Setting::Set(hashmap!{ "alex".to_string() => vec!["alexey".to_string()] })
@@ -1047,7 +1047,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
-            faceted_attributes: Setting::Reset,
+            filterable_attributes: Setting::Reset,
             criteria: Setting::Reset,
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
@@ -1076,7 +1076,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::NotSet,
             searchable_attributes: Setting::NotSet,
-            faceted_attributes: Setting::NotSet,
+            filterable_attributes: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
