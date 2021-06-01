@@ -55,6 +55,10 @@ fi
 
 if [[ ! -f "$file2_local_path" ]]; then
     s3cmd get "$file2_s3_path" "$file2_local_path"
+    if [[ "$?" -ne 0 ]]; then
+	    echo 's3cmd command failed. Check your configuration'
+	    exit 1
+    fi
 else
     echo "$file2 already present in /tmp, no need to download."
 fi
