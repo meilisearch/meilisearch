@@ -55,62 +55,6 @@ pub enum FacetCondition {
     And(Box<Self>, Box<Self>),
 }
 
-fn field_id(
-    fields_ids_map: &FieldsIdsMap,
-    filterable_fields: &HashSet<FieldId>,
-    items: &mut Pairs<Rule>,
-) -> Result<FieldId, PestError<Rule>>
-{
-    // lexing ensures that we at least have a key
-    let key = items.next().unwrap();
-
-    let field_id = match fields_ids_map.id(key.as_str()) {
-        Some(field_id) => field_id,
-        None => return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` not found, available attributes are: {}",
-                    key.as_str(),
-                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
-                ),
-            },
-            key.as_span(),
-        )),
-    };
-
-    if !filterable_fields.contains(&field_id) {
-        return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` is not filterable, available filterable attributes are: {}",
-                    key.as_str(),
-                    filterable_fields.iter().flat_map(|id| {
-                        fields_ids_map.name(*id)
-                    }).collect::<Vec<_>>().join(", "),
-                ),
-            },
-            key.as_span(),
-        ));
-    }
-
-    Ok(field_id)
-}
-
-fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
-where T: FromStr,
-      T::Err: ToString,
-{
-    let result = match pair.as_str().parse::<T>() {
-        Ok(value) => Ok(value),
-        Err(e) => Err(PestError::<Rule>::new_from_span(
-            ErrorVariant::CustomError { message: e.to_string() },
-            pair.as_span(),
-        )),
-    };
-
-    (result, pair.as_str().to_string())
-}
-
 impl FacetCondition {
     pub fn from_array<I, J, A, B>(
         rtxn: &heed::RoTxn,
@@ -467,6 +411,71 @@ impl FacetCondition {
             },
         }
     }
+}
+
+/// Retrieve the field id base on the pest value, returns an error is
+/// the field does not exist or is not filterable.
+///
+/// The pest pair is simply a string associated with a span, a location to highlight in
+/// the error message.
+fn field_id(
+    fields_ids_map: &FieldsIdsMap,
+    filterable_fields: &HashSet<FieldId>,
+    items: &mut Pairs<Rule>,
+) -> Result<FieldId, PestError<Rule>>
+{
+    // lexing ensures that we at least have a key
+    let key = items.next().unwrap();
+
+    let field_id = match fields_ids_map.id(key.as_str()) {
+        Some(field_id) => field_id,
+        None => return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` not found, available attributes are: {}",
+                    key.as_str(),
+                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
+                ),
+            },
+            key.as_span(),
+        )),
+    };
+
+    if !filterable_fields.contains(&field_id) {
+        return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` is not filterable, available filterable attributes are: {}",
+                    key.as_str(),
+                    filterable_fields.iter().flat_map(|id| {
+                        fields_ids_map.name(*id)
+                    }).collect::<Vec<_>>().join(", "),
+                ),
+            },
+            key.as_span(),
+        ));
+    }
+
+    Ok(field_id)
+}
+
+/// Tries to parse the pest pair into the type `T` specified, always returns
+/// the original string that we tried to parse.
+///
+/// Returns the parsing error associated with the span if the conversion fails.
+fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
+where T: FromStr,
+      T::Err: ToString,
+{
+    let result = match pair.as_str().parse::<T>() {
+        Ok(value) => Ok(value),
+        Err(e) => Err(PestError::<Rule>::new_from_span(
+            ErrorVariant::CustomError { message: e.to_string() },
+            pair.as_span(),
+        )),
+    };
+
+    (result, pair.as_str().to_string())
 }
 
 #[cfg(test)]
