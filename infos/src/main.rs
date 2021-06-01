@@ -157,6 +157,8 @@ enum Command {
         prefixes: Vec<String>,
     },
 
+    /// Outputs a CSV with the documents ids along with
+    /// the field id and the word count where it appears.
     FieldIdWordCountDocids {
         /// Display the whole documents ids in details.
         #[structopt(long)]
@@ -714,8 +716,8 @@ fn field_id_word_count_docids(
         .id(&field_name)
         .with_context(|| format!("unknown field name: {}", &field_name))?;
 
-    let left = (field_id, 1);
-    let right = (field_id, 11);
+    let left = (field_id, 0);
+    let right = (field_id, u8::max_value());
     let iter = index.field_id_word_count_docids
         .range(rtxn, &(left..=right))?;
 

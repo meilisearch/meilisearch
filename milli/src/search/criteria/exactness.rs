@@ -1,9 +1,10 @@
+use std::convert::TryFrom;
 use std::mem::take;
+use std::ops::BitOr;
 
 use log::debug;
 use roaring::RoaringBitmap;
 use itertools::Itertools;
-use std::ops::BitOr;
 
 use crate::search::query_tree::{Operation, PrimitiveQueryPart};
 use crate::search::criteria::{
@@ -162,23 +163,24 @@ fn resolve_state(
     use State::*;
     match state {
         ExactAttribute(mut allowed_candidates) => {
-            let query_len = query.len() as u8;
             let mut candidates = RoaringBitmap::new();
-            let attributes_ids = ctx.searchable_fields_ids()?;
-            for id in attributes_ids {
-                if let Some(attribute_allowed_docids) = ctx.field_id_word_count_docids(id, query_len)? {
-                    let mut attribute_candidates_array = attribute_start_with_docids(ctx, id as u32, query)?;
-                    attribute_candidates_array.push(attribute_allowed_docids);
-                    candidates |= intersection_of(attribute_candidates_array.iter().collect());
+            if let Ok(query_len) = u8::try_from(query.len()) {
+                let attributes_ids = ctx.searchable_fields_ids()?;
+                for id in attributes_ids {
+                    if let Some(attribute_allowed_docids) = ctx.field_id_word_count_docids(id, query_len)? {
+                        let mut attribute_candidates_array = attribute_start_with_docids(ctx, id as u32, query)?;
+                        attribute_candidates_array.push(attribute_allowed_docids);
+                        candidates |= intersection_of(attribute_candidates_array.iter().collect());
+                    }
                 }
+
+                // only keep allowed candidates
+                candidates &= &allowed_candidates;
+                // remove current candidates from allowed candidates
+                allowed_candidates -= &candidates;
             }
 
-            // only keep allowed candidates
-            candidates &= &allowed_candidates;
-            // remove current candidates from allowed candidates
-            allowed_candidates -= &candidates;
             Ok((candidates, Some(AttributeStartsWith(allowed_candidates))))
-
         },
         AttributeStartsWith(mut allowed_candidates) => {
             let mut candidates = RoaringBitmap::new();
