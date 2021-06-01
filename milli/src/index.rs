@@ -357,8 +357,29 @@ impl Index {
 
         Ok(filterable_fields)
     }
+
+    /* faceted documents ids */
+
+    /// Returns the faceted fields names.
+    ///
+    /// Faceted fields are the union of all the filterable, distinct, and Asc/Desc fields.
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
-        Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
+        let filterable_fields = self.filterable_fields(rtxn)?;
+        let distinct_field = self.distinct_attribute(rtxn)?;
+        let asc_desc_fields = self.criteria(rtxn)?
+            .into_iter()
+            .filter_map(|criterion| match criterion {
+                Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
+                _otherwise => None,
+            });
+
+        let mut faceted_fields = filterable_fields;
+        faceted_fields.extend(asc_desc_fields);
+        if let Some(field) = distinct_field {
+            faceted_fields.insert(field.to_owned());
+        }
+
+        Ok(faceted_fields)
     }
 
     /// Same as `faceted_fields`, but returns ids instead.
