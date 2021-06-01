@@ -1942,9 +1942,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "ordered-float"
-version = "2.0.1"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dacdec97876ef3ede8c50efc429220641a0b11ba0048b4b0c357bccbc47c5204"
+checksum = "f100fcfb41e5385e0991f74981732049f9b896821542a219420491046baafdc2"
 dependencies = [
  "num-traits",
  "serde",
