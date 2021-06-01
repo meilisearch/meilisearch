@@ -14,24 +14,23 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-pub use updates::*;
-pub use dump_actor::{DumpInfo, DumpStatus};
 use dump_actor::DumpActorHandle;
+pub use dump_actor::{DumpInfo, DumpStatus};
 use index_actor::IndexActorHandle;
-use snapshot::{SnapshotService, load_snapshot};
+use snapshot::{load_snapshot, SnapshotService};
 use update_actor::UpdateActorHandle;
-use uuid_resolver::{UuidError, UuidResolverHandle};
+pub use updates::*;
+use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
-use dump_actor::load_dump;
+use self::dump_actor::load_dump;
 
+mod dump_actor;
 mod index_actor;
 mod snapshot;
-mod dump_actor;
 mod update_actor;
-mod update_handler;
 mod updates;
 mod uuid_resolver;
 
@@ -94,13 +93,14 @@ impl IndexController {
                 options.ignore_snapshot_if_db_exists,
                 options.ignore_missing_snapshot,
             )?;
-        } else if let Some(ref path) = options.import_dump {
+        } else if let Some(ref src_path) = options.import_dump {
             load_dump(
                 &options.db_path,
-                path,
-                index_size,
+                src_path,
+                options.max_mdb_size.get_bytes() as usize,
+                options.max_udb_size.get_bytes() as usize,
+                &options.indexer_options,
             )?;
-
         }
 
         std::fs::create_dir_all(&path)?;
@@ -112,7 +112,13 @@ impl IndexController {
             &path,
             update_store_size,
         )?;
-        let dump_handle = dump_actor::DumpActorHandleImpl::new(&options.dumps_dir, uuid_resolver.clone(), index_handle.clone(), update_handle.clone())?;
+        let dump_handle = dump_actor::DumpActorHandleImpl::new(
+            &options.dumps_dir,
+            uuid_resolver.clone(),
+            update_handle.clone(),
+            options.max_mdb_size.get_bytes() as usize,
+            options.max_udb_size.get_bytes() as usize,
+        )?;
 
         if options.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
@@ -159,11 +165,6 @@ impl IndexController {
             // registered and the update_actor that waits for the the payload to be sent to it.
             tokio::task::spawn_local(async move {
                 payload
-                    .map(|bytes| {
-                        bytes.map_err(|e| {
-                            Box::new(e) as Box<dyn std::error::Error + Sync + Send + 'static>
-                        })
-                    })
                     .for_each(|r| async {
                         let _ = sender.send(r).await;
                     })
@@ -176,7 +177,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_update(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) => {
+            Err(UuidResolverError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let status = perform_update(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created
@@ -230,7 +231,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_udpate(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) if create => {
+            Err(UuidResolverError::UnexistingIndex(name)) if create => {
                 let uuid = Uuid::new_v4();
                 let status = perform_udpate(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created

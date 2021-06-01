@@ -15,7 +15,7 @@ use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
 
 use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{Failed, Processed, Processing, IndexStats};
+use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
 use super::IndexSettings;
 
@@ -44,23 +44,44 @@ impl IndexMeta {
         let created_at = index.created_at(&txn)?;
         let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
-        Ok(Self { created_at, updated_at, primary_key })
+        Ok(Self {
+            created_at,
+            updated_at,
+            primary_key,
+        })
     }
 }
 
 #[derive(Error, Debug)]
 pub enum IndexError {
-    #[error("error with index: {0}")]
-    Error(#[from] anyhow::Error),
     #[error("index already exists")]
     IndexAlreadyExists,
     #[error("Index doesn't exists")]
     UnexistingIndex,
-    #[error("Heed error: {0}")]
-    HeedError(#[from] heed::Error),
     #[error("Existing primary key")]
     ExistingPrimaryKey,
+    #[error("Internal Index Error: {0}")]
+    Internal(String),
 }
+
+macro_rules! internal_error {
+    ($($other:path), *) => {
+        $(
+            impl From<$other> for IndexError {
+                fn from(other: $other) -> Self {
+                    Self::Internal(other.to_string())
+                }
+            }
+        )*
+    }
+}
+
+internal_error!(
+    anyhow::Error,
+    heed::Error,
+    tokio::task::JoinError,
+    std::io::Error
+);
 
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
@@ -97,7 +118,7 @@ pub trait IndexActorHandle {
         index_settings: IndexSettings,
     ) -> IndexResult<IndexMeta>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
-    async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
     async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats>;
 }
 
@@ -178,8 +199,8 @@ mod test {
             self.as_ref().snapshot(uuid, path).await
         }
 
-        async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
-            self.as_ref().dump(uid, uuid, path).await
+        async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+            self.as_ref().dump(uuid, path).await
         }
 
         async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {

@@ -1,7 +1,6 @@
 use tokio::sync::oneshot;
 
-use super::{DumpResult, DumpInfo};
-
+use super::{DumpInfo, DumpResult};
 
 pub enum DumpMsg {
     CreateDump {
@@ -12,4 +11,3 @@ pub enum DumpMsg {
         ret: oneshot::Sender<DumpResult<DumpInfo>>,
     },
 }
-

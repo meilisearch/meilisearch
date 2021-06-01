@@ -299,7 +299,7 @@ impl From<JsonPayloadError> for Error {
             JsonPayloadError::Payload(err) => {
                 Error::BadRequest(format!("Problem while decoding the request: {}", err))
             }
-            e => Error::Internal(format!("Unexpected Json error: {}", e))
+            e => Error::Internal(format!("Unexpected Json error: {}", e)),
         }
     }
 }
@@ -310,7 +310,7 @@ impl From<QueryPayloadError> for Error {
             QueryPayloadError::Deserialize(err) => {
                 Error::BadRequest(format!("Invalid query parameters: {}", err))
             }
-            e => Error::Internal(format!("Unexpected query payload error: {}", e))
+            e => Error::Internal(format!("Unexpected query payload error: {}", e)),
         }
     }
 }

@@ -1,7 +1,7 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;

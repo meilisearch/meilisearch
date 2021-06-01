@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::{index::Checked, index_controller::{IndexSettings, IndexStats, Processing}};
+use crate::{
+    index::Checked,
+    index_controller::{IndexSettings, IndexStats, Processing},
+};
 use crate::{
     index::{Document, SearchQuery, SearchResult, Settings},
     index_controller::{Failed, Processed},
@@ -136,9 +139,9 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn dump(&self, uid: String, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::Dump { uid, uuid, path, ret };
+        let msg = IndexMsg::Dump { uuid, path, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }

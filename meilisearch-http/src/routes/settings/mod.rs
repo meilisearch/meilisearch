@@ -1,9 +1,9 @@
 use actix_web::{delete, get, post, web, HttpResponse};
 
-use crate::{error::ResponseError, index::Unchecked};
 use crate::helpers::Authentication;
 use crate::index::Settings;
 use crate::Data;
+use crate::{error::ResponseError, index::Unchecked};
 
 #[macro_export]
 macro_rules! make_setting_route {

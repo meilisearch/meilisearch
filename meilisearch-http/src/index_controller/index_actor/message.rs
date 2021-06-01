@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use crate::index::{Document, SearchQuery, SearchResult, Settings, Checked};
+use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
 use super::{IndexMeta, IndexResult, IndexSettings};
@@ -61,7 +61,6 @@ pub enum IndexMsg {
         ret: oneshot::Sender<IndexResult<()>>,
     },
     Dump {
-        uid: String,
         uuid: Uuid,
         path: PathBuf,
         ret: oneshot::Sender<IndexResult<()>>,

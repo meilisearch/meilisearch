@@ -4,7 +4,9 @@ use std::sync::Arc;
 use sha2::Digest;
 
 use crate::index::{Checked, Settings};
-use crate::index_controller::{IndexController, IndexStats, Stats, DumpInfo, IndexMetadata, IndexSettings};
+use crate::index_controller::{
+    DumpInfo, IndexController, IndexMetadata, IndexSettings, IndexStats, Stats,
+};
 use crate::option::Opt;
 
 pub mod search;
@@ -67,7 +69,11 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { index_controller, api_keys, options };
+        let inner = DataInner {
+            index_controller,
+            api_keys,
+            options,
+        };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })

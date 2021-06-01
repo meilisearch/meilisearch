@@ -90,7 +90,8 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let displayed_ids = self.displayed_fields_ids(&rtxn)?
+        let displayed_ids = self
+            .displayed_fields_ids(&rtxn)?
             .map(|fields| fields.into_iter().collect::<HashSet<_>>())
             .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
@@ -156,10 +157,8 @@ impl Index {
         };
 
         let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(
-            &stop_words,
-            (String::from("<em>"), String::from("</em>")),
-        );
+        let highlighter =
+            Highlighter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
             let document = make_document(&all_attributes, &fields_ids_map, obkv)?;
@@ -384,17 +383,16 @@ mod test {
     #[test]
     fn no_formatted() {
         let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(
-            &stop_words,
-            (String::from("<em>"), String::from("</em>")),
-        );
+        let highlighter =
+            Highlighter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
+            .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
@@ -410,8 +408,9 @@ mod test {
             &highlighter,
             &matching_words,
             &all_formatted,
-            &to_highlight_ids
-        ).unwrap();
+            &to_highlight_ids,
+        )
+        .unwrap();
 
         assert!(value.is_empty());
     }
@@ -419,17 +418,16 @@ mod test {
     #[test]
     fn formatted_no_highlight() {
         let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(
-            &stop_words,
-            (String::from("<em>"), String::from("</em>")),
-        );
+        let highlighter =
+            Highlighter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
+            .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
@@ -445,8 +443,9 @@ mod test {
             &highlighter,
             &matching_words,
             &all_formatted,
-            &to_highlight_ids
-        ).unwrap();
+            &to_highlight_ids,
+        )
+        .unwrap();
 
         assert_eq!(value["test"], "hello");
     }
@@ -454,17 +453,16 @@ mod test {
     #[test]
     fn formatted_with_highlight() {
         let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(
-            &stop_words,
-            (String::from("<em>"), String::from("</em>")),
-        );
+        let highlighter =
+            Highlighter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes()).unwrap();
+        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
+            .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
@@ -480,8 +478,9 @@ mod test {
             &highlighter,
             &matching_words,
             &all_formatted,
-            &to_highlight_ids
-        ).unwrap();
+            &to_highlight_ids,
+        )
+        .unwrap();
 
         assert_eq!(value["test"], "<em>hello</em>");
     }

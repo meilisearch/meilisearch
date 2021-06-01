@@ -1,8 +1,7 @@
-use std::path::{Path, PathBuf};
-
 use chrono::{DateTime, Utc};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::index::{Checked, Settings};
 
@@ -34,11 +33,11 @@ pub struct Enqueued {
     pub update_id: u64,
     pub meta: UpdateMeta,
     pub enqueued_at: DateTime<Utc>,
-    pub content: Option<PathBuf>,
+    pub content: Option<Uuid>,
 }
 
 impl Enqueued {
-    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<PathBuf>) -> Self {
+    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<Uuid>) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
@@ -68,14 +67,6 @@ impl Enqueued {
     pub fn id(&self) -> u64 {
         self.update_id
     }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.content.as_deref()
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        self.content.as_mut()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -90,14 +81,6 @@ pub struct Processed {
 impl Processed {
     pub fn id(&self) -> u64 {
         self.from.id()
-    }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.from.content_path()
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        self.from.content_path_mut()
     }
 }
 
@@ -116,14 +99,6 @@ impl Processing {
 
     pub fn meta(&self) -> &UpdateMeta {
         self.from.meta()
-    }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.from.content_path()
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        self.from.content_path_mut()
     }
 
     pub fn process(self, success: UpdateResult) -> Processed {
@@ -155,14 +130,6 @@ impl Aborted {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.from.content_path()
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        self.from.content_path_mut()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -177,14 +144,6 @@ pub struct Failed {
 impl Failed {
     pub fn id(&self) -> u64 {
         self.from.id()
-    }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.from.content_path()
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        self.from.content_path_mut()
     }
 }
 
@@ -213,26 +172,6 @@ impl UpdateStatus {
         match self {
             UpdateStatus::Processed(p) => Some(p),
             _ => None,
-        }
-    }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        match self {
-            UpdateStatus::Processing(u) => u.content_path(),
-            UpdateStatus::Processed(u) => u.content_path(),
-            UpdateStatus::Aborted(u) => u.content_path(),
-            UpdateStatus::Failed(u) => u.content_path(),
-            UpdateStatus::Enqueued(u) => u.content_path(),
-        }
-    }
-
-    pub fn content_path_mut(&mut self) -> Option<&mut PathBuf> {
-        match self {
-            UpdateStatus::Processing(u) => u.content_path_mut(),
-            UpdateStatus::Processed(u) => u.content_path_mut(),
-            UpdateStatus::Aborted(u) => u.content_path_mut(),
-            UpdateStatus::Failed(u) => u.content_path_mut(),
-            UpdateStatus::Enqueued(u) => u.content_path_mut(),
         }
     }
 }

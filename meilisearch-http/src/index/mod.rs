@@ -1,17 +1,23 @@
-use std::{collections::{BTreeSet, HashSet}, marker::PhantomData};
+use std::collections::{BTreeSet, HashSet};
+use std::fs::create_dir_all;
+use std::marker::PhantomData;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
+use heed::{EnvOpenOptions, RoTxn};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, Checked, Unchecked};
 use serde::{de::Deserializer, Deserialize};
+pub use updates::{Checked, Facets, Settings, Unchecked};
 
+mod dump;
 mod search;
+pub mod update_handler;
 mod updates;
 
 pub type Document = Map<String, Value>;
@@ -36,9 +42,20 @@ where
 }
 
 impl Index {
+    pub fn open(path: impl AsRef<Path>, size: usize) -> anyhow::Result<Self> {
+        create_dir_all(&path)?;
+        let mut options = EnvOpenOptions::new();
+        options.map_size(size);
+        let index = milli::Index::new(options, &path)?;
+        Ok(Index(Arc::new(index)))
+    }
+
     pub fn settings(&self) -> anyhow::Result<Settings<Checked>> {
         let txn = self.read_txn()?;
+        self.settings_txn(&txn)
+    }
 
+    pub fn settings_txn(&self, txn: &RoTxn) -> anyhow::Result<Settings<Checked>> {
         let displayed_attributes = self
             .displayed_fields(&txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
@@ -94,8 +111,6 @@ impl Index {
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
         let mut documents = Vec::new();
-
-        println!("fields to display: {:?}", fields_to_display);
 
         for entry in iter {
             let (_id, obkv) = entry?;

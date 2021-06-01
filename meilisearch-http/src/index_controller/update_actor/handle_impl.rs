@@ -71,7 +71,7 @@ where
         receiver.await.expect("update actor killed.")
     }
 
-    async fn dump(&self, uuids: HashSet<(String, Uuid)>, path: PathBuf) -> Result<()> {
+    async fn dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Dump { uuids, path, ret };
         let _ = self.sender.send(msg).await;

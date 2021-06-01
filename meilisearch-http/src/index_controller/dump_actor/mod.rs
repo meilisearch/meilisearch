@@ -1,30 +1,31 @@
-mod actor;
-mod handle_impl;
-mod message;
-mod v1;
-mod v2;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 
-use std::{fs::File, path::Path, sync::Arc};
-
-use anyhow::bail;
-use heed::EnvOpenOptions;
-use log::{error, info};
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use anyhow::Context;
+use chrono::{DateTime, Utc};
+use log::{error, info, warn};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 use thiserror::Error;
-use uuid::Uuid;
+use tokio::fs::create_dir_all;
 
-use super::IndexMetadata;
-use crate::helpers::compression;
-use crate::index::Index;
-use crate::index_controller::uuid_resolver;
+use loaders::v1::MetadataV1;
+use loaders::v2::MetadataV2;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
+
+use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
+use crate::{helpers::compression, option::IndexerOpts};
+
+mod actor;
+mod handle_impl;
+mod loaders;
+mod message;
+
+const META_FILE_NAME: &str = "metadata.json";
 
 pub type DumpResult<T> = std::result::Result<T, DumpError>;
 
@@ -40,31 +41,6 @@ pub enum DumpError {
     DumpDoesNotExist(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-enum DumpVersion {
-    V1,
-    V2,
-}
-
-impl DumpVersion {
-    const CURRENT: Self = Self::V2;
-
-    /// Select the good importation function from the `DumpVersion` of metadata
-    pub fn import_index(
-        self,
-        size: usize,
-        uuid: Uuid,
-        dump_path: &Path,
-        db_path: &Path,
-        primary_key: Option<&str>,
-    ) -> anyhow::Result<()> {
-        match self {
-            Self::V1 => v1::import_index(size, uuid, dump_path, db_path, primary_key),
-            Self::V2 => v2::import_index(size, uuid, dump_path, db_path, primary_key),
-        }
-    }
-}
-
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait DumpActorHandle {
@@ -78,39 +54,16 @@ pub trait DumpActorHandle {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Metadata {
-    indexes: Vec<IndexMetadata>,
-    db_version: String,
-    dump_version: DumpVersion,
+#[serde(tag = "dumpVersion")]
+pub enum Metadata {
+    V1(MetadataV1),
+    V2(MetadataV2),
 }
 
 impl Metadata {
-    /// Create a Metadata with the current dump version of meilisearch.
-    pub fn new(indexes: Vec<IndexMetadata>, db_version: String) -> Self {
-        Metadata {
-            indexes,
-            db_version,
-            dump_version: DumpVersion::CURRENT,
-        }
-    }
-
-    /// Extract Metadata from `metadata.json` file present at provided `dir_path`
-    fn from_path(dir_path: &Path) -> anyhow::Result<Self> {
-        let path = dir_path.join("metadata.json");
-        let file = File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let metadata = serde_json::from_reader(reader)?;
-
-        Ok(metadata)
-    }
-
-    /// Write Metadata in `metadata.json` file at provided `dir_path`
-    pub async fn to_path(&self, dir_path: &Path) -> anyhow::Result<()> {
-        let path = dir_path.join("metadata.json");
-        tokio::fs::write(path, serde_json::to_string(self)?).await?;
-
-        Ok(())
+    pub fn new_v2(index_db_size: usize, update_db_size: usize) -> Self {
+        let meta = MetadataV2::new(index_db_size, update_db_size);
+        Self::V2(meta)
     }
 }
 
@@ -129,6 +82,9 @@ pub struct DumpInfo {
     pub status: DumpStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    started_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finished_at: Option<DateTime<Utc>>,
 }
 
 impl DumpInfo {
@@ -137,15 +93,19 @@ impl DumpInfo {
             uid,
             status,
             error: None,
+            started_at: Utc::now(),
+            finished_at: None,
         }
     }
 
     pub fn with_error(&mut self, error: String) {
         self.status = DumpStatus::Failed;
+        self.finished_at = Some(Utc::now());
         self.error = Some(error);
     }
 
     pub fn done(&mut self) {
+        self.finished_at = Some(Utc::now());
         self.status = DumpStatus::Done;
     }
 
@@ -155,80 +115,100 @@ impl DumpInfo {
 }
 
 pub fn load_dump(
-    db_path: impl AsRef<Path>,
-    dump_path: impl AsRef<Path>,
-    size: usize,
+    dst_path: impl AsRef<Path>,
+    src_path: impl AsRef<Path>,
+    index_db_size: usize,
+    update_db_size: usize,
+    indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    info!("Importing dump from {}...", dump_path.as_ref().display());
-    let db_path = db_path.as_ref();
-    let dump_path = dump_path.as_ref();
-    let uuid_resolver = uuid_resolver::HeedUuidStore::new(&db_path)?;
+    let tmp_src = tempfile::tempdir_in(".")?;
+    let tmp_src_path = tmp_src.path();
 
-    // extract the dump in a temporary directory
-    let tmp_dir = TempDir::new_in(db_path)?;
-    let tmp_dir_path = tmp_dir.path();
-    compression::from_tar_gz(dump_path, tmp_dir_path)?;
+    compression::from_tar_gz(&src_path, tmp_src_path)?;
 
-    // read dump metadata
-    let metadata = Metadata::from_path(&tmp_dir_path)?;
+    let meta_path = tmp_src_path.join(META_FILE_NAME);
+    let mut meta_file = File::open(&meta_path)?;
+    let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
-    // remove indexes which have same `uuid` than indexes to import and create empty indexes
-    let existing_index_uids = uuid_resolver.list()?;
+    let dst_dir = dst_path
+        .as_ref()
+        .parent()
+        .with_context(|| format!("Invalid db path: {}", dst_path.as_ref().display()))?;
 
-    info!("Deleting indexes already present in the db and provided in the dump...");
-    for idx in &metadata.indexes {
-        if let Some((_, uuid)) = existing_index_uids.iter().find(|(s, _)| s == &idx.uid) {
-            // if we find the index in the `uuid_resolver` it's supposed to exist on the file system
-            // and we want to delete it
-            let path = db_path.join(&format!("indexes/index-{}", uuid));
-            info!("Deleting {}", path.display());
-            use std::io::ErrorKind::*;
-            match std::fs::remove_dir_all(path) {
-                Ok(()) => (),
-                // if an index was present in the metadata but missing of the fs we can ignore the
-                // problem because we are going to create it later
-                Err(e) if e.kind() == NotFound => (),
-                Err(e) => bail!(e),
-            }
-        } else {
-            // if the index does not exist in the `uuid_resolver` we create it
-            uuid_resolver.create_uuid(idx.uid.clone(), false)?;
+    let tmp_dst = tempfile::tempdir_in(dst_dir)?;
+
+    match meta {
+        Metadata::V1(meta) => {
+            meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
+        Metadata::V2(meta) => meta.load_dump(
+            &tmp_src_path,
+            tmp_dst.path(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?,
+    }
+    // Persist and atomically rename the db
+    let persisted_dump = tmp_dst.into_path();
+    if dst_path.as_ref().exists() {
+        warn!("Overwriting database at {}", dst_path.as_ref().display());
+        std::fs::remove_dir_all(&dst_path)?;
     }
 
-    // import each indexes content
-    for idx in metadata.indexes {
-        let dump_path = tmp_dir_path.join(&idx.uid);
-        // this cannot fail since we created all the missing uuid in the previous loop
-        let uuid = uuid_resolver.get_uuid(idx.uid)?.unwrap();
+    std::fs::rename(&persisted_dump, &dst_path)?;
 
-        info!(
-            "Importing dump from {} into {}...",
-            dump_path.display(),
-            db_path.display()
-        );
-        metadata.dump_version.import_index(
-            size,
-            uuid,
-            &dump_path,
-            &db_path,
-            idx.meta.primary_key.as_ref().map(|s| s.as_ref()),
-        )?;
-        info!("Dump importation from {} succeed", dump_path.display());
-    }
-
-    // finally we can move all the unprocessed update file into our new DB
-    // this directory may not exists
-    let update_path = tmp_dir_path.join("update_files");
-    let db_update_path = db_path.join("updates/update_files");
-    if update_path.exists() {
-        let _ = std::fs::remove_dir_all(db_update_path);
-        std::fs::rename(
-            tmp_dir_path.join("update_files"),
-            db_path.join("updates/update_files"),
-        )?;
-    }
-
-    info!("Dump importation from {} succeed", dump_path.display());
     Ok(())
+}
+
+struct DumpTask<U, P> {
+    path: PathBuf,
+    uuid_resolver: U,
+    update_handle: P,
+    uid: String,
+    update_db_size: usize,
+    index_db_size: usize,
+}
+
+impl<U, P> DumpTask<U, P>
+where
+    U: UuidResolverHandle + Send + Sync + Clone + 'static,
+    P: UpdateActorHandle + Send + Sync + Clone + 'static,
+{
+    async fn run(self) -> anyhow::Result<()> {
+        info!("Performing dump.");
+
+        create_dir_all(&self.path).await?;
+
+        let path_clone = self.path.clone();
+        let temp_dump_dir =
+            tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(path_clone)).await??;
+        let temp_dump_path = temp_dump_dir.path().to_owned();
+
+        let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);
+        let meta_path = temp_dump_path.join(META_FILE_NAME);
+        let mut meta_file = File::create(&meta_path)?;
+        serde_json::to_writer(&mut meta_file, &meta)?;
+
+        let uuids = self.uuid_resolver.dump(temp_dump_path.clone()).await?;
+
+        self.update_handle
+            .dump(uuids, temp_dump_path.clone())
+            .await?;
+
+        let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
+            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
+
+            let dump_path = self.path.join(self.uid).with_extension("dump");
+            temp_dump_file.persist(&dump_path)?;
+
+            Ok(dump_path)
+        })
+        .await??;
+
+        info!("Created dump in {:?}.", dump_path);
+
+        Ok(())
+    }
 }

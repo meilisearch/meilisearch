@@ -1,36 +1,35 @@
-use std::collections::{BTreeMap, HashSet};
-use std::convert::TryInto;
+mod codec;
+pub mod dump;
+
 use std::fs::{copy, create_dir_all, remove_file, File};
-use std::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
-use std::{borrow::Cow, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+};
 
-use anyhow::Context;
 use arc_swap::ArcSwap;
 use futures::StreamExt;
 use heed::types::{ByteSlice, OwnedType, SerdeJson};
 use heed::zerocopy::U64;
-use heed::{BytesDecode, BytesEncode, CompactionOption, Database, Env, EnvOpenOptions};
+use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use log::error;
 use parking_lot::{Mutex, MutexGuard};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use codec::*;
+
 use super::UpdateMeta;
-use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
+use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
 
-struct NextIdCodec;
-
-enum NextIdKey {
-    Global,
-    Index(Uuid),
-}
+const UPDATE_DIR: &str = "update_files";
 
 pub struct UpdateStoreInfo {
     /// Size of the update store in bytes.
@@ -45,13 +44,13 @@ pub struct StateLock {
     data: ArcSwap<State>,
 }
 
-struct StateLockGuard<'a> {
+pub struct StateLockGuard<'a> {
     _lock: MutexGuard<'a, ()>,
     state: &'a StateLock,
 }
 
 impl StateLockGuard<'_> {
-    fn swap(&self, state: State) -> Arc<State> {
+    pub fn swap(&self, state: State) -> Arc<State> {
         self.state.data.swap(Arc::new(state))
     }
 }
@@ -63,11 +62,11 @@ impl StateLock {
         Self { lock, data }
     }
 
-    fn read(&self) -> Arc<State> {
+    pub fn read(&self) -> Arc<State> {
         self.data.load().clone()
     }
 
-    fn write(&self) -> StateLockGuard {
+    pub fn write(&self) -> StateLockGuard {
         let _lock = self.lock.lock();
         let state = &self;
         StateLockGuard { _lock, state }
@@ -80,81 +79,6 @@ pub enum State {
     Processing(Uuid, Processing),
     Snapshoting,
     Dumping,
-}
-
-impl<'a> BytesEncode<'a> for NextIdCodec {
-    type EItem = NextIdKey;
-
-    fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-        match item {
-            NextIdKey::Global => Some(Cow::Borrowed(b"__global__")),
-            NextIdKey::Index(ref uuid) => Some(Cow::Borrowed(uuid.as_bytes())),
-        }
-    }
-}
-
-struct PendingKeyCodec;
-
-impl<'a> BytesEncode<'a> for PendingKeyCodec {
-    type EItem = (u64, Uuid, u64);
-
-    fn bytes_encode((global_id, uuid, update_id): &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-        let mut bytes = Vec::with_capacity(size_of::<Self::EItem>());
-        bytes.extend_from_slice(&global_id.to_be_bytes());
-        bytes.extend_from_slice(uuid.as_bytes());
-        bytes.extend_from_slice(&update_id.to_be_bytes());
-        Some(Cow::Owned(bytes))
-    }
-}
-
-impl<'a> BytesDecode<'a> for PendingKeyCodec {
-    type DItem = (u64, Uuid, u64);
-
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let global_id_bytes = bytes.get(0..size_of::<u64>())?.try_into().ok()?;
-        let global_id = u64::from_be_bytes(global_id_bytes);
-
-        let uuid_bytes = bytes
-            .get(size_of::<u64>()..(size_of::<u64>() + size_of::<Uuid>()))?
-            .try_into()
-            .ok()?;
-        let uuid = Uuid::from_bytes(uuid_bytes);
-
-        let update_id_bytes = bytes
-            .get((size_of::<u64>() + size_of::<Uuid>())..)?
-            .try_into()
-            .ok()?;
-        let update_id = u64::from_be_bytes(update_id_bytes);
-
-        Some((global_id, uuid, update_id))
-    }
-}
-
-struct UpdateKeyCodec;
-
-impl<'a> BytesEncode<'a> for UpdateKeyCodec {
-    type EItem = (Uuid, u64);
-
-    fn bytes_encode((uuid, update_id): &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-        let mut bytes = Vec::with_capacity(size_of::<Self::EItem>());
-        bytes.extend_from_slice(uuid.as_bytes());
-        bytes.extend_from_slice(&update_id.to_be_bytes());
-        Some(Cow::Owned(bytes))
-    }
-}
-
-impl<'a> BytesDecode<'a> for UpdateKeyCodec {
-    type DItem = (Uuid, u64);
-
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let uuid_bytes = bytes.get(0..size_of::<Uuid>())?.try_into().ok()?;
-        let uuid = Uuid::from_bytes(uuid_bytes);
-
-        let update_id_bytes = bytes.get(size_of::<Uuid>()..)?.try_into().ok()?;
-        let update_id = u64::from_be_bytes(update_id_bytes);
-
-        Some((uuid, update_id))
-    }
 }
 
 #[derive(Clone)]
@@ -174,19 +98,20 @@ pub struct UpdateStore {
     /// | 16-bytes | 8-bytes |
     updates: Database<ByteSlice, SerdeJson<UpdateStatus>>,
     /// Indicates the current state of the update store,
-    state: Arc<StateLock>,
+    pub state: Arc<StateLock>,
     /// Wake up the loop when a new event occurs.
     notification_sender: mpsc::Sender<()>,
+    path: PathBuf,
 }
 
 impl UpdateStore {
-    pub fn create(
+    fn new(
         mut options: EnvOpenOptions,
         path: impl AsRef<Path>,
     ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
-        let env = options.open(path)?;
+        let env = options.open(&path)?;
         let pending_queue = env.create_database(Some("pending-queue"))?;
         let next_update_id = env.create_database(Some("next-update-id"))?;
         let updates = env.create_database(Some("updates"))?;
@@ -194,8 +119,6 @@ impl UpdateStore {
         let state = Arc::new(StateLock::from_state(State::Idle));
 
         let (notification_sender, notification_receiver) = mpsc::channel(10);
-        // Send a first notification to trigger the process.
-        let _ = notification_sender.send(());
 
         Ok((
             Self {
@@ -205,6 +128,7 @@ impl UpdateStore {
                 updates,
                 state,
                 notification_sender,
+                path: path.as_ref().to_owned(),
             },
             notification_receiver,
         ))
@@ -215,8 +139,11 @@ impl UpdateStore {
         path: impl AsRef<Path>,
         index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
     ) -> anyhow::Result<Arc<Self>> {
-        let (update_store, mut notification_receiver) = Self::create(options, path)?;
+        let (update_store, mut notification_receiver) = Self::new(options, path)?;
         let update_store = Arc::new(update_store);
+
+        // Send a first notification to trigger the process.
+        let _ = update_store.notification_sender.send(());
 
         // Init update loop to perform any pending updates at launch.
         // Since we just launched the update store, and we still own the receiving end of the
@@ -296,13 +223,13 @@ impl UpdateStore {
     pub fn register_update(
         &self,
         meta: UpdateMeta,
-        content: Option<impl AsRef<Path>>,
+        content: Option<Uuid>,
         index_uuid: Uuid,
     ) -> heed::Result<Enqueued> {
         let mut txn = self.env.write_txn()?;
 
         let (global_id, update_id) = self.next_update_id(&mut txn, index_uuid)?;
-        let meta = Enqueued::new(meta, update_id, content.map(|p| p.as_ref().to_owned()));
+        let meta = Enqueued::new(meta, update_id, content);
 
         self.pending_queue
             .put(&mut txn, &(global_id, index_uuid, update_id), &meta)?;
@@ -320,7 +247,7 @@ impl UpdateStore {
     pub fn register_raw_updates(
         &self,
         wtxn: &mut heed::RwTxn,
-        update: UpdateStatus,
+        update: &UpdateStatus,
         index_uuid: Uuid,
     ) -> heed::Result<()> {
         match update {
@@ -364,13 +291,14 @@ impl UpdateStore {
                 let processing = pending.processing();
 
                 // Acquire the state lock and set the current state to processing.
+                // txn must *always* be acquired after state lock, or it will dead lock.
                 let state = self.state.write();
                 state.swap(State::Processing(index_uuid, processing.clone()));
 
                 let file = match content_path {
-                    Some(ref path) => {
-                        let file = File::open(path)
-                            .with_context(|| format!("file at path: {:?}", &content_path))?;
+                    Some(uuid) => {
+                        let path = update_uuid_to_file_path(&self.path, uuid);
+                        let file = File::open(path)?;
                         Some(file)
                     }
                     None => None,
@@ -386,7 +314,8 @@ impl UpdateStore {
                 self.pending_queue
                     .delete(&mut wtxn, &(global_id, index_uuid, update_id))?;
 
-                if let Some(path) = content_path {
+                if let Some(uuid) = content_path {
+                    let path = update_uuid_to_file_path(&self.path, uuid);
                     remove_file(&path)?;
                 }
 
@@ -486,7 +415,7 @@ impl UpdateStore {
     pub fn delete_all(&self, index_uuid: Uuid) -> anyhow::Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
-        let mut paths_to_remove = Vec::new();
+        let mut uuids_to_remove = Vec::new();
 
         let mut pendings = self.pending_queue.iter_mut(&mut txn)?.lazily_decode_data();
 
@@ -494,8 +423,8 @@ impl UpdateStore {
             if uuid == index_uuid {
                 pendings.del_current()?;
                 let mut pending = pending.decode()?;
-                if let Some(path) = pending.content.take() {
-                    paths_to_remove.push(path);
+                if let Some(update_uuid) = pending.content.take() {
+                    uuids_to_remove.push(update_uuid);
                 }
             }
         }
@@ -515,9 +444,12 @@ impl UpdateStore {
 
         txn.commit()?;
 
-        paths_to_remove.iter().for_each(|path| {
-            let _ = remove_file(path);
-        });
+        uuids_to_remove
+            .iter()
+            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
+            .for_each(|path| {
+                let _ = remove_file(path);
+            });
 
         // We don't care about the currently processing update, since it will be removed by itself
         // once its done processing, and we can't abort a running update.
@@ -546,7 +478,7 @@ impl UpdateStore {
         // create db snapshot
         self.env.copy_to_path(&db_path, CompactionOption::Enabled)?;
 
-        let update_files_path = update_path.join("update_files");
+        let update_files_path = update_path.join(UPDATE_DIR);
         create_dir_all(&update_files_path)?;
 
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
@@ -554,10 +486,13 @@ impl UpdateStore {
         for entry in pendings {
             let ((_, uuid, _), pending) = entry?;
             if uuids.contains(&uuid) {
-                if let Some(path) = pending.decode()?.content_path() {
-                    let name = path.file_name().unwrap();
-                    let to = update_files_path.join(name);
-                    copy(path, to)?;
+                if let Enqueued {
+                    content: Some(uuid),
+                    ..
+                } = pending.decode()?
+                {
+                    let path = update_uuid_to_file_path(&self.path, uuid);
+                    copy(path, &update_files_path)?;
                 }
             }
         }
@@ -580,85 +515,17 @@ impl UpdateStore {
         Ok(())
     }
 
-    pub fn dump(
-        &self,
-        uuids: &HashSet<(String, Uuid)>,
-        path: PathBuf,
-        handle: impl IndexActorHandle,
-    ) -> anyhow::Result<()> {
-        use std::io::prelude::*;
-        let state_lock = self.state.write();
-        state_lock.swap(State::Dumping);
-
-        let txn = self.env.write_txn()?;
-
-        for (index_uid, index_uuid) in uuids.iter() {
-            let file = File::create(path.join(index_uid).join("updates.jsonl"))?;
-            let mut file = std::io::BufWriter::new(file);
-
-            let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
-            for entry in pendings {
-                let ((_, uuid, _), pending) = entry?;
-                if &uuid == index_uuid {
-                    let mut update: UpdateStatus = pending.decode()?.into();
-                    if let Some(path) = update.content_path_mut() {
-                        *path = path.file_name().expect("update path can't be empty").into();
-                    }
-                    serde_json::to_writer(&mut file, &update)?;
-                    file.write_all(b"\n")?;
-                }
-            }
-
-            let updates = self.updates.prefix_iter(&txn, index_uuid.as_bytes())?;
-            for entry in updates {
-                let (_, update) = entry?;
-                let mut update = update.clone();
-                if let Some(path) = update.content_path_mut() {
-                    *path = path.file_name().expect("update path can't be empty").into();
-                }
-                serde_json::to_writer(&mut file, &update)?;
-                file.write_all(b"\n")?;
-            }
-        }
-
-        let update_files_path = path.join("update_files");
-        create_dir_all(&update_files_path)?;
-
-        let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
-
-        for entry in pendings {
-            let ((_, uuid, _), pending) = entry?;
-            if uuids.iter().any(|(_, id)| id == &uuid) {
-                if let Some(path) = pending.decode()?.content_path() {
-                    let name = path.file_name().unwrap();
-                    let to = update_files_path.join(name);
-                    copy(path, to)?;
-                }
-            }
-        }
-
-        // Perform the dump of each index concurently. Only a third of the capabilities of
-        // the index actor at a time not to put too much pressure on the index actor
-        let path = &path;
-
-        let mut stream = futures::stream::iter(uuids.iter())
-            .map(|(uid, uuid)| handle.dump(uid.clone(), *uuid, path.clone()))
-            .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
-
-        Handle::current().block_on(async {
-            while let Some(res) = stream.next().await {
-                res?;
-            }
-            Ok(())
-        })
-    }
-
     pub fn get_info(&self) -> anyhow::Result<UpdateStoreInfo> {
         let mut size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
             let (_, pending) = entry?;
-            if let Some(path) = pending.content_path() {
+            if let Enqueued {
+                content: Some(uuid),
+                ..
+            } = pending
+            {
+                let path = update_uuid_to_file_path(&self.path, uuid);
                 size += File::open(path)?.metadata()?.len();
             }
         }
@@ -669,6 +536,12 @@ impl UpdateStore {
 
         Ok(UpdateStoreInfo { size, processing })
     }
+}
+
+fn update_uuid_to_file_path(root: impl AsRef<Path>, uuid: Uuid) -> PathBuf {
+    root.as_ref()
+        .join(UPDATE_DIR)
+        .join(format!("update_{}", uuid))
 }
 
 #[cfg(test)]
@@ -716,9 +589,7 @@ mod test {
         let uuid = Uuid::new_v4();
         let store_clone = update_store.clone();
         tokio::task::spawn_blocking(move || {
-            store_clone
-                .register_update(meta, Some("here"), uuid)
-                .unwrap();
+            store_clone.register_update(meta, None, uuid).unwrap();
         })
         .await
         .unwrap();
