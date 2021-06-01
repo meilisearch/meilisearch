@@ -57,7 +57,7 @@ pub enum FacetCondition {
 
 fn field_id(
     fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashSet<FieldId>,
+    filterable_fields: &HashSet<FieldId>,
     items: &mut Pairs<Rule>,
 ) -> Result<FieldId, PestError<Rule>>
 {
@@ -78,13 +78,13 @@ fn field_id(
         )),
     };
 
-    if !faceted_fields.contains(&field_id) {
+    if !filterable_fields.contains(&field_id) {
         return Err(PestError::new_from_span(
             ErrorVariant::CustomError {
                 message: format!(
-                    "attribute `{}` is not faceted, available faceted attributes are: {}",
+                    "attribute `{}` is not filterable, available filterable attributes are: {}",
                     key.as_str(),
-                    faceted_fields.iter().flat_map(|id| {
+                    filterable_fields.iter().flat_map(|id| {
                         fields_ids_map.name(*id)
                     }).collect::<Vec<_>>().join(", "),
                 ),
@@ -163,9 +163,9 @@ impl FacetCondition {
     ) -> anyhow::Result<FacetCondition>
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields_ids(rtxn)?;
+        let filterable_fields = index.filterable_fields_ids(rtxn)?;
         let lexed = FilterParser::parse(Rule::prgm, expression)?;
-        FacetCondition::from_pairs(&fields_ids_map, &faceted_fields, lexed)
+        FacetCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
     fn from_pairs(
@@ -212,12 +212,12 @@ impl FacetCondition {
 
     fn between(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
@@ -230,12 +230,12 @@ impl FacetCondition {
 
     fn equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
@@ -246,12 +246,12 @@ impl FacetCondition {
 
     fn greater_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -261,12 +261,12 @@ impl FacetCondition {
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -276,12 +276,12 @@ impl FacetCondition {
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -291,12 +291,12 @@ impl FacetCondition {
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -484,10 +484,10 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashset!{ S("channel") });
+        builder.set_filterable_fields(hashset!{ S("channel") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -513,10 +513,10 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashset!{ "timestamp".into() });
+        builder.set_filterable_fields(hashset!{ "timestamp".into() });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -541,11 +541,11 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -588,11 +588,11 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 

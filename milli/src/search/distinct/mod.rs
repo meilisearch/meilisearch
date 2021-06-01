@@ -83,7 +83,7 @@ mod test {
         let mut update = builder.settings(&mut txn, &index);
         update.set_distinct_attribute(distinct.to_string());
         if !facets.is_empty() {
-            update.set_faceted_fields(facets)
+            update.set_filterable_fields(facets)
         }
         update.execute(|_, _| ()).unwrap();
 

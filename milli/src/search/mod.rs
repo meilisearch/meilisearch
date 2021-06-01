@@ -141,8 +141,8 @@ impl<'a> Search<'a> {
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 let id = field_ids_map.id(name).expect("distinct not present in field map");
-                let faceted_fields = self.index.faceted_fields(self.rtxn)?;
-                if faceted_fields.contains(name) {
+                let filterable_fields = self.index.filterable_fields(self.rtxn)?;
+                if filterable_fields.contains(name) {
                     let distinct = FacetDistinct::new(id, self.index, self.rtxn);
                     self.perform_sort(distinct, matching_words, criteria)
                 } else {

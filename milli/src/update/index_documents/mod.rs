@@ -417,7 +417,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             FacetLevel0NumbersDocids,
         }
 
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
+        let filterable_fields = self.index.filterable_fields_ids(self.wtxn)?;
         let searchable_fields: HashSet<_> = match self.index.searchable_fields_ids(self.wtxn)? {
             Some(fields) => fields.iter().copied().collect(),
             None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
@@ -453,7 +453,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .map(|(i, documents)| {
                     let store = Store::new(
                         searchable_fields.clone(),
-                        faceted_fields.clone(),
+                        filterable_fields.clone(),
                         linked_hash_map_size,
                         max_nb_chunks,
                         max_memory_by_job,

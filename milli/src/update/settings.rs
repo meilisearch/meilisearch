@@ -66,7 +66,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    faceted_fields: Setting<HashSet<String>>,
+    filterable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
     distinct_attribute: Setting<String>,
@@ -92,7 +92,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             thread_pool: None,
             searchable_fields: Setting::NotSet,
             displayed_fields: Setting::NotSet,
-            faceted_fields: Setting::NotSet,
+            filterable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
@@ -117,12 +117,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.displayed_fields = Setting::Set(names);
     }
 
-    pub fn reset_faceted_fields(&mut self) {
-        self.faceted_fields = Setting::Reset;
+    pub fn reset_filterable_fields(&mut self) {
+        self.filterable_fields = Setting::Reset;
     }
 
-    pub fn set_faceted_fields(&mut self, names_facet_types: HashSet<String>) {
-        self.faceted_fields = Setting::Set(names_facet_types);
+    pub fn set_filterable_fields(&mut self, names: HashSet<String>) {
+        self.filterable_fields = Setting::Set(names);
     }
 
     pub fn reset_criteria(&mut self) {
@@ -267,7 +267,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             Setting::Set(ref fields) => {
                 // every time the searchable attributes are updated, we need to update the
                 // ids for any settings that uses the facets. (displayed_fields,
-                // faceted_fields)
+                // filterable_fields)
                 let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
                 let mut new_fields_ids_map = FieldsIdsMap::new();
@@ -382,7 +382,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_facets(&mut self) -> anyhow::Result<bool> {
-        match self.faceted_fields {
+        match self.filterable_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_facets = HashSet::new();
@@ -390,10 +390,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     fields_ids_map.insert(name).context("field id limit exceeded")?;
                     new_facets.insert(name.clone());
                 }
-                self.index.put_faceted_fields(self.wtxn, &new_facets)?;
+                self.index.put_filterable_fields(self.wtxn, &new_facets)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_faceted_fields(self.wtxn)?; }
+            Setting::Reset => { self.index.delete_filterable_fields(self.wtxn)?; }
             Setting::NotSet => return Ok(false)
         }
         Ok(true)
@@ -402,10 +402,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_criteria(&mut self) -> anyhow::Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
-                let faceted_fields = self.index.faceted_fields(&self.wtxn)?;
+                let filterable_fields = self.index.filterable_fields(&self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
-                    let criterion = Criterion::from_str(&faceted_fields, &name)?;
+                    let criterion = Criterion::from_str(&filterable_fields, &name)?;
                     new_criteria.push(criterion);
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
@@ -611,16 +611,16 @@ mod tests {
     }
 
     #[test]
-    fn set_faceted_fields() {
+    fn set_filterable_fields() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the age.
+        // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashset!{ S("age") });
+        builder.set_filterable_fields(hashset!{ S("age") });
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -637,7 +637,7 @@ mod tests {
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.faceted_fields(&rtxn).unwrap();
+        let fields_ids = index.filterable_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, hashset!{ S("age") });
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
@@ -833,7 +833,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
-        builder.set_faceted_fields(hashset!{ S("age"), S("toto") });
+        builder.set_filterable_fields(hashset!{ S("age"), S("toto") });
         builder.set_criteria(vec!["asc(toto)".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();

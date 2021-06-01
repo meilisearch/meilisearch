@@ -25,7 +25,7 @@ pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
-pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
+pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
 pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
@@ -324,19 +324,39 @@ impl Index {
         }
     }
 
-    /* faceted fields */
+    /* filterable fields */
 
-    /// Writes the facet fields names in the database.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields)
+    /// Writes the filterable fields names in the database.
+    pub fn put_filterable_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FILTERABLE_FIELDS_KEY, fields)
     }
 
-    /// Deletes the facet fields ids in the database.
-    pub fn delete_faceted_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, FACETED_FIELDS_KEY)
+    /// Deletes the filterable fields ids in the database.
+    pub fn delete_filterable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the facet fields names.
+    /// Returns the filterable fields names.
+    pub fn filterable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
+        Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FILTERABLE_FIELDS_KEY)?.unwrap_or_default())
+    }
+
+    /// Same as `filterable_fields`, but returns ids instead.
+    pub fn filterable_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashSet<FieldId>> {
+        let filterable_fields = self.filterable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let filterable_fields = filterable_fields
+            .iter()
+            .map(|k| {
+                fields_ids_map
+                    .id(k)
+                    .ok_or_else(|| format!("{:?} should be present in the field id map", k))
+                    .expect("corrupted data: ")
+            })
+            .collect();
+
+        Ok(filterable_fields)
+    }
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
         Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
     }
