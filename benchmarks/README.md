@@ -99,8 +99,8 @@ List the available file in the DO Space:
 ./benchmarks/script/list.sh
 ```
 ```bash
-2021-05-31 14:40       279890  s3://milli-benchmarks/critcmp_results/songs_main_09a4321.json
-2021-05-31 13:49       279576  s3://milli-benchmarks/critcmp_results/songs_geosearch_24ec456.json
+songs_main_09a4321.json
+songs_geosearch_24ec456.json
 ```
 
 Run the comparison script:

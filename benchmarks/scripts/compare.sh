@@ -21,9 +21,9 @@ if [[ $# -ne 2 ]]
   then
     echo 'Need 2 arguments.'
     echo 'Usage: '
-    echo '  $ bash compare.sh file_to_download1 file_to_download2'
+    echo '  $ ./compare.sh file_to_download1 file_to_download2'
     echo 'Ex:'
-    echo '  $ bash compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json'
+    echo '  $ ./compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json'
     exit 1
 fi
 
@@ -38,7 +38,7 @@ file2_local_path="/tmp/$file2"
 if [[ ! -f "$file1_local_path" ]]; then
     curl "$file1_s3_url" -O "$file1_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 'curl command failed. Check your configuration'
+	    echo 'curl command failed.'
 	    exit 1
     fi
 else
@@ -48,7 +48,7 @@ fi
 if [[ ! -f "$file2_local_path" ]]; then
     curl "$file2_s3_url" -O "$file2_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 'curl command failed. Check your configuration'
+	    echo 'curl command failed.'
 	    exit 1
     fi
 else
