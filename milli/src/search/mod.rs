@@ -12,7 +12,7 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use distinct::{Distinct, DocIter, FacetDistinct, MapDistinct, NoopDistinct};
+use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId};
 
@@ -141,14 +141,8 @@ impl<'a> Search<'a> {
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 let id = field_ids_map.id(name).expect("distinct not present in field map");
-                let filterable_fields = self.index.filterable_fields(self.rtxn)?;
-                if filterable_fields.contains(name) {
-                    let distinct = FacetDistinct::new(id, self.index, self.rtxn);
-                    self.perform_sort(distinct, matching_words, criteria)
-                } else {
-                    let distinct = MapDistinct::new(id, self.index, self.rtxn);
-                    self.perform_sort(distinct, matching_words, criteria)
-                }
+                let distinct = FacetDistinct::new(id, self.index, self.rtxn);
+                self.perform_sort(distinct, matching_words, criteria)
             }
         }
     }

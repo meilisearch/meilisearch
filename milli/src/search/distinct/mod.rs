@@ -1,12 +1,10 @@
 mod facet_distinct;
-mod map_distinct;
 mod noop_distinct;
 
 use roaring::RoaringBitmap;
 
 use crate::DocumentId;
 pub use facet_distinct::FacetDistinct;
-pub use map_distinct::MapDistinct;
 pub use noop_distinct::NoopDistinct;
 
 /// A trait implemented by document interators that are returned by calls to `Distinct::distinct`.
@@ -74,7 +72,7 @@ mod test {
 
     /// Returns a temporary index populated with random test documents, the FieldId for the
     /// distinct attribute, and the RoaringBitmap with the document ids.
-    pub(crate) fn generate_index(distinct: &str, facets: HashSet<String>) -> (TempIndex, FieldId, RoaringBitmap) {
+    pub(crate) fn generate_index(distinct: &str) -> (TempIndex, FieldId, RoaringBitmap) {
         let index = TempIndex::new();
         let mut txn = index.write_txn().unwrap();
 
@@ -82,9 +80,6 @@ mod test {
         let builder = UpdateBuilder::new(0);
         let mut update = builder.settings(&mut txn, &index);
         update.set_distinct_attribute(distinct.to_string());
-        if !facets.is_empty() {
-            update.set_filterable_fields(facets)
-        }
         update.execute(|_, _| ()).unwrap();
 
         // add documents to the index
