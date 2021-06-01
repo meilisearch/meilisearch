@@ -24,7 +24,7 @@ const DATA_FILE_NAME: &str = "documents.jsonl";
 
 impl Index {
     pub fn dump(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        // acquire write txn make sure any ongoing write is finnished before we start.
+        // acquire write txn make sure any ongoing write is finished before we start.
         let txn = self.env.write_txn()?;
 
         self.dump_documents(&txn, &path)?;

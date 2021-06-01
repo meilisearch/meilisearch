@@ -76,14 +76,6 @@ struct Settings {
     pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
-impl std::ops::Deref for Settings {
-    type Target = Option<Option<BTreeSet<String>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.stop_words
-    }
-}
-
 fn load_index(
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
@@ -128,7 +120,7 @@ fn load_index(
 
     // Finaly, we extract the original milli::Index and close it
     Arc::try_unwrap(index.0)
-        .map_err(|_e| "Couln't close index properly")
+        .map_err(|_e| "Couldn't close the index properly")
         .unwrap()
         .prepare_for_closing()
         .wait();

@@ -200,7 +200,7 @@ where
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
             compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
 
-            let dump_path = self.path.join(format!("{}.dump", self.uid));
+            let dump_path = self.path.join(self.uid).with_extension("dump");
             temp_dump_file.persist(&dump_path)?;
 
             Ok(dump_path)
