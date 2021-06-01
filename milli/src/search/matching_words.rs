@@ -11,24 +11,28 @@ use super::build_dfa;
 
 type IsPrefix = bool;
 
-/// The query tree builder is the interface to build a query tree.
+/// Structure created from a query tree
+/// referencing words that match the given query tree.
 #[derive(Default)]
 pub struct MatchingWords {
     dfas: Vec<(DFA, String, u8, IsPrefix)>,
 }
 
 impl MatchingWords {
-    /// Lists all words which can be considered as a match for the query tree.
     pub fn from_query_tree(tree: &Operation) -> Self {
+        // fetch matchable words from the query tree
         let mut dfas: Vec<_> = fetch_queries(tree)
             .into_iter()
+            // create DFAs for each word
             .map(|(w, t, p)| (build_dfa(w, t, p), w.to_string(), t, p))
             .collect();
+        // Sort word by len in DESC order prioritizing the longuest word,
+        // in order to highlight the longuest part of the matched word.
         dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix)| Reverse(query_word.len()));
         Self { dfas }
     }
 
-    /// Returns the number of matching bytes if the word matches.
+    /// Returns the number of matching bytes if the word matches one of the query words.
     pub fn matching_bytes(&self, word: &str) -> Option<usize> {
         self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| match dfa.eval(word) {
             Distance::Exact(t) if t <= *typo => {
@@ -94,6 +98,8 @@ impl<T> IndexMut<(usize, usize)> for N2Array<T> {
     }
 }
 
+/// Returns the distance between the source word and the target word,
+/// and the number of byte matching in the target word.
 fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
     let (n, m) = (source.len(), target.len());
 

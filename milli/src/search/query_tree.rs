@@ -1,14 +1,11 @@
-use std::collections::HashSet;
 use std::{fmt, cmp, mem};
 
 use fst::Set;
-use levenshtein_automata::{DFA, Distance};
 use meilisearch_tokenizer::{TokenKind, tokenizer::TokenStream};
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
 use crate::Index;
-use super::build_dfa;
 
 type IsOptionalWord = bool;
 type IsPrefix = bool;
@@ -519,7 +516,7 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 mod test {
     use std::collections::HashMap;
 
-    use maplit::{hashmap, hashset};
+    use maplit::hashmap;
     use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
