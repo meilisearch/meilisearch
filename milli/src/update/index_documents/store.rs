@@ -59,7 +59,7 @@ pub struct Store<'s, A> {
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
-    field_id_word_count_docids: HashMap<(u8, u8), RoaringBitmap>,
+    field_id_word_count_docids: HashMap<(FieldId, u8), RoaringBitmap>,
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
     facet_field_number_docids: LinkedHashMap<(FieldId, OrderedFloat<f64>), RoaringBitmap>,
