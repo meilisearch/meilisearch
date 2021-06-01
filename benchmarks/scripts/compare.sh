@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Requirements:
-# - s3cmd and being logged to the DO Space "milli-benchmarks". See: https://docs.digitalocean.com/products/spaces/resources/s3cmd/
 # - critcmp. See: https://github.com/BurntSushi/critcmp
+# - wget
 
 # Usage
 # $ bash compare.sh json_file1 json_file1
@@ -17,11 +17,10 @@ if [[ "$?" -ne 0 ]]; then
     exit 1
 fi
 
-# Checking that s3cmd is installed
-command -v s3cmd > /dev/null 2>&1
+# Checking that wget is installed
+command -v wget > /dev/null 2>&1
 if [[ "$?" -ne 0 ]]; then
-    echo 'You must install s3cmd to make this script working.'
-    echo 'See: https://github.com/s3tools/s3cmd'
+    echo 'You must install wget to make this script working.'
     exit 1
 fi
 
@@ -37,16 +36,16 @@ fi
 
 file1="$1"
 file2="$2"
-s3_path='s3://milli-benchmarks/critcmp_results'
-file1_s3_path="$s3_path/$file1"
-file2_s3_path="$s3_path/$file2"
+s3_url='https://milli-benchmarks.fra1.digitaloceanspaces.com/critcmp_results'
+file1_s3_url="$s3_url/$file1"
+file2_s3_url="$s3_url/$file2"
 file1_local_path="/tmp/$file1"
 file2_local_path="/tmp/$file2"
 
 if [[ ! -f "$file1_local_path" ]]; then
-    s3cmd get "$file1_s3_path" "$file1_local_path"
+    wget "$file1_s3_url" -O "$file1_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 's3cmd command failed. Check your configuration'
+	    echo 'wget command failed. Check your configuration'
 	    exit 1
     fi
 else
@@ -54,9 +53,9 @@ else
 fi
 
 if [[ ! -f "$file2_local_path" ]]; then
-    s3cmd get "$file2_s3_path" "$file2_local_path"
+    wget "$file2_s3_url" -O "$file2_local_path"
     if [[ "$?" -ne 0 ]]; then
-	    echo 's3cmd command failed. Check your configuration'
+	    echo 'wget command failed. Check your configuration'
 	    exit 1
     fi
 else
