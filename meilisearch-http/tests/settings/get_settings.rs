@@ -73,7 +73,7 @@ async fn reset_all_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     index
-        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"] }))
+        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"], "attributesForFaceting": { "toto": "string" } }))
         .await;
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
@@ -81,6 +81,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["bar"]));
     assert_eq!(response["stopWords"], json!(["the"]));
+    assert_eq!(response["attributesForFaceting"], json!({"toto": "string"}));
 
     index.delete_settings().await;
     index.wait_update_id(1).await;
@@ -90,6 +91,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["*"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
     assert_eq!(response["stopWords"], json!([]));
+    assert_eq!(response["attributesForFaceting"], json!({}));
 }
 
 #[actix_rt::test]

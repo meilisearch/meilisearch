@@ -38,7 +38,7 @@ impl UpdateHandler {
         })
     }
 
-    fn update_builder(&self, update_id: u64) -> UpdateBuilder {
+    pub fn update_builder(&self, update_id: u64) -> UpdateBuilder {
         // We prepare the update by using the update builder.
         let mut update_builder = UpdateBuilder::new(update_id);
         if let Some(max_nb_chunks) = self.max_nb_chunks {
@@ -82,7 +82,7 @@ impl UpdateHandler {
             ),
             ClearDocuments => index.clear_documents(update_builder),
             DeleteDocuments => index.delete_documents(content, update_builder),
-            Settings(settings) => index.update_settings(settings, update_builder),
+            Settings(settings) => index.update_settings(&settings.clone().check(), update_builder),
         };
 
         match result {

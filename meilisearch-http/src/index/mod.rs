@@ -1,16 +1,23 @@
-use std::{collections::{BTreeSet, HashSet}, marker::PhantomData};
+use std::collections::{BTreeSet, HashSet};
+use std::fs::create_dir_all;
+use std::marker::PhantomData;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
+use heed::{EnvOpenOptions, RoTxn};
 use milli::obkv_to_json;
 use serde_json::{Map, Value};
 
 use crate::helpers::EnvSizer;
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Facets, Settings, Checked, Unchecked};
+use serde::{de::Deserializer, Deserialize};
+pub use updates::{Checked, Facets, Settings, Unchecked};
 
+mod dump;
 mod search;
+pub mod update_handler;
 mod updates;
 
 pub type Document = Map<String, Value>;
@@ -26,19 +33,36 @@ impl Deref for Index {
     }
 }
 
+pub fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
+}
+
 impl Index {
+    pub fn open(path: impl AsRef<Path>, size: usize) -> anyhow::Result<Self> {
+        create_dir_all(&path)?;
+        let mut options = EnvOpenOptions::new();
+        options.map_size(size);
+        let index = milli::Index::new(options, &path)?;
+        Ok(Index(Arc::new(index)))
+    }
+
     pub fn settings(&self) -> anyhow::Result<Settings<Checked>> {
         let txn = self.read_txn()?;
+        self.settings_txn(&txn)
+    }
 
+    pub fn settings_txn(&self, txn: &RoTxn) -> anyhow::Result<Settings<Checked>> {
         let displayed_attributes = self
             .displayed_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
+            .map(|fields| fields.into_iter().map(String::from).collect());
 
         let searchable_attributes = self
             .searchable_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
+            .map(|fields| fields.into_iter().map(String::from).collect());
 
         let faceted_attributes = self
             .faceted_fields(&txn)?
@@ -62,8 +86,8 @@ impl Index {
         let distinct_attribute = self.distinct_attribute(&txn)?.map(String::from);
 
         Ok(Settings {
-            displayed_attributes: Some(Some(displayed_attributes)),
-            searchable_attributes: Some(Some(searchable_attributes)),
+            displayed_attributes: Some(displayed_attributes),
+            searchable_attributes: Some(searchable_attributes),
             attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),

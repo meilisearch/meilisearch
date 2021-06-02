@@ -50,7 +50,7 @@ mod mini_dashboard {
             sha1_file.read_to_string(&mut sha1)?;
             if sha1 == meta["sha1"].as_str().unwrap() {
                 // Nothing to do.
-                return Ok(())
+                return Ok(());
             }
         }
 
@@ -62,7 +62,11 @@ mod mini_dashboard {
         hasher.update(&dashboard_assets_bytes);
         let sha1 = hex::encode(hasher.finalize());
 
-        assert_eq!(meta["sha1"].as_str().unwrap(), sha1, "Downloaded mini-dashboard shasum differs from the one specified in the Cargo.toml");
+        assert_eq!(
+            meta["sha1"].as_str().unwrap(),
+            sha1,
+            "Downloaded mini-dashboard shasum differs from the one specified in the Cargo.toml"
+        );
 
         create_dir_all(&dashboard_dir)?;
         let cursor = Cursor::new(&dashboard_assets_bytes);

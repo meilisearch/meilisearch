@@ -1,6 +1,7 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
@@ -65,6 +66,16 @@ async fn create_index(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
     uid: Option<String>,
+    primary_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateIndexResponse {
+    name: String,
+    uid: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     primary_key: Option<String>,
 }
 

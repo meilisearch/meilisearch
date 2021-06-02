@@ -46,8 +46,8 @@ macro_rules! create_app {
             .configure(synonym::services)
             .configure(health::services)
             .configure(stats::services)
-            .configure(key::services);
-        //.configure(routes::dump::services);
+            .configure(key::services)
+            .configure(dump::services);
         #[cfg(feature = "mini-dashboard")]
         let app = if $enable_frontend {
             let generated = dashboard::generate();
@@ -62,11 +62,11 @@ macro_rules! create_app {
 
         app.wrap(
             Cors::default()
-            .send_wildcard()
-            .allowed_headers(vec!["content-type", "x-meili-api-key"])
-            .allow_any_origin()
-            .allow_any_method()
-            .max_age(86_400) // 24h
+                .send_wildcard()
+                .allowed_headers(vec!["content-type", "x-meili-api-key"])
+                .allow_any_origin()
+                .allow_any_method()
+                .max_age(86_400), // 24h
         )
         .wrap(middleware::Logger::default())
         .wrap(middleware::Compress::default())

@@ -1,28 +1,39 @@
 use std::collections::{BTreeSet, HashMap};
 use std::io;
-use std::num::NonZeroUsize;
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
 use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
-use super::Index;
 use crate::index_controller::UpdateResult;
 
-#[derive(Clone, Default, Debug)]
+use super::{deserialize_some, Index};
+
+fn serialize_with_wildcard<S>(field: &Option<Option<Vec<String>>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let wildcard = vec!["*".to_string()];
+    s.serialize_some(&field.as_ref().map(|o| o.as_ref().unwrap_or(&wildcard)))
+}
+
+#[derive(Clone, Default, Debug, Serialize)]
 pub struct Checked;
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Unchecked;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
 pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
+        serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub displayed_attributes: Option<Option<Vec<String>>>,
@@ -30,11 +41,16 @@ pub struct Settings<T> {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
+        serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Option::is_none"
     )]
     pub searchable_attributes: Option<Option<Vec<String>>>,
 
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub attributes_for_faceting: Option<Option<HashMap<String, String>>>,
 
     #[serde(
@@ -69,6 +85,28 @@ impl Settings<Checked> {
             ranking_rules: Some(None),
             stop_words: Some(None),
             distinct_attribute: Some(None),
+            _kind: PhantomData,
+        }
+    }
+
+    pub fn into_unchecked(self) -> Settings<Unchecked> {
+        let Self {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting,
+            ranking_rules,
+            stop_words,
+            distinct_attribute,
+            ..
+        } = self;
+
+        Settings {
+            displayed_attributes,
+            searchable_attributes,
+            attributes_for_faceting,
+            ranking_rules,
+            stop_words,
+            distinct_attribute,
             _kind: PhantomData,
         }
     }
@@ -118,14 +156,6 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
-}
-
 impl Index {
     pub fn update_documents(
         &self,
@@ -135,16 +165,36 @@ impl Index {
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> anyhow::Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
+        let result = self.update_documents_txn(
+            &mut txn,
+            format,
+            method,
+            content,
+            update_builder,
+            primary_key,
+        )?;
+        txn.commit()?;
+        Ok(result)
+    }
+
+    pub fn update_documents_txn<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
+        format: UpdateFormat,
+        method: IndexDocumentsMethod,
+        content: Option<impl io::Read>,
+        update_builder: UpdateBuilder,
+        primary_key: Option<&str>,
+    ) -> anyhow::Result<UpdateResult> {
         info!("performing document addition");
-        // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
 
         // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(ref primary_key)) = (self.primary_key(&wtxn)?, primary_key) {
-            self.put_primary_key(&mut wtxn, primary_key)?;
+        if let (None, Some(ref primary_key)) = (self.primary_key(txn)?, primary_key) {
+            self.put_primary_key(txn, primary_key)?;
         }
 
-        let mut builder = update_builder.index_documents(&mut wtxn, self);
+        let mut builder = update_builder.index_documents(txn, self);
         builder.update_format(format);
         builder.index_documents_method(method);
 
@@ -152,19 +202,17 @@ impl Index {
             |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
 
         let gzipped = false;
-        let result = match content {
-            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback),
-            Some(content) => builder.execute(content, indexing_callback),
-            None => builder.execute(std::io::empty(), indexing_callback),
+        let addition = match content {
+            Some(content) if gzipped => {
+                builder.execute(GzDecoder::new(content), indexing_callback)?
+            }
+            Some(content) => builder.execute(content, indexing_callback)?,
+            None => builder.execute(std::io::empty(), indexing_callback)?,
         };
 
-        info!("document addition done: {:?}", result);
+        info!("document addition done: {:?}", addition);
 
-        result.and_then(|addition_result| {
-            wtxn.commit()
-                .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
-                .map_err(Into::into)
-        })
+        Ok(UpdateResult::DocumentsAddition(addition))
     }
 
     pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
@@ -181,14 +229,14 @@ impl Index {
         }
     }
 
-    pub fn update_settings(
-        &self,
+    pub fn update_settings_txn<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
-        let mut builder = update_builder.settings(&mut wtxn, self);
+        let mut builder = update_builder.settings(txn, self);
 
         if let Some(ref names) = settings.searchable_attributes {
             match names {
@@ -230,16 +278,22 @@ impl Index {
             }
         }
 
-        let result = builder
-            .execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
+        builder.execute(|indexing_step, update_id| {
+            info!("update {}: {:?}", update_id, indexing_step)
+        })?;
 
-        match result {
-            Ok(()) => wtxn
-                .commit()
-                .and(Ok(UpdateResult::Other))
-                .map_err(Into::into),
-            Err(e) => Err(e),
-        }
+        Ok(UpdateResult::Other)
+    }
+
+    pub fn update_settings(
+        &self,
+        settings: &Settings<Checked>,
+        update_builder: UpdateBuilder,
+    ) -> anyhow::Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
+        let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
+        txn.commit()?;
+        Ok(result)
     }
 
     pub fn delete_documents(
@@ -288,7 +342,10 @@ mod test {
 
         let checked = settings.clone().check();
         assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
-        assert_eq!(settings.searchable_attributes, checked.searchable_attributes);
+        assert_eq!(
+            settings.searchable_attributes,
+            checked.searchable_attributes
+        );
 
         // test wildcard
         // test no changes

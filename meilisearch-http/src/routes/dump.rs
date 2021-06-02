@@ -1,25 +1,20 @@
-use std::fs::File;
-use std::path::Path;
-
-use actix_web::{get, post};
-use actix_web::{HttpResponse, web};
+use actix_web::HttpResponse;
+use actix_web::{get, post, web};
 use serde::{Deserialize, Serialize};
 
-use crate::dump::{DumpInfo, DumpStatus, compressed_dumps_dir, init_dump_process};
-use crate::Data;
-use crate::error::{Error, ResponseError};
+use crate::error::ResponseError;
 use crate::helpers::Authentication;
+use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(trigger_dump)
-        .service(get_dump_status);
+    cfg.service(create_dump).service(get_dump_status);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
-async fn trigger_dump(
-    data: web::Data<Data>,
-) -> Result<HttpResponse, ResponseError> {
-    todo!()
+async fn create_dump(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+    let res = data.create_dump().await?;
+
+    Ok(HttpResponse::Accepted().json(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -38,5 +33,7 @@ async fn get_dump_status(
     data: web::Data<Data>,
     path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let res = data.dump_status(path.dump_uid.clone()).await?;
+
+    Ok(HttpResponse::Ok().json(res))
 }

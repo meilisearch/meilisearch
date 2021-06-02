@@ -14,19 +14,23 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-pub use updates::*;
+use dump_actor::DumpActorHandle;
+pub use dump_actor::{DumpInfo, DumpStatus};
 use index_actor::IndexActorHandle;
-use snapshot::{SnapshotService, load_snapshot};
+use snapshot::{load_snapshot, SnapshotService};
 use update_actor::UpdateActorHandle;
-use uuid_resolver::{UuidError, UuidResolverHandle};
+pub use updates::*;
+use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 
+use self::dump_actor::load_dump;
+
+mod dump_actor;
 mod index_actor;
 mod snapshot;
 mod update_actor;
-mod update_handler;
 mod updates;
 mod uuid_resolver;
 
@@ -60,10 +64,12 @@ pub struct IndexStats {
     pub fields_distribution: FieldsDistribution,
 }
 
+#[derive(Clone)]
 pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
     index_handle: index_actor::IndexActorHandleImpl,
     update_handle: update_actor::UpdateActorHandleImpl<Bytes>,
+    dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
 #[derive(Serialize)]
@@ -87,6 +93,14 @@ impl IndexController {
                 options.ignore_snapshot_if_db_exists,
                 options.ignore_missing_snapshot,
             )?;
+        } else if let Some(ref src_path) = options.import_dump {
+            load_dump(
+                &options.db_path,
+                src_path,
+                options.max_mdb_size.get_bytes() as usize,
+                options.max_udb_size.get_bytes() as usize,
+                &options.indexer_options,
+            )?;
         }
 
         std::fs::create_dir_all(&path)?;
@@ -97,6 +111,13 @@ impl IndexController {
             index_handle.clone(),
             &path,
             update_store_size,
+        )?;
+        let dump_handle = dump_actor::DumpActorHandleImpl::new(
+            &options.dumps_dir,
+            uuid_resolver.clone(),
+            update_handle.clone(),
+            options.max_mdb_size.get_bytes() as usize,
+            options.max_udb_size.get_bytes() as usize,
         )?;
 
         if options.schedule_snapshot {
@@ -119,6 +140,7 @@ impl IndexController {
             uuid_resolver,
             index_handle,
             update_handle,
+            dump_handle,
         })
     }
 
@@ -143,11 +165,6 @@ impl IndexController {
             // registered and the update_actor that waits for the the payload to be sent to it.
             tokio::task::spawn_local(async move {
                 payload
-                    .map(|bytes| {
-                        bytes.map_err(|e| {
-                            Box::new(e) as Box<dyn std::error::Error + Sync + Send + 'static>
-                        })
-                    })
                     .for_each(|r| async {
                         let _ = sender.send(r).await;
                     })
@@ -160,7 +177,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_update(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) => {
+            Err(UuidResolverError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let status = perform_update(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created
@@ -206,7 +223,7 @@ impl IndexController {
         create: bool,
     ) -> anyhow::Result<UpdateStatus> {
         let perform_udpate = |uuid| async move {
-            let meta = UpdateMeta::Settings(settings);
+            let meta = UpdateMeta::Settings(settings.into_unchecked());
             // Nothing so send, drop the sender right away, as not to block the update actor.
             let (_, receiver) = mpsc::channel(1);
             self.update_handle.update(meta, receiver, uuid).await
@@ -214,7 +231,7 @@ impl IndexController {
 
         match self.uuid_resolver.get(uid).await {
             Ok(uuid) => Ok(perform_udpate(uuid).await?),
-            Err(UuidError::UnexistingIndex(name)) if create => {
+            Err(UuidResolverError::UnexistingIndex(name)) if create => {
                 let uuid = Uuid::new_v4();
                 let status = perform_udpate(uuid).await?;
                 // ignore if index creation fails now, since it may already have been created
@@ -392,6 +409,14 @@ impl IndexController {
             last_update,
             indexes,
         })
+    }
+
+    pub async fn create_dump(&self) -> anyhow::Result<DumpInfo> {
+        Ok(self.dump_handle.create_dump().await?)
+    }
+
+    pub async fn dump_info(&self, uid: String) -> anyhow::Result<DumpInfo> {
+        Ok(self.dump_handle.dump_info(uid).await?)
     }
 }
 

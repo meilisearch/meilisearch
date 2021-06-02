@@ -144,7 +144,7 @@ mod test {
     use crate::index_controller::update_actor::{
         MockUpdateActorHandle, UpdateActorHandleImpl, UpdateError,
     };
-    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidError};
+    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidResolverError};
 
     #[actix_rt::test]
     async fn test_normal() {
@@ -193,7 +193,7 @@ mod test {
             .expect_snapshot()
             .times(1)
             // abitrary error
-            .returning(|_| Box::pin(err(UuidError::NameAlreadyExist)));
+            .returning(|_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
         let update_handle = MockUpdateActorHandle::new();
 
@@ -248,7 +248,7 @@ mod test {
             // we expect the funtion to be called between 2 and 3 time in the given interval.
             .times(2..4)
             // abitrary error, to short-circuit the function
-            .returning(move |_| Box::pin(err(UuidError::NameAlreadyExist)));
+            .returning(move |_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
         let update_handle = MockUpdateActorHandle::new();
 

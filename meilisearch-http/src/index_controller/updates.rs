@@ -1,10 +1,9 @@
-use std::path::{Path, PathBuf};
-
 use chrono::{DateTime, Utc};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use crate::index::{Checked, Settings};
+use crate::index::{Unchecked, Settings};
 
 pub type UpdateError = String;
 
@@ -25,7 +24,7 @@ pub enum UpdateMeta {
     },
     ClearDocuments,
     DeleteDocuments,
-    Settings(Settings<Checked>),
+    Settings(Settings<Unchecked>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -34,11 +33,11 @@ pub struct Enqueued {
     pub update_id: u64,
     pub meta: UpdateMeta,
     pub enqueued_at: DateTime<Utc>,
-    pub content: Option<PathBuf>,
+    pub content: Option<Uuid>,
 }
 
 impl Enqueued {
-    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<PathBuf>) -> Self {
+    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<Uuid>) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
@@ -67,10 +66,6 @@ impl Enqueued {
 
     pub fn id(&self) -> u64 {
         self.update_id
-    }
-
-    pub fn content_path(&self) -> Option<&Path> {
-        self.content.as_deref()
     }
 }
 
@@ -152,7 +147,7 @@ impl Failed {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus {
     Processing(Processing),

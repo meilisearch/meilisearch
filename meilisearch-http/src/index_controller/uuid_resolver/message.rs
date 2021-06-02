@@ -34,4 +34,8 @@ pub enum UuidResolveMsg {
     GetSize {
         ret: oneshot::Sender<Result<u64>>,
     },
+    DumpRequest {
+        path: PathBuf,
+        ret: oneshot::Sender<Result<HashSet<Uuid>>>,
+    },
 }

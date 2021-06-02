@@ -6,14 +6,15 @@ use async_stream::stream;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
-use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
+use tokio::{fs, sync::mpsc};
 use uuid::Uuid;
 
-use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
+use crate::index::{
+    update_handler::UpdateHandler, Checked, Document, SearchQuery, SearchResult, Settings,
+};
 use crate::index_controller::{
-    get_arc_ownership_blocking, update_handler::UpdateHandler, Failed, IndexStats, Processed,
-    Processing,
+    get_arc_ownership_blocking, Failed, IndexStats, Processed, Processing,
 };
 use crate::option::IndexerOpts;
 
@@ -30,12 +31,19 @@ pub struct IndexActor<S> {
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
     pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> IndexResult<Self> {
         let options = IndexerOpts::default();
-        let update_handler = UpdateHandler::new(&options).map_err(IndexError::Error)?;
+        let update_handler = UpdateHandler::new(&options)?;
         let update_handler = Arc::new(update_handler);
         let receiver = Some(receiver);
-        Ok(Self { receiver, update_handler, store })
+        Ok(Self {
+            receiver,
+            update_handler,
+            store,
+        })
     }
 
+    /// `run` poll the write_receiver and read_receiver concurrently, but while messages send
+    /// through the read channel are processed concurrently, the messages sent through the write
+    /// channel are processed one at a time.
     pub async fn run(mut self) {
         let mut receiver = self
             .receiver
@@ -119,6 +127,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Snapshot { uuid, path, ret } => {
                 let _ = ret.send(self.handle_snapshot(uuid, path).await);
             }
+            Dump { uuid, path, ret } => {
+                let _ = ret.send(self.handle_dump(uuid, path).await);
+            }
             GetStats { uuid, ret } => {
                 let _ = ret.send(self.handle_get_stats(uuid).await);
             }
@@ -140,9 +151,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         primary_key: Option<String>,
     ) -> IndexResult<IndexMeta> {
         let index = self.store.create(uuid, primary_key).await?;
-        let meta = spawn_blocking(move || IndexMeta::new(&index))
-            .await
-            .map_err(|e| IndexError::Error(e.into()))??;
+        let meta = spawn_blocking(move || IndexMeta::new(&index)).await??;
         Ok(meta)
     }
 
@@ -159,9 +168,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             None => self.store.create(uuid, None).await?,
         };
 
-        spawn_blocking(move || update_handler.handle_update(meta, data, index))
-            .await
-            .map_err(|e| IndexError::Error(e.into()))
+        let result =
+            spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?;
+        Ok(result)
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
@@ -170,9 +179,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
-        spawn_blocking(move || index.settings().map_err(IndexError::Error))
-            .await
-            .map_err(|e| IndexError::Error(e.into()))?
+        let result = spawn_blocking(move || index.settings()).await??;
+        Ok(result)
     }
 
     async fn handle_fetch_documents(
@@ -187,13 +195,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
-        spawn_blocking(move || {
-            index
-                .retrieve_documents(offset, limit, attributes_to_retrieve)
-                .map_err(IndexError::Error)
-        })
-        .await
-        .map_err(|e| IndexError::Error(e.into()))?
+        let result =
+            spawn_blocking(move || index.retrieve_documents(offset, limit, attributes_to_retrieve))
+                .await??;
+
+        Ok(result)
     }
 
     async fn handle_fetch_document(
@@ -207,13 +213,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .get(uuid)
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
-        spawn_blocking(move || {
-            index
-                .retrieve_document(doc_id, attributes_to_retrieve)
-                .map_err(IndexError::Error)
-        })
-        .await
-        .map_err(|e| IndexError::Error(e.into()))?
+
+        let result =
+            spawn_blocking(move || index.retrieve_document(doc_id, attributes_to_retrieve))
+                .await??;
+
+        Ok(result)
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> IndexResult<()> {
@@ -236,9 +241,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     async fn handle_get_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta> {
         match self.store.get(uuid).await? {
             Some(index) => {
-                let meta = spawn_blocking(move || IndexMeta::new(&index))
-                    .await
-                    .map_err(|e| IndexError::Error(e.into()))??;
+                let meta = spawn_blocking(move || IndexMeta::new(&index)).await??;
                 Ok(meta)
             }
             None => Err(IndexError::UnexistingIndex),
@@ -256,7 +259,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .await?
             .ok_or(IndexError::UnexistingIndex)?;
 
-        spawn_blocking(move || match index_settings.primary_key {
+        let result = spawn_blocking(move || match index_settings.primary_key {
             Some(ref primary_key) => {
                 let mut txn = index.write_txn()?;
                 if index.primary_key(&txn)?.is_some() {
@@ -272,23 +275,22 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 Ok(meta)
             }
         })
-        .await
-        .map_err(|e| IndexError::Error(e.into()))?
+        .await??;
+
+        Ok(result)
     }
 
     async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> IndexResult<()> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
-        create_dir_all(&path)
-            .await
-            .map_err(|e| IndexError::Error(e.into()))?;
+        create_dir_all(&path).await?;
 
         if let Some(index) = self.store.get(uuid).await? {
             let mut index_path = path.join(format!("index-{}", uuid));
-            create_dir_all(&index_path)
-                .await
-                .map_err(|e| IndexError::Error(e.into()))?;
+
+            create_dir_all(&index_path).await?;
+
             index_path.push("data.mdb");
             spawn_blocking(move || -> anyhow::Result<()> {
                 // Get write txn to wait for ongoing write transaction before snapshot.
@@ -298,10 +300,25 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                     .copy_to_path(index_path, CompactionOption::Enabled)?;
                 Ok(())
             })
-            .await
-            .map_err(|e| IndexError::Error(e.into()))?
-            .map_err(IndexError::Error)?;
+            .await??;
         }
+
+        Ok(())
+    }
+
+    /// Create a `documents.jsonl` and a `settings.json` in `path/uid/` with a dump of all the
+    /// documents and all the settings.
+    async fn handle_dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+        let index = self
+            .store
+            .get(uuid)
+            .await?
+            .ok_or(IndexError::UnexistingIndex)?;
+
+        let path = path.join(format!("indexes/index-{}/", uuid));
+        fs::create_dir_all(&path).await?;
+
+        tokio::task::spawn_blocking(move || index.dump(path)).await??;
 
         Ok(())
     }
@@ -323,7 +340,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })
-        .await
-        .map_err(|e| IndexError::Error(e.into()))?
+        .await?
     }
 }

@@ -202,10 +202,6 @@ pub struct Opt {
     #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    /// The batch size used in the importation process, the bigger it is the faster the dump is created.
-    #[structopt(long, env = "MEILI_DUMP_BATCH_SIZE", default_value = "1024")]
-    pub dump_batch_size: usize,
-
     #[structopt(flatten)]
     pub indexer_options: IndexerOpts,
 }
