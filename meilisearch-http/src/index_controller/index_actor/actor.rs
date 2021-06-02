@@ -168,9 +168,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             None => self.store.create(uuid, None).await?,
         };
 
-        let result =
-            spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?;
-        Ok(result)
+        Ok(spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?)
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {

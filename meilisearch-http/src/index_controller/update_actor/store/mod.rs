@@ -303,9 +303,13 @@ impl UpdateStore {
                     }
                     None => None,
                 };
+
                 // Process the pending update using the provided user function.
-                let result = Handle::current()
-                    .block_on(index_handle.update(index_uuid, processing, file))?;
+                let handle = Handle::current();
+                let result = match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
+                    Ok(result) => result,
+                    Err(e) => Err(processing.fail(e.to_string())),
+                };
 
                 // Once the pending update have been successfully processed
                 // we must remove the content from the pending and processing stores and
