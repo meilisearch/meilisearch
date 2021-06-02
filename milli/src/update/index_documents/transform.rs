@@ -95,7 +95,11 @@ impl Transform<'_, '_> {
 
         // We extract the primary key from the first document in
         // the batch if it hasn't already been defined in the index
-        let first = documents.peek().and_then(|r| r.as_ref().ok());
+        let first = match documents.peek().map(Result::as_ref).transpose() {
+            Ok(first) => first,
+            Err(_) => return Err(documents.next().unwrap().unwrap_err().into()),
+        };
+
         let alternative_name = first.and_then(|doc| doc.keys().find(|f| is_primary_key(f)).cloned());
         let (primary_key_id, primary_key) = compute_primary_key_pair(
             self.index.primary_key(self.rtxn)?,
@@ -236,7 +240,7 @@ impl Transform<'_, '_> {
                // The primary key is known so we must find the position in the CSV headers.
                headers.iter().position(|h| h == primary_key)
             },
-            None => headers.iter().position(|f| is_primary_key(&f)),
+            None => headers.iter().position(is_primary_key),
         };
 
         // Returns the field id in the fields ids map, create an "id" field
