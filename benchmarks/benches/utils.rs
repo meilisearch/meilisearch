@@ -29,15 +29,13 @@ pub struct Conf<'a> {
 }
 
 impl Conf<'_> {
-    fn nop(_builder: &mut Settings) {}
-
     pub const BASE: Self = Conf {
         database_name: "benches.mmdb",
         dataset: "",
         group_name: "",
         queries: &[],
         criterion: None,
-        configure: Self::nop,
+        configure: |_| (),
         facet_condition: None,
         optional_words: true,
         primary_key: None,
