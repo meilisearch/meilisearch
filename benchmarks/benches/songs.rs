@@ -21,14 +21,14 @@ fn base_conf(builder: &mut Settings) {
     builder.set_searchable_fields(searchable_fields);
 
     let faceted_fields = [
-        ("released-timestamp", "number"),
-        ("duration-float", "number"),
-        ("genre", "string"),
-        ("country", "string"),
-        ("artist", "string"),
+        "released-timestamp",
+        "duration-float",
+        "genre",
+        "country",
+        "artist",
     ]
     .iter()
-    .map(|(a, b)| (a.to_string(), b.to_string()))
+    .map(|s| s.to_string())
     .collect();
     builder.set_faceted_fields(faceted_fields);
 }
