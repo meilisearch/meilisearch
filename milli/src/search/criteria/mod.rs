@@ -203,14 +203,14 @@ impl<'t> CriteriaBuilder<'t> {
         &'t self,
         query_tree: Option<Operation>,
         primitive_query: Option<Vec<PrimitiveQueryPart>>,
-        facet_candidates: Option<RoaringBitmap>,
+        filtered_candidates: Option<RoaringBitmap>,
     ) -> anyhow::Result<Final<'t>>
     {
         use crate::criterion::Criterion as Name;
 
         let primitive_query = primitive_query.unwrap_or_default();
 
-        let mut criterion = Box::new(Initial::new(query_tree, facet_candidates)) as Box<dyn Criterion>;
+        let mut criterion = Box::new(Initial::new(query_tree, filtered_candidates)) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
             criterion = match name {
                 Name::Typo => Box::new(Typo::new(self, criterion)),

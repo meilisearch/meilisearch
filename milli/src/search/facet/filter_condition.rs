@@ -18,7 +18,7 @@ use super::FacetRange;
 use super::parser::Rule;
 use super::parser::{PREC_CLIMBER, FilterParser};
 
-use self::FacetCondition::*;
+use self::FilterCondition::*;
 use self::Operator::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,74 +49,18 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FacetCondition {
+pub enum FilterCondition {
     Operator(FieldId, Operator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 }
 
-fn field_id(
-    fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashSet<FieldId>,
-    items: &mut Pairs<Rule>,
-) -> Result<FieldId, PestError<Rule>>
-{
-    // lexing ensures that we at least have a key
-    let key = items.next().unwrap();
-
-    let field_id = match fields_ids_map.id(key.as_str()) {
-        Some(field_id) => field_id,
-        None => return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` not found, available attributes are: {}",
-                    key.as_str(),
-                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
-                ),
-            },
-            key.as_span(),
-        )),
-    };
-
-    if !faceted_fields.contains(&field_id) {
-        return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` is not faceted, available faceted attributes are: {}",
-                    key.as_str(),
-                    faceted_fields.iter().flat_map(|id| {
-                        fields_ids_map.name(*id)
-                    }).collect::<Vec<_>>().join(", "),
-                ),
-            },
-            key.as_span(),
-        ));
-    }
-
-    Ok(field_id)
-}
-
-fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
-where T: FromStr,
-      T::Err: ToString,
-{
-    let result = match pair.as_str().parse::<T>() {
-        Ok(value) => Ok(value),
-        Err(e) => Err(PestError::<Rule>::new_from_span(
-            ErrorVariant::CustomError { message: e.to_string() },
-            pair.as_span(),
-        )),
-    };
-
-    (result, pair.as_str().to_string())
-}
-
-impl FacetCondition {
+impl FilterCondition {
     pub fn from_array<I, J, A, B>(
         rtxn: &heed::RoTxn,
         index: &Index,
         array: I,
-    ) -> anyhow::Result<Option<FacetCondition>>
+    ) -> anyhow::Result<Option<FilterCondition>>
     where I: IntoIterator<Item=Either<J, B>>,
           J: IntoIterator<Item=A>,
           A: AsRef<str>,
@@ -129,7 +73,7 @@ impl FacetCondition {
                 Either::Left(array) => {
                     let mut ors = None;
                     for rule in array {
-                        let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
+                        let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
                         ors = match ors.take() {
                             Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
                             None => Some(condition),
@@ -144,7 +88,7 @@ impl FacetCondition {
                     }
                 },
                 Either::Right(rule) => {
-                    let condition = FacetCondition::from_str(rtxn, index, rule.as_ref())?;
+                    let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
                     ands = match ands.take() {
                         Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
                         None => Some(condition),
@@ -160,12 +104,12 @@ impl FacetCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         expression: &str,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields_ids(rtxn)?;
+        let filterable_fields = index.filterable_fields_ids(rtxn)?;
         let lexed = FilterParser::parse(Rule::prgm, expression)?;
-        FacetCondition::from_pairs(&fields_ids_map, &faceted_fields, lexed)
+        FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
     fn from_pairs(
@@ -199,7 +143,7 @@ impl FacetCondition {
         )
     }
 
-    fn negate(self) -> FacetCondition {
+    fn negate(self) -> FilterCondition {
         match self {
             Operator(fid, op) => match op.negate() {
                 (op, None) => Operator(fid, op),
@@ -212,12 +156,12 @@ impl FacetCondition {
 
     fn between(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
@@ -230,12 +174,12 @@ impl FacetCondition {
 
     fn equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
@@ -246,12 +190,12 @@ impl FacetCondition {
 
     fn greater_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -261,12 +205,12 @@ impl FacetCondition {
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -276,12 +220,12 @@ impl FacetCondition {
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -291,12 +235,12 @@ impl FacetCondition {
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, faceted_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -305,7 +249,7 @@ impl FacetCondition {
     }
 }
 
-impl FacetCondition {
+impl FilterCondition {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_number_levels(
@@ -469,6 +413,71 @@ impl FacetCondition {
     }
 }
 
+/// Retrieve the field id base on the pest value, returns an error is
+/// the field does not exist or is not filterable.
+///
+/// The pest pair is simply a string associated with a span, a location to highlight in
+/// the error message.
+fn field_id(
+    fields_ids_map: &FieldsIdsMap,
+    filterable_fields: &HashSet<FieldId>,
+    items: &mut Pairs<Rule>,
+) -> Result<FieldId, PestError<Rule>>
+{
+    // lexing ensures that we at least have a key
+    let key = items.next().unwrap();
+
+    let field_id = match fields_ids_map.id(key.as_str()) {
+        Some(field_id) => field_id,
+        None => return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` not found, available attributes are: {}",
+                    key.as_str(),
+                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
+                ),
+            },
+            key.as_span(),
+        )),
+    };
+
+    if !filterable_fields.contains(&field_id) {
+        return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "attribute `{}` is not filterable, available filterable attributes are: {}",
+                    key.as_str(),
+                    filterable_fields.iter().flat_map(|id| {
+                        fields_ids_map.name(*id)
+                    }).collect::<Vec<_>>().join(", "),
+                ),
+            },
+            key.as_span(),
+        ));
+    }
+
+    Ok(field_id)
+}
+
+/// Tries to parse the pest pair into the type `T` specified, always returns
+/// the original string that we tried to parse.
+///
+/// Returns the parsing error associated with the span if the conversion fails.
+fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
+where T: FromStr,
+      T::Err: ToString,
+{
+    let result = match pair.as_str().parse::<T>() {
+        Ok(value) => Ok(value),
+        Err(e) => Err(PestError::<Rule>::new_from_span(
+            ErrorVariant::CustomError { message: e.to_string() },
+            pair.as_span(),
+        )),
+    };
+
+    (result, pair.as_str().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,24 +493,24 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashset!{ S("channel") });
+        builder.set_filterable_fields(hashset!{ S("channel") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
         let expected = Operator(0, Operator::Equal(None, S("ponce")));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
     }
@@ -513,20 +522,20 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_faceted_fields(hashset!{ "timestamp".into() });
+        builder.set_filterable_fields(hashset!{ "timestamp".into() });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
         let expected = Operator(0, Between(22.0, 44.0));
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected = Or(
             Box::new(Operator(0, LowerThan(22.0))),
             Box::new(Operator(0, GreaterThan(44.0))),
@@ -541,17 +550,17 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_str(
+        let condition = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
@@ -564,7 +573,7 @@ mod tests {
         );
         assert_eq!(condition, expected);
 
-        let condition = FacetCondition::from_str(
+        let condition = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
@@ -588,21 +597,21 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // Set the faceted fields to be the channel.
+        // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_faceted_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FacetCondition::from_array(
+        let condition = FilterCondition::from_array(
             &rtxn, &index,
             vec![Either::Right("channel = gotaga"), Either::Left(vec!["timestamp = 44", "channel != ponce"])],
         ).unwrap().unwrap();
-        let expected = FacetCondition::from_str(
+        let expected = FilterCondition::from_str(
             &rtxn, &index,
             "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
         ).unwrap();

@@ -29,7 +29,7 @@ use tokio::sync::broadcast;
 use warp::{Filter, http::Response};
 use warp::filters::ws::Message;
 
-use milli::{FacetCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
+use milli::{FilterCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use milli::update::UpdateIndexingStep::*;
 
@@ -251,7 +251,7 @@ struct Settings {
     searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    faceted_attributes: Setting<HashSet<String>>,
+    filterable_attributes: Setting<HashSet<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     criteria: Setting<Vec<String>>,
@@ -420,9 +420,9 @@ async fn main() -> anyhow::Result<()> {
                     }
 
                     // We transpose the settings JSON struct into a real setting update.
-                    match settings.faceted_attributes {
-                        Setting::Set(faceted_attributes) => builder.set_faceted_fields(faceted_attributes),
-                        Setting::Reset => builder.reset_faceted_fields(),
+                    match settings.filterable_attributes {
+                        Setting::Set(filterable_attributes) => builder.set_filterable_fields(filterable_attributes),
+                        Setting::Reset => builder.reset_filterable_fields(),
                         Setting::NotSet => ()
                     }
 
@@ -690,7 +690,7 @@ async fn main() -> anyhow::Result<()> {
 
             let filters = match query.filters {
                 Some(condition) if !condition.trim().is_empty() => {
-                    Some(FacetCondition::from_str(&rtxn, &index, &condition).unwrap())
+                    Some(FilterCondition::from_str(&rtxn, &index, &condition).unwrap())
                 }
                 _otherwise => None,
             };
@@ -698,21 +698,21 @@ async fn main() -> anyhow::Result<()> {
             let facet_filters = match query.facet_filters {
                 Some(array) => {
                     let eithers = array.into_iter().map(Into::into);
-                    FacetCondition::from_array(&rtxn, &index, eithers).unwrap()
+                    FilterCondition::from_array(&rtxn, &index, eithers).unwrap()
                 }
                 _otherwise => None,
             };
 
             let condition = match (filters, facet_filters) {
                 (Some(filters), Some(facet_filters)) => {
-                    Some(FacetCondition::And(Box::new(filters), Box::new(facet_filters)))
+                    Some(FilterCondition::And(Box::new(filters), Box::new(facet_filters)))
                 }
                 (Some(condition), None) | (None, Some(condition)) => Some(condition),
                 _otherwise => None,
             };
 
             if let Some(condition) = condition {
-                search.facet_condition(condition);
+                search.filter(condition);
             }
 
             let SearchResult { matching_words, candidates, documents_ids } = search.execute().unwrap();
@@ -996,7 +996,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
             searchable_attributes: Setting::Set(vec!["age".to_string()]),
-            faceted_attributes: Setting::Set(hashset!{ "age".to_string() }),
+            filterable_attributes: Setting::Set(hashset!{ "age".to_string() }),
             criteria: Setting::Set(vec!["asc(age)".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
             synonyms: Setting::Set(hashmap!{ "alex".to_string() => vec!["alexey".to_string()] })
@@ -1047,7 +1047,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
-            faceted_attributes: Setting::Reset,
+            filterable_attributes: Setting::Reset,
             criteria: Setting::Reset,
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
@@ -1076,7 +1076,7 @@ mod tests {
         let settings = Settings {
             displayed_attributes: Setting::NotSet,
             searchable_attributes: Setting::NotSet,
-            faceted_attributes: Setting::NotSet,
+            filterable_attributes: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,

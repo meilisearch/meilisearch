@@ -23,9 +23,9 @@ use crate::fields_ids_map::FieldsIdsMap;
 
 pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
-pub const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute-key";
+pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
-pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
+pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
 pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
@@ -324,21 +324,62 @@ impl Index {
         }
     }
 
-    /* faceted fields */
+    /* filterable fields */
 
-    /// Writes the facet fields names in the database.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields)
+    /// Writes the filterable fields names in the database.
+    pub fn put_filterable_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FILTERABLE_FIELDS_KEY, fields)
     }
 
-    /// Deletes the facet fields ids in the database.
-    pub fn delete_faceted_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, FACETED_FIELDS_KEY)
+    /// Deletes the filterable fields ids in the database.
+    pub fn delete_filterable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the facet fields names.
+    /// Returns the filterable fields names.
+    pub fn filterable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
+        Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FILTERABLE_FIELDS_KEY)?.unwrap_or_default())
+    }
+
+    /// Same as `filterable_fields`, but returns ids instead.
+    pub fn filterable_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashSet<FieldId>> {
+        let filterable_fields = self.filterable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let filterable_fields = filterable_fields
+            .iter()
+            .map(|k| {
+                fields_ids_map
+                    .id(k)
+                    .ok_or_else(|| format!("{:?} should be present in the field id map", k))
+                    .expect("corrupted data: ")
+            })
+            .collect();
+
+        Ok(filterable_fields)
+    }
+
+    /* faceted documents ids */
+
+    /// Returns the faceted fields names.
+    ///
+    /// Faceted fields are the union of all the filterable, distinct, and Asc/Desc fields.
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
-        Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
+        let filterable_fields = self.filterable_fields(rtxn)?;
+        let distinct_field = self.distinct_field(rtxn)?;
+        let asc_desc_fields = self.criteria(rtxn)?
+            .into_iter()
+            .filter_map(|criterion| match criterion {
+                Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
+                _otherwise => None,
+            });
+
+        let mut faceted_fields = filterable_fields;
+        faceted_fields.extend(asc_desc_fields);
+        if let Some(field) = distinct_field {
+            faceted_fields.insert(field.to_owned());
+        }
+
+        Ok(faceted_fields)
     }
 
     /// Same as `faceted_fields`, but returns ids instead.
@@ -424,18 +465,18 @@ impl Index {
         }
     }
 
-    /* Distinct attribute */
+    /* distinct field */
 
-    pub(crate) fn put_distinct_attribute(&self, wtxn: &mut RwTxn, distinct_attribute: &str) -> heed::Result<()> {
-        self.main.put::<_, Str, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY, distinct_attribute)
+    pub(crate) fn put_distinct_field(&self, wtxn: &mut RwTxn, distinct_field: &str) -> heed::Result<()> {
+        self.main.put::<_, Str, Str>(wtxn, DISTINCT_FIELD_KEY, distinct_field)
     }
 
-    pub fn distinct_attribute<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
-        self.main.get::<_, Str, Str>(rtxn, DISTINCT_ATTRIBUTE_KEY)
+    pub fn distinct_field<'a>(&self, rtxn: &'a RoTxn) -> heed::Result<Option<&'a str>> {
+        self.main.get::<_, Str, Str>(rtxn, DISTINCT_FIELD_KEY)
     }
 
-    pub(crate) fn delete_distinct_attribute(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, DISTINCT_ATTRIBUTE_KEY)
+    pub(crate) fn delete_distinct_field(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, DISTINCT_FIELD_KEY)
     }
 
     /* criteria */

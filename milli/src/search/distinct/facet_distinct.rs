@@ -172,7 +172,7 @@ impl DocIter for FacetDistinctIter<'_> {
     }
 }
 
-impl<'a> Distinct<'_> for FacetDistinct<'a> {
+impl<'a> Distinct for FacetDistinct<'a> {
     type Iter = FacetDistinctIter<'a>;
 
     fn distinct(&mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter {
@@ -189,8 +189,6 @@ impl<'a> Distinct<'_> for FacetDistinct<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
-
     use super::super::test::{generate_index, validate_distinct_candidates};
     use super::*;
 
@@ -198,10 +196,7 @@ mod test {
         ($name:ident, $distinct:literal) => {
             #[test]
             fn $name() {
-                use std::iter::FromIterator;
-
-                let facets = HashSet::from_iter(Some(($distinct.to_string())));
-                let (index, fid, candidates) = generate_index($distinct, facets);
+                let (index, fid, candidates) = generate_index($distinct);
                 let txn = index.read_txn().unwrap();
                 let mut map_distinct = FacetDistinct::new(fid, &index, &txn);
                 let excluded = RoaringBitmap::new();

@@ -1,12 +1,10 @@
 mod facet_distinct;
-mod map_distinct;
 mod noop_distinct;
 
 use roaring::RoaringBitmap;
 
 use crate::DocumentId;
 pub use facet_distinct::FacetDistinct;
-pub use map_distinct::MapDistinct;
 pub use noop_distinct::NoopDistinct;
 
 /// A trait implemented by document interators that are returned by calls to `Distinct::distinct`.
@@ -20,10 +18,10 @@ pub trait DocIter: Iterator<Item = anyhow::Result<DocumentId>> {
 /// must return an iterator containing only distinct documents, and add the discarded documents to
 /// the excluded set. The excluded set can later be retrieved by calling `DocIter::excluded` on the
 /// returned iterator.
-pub trait Distinct<'a> {
+pub trait Distinct {
     type Iter: DocIter;
 
-    fn distinct(&'a mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter;
+    fn distinct(&mut self, candidates: RoaringBitmap, excluded: RoaringBitmap) -> Self::Iter;
 }
 
 #[cfg(test)]
@@ -74,17 +72,14 @@ mod test {
 
     /// Returns a temporary index populated with random test documents, the FieldId for the
     /// distinct attribute, and the RoaringBitmap with the document ids.
-    pub(crate) fn generate_index(distinct: &str, facets: HashSet<String>) -> (TempIndex, FieldId, RoaringBitmap) {
+    pub(crate) fn generate_index(distinct: &str) -> (TempIndex, FieldId, RoaringBitmap) {
         let index = TempIndex::new();
         let mut txn = index.write_txn().unwrap();
 
         // set distinct and faceted attributes for the index.
         let builder = UpdateBuilder::new(0);
         let mut update = builder.settings(&mut txn, &index);
-        update.set_distinct_attribute(distinct.to_string());
-        if !facets.is_empty() {
-            update.set_faceted_fields(facets)
-        }
+        update.set_distinct_field(distinct.to_string());
         update.execute(|_, _| ()).unwrap();
 
         // add documents to the index

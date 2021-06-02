@@ -24,6 +24,7 @@ pub struct AscDesc<'t> {
     ascending: bool,
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
+    allowed_candidates: RoaringBitmap,
     bucket_candidates: RoaringBitmap,
     faceted_candidates: RoaringBitmap,
     parent: Box<dyn Criterion + 't>,
@@ -68,6 +69,7 @@ impl<'t> AscDesc<'t> {
             ascending,
             query_tree: None,
             candidates: Box::new(std::iter::empty()),
+            allowed_candidates: RoaringBitmap::new(),
             faceted_candidates: index.number_faceted_documents_ids(rtxn, field_id)?,
             bucket_candidates: RoaringBitmap::new(),
             parent,
@@ -78,6 +80,9 @@ impl<'t> AscDesc<'t> {
 impl<'t> Criterion for AscDesc<'t> {
     #[logging_timer::time("AscDesc::{}")]
     fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+        // remove excluded candidates when next is called, instead of doing it in the loop.
+        self.allowed_candidates -= params.excluded_candidates;
+
         loop {
             debug!(
                 "Facet {}({}) iteration",
@@ -86,18 +91,25 @@ impl<'t> Criterion for AscDesc<'t> {
             );
 
             match self.candidates.next().transpose()? {
+                None if !self.allowed_candidates.is_empty() => {
+                    return Ok(Some(CriterionResult {
+                        query_tree: self.query_tree.clone(),
+                        candidates: Some(take(&mut self.allowed_candidates)),
+                        filtered_candidates: None,
+                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                    }));
+                },
                 None => {
                     match self.parent.next(params)? {
                         Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
                             self.query_tree = query_tree;
                             let mut candidates = match (&self.query_tree, candidates) {
-                                (_, Some(candidates)) => candidates & &self.faceted_candidates,
+                                (_, Some(candidates)) => candidates,
                                 (Some(qt), None) => {
                                     let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
-                                    let candidates = resolve_query_tree(&context, qt, params.wdcache)?;
-                                    candidates & &self.faceted_candidates
+                                    resolve_query_tree(&context, qt, params.wdcache)?
                                 },
-                                (None, None) => take(&mut self.faceted_candidates),
+                                (None, None) => self.index.documents_ids(self.rtxn)?,
                             };
 
                             if let Some(filtered_candidates) = filtered_candidates {
@@ -113,12 +125,13 @@ impl<'t> Criterion for AscDesc<'t> {
                                 continue;
                             }
 
+                            self.allowed_candidates = &candidates - params.excluded_candidates;
                             self.candidates = facet_ordered(
                                 self.index,
                                 self.rtxn,
                                 self.field_id,
                                 self.ascending,
-                                candidates,
+                                candidates & &self.faceted_candidates,
                             )?;
                         },
                         None => return Ok(None),
@@ -126,6 +139,7 @@ impl<'t> Criterion for AscDesc<'t> {
                 },
                 Some(mut candidates) => {
                     candidates -= params.excluded_candidates;
+                    self.allowed_candidates -= &candidates;
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
