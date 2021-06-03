@@ -1,4 +1,5 @@
 use std::fs::{create_dir_all, remove_dir_all, File};
+use std::path::Path;
 
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
@@ -97,7 +98,9 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     for conf in confs {
         let index = base_setup(conf);
 
-        let mut group = c.benchmark_group(&format!("{}: {}", conf.dataset, conf.group_name));
+        let file_name = Path::new(conf.dataset).file_name().and_then(|f| f.to_str()).unwrap();
+        let name = format!("{}: {}", file_name, conf.group_name);
+        let mut group = c.benchmark_group(&name);
 
         for &query in conf.queries {
             group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
@@ -106,8 +109,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
                     if let Some(filter) = conf.filter {
-                        let filter =
-                            FilterCondition::from_str(&rtxn, &index, filter).unwrap();
+                        let filter = FilterCondition::from_str(&rtxn, &index, filter).unwrap();
                         search.filter(filter);
                     }
                     let _ids = search.execute().unwrap();
