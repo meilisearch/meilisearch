@@ -4,7 +4,7 @@ use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
 use milli::{
     update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat},
-    FacetCondition, Index,
+    FilterCondition, Index,
 };
 
 pub struct Conf<'a> {
@@ -21,7 +21,7 @@ pub struct Conf<'a> {
     pub criterion: Option<&'a [&'a str]>,
     /// the last chance to configure your database as you want
     pub configure: fn(&mut Settings),
-    pub facet_condition: Option<&'a str>,
+    pub filter: Option<&'a str>,
     /// enable or disable the optional words on the query
     pub optional_words: bool,
     /// primary key, if there is None we'll auto-generate docids for every documents
@@ -36,7 +36,7 @@ impl Conf<'_> {
         queries: &[],
         criterion: None,
         configure: |_| (),
-        facet_condition: None,
+        filter: None,
         optional_words: true,
         primary_key: None,
     };
@@ -64,7 +64,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut builder = update_builder.settings(&mut wtxn, &index);
 
     if let Some(criterion) = conf.criterion {
-        builder.reset_faceted_fields();
+        builder.reset_filterable_fields();
         builder.reset_criteria();
         builder.reset_stop_words();
 
@@ -105,10 +105,10 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let rtxn = index.read_txn().unwrap();
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
-                    if let Some(facet_condition) = conf.facet_condition {
-                        let facet_condition =
-                            FacetCondition::from_str(&rtxn, &index, facet_condition).unwrap();
-                        search.facet_condition(facet_condition);
+                    if let Some(filter) = conf.filter {
+                        let filter =
+                            FilterCondition::from_str(&rtxn, &index, filter).unwrap();
+                        search.filter(filter);
                     }
                     let _ids = search.execute().unwrap();
                 });

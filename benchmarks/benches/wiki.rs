@@ -83,7 +83,7 @@ fn bench_songs(c: &mut criterion::Criterion) {
             group_name: "words",
             queries: &[
                 "the black saint and the sinner lady and the good doggo ", // four words to pop, 27 results
-                "Kameya Tokujirō mingus monk ",                           // two words to pop, 55
+                "Kameya Tokujirō mingus monk ",                            // two words to pop, 55
                 "Ulrich Hensel meilisearch milli ",                        // two words to pop, 306
                 "Idaho Bellevue pizza ",                                   // one word to pop, 800
                 "Abraham machin ",                                         // one word to pop, 1141

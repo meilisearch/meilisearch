@@ -30,7 +30,7 @@ fn base_conf(builder: &mut Settings) {
     .iter()
     .map(|s| s.to_string())
     .collect();
-    builder.set_faceted_fields(faceted_fields);
+    builder.set_filterable_fields(faceted_fields);
 }
 
 const BASE_CONF: Conf = Conf {
@@ -156,17 +156,17 @@ fn bench_songs(c: &mut criterion::Criterion) {
         /* we bench the filters with the default request */
         utils::Conf {
             group_name: "basic filter: <=",
-            facet_condition: Some("released-timestamp <= 946728000"), // year 2000
+            filter: Some("released-timestamp <= 946728000"), // year 2000
             ..BASE_CONF
         },
         utils::Conf {
             group_name: "basic filter: TO",
-            facet_condition: Some("released-timestamp 946728000 TO 1262347200"), // year 2000 to 2010
+            filter: Some("released-timestamp 946728000 TO 1262347200"), // year 2000 to 2010
             ..BASE_CONF
         },
         utils::Conf {
             group_name: "big filter",
-            facet_condition: Some("released-timestamp != 1262347200 AND (NOT (released-timestamp = 946728000)) AND (duration-float = 1 OR (duration-float 1.1 TO 1.5 AND released-timestamp > 315576000))"),
+            filter: Some("released-timestamp != 1262347200 AND (NOT (released-timestamp = 946728000)) AND (duration-float = 1 OR (duration-float 1.1 TO 1.5 AND released-timestamp > 315576000))"),
             ..BASE_CONF
         },
 
