@@ -10,7 +10,7 @@ milli = { path = "../milli" }
 
 [dev-dependencies]
 heed = "*" # we want to use the version milli uses
-criterion = "0.3.4"
+criterion = { version = "0.3.4", features = ["html_reports"] }
 
 [build-dependencies]
 anyhow = "1.0"
