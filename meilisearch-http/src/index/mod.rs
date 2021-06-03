@@ -87,7 +87,7 @@ impl Index {
         Ok(Settings {
             displayed_attributes: Some(displayed_attributes),
             searchable_attributes: Some(searchable_attributes),
-            attributes_for_faceting: Some(Some(faceted_attributes)),
+            filterable_attributes: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
             distinct_attribute: Some(distinct_field),

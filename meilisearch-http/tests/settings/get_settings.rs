@@ -19,7 +19,7 @@ async fn get_settings() {
     assert_eq!(settings.keys().len(), 6);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
-    assert_eq!(settings["attributesForFaceting"], json!([]));
+    assert_eq!(settings["filterableAttributes"], json!([]));
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
@@ -87,7 +87,7 @@ async fn reset_all_settings() {
     index.wait_update_id(0).await;
 
     index
-        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "attributesForFaceting": ["age"] }))
+        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"] }))
         .await;
     index.wait_update_id(1).await;
     let (response, code) = index.settings().await;
@@ -95,7 +95,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
     assert_eq!(response["searchableAttributes"], json!(["name"]));
     assert_eq!(response["stopWords"], json!(["the"]));
-    assert_eq!(response["attributesForFaceting"], json!(["age"]));
+    assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     index.delete_settings().await;
     index.wait_update_id(2).await;
@@ -105,7 +105,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["*"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
     assert_eq!(response["stopWords"], json!([]));
-    assert_eq!(response["attributesForFaceting"], json!([]));
+    assert_eq!(response["filterableAttributes"], json!([]));
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
@@ -181,7 +181,7 @@ macro_rules! test_setting_routes {
 }
 
 test_setting_routes!(
-    attributes_for_faceting,
+    filterable_attributes,
     displayed_attributes,
     searchable_attributes,
     stop_words
