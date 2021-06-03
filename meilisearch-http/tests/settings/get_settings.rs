@@ -72,19 +72,33 @@ async fn delete_settings_unexisting_index() {
 async fn reset_all_settings() {
     let server = Server::new().await;
     let index = server.index("test");
-    index
-        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"], "attributesForFaceting": ["toto"] }))
-        .await;
+
+    let documents = json!([
+        {
+            "id": 1,
+            "name": "curqui",
+            "age": 99
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202);
+    assert_eq!(response["updateId"], 0);
     index.wait_update_id(0).await;
+
+    index
+        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "attributesForFaceting": ["age"] }))
+        .await;
+    index.wait_update_id(1).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
-    assert_eq!(response["displayedAttributes"], json!(["foo"]));
-    assert_eq!(response["searchableAttributes"], json!(["bar"]));
+    assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
+    assert_eq!(response["searchableAttributes"], json!(["name"]));
     assert_eq!(response["stopWords"], json!(["the"]));
-    assert_eq!(response["attributesForFaceting"], json!(["toto"]));
+    assert_eq!(response["attributesForFaceting"], json!(["age"]));
 
     index.delete_settings().await;
-    index.wait_update_id(1).await;
+    index.wait_update_id(2).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -92,6 +106,10 @@ async fn reset_all_settings() {
     assert_eq!(response["searchableAttributes"], json!(["*"]));
     assert_eq!(response["stopWords"], json!([]));
     assert_eq!(response["attributesForFaceting"], json!([]));
+
+    let (response, code) = index.get_document(1, None).await;
+    assert_eq!(code, 200);
+    assert!(response.as_object().unwrap().get("age").is_some());
 }
 
 #[actix_rt::test]
