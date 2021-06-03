@@ -19,7 +19,7 @@ async fn get_settings() {
     assert_eq!(settings.keys().len(), 6);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
-    assert_eq!(settings["attributesForFaceting"], json!({}));
+    assert_eq!(settings["attributesForFaceting"], json!([]));
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
@@ -73,7 +73,7 @@ async fn reset_all_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     index
-        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"], "attributesForFaceting": { "toto": "string" } }))
+        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"], "stopWords": ["the"], "attributesForFaceting": ["toto"] }))
         .await;
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
@@ -81,7 +81,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["bar"]));
     assert_eq!(response["stopWords"], json!(["the"]));
-    assert_eq!(response["attributesForFaceting"], json!({"toto": "string"}));
+    assert_eq!(response["attributesForFaceting"], json!(["toto"]));
 
     index.delete_settings().await;
     index.wait_update_id(1).await;
@@ -91,7 +91,7 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["*"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
     assert_eq!(response["stopWords"], json!([]));
-    assert_eq!(response["attributesForFaceting"], json!({}));
+    assert_eq!(response["attributesForFaceting"], json!([]));
 }
 
 #[actix_rt::test]
