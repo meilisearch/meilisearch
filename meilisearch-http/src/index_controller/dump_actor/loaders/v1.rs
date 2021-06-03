@@ -145,7 +145,7 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
             // representing the name of the faceted field + the type of the field. Since the type
             // was not known in the V1 of the dump we are just going to assume everything is a
             // String
-            attributes_for_faceting: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().map(|key| (key, String::from("string"))).collect())),
+            attributes_for_faceting: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter_map(|criterion| {
                 match criterion.as_str() {

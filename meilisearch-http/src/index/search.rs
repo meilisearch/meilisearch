@@ -8,7 +8,7 @@ use heed::RoTxn;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use milli::{facet::FacetValue, FacetCondition, FieldId, FieldsIdsMap, MatchingWords};
+use milli::{FilterCondition, FieldId, FieldsIdsMap, MatchingWords};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -57,7 +57,7 @@ pub struct SearchResult {
     pub offset: usize,
     pub processing_time_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facet_distributions: Option<BTreeMap<String, BTreeMap<FacetValue, u64>>>,
+    pub facet_distributions: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
 impl Index {
@@ -74,9 +74,15 @@ impl Index {
         search.limit(query.limit);
         search.offset(query.offset.unwrap_or_default());
 
+<<<<<<< HEAD
         if let Some(ref filter) = query.filter {
             if let Some(facets) = parse_facets(filter, self, &rtxn)? {
                 search.facet_condition(facets);
+=======
+        if let Some(ref facets) = query.facet_filters {
+            if let Some(facets) = parse_facets(facets, self, &rtxn)? {
+                search.filter(facets);
+>>>>>>> 562cc32 (Add changes according to milli update)
             }
         }
 
@@ -272,10 +278,42 @@ impl Matcher for HashSet<String> {
 
 impl Matcher for MatchingWords {
     fn matches(&self, w: &str) -> bool {
-        self.matches(w)
+        self.matching_bytes(w).is_some()
     }
 }
 
+<<<<<<< HEAD
+=======
+fn parse_facets_array(
+    txn: &RoTxn,
+    index: &Index,
+    arr: &[Value],
+) -> anyhow::Result<Option<FilterCondition>> {
+    let mut ands = Vec::new();
+    for value in arr {
+        match value {
+            Value::String(s) => ands.push(Either::Right(s.clone())),
+            Value::Array(arr) => {
+                let mut ors = Vec::new();
+                for value in arr {
+                    match value {
+                        Value::String(s) => ors.push(s.clone()),
+                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
+                    }
+                }
+                ands.push(Either::Left(ors));
+            }
+            v => bail!(
+                "Invalid facet expression, expected String or [String], found: {:?}",
+                v
+            ),
+        }
+    }
+
+    FilterCondition::from_array(txn, &index.0, ands)
+}
+
+>>>>>>> 562cc32 (Add changes according to milli update)
 struct Highlighter<'a, A> {
     analyzer: Analyzer<'a, A>,
     marks: (String, String),
@@ -335,7 +373,7 @@ fn parse_facets(
     facets: &Value,
     index: &Index,
     txn: &RoTxn,
-) -> anyhow::Result<Option<FacetCondition>> {
+) -> anyhow::Result<Option<FilterCondition>> {
     match facets {
         Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
         Value::Array(arr) => parse_facets_array(txn, index, arr),

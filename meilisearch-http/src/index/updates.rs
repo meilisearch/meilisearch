@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -51,7 +51,7 @@ pub struct Settings<T> {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub attributes_for_faceting: Option<Option<HashMap<String, String>>>,
+    pub attributes_for_faceting: Option<Option<HashSet<String>>>,
 
     #[serde(
         default,
@@ -253,8 +253,8 @@ impl Index {
         }
 
         if let Some(ref facet_types) = settings.attributes_for_faceting {
-            let facet_types = facet_types.clone().unwrap_or_else(HashMap::new);
-            builder.set_faceted_fields(facet_types);
+            let facet_types = facet_types.clone().unwrap_or_else(HashSet::new);
+            builder.set_filterable_fields(facet_types);
         }
 
         if let Some(ref criteria) = settings.ranking_rules {
@@ -273,8 +273,8 @@ impl Index {
 
         if let Some(ref distinct_attribute) = settings.distinct_attribute {
             match distinct_attribute {
-                Some(attr) => builder.set_distinct_attribute(attr.clone()),
-                None => builder.reset_distinct_attribute(),
+                Some(attr) => builder.set_distinct_field(attr.clone()),
+                None => builder.reset_distinct_field(),
             }
         }
 

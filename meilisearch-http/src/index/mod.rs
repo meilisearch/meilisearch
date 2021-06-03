@@ -67,7 +67,6 @@ impl Index {
         let faceted_attributes = self
             .faceted_fields(&txn)?
             .into_iter()
-            .map(|(k, v)| (k, v.to_string()))
             .collect();
 
         let criteria = self
@@ -83,7 +82,7 @@ impl Index {
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
-        let distinct_attribute = self.distinct_attribute(&txn)?.map(String::from);
+        let distinct_field = self.distinct_field(&txn)?.map(String::from);
 
         Ok(Settings {
             displayed_attributes: Some(displayed_attributes),
@@ -91,7 +90,7 @@ impl Index {
             attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
-            distinct_attribute: Some(distinct_attribute),
+            distinct_attribute: Some(distinct_field),
             _kind: PhantomData,
         })
     }
