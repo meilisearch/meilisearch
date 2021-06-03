@@ -37,6 +37,11 @@ jobs:
         with:
           command: test
 
+      - uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --no-run -p benchmarks
+
       # - uses: actions-rs/cargo@v1
       #   with:
       #     command: bench
