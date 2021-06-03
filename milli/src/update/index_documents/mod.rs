@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, Seek, SeekFrom, BufReader, BufRead};
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::str;
 use std::sync::mpsc::sync_channel;
@@ -327,6 +327,16 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         R: io::Read,
         F: Fn(UpdateIndexingStep, u64) + Sync,
     {
+        let mut reader = BufReader::new(reader);
+        reader.fill_buf()?;
+
+        // Early return when there is no document to add
+        if reader.buffer().is_empty() {
+            return Ok(DocumentAdditionResult {
+                nb_documents: 0,
+            })
+        }
+
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         let before_transform = Instant::now();
         let update_id = self.update_id;
