@@ -98,6 +98,12 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/indexes/{index_uid}/settings/synonyms",
+    std::collections::BTreeMap<String, Vec<String>>,
+    synonyms
+);
+
+make_setting_route!(
     "/indexes/{index_uid}/settings/distinct-attribute",
     String,
     distinct_attribute
@@ -131,6 +137,7 @@ create_services!(
     searchable_attributes,
     distinct_attribute,
     stop_words,
+    synonyms,
     ranking_rules
 );
 

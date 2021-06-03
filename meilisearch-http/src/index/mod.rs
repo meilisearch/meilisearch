@@ -84,6 +84,17 @@ impl Index {
             .unwrap_or_else(BTreeSet::new);
         let distinct_field = self.distinct_field(&txn)?.map(String::from);
 
+        let synonyms = self
+            .synonyms(&txn)?
+            .iter()
+            .map(|(key, values)| {
+                (
+                    key.join(" "),
+                    values.iter().map(|value| value.join(" ")).collect(),
+                )
+            })
+            .collect();
+
         Ok(Settings {
             displayed_attributes: Some(displayed_attributes),
             searchable_attributes: Some(searchable_attributes),
@@ -91,6 +102,7 @@ impl Index {
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
             distinct_attribute: Some(distinct_field),
+            synonyms: Some(Some(synonyms)),
             _kind: PhantomData,
         })
     }

@@ -16,7 +16,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 6);
+    assert_eq!(settings.keys().len(), 7);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -87,7 +87,7 @@ async fn reset_all_settings() {
     index.wait_update_id(0).await;
 
     index
-        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"] }))
+        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
     index.wait_update_id(1).await;
     let (response, code) = index.settings().await;
@@ -95,6 +95,10 @@ async fn reset_all_settings() {
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
     assert_eq!(response["searchableAttributes"], json!(["name"]));
     assert_eq!(response["stopWords"], json!(["the"]));
+    assert_eq!(
+        response["synonyms"],
+        json!({"puppy": ["dog", "doggo", "potat"] })
+    );
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     index.delete_settings().await;
@@ -110,6 +114,7 @@ async fn reset_all_settings() {
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
     assert!(response.as_object().unwrap().get("age").is_some());
+    assert_eq!(response["synonyms"], json!({}));
 }
 
 #[actix_rt::test]
@@ -184,5 +189,6 @@ test_setting_routes!(
     filterable_attributes,
     displayed_attributes,
     searchable_attributes,
-    stop_words
+    stop_words,
+    synonyms
 );

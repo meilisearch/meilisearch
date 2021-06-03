@@ -133,9 +133,6 @@ fn load_index(
 /// we need to **always** be able to convert the old settings to the settings currently being used
 impl From<Settings> for index_controller::Settings<Unchecked> {
     fn from(settings: Settings) -> Self {
-        if settings.synonyms.flatten().is_some() {
-            error!("`synonyms` are not yet implemented and thus will be ignored");
-        }
         Self {
             distinct_attribute: settings.distinct_attribute,
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
@@ -167,6 +164,8 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 }).collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             stop_words: settings.stop_words.map(|o| o.map(|vec| vec.into_iter().collect())),
+            // we need to convert the old `Vec<String>` into a `BTreeMap<String>`
+            synonyms: settings.synonyms.map(|o| o.map(|vec| vec.into_iter().collect())),
             _kind: PhantomData,
         }
     }

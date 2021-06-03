@@ -15,7 +15,6 @@ pub mod key;
 pub mod search;
 pub mod settings;
 pub mod stats;
-pub mod synonym;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "name")]

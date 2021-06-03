@@ -43,7 +43,6 @@ macro_rules! create_app {
             .configure(index::services)
             .configure(search::services)
             .configure(settings::services)
-            .configure(synonym::services)
             .configure(health::services)
             .configure(stats::services)
             .configure(key::services)
