@@ -16,8 +16,12 @@ use super::Index;
 
 pub type Document = IndexMap<String, Value>;
 
-pub const DEFAULT_SEARCH_LIMIT: usize = 20;
+// pub const DEFAULT_CROP_LENGTH: usize = 5;
+// const fn default_crop_length() -> Option<usize> {
+//     Some(DEFAULT_CROP_LENGTH)
+// }
 
+pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 const fn default_search_limit() -> usize {
     DEFAULT_SEARCH_LIMIT
 }
@@ -31,6 +35,7 @@ pub struct SearchQuery {
     pub limit: usize,
     pub attributes_to_retrieve: Option<HashSet<String>>,
     pub attributes_to_crop: Option<HashSet<String>>,
+    // #[serde(default = "default_crop_length")]
     pub crop_length: Option<usize>,
     pub attributes_to_highlight: Option<HashSet<String>>,
     pub matches: Option<bool>,
@@ -162,6 +167,7 @@ impl Index {
         let to_crop = to_crop_ids
             .into_iter()
             .map(|id| (id, query.crop_length))
+            // .map(|id| (id, Some(5)))
             .collect::<HashMap<_, _>>();
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
@@ -346,7 +352,13 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 while let Some((word, token)) = tokens.next_if(|(_, token)| !matcher.matches(token.text())) {
                     buffer.push_back((word, token));
                     taken_before += word.chars().count();
-                    while taken_before > crop_len {
+                    while taken_before >= crop_len {
+                        // Around to the previous word
+                        if let Some((word, _)) = buffer.front() {
+                            if taken_before - word.chars().count() < crop_len {
+                                break;
+                            }
+                        }
                         if let Some((word, _)) = buffer.pop_front() {
                             taken_before -= word.chars().count();
                         }
@@ -358,13 +370,13 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 }
 
                 let mut taken_after = 0;
-
                 let after_iter = tokens
                     .take_while(move |(word, _)| {
-                        let take = taken_after <= crop_len;
+                        let take = taken_after < crop_len;
                         taken_after += word.chars().count();
                         take
                     });
+
                 let iter = buffer
                     .into_iter()
                     .chain(after_iter);
