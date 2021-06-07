@@ -3,9 +3,9 @@ Benchmarks
 
 ## TOC
 
-- [Datasets](#datasets)
 - [Run the benchmarks](#run-the-benchmarks)
 - [Comparison between benchmarks](#comparison-between-benchmarks)
+- [Datasets](#datasets)
 
 ## Datasets
 
