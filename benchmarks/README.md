@@ -7,36 +7,6 @@ Benchmarks
 - [Comparison between benchmarks](#comparison-between-benchmarks)
 - [Datasets](#datasets)
 
-## Datasets
-
-The benchmarks are available for the following datasets:
-- `songs`
-- `wiki`
-
-### Songs
-
-`songs` is a subset of the [`songs.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/songs.csv.gz).
-
-It was generated with this command:
-
-```bash
-xsv sample --seed 42 1000000 songs.csv -o smol-songs.csv
-```
-
-_[Download the generated `songs` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-songs.csv.gz)._
-
-### Wiki
-
-`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/wikipedia-articles.csv.gz).
-
-It was generated with the following command:
-
-```bash
-xsv sample --seed 42 500000 wikipedia-articles.csv -o smol-wikipedia-articles.csv
-```
-
-_[Download the generated `wiki` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-wikipedia-articles.csv.gz)._
-
 ## Run the benchmarks
 
 ### On our private server
@@ -108,3 +78,34 @@ Run the comparison script:
 ```bash
 ./benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
 ```
+
+## Datasets
+
+The benchmarks are available for the following datasets:
+- `songs`
+- `wiki`
+
+### Songs
+
+`songs` is a subset of the [`songs.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/songs.csv.gz).
+
+It was generated with this command:
+
+```bash
+xsv sample --seed 42 1000000 songs.csv -o smol-songs.csv
+```
+
+_[Download the generated `songs` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-songs.csv.gz)._
+
+### Wiki
+
+`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/wiki-articles.csv.gz).
+
+It was generated with the following command:
+
+```bash
+xsv sample --seed 42 500000 wiki-articles.csv -o smol-wiki-articles.csv
+```
+
+_[Download the generated `wiki` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-wiki-articles.csv.gz)._
+
