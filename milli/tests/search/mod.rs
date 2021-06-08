@@ -98,14 +98,15 @@ pub fn expected_order(criteria: &[Criterion], autorize_typo: bool, optional_word
                     group.sort_by_key(|d| d.word_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.word_rank).map(Vec::from));
                 },
-                Criterion::Asc(_) => {
+                Criterion::Asc(field_name) if field_name == "asc_desc_rank" => {
                     group.sort_by_key(|d| d.asc_desc_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 },
-                Criterion::Desc(_) => {
+                Criterion::Desc(field_name)  if field_name == "asc_desc_rank" => {
                     group.sort_by_key(|d| std::cmp::Reverse(d.asc_desc_rank));
                     new_groups.extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 },
+                Criterion::Asc(_) | Criterion::Desc(_) => new_groups.push(group.clone()),
             }
         }
         groups = std::mem::take(&mut new_groups);

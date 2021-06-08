@@ -2,376 +2,57 @@ use milli::{Search, SearchResult, Criterion};
 use big_s::S;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
+use Criterion::*;
 
-#[test]
-fn none() {
-    let criteria = vec![];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
+const ALLOW_TYPOS: bool = true;
+const DISALLOW_TYPOS: bool = false;
+const ALLOW_OPTIONAL_WORDS: bool = true;
+const DISALLOW_OPTIONAL_WORDS: bool = false;
 
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
+macro_rules! test_criterion {
+    ($func:ident, $optional_word:ident, $authorize_typos:ident $(, $criterion:expr)?) => {
+        #[test]
+        fn $func() {
+            let criteria = vec![$($criterion)?];
+            let index = search::setup_search_index_with_criteria(&criteria);
+            let mut rtxn = index.read_txn().unwrap();
 
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
+            let mut search = Search::new(&mut rtxn, &index);
+            search.query(search::TEST_QUERY);
+            search.limit(EXTERNAL_DOCUMENTS_IDS.len());
+            search.authorize_typos($authorize_typos);
+            search.optional_words($optional_word);
 
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
+            let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
 
-    assert_eq!(documents_ids, expected_external_ids);
+            let expected_external_ids: Vec<_> = search::expected_order(&criteria, $authorize_typos, $optional_word).into_iter().map(|d| d.id).collect();
+            let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
+
+            assert_eq!(documents_ids, expected_external_ids);
+
+        }
+    }
 }
 
-#[test]
-fn words() {
-    let criteria = vec![Criterion::Words];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn attribute() {
-    let criteria = vec![Criterion::Attribute];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn exactness() {
-    let criteria = vec![Criterion::Exactness];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn proximity() {
-    let criteria = vec![Criterion::Proximity];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn typo() {
-    let criteria = vec![Criterion::Typo];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn asc() {
-    let criteria = vec![Criterion::Asc(S("asc_desc_rank"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn desc() {
-    let criteria = vec![Criterion::Desc(S("asc_desc_rank"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn none_0_typo() {
-    let criteria = vec![];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.authorize_typos(false);
-    search.optional_words(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn attribute_0_typo() {
-    let criteria = vec![Criterion::Attribute];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn exactness_0_typo() {
-    let criteria = vec![Criterion::Exactness];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn proximity_0_typo() {
-    let criteria = vec![Criterion::Proximity];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn typo_0_typo() {
-    let criteria = vec![Criterion::Typo];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn asc_0_typo() {
-    let criteria = vec![Criterion::Asc(S("asc_desc_rank"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn desc_0_typo() {
-    let criteria = vec![Criterion::Desc(S("asc_desc_rank"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn test_desc_on_unexisting_field_should_return_all_1() {
-    let criteria = vec![Criterion::Desc(S("unexisting_field"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let criteria = vec![];
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn test_asc_on_unexisting_field_should_return_all_1() {
-    let criteria = vec![Criterion::Asc(S("unexisting_field"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.optional_words(false);
-    search.authorize_typos(false);
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let criteria = vec![];
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, false, false).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn test_desc_on_unexisting_field_should_return_all_2() {
-    let criteria = vec![Criterion::Desc(S("unexisting_field"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let criteria = vec![];
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
-
-#[test]
-fn test_asc_on_unexisting_field_should_return_all_2() {
-    let criteria = vec![Criterion::Asc(S("unexisting_field"))];
-    let index = search::setup_search_index_with_criteria(&criteria);
-    let mut rtxn = index.read_txn().unwrap();
-
-    let mut search = Search::new(&mut rtxn, &index);
-    search.query(search::TEST_QUERY);
-    search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-
-    let SearchResult { matching_words: _matching_words, candidates: _candidates, documents_ids } = search.execute().unwrap();
-
-    let criteria = vec![];
-    let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true).into_iter().map(|d| d.id).collect();
-    let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
-
-    assert_eq!(documents_ids, expected_external_ids);
-}
+test_criterion!(none_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS);
+test_criterion!(none_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS);
+test_criterion!(words_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Words);
+test_criterion!(attribute_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Attribute);
+test_criterion!(attribute_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Attribute);
+test_criterion!(exactness_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Exactness);
+test_criterion!(exactness_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Exactness);
+test_criterion!(proximity_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Proximity);
+test_criterion!(proximity_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Proximity);
+test_criterion!(asc_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Asc(S("asc_desc_rank")));
+test_criterion!(asc_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Asc(S("asc_desc_rank")));
+test_criterion!(desc_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Desc(S("asc_desc_rank")));
+test_criterion!(desc_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Desc(S("asc_desc_rank")));
+test_criterion!(asc_unexisting_field_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Asc(S("unexisting_field")));
+test_criterion!(asc_unexisting_field_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Asc(S("unexisting_field")));
+test_criterion!(desc_unexisting_field_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, Desc(S("unexisting_field")));
+test_criterion!(desc_unexisting_field_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, Desc(S("unexisting_field")));
 
 #[test]
 fn criteria_mixup() {
