@@ -30,6 +30,16 @@ pub enum Criterion {
     Desc(String),
 }
 
+impl Criterion {
+    /// Returns the field name parameter of this criterion.
+    pub fn field_name(&self) -> Option<&str> {
+        match self {
+            Criterion::Asc(name) | Criterion::Desc(name) => Some(name),
+            _otherwise => None,
+        }
+    }
+}
+
 impl FromStr for Criterion {
     type Err = anyhow::Error;
 

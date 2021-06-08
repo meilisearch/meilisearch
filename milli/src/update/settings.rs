@@ -8,9 +8,10 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use rayon::ThreadPool;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{FieldsIdsMap, Index};
-use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
+use crate::criterion::Criterion;
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
+use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
+use crate::{FieldsIdsMap, Index};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting<T> {
@@ -403,12 +404,17 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_criteria(&mut self) -> anyhow::Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
+                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
-                    let criterion = name.parse()?;
+                    let criterion: Criterion = name.parse()?;
+                    if let Some(name) = criterion.field_name() {
+                        fields_ids_map.insert(name).context("field id limit exceeded")?;
+                    }
                     new_criteria.push(criterion);
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
+                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => { self.index.delete_criteria(self.wtxn)?; }
             Setting::NotSet => (),
