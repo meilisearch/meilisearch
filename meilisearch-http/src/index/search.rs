@@ -16,14 +16,14 @@ use super::Index;
 
 pub type Document = IndexMap<String, Value>;
 
-// pub const DEFAULT_CROP_LENGTH: usize = 5;
-// const fn default_crop_length() -> Option<usize> {
-//     Some(DEFAULT_CROP_LENGTH)
-// }
-
 pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 const fn default_search_limit() -> usize {
     DEFAULT_SEARCH_LIMIT
+}
+
+pub const DEFAULT_CROP_LENGTH: usize = 200;
+const fn default_crop_length() -> Option<usize> {
+    Some(DEFAULT_CROP_LENGTH)
 }
 
 #[derive(Deserialize)]
@@ -34,8 +34,8 @@ pub struct SearchQuery {
     #[serde(default = "default_search_limit")]
     pub limit: usize,
     pub attributes_to_retrieve: Option<HashSet<String>>,
-    pub attributes_to_crop: Option<HashSet<String>>,
-    // #[serde(default = "default_crop_length")]
+    pub attributes_to_crop: Option<Vec<String>>,
+    #[serde(default = "default_crop_length")]
     pub crop_length: Option<usize>,
     pub attributes_to_highlight: Option<HashSet<String>>,
     pub matches: Option<bool>,
@@ -126,11 +126,44 @@ impl Index {
             .map(fids)
             .unwrap_or_default();
 
-        let to_crop_ids = query
+        let to_crop_ids_length = query
             .attributes_to_crop
             .as_ref()
-            .map(fids)
+            .map(|attributes: &Vec<String>| {
+                let mut ids_length_crop = HashMap::new();
+                for attribute in attributes {
+                    let mut attr_name = attribute.clone();
+                    let mut attr_len = query.crop_length;
+
+                    if attr_name.contains(":") {
+                        let mut split = attr_name.rsplit(':');
+                        attr_len = match split.nth(0) {
+                            Some(s) => s.parse::<usize>().ok(),
+                            None => None,
+                        };
+                        attr_name = split.flat_map(|s| s.chars()).collect();
+                    }
+
+                    if attr_name == "*" {
+                        let ids = displayed_ids.clone();
+                        for id in ids {
+                            ids_length_crop.insert(id, attr_len);
+                        }
+                    }
+
+                    if let Some(id) = fields_ids_map.id(&attr_name) {
+                        ids_length_crop.insert(id, attr_len);
+                    }
+                }
+                ids_length_crop
+            })
             .unwrap_or_default();
+
+        let to_crop_ids = to_crop_ids_length
+            .clone()
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect::<HashSet<_>>();
 
         // The attributes to retrieve are:
         // - the ones explicitly marked as to retrieve that are also in the displayed attributes
@@ -164,12 +197,6 @@ impl Index {
         let highlighter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
-        let to_crop = to_crop_ids
-            .into_iter()
-            .map(|id| (id, query.crop_length))
-            // .map(|id| (id, Some(5)))
-            .collect::<HashMap<_, _>>();
-
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
             let document = make_document(&all_attributes, &fields_ids_map, obkv)?;
             let formatted = compute_formatted(
@@ -179,7 +206,7 @@ impl Index {
                 &matching_words,
                 all_formatted.as_ref().as_slice(),
                 &to_highlight_ids,
-                &to_crop,
+                &to_crop_ids_length,
             )?;
             let hit = SearchHit {
                 document,
@@ -352,7 +379,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 while let Some((word, token)) = tokens.next_if(|(_, token)| !matcher.matches(token.text())) {
                     buffer.push_back((word, token));
                     taken_before += word.chars().count();
-                    while taken_before >= crop_len {
+                    while taken_before > crop_len {
                         // Around to the previous word
                         if let Some((word, _)) = buffer.front() {
                             if taken_before - word.chars().count() < crop_len {

@@ -40,7 +40,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let attributes_to_highlight = other
             .attributes_to_highlight
