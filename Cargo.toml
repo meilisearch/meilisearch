@@ -7,3 +7,14 @@ debug = true
 
 [profile.bench]
 debug = true
+
+# Make sure that the build scripts and proc-macros are compiled with
+# all the optimizations. It speeds up the zip crate that we use in the build.rs.
+[profile.dev.build-override]
+opt-level = 3
+[profile.release.build-override]
+opt-level = 3
+[profile.bench.build-override]
+opt-level = 3
+[profile.test.build-override]
+opt-level = 3
