@@ -203,7 +203,10 @@ fn criteria_mixup() {
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
-        let expected_external_ids: Vec<_> = search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS).into_iter().map(|d| d.id).collect();
+        let expected_external_ids: Vec<_> = search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS)
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
         let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
 
         assert_eq!(documents_ids, expected_external_ids);

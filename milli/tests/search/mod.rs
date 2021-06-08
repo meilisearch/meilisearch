@@ -29,9 +29,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.set_criteria(criteria);
     builder.set_filterable_fields(hashset!{
         S("tag"),
-        S("unexisting_field"),
         S("asc_desc_rank"),
-        S("unexisting_field"),
     });
     builder.set_synonyms(hashmap!{
         S("hello") => vec![S("good morning")],
