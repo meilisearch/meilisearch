@@ -68,4 +68,4 @@ jobs:
           echo "${{ steps.file.outputs.basename }}.json has just been pushed."
           echo 'How to compare this benchmark with another one?'
           echo '  - Check the available files with: ./benchmarks/scripts/list.sh'
-          echo "  - Run the following command: ./benchmaks/scipts/compare.sh ${{ steps.file.outputs.basename }}.json <file-to-compare-with>"
+          echo "  - Run the following command: ./benchmaks/scipts/compare.sh <file-to-compare-with> ${{ steps.file.outputs.basename }}.json"
