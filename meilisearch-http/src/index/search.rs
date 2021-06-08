@@ -135,9 +135,9 @@ impl Index {
                     let mut attr_name = attribute.clone();
                     let mut attr_len = query.crop_length;
 
-                    if attr_name.contains(":") {
+                    if attr_name.contains(':') {
                         let mut split = attr_name.rsplit(':');
-                        attr_len = match split.nth(0) {
+                        attr_len = match split.next() {
                             Some(s) => s.parse::<usize>().ok(),
                             None => None,
                         };
