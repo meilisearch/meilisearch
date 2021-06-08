@@ -7,3 +7,13 @@ debug = true
 
 [profile.bench]
 debug = true
+
+# Set the settings for build scripts and proc-macros.
+[profile.dev.build-override]
+opt-level = 3
+[profile.release.build-override]
+opt-level = 3
+[profile.bench.build-override]
+opt-level = 3
+[profile.test.build-override]
+opt-level = 3
