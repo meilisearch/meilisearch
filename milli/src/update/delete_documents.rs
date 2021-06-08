@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use chrono::Utc;
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Unit};
@@ -77,7 +77,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-        let id_field = fields_ids_map.id("id").expect(r#"the field "id" to be present"#);
+        let primary_key = self.index.primary_key(self.wtxn)?.context("missing primary key")?;
+        let id_field = fields_ids_map.id(primary_key).expect(r#"the field "id" to be present"#);
 
         let Index {
             env: _env,
@@ -439,7 +440,6 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
-        // First we send 3 documents with an id for only one of them.
         let mut wtxn = index.write_txn().unwrap();
         let content = &br#"[
             { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
@@ -462,5 +462,31 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         assert!(index.fields_distribution(&rtxn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_documents_with_strange_primary_key() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "mysuperid": 0, "name": "kevin" },
+            { "mysuperid": 1, "name": "kevina" },
+            { "mysuperid": 2, "name": "benoit" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index, 1).unwrap();
+        builder.delete_external_id("0");
+        builder.delete_external_id("1");
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
     }
 }
