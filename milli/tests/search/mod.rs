@@ -52,13 +52,6 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     index
 }
 
-#[allow(dead_code)]
-pub fn external_to_internal_ids(index: &Index, external_ids: &[&str]) -> Vec<DocumentId> {
-    let mut rtxn = index.read_txn().unwrap();
-    let docid_map = index.external_documents_ids(&mut rtxn).unwrap();
-    external_ids.iter().map(|id| docid_map.get(id).unwrap()).collect()
-}
-
 pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> Vec<String> {
     let mut rtxn = index.read_txn().unwrap();
     let docid_map = index.external_documents_ids(&mut rtxn).unwrap();
@@ -70,7 +63,7 @@ fn fetch_dataset() -> Vec<TestDocument> {
     serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect()
 }
 
-pub fn expected_order(criteria: &[Criterion], autorize_typo: bool, optional_words: bool) -> Vec<TestDocument> {
+pub fn expected_order(criteria: &[Criterion], authorize_typo: bool, optional_words: bool) -> Vec<TestDocument> {
     let dataset = fetch_dataset();
     let mut groups: Vec<Vec<TestDocument>> = vec![dataset];
 
@@ -112,11 +105,11 @@ pub fn expected_order(criteria: &[Criterion], autorize_typo: bool, optional_word
         groups = std::mem::take(&mut new_groups);
     }
 
-    if autorize_typo && optional_words {
+    if authorize_typo && optional_words {
         groups.into_iter().flatten().collect()
     } else if optional_words {
         groups.into_iter().flatten().filter(|d| d.typo_rank == 0).collect()
-    } else if autorize_typo {
+    } else if authorize_typo {
         groups.into_iter().flatten().filter(|d| d.word_rank == 0).collect()
     } else {
         groups.into_iter().flatten().filter(|d| d.word_rank == 0 && d.typo_rank == 0).collect()
