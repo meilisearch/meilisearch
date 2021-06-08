@@ -475,7 +475,7 @@ fn create_primitive_query(query: TokenStream, stop_words: Option<Set<&[u8]>>, wo
                 if quote_count % 2 != 0 {
                     quoted = !quoted;
                 }
-                // if there are any quote or any hard separator we close the phrase.
+                // if there is a quote or a hard separator we close the phrase.
                 if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard) {
                     primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
                 }
