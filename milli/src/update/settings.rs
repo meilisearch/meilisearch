@@ -697,7 +697,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         // Don't display the generated `id` field.
-        builder.set_displayed_fields(vec![S("name"), S("age")]);
+        builder.set_displayed_fields(vec![S("name")]);
         builder.set_criteria(vec![S("asc(age)")]);
         builder.execute(|_, _| ()).unwrap();
 
