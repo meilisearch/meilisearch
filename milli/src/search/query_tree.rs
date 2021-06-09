@@ -1,7 +1,9 @@
 use std::{fmt, cmp, mem};
 
 use fst::Set;
-use meilisearch_tokenizer::{TokenKind, tokenizer::TokenStream};
+use meilisearch_tokenizer::token::SeparatorKind;
+use meilisearch_tokenizer::tokenizer::TokenStream;
+use meilisearch_tokenizer::TokenKind;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
@@ -467,13 +469,14 @@ fn create_primitive_query(query: TokenStream, stop_words: Option<Set<&[u8]>>, wo
                     primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), true));
                 }
             },
-            TokenKind::Separator(_) => {
+            TokenKind::Separator(separator_kind) => {
                 let quote_count = token.word.chars().filter(|&s| s == '"').count();
                 // swap quoted state if we encounter a double quote
                 if quote_count % 2 != 0 {
                     quoted = !quoted;
                 }
-                if !phrase.is_empty() && quote_count > 0 {
+                // if there is a quote or a hard separator we close the phrase.
+                if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard) {
                     primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
                 }
             },
@@ -791,6 +794,29 @@ mod test {
                 Operation::Query(Query { prefix: false, kind: QueryKind::exact("friends".to_string()) }),
             ]),
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
+        ]);
+
+        let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+
+        assert_eq!(expected, query_tree);
+    }
+
+    #[test]
+    fn phrase_with_hard_separator() {
+        let query = "\"hey friends. wooop wooop\"";
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+        let result = analyzer.analyze(query);
+        let tokens = result.tokens();
+
+        let expected = Operation::And(vec![
+            Operation::Consecutive(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friends".to_string()) }),
+            ]),
+            Operation::Consecutive(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
+            ]),
         ]);
 
         let (query_tree, _) = TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
