@@ -26,11 +26,7 @@ use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec32, Position, DocumentId, FieldId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
-use super::merge_function::{
-    main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
-    word_level_position_docids_merge, facet_field_value_docids_merge,
-    field_id_docid_facet_values_merge, field_id_word_count_docids_merge,
-};
+use super::merge_function::{fst_merge, keep_first, roaring_bitmap_merge, cbo_roaring_bitmap_merge};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_KILOBYTE: usize = 1024 * 1024;
@@ -104,7 +100,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         let linked_hash_map_size = linked_hash_map_size.unwrap_or(500);
 
         let main_sorter = create_sorter(
-            main_merge,
+            fst_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -112,7 +108,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let word_docids_sorter = create_sorter(
-            word_docids_merge,
+            roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -120,7 +116,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let words_pairs_proximities_docids_sorter = create_sorter(
-            words_pairs_proximities_docids_merge,
+            cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -128,7 +124,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let word_level_position_docids_sorter = create_sorter(
-            word_level_position_docids_merge,
+            cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -136,7 +132,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let field_id_word_count_docids_sorter = create_sorter(
-            field_id_word_count_docids_merge,
+            cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -144,7 +140,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let facet_field_numbers_docids_sorter = create_sorter(
-            facet_field_value_docids_merge,
+            cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -152,7 +148,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let facet_field_strings_docids_sorter = create_sorter(
-            facet_field_value_docids_merge,
+            cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -160,7 +156,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let field_id_docid_facet_numbers_sorter = create_sorter(
-            field_id_docid_facet_values_merge,
+            keep_first,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -168,7 +164,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             Some(1024 * 1024 * 1024), // 1MB
         );
         let field_id_docid_facet_strings_sorter = create_sorter(
-            field_id_docid_facet_values_merge,
+            keep_first,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,

@@ -15,7 +15,7 @@ use crate::heed_codec::{StrLevelPositionCodec, CboRoaringBitmapCodec};
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{
     create_writer, create_sorter, writer_into_reader, write_into_lmdb_database,
-    word_prefix_level_positions_docids_merge, sorter_into_lmdb_database
+    cbo_roaring_bitmap_merge, sorter_into_lmdb_database
 };
 use crate::{Index, TreeLevel};
 
@@ -86,7 +86,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         self.index.word_prefix_level_position_docids.clear(self.wtxn)?;
 
         let mut word_prefix_level_positions_docids_sorter = create_sorter(
-            word_prefix_level_positions_docids_merge,
+            cbo_roaring_bitmap_merge,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.chunk_fusing_shrink_size,
@@ -119,7 +119,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             word_prefix_level_positions_docids_sorter,
-            word_prefix_level_positions_docids_merge,
+            cbo_roaring_bitmap_merge,
             WriteMethod::Append,
         )?;
 

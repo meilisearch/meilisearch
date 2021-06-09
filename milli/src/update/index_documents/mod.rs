@@ -25,11 +25,8 @@ use crate::update::{
 };
 use self::store::{Store, Readers};
 pub use self::merge_function::{
-    main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
-    docid_word_positions_merge, documents_merge,
-    word_level_position_docids_merge, word_prefix_level_positions_docids_merge,
-    facet_field_value_docids_merge, field_id_docid_facet_values_merge,
-    field_id_word_count_docids_merge,
+    fst_merge, cbo_roaring_bitmap_merge, roaring_bitmap_merge,
+    docid_word_positions_merge, documents_merge, keep_first
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -539,22 +536,22 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             debug!("Merging the main, word docids and words pairs proximity docids in parallel...");
             rayon::spawn(move || {
                 vec![
-                    (DatabaseType::Main, main_readers, main_merge as MergeFn),
-                    (DatabaseType::WordDocids, word_docids_readers, word_docids_merge),
+                    (DatabaseType::Main, main_readers, fst_merge as MergeFn),
+                    (DatabaseType::WordDocids, word_docids_readers, roaring_bitmap_merge),
                     (
                         DatabaseType::FacetLevel0NumbersDocids,
                         facet_field_numbers_docids_readers,
-                        facet_field_value_docids_merge,
+                        cbo_roaring_bitmap_merge,
                     ),
                     (
                         DatabaseType::WordLevel0PositionDocids,
                         word_level_position_docids_readers,
-                        word_level_position_docids_merge,
+                        cbo_roaring_bitmap_merge,
                     ),
                     (
                         DatabaseType::FieldIdWordCountDocids,
                         field_id_word_count_docids_readers,
-                        field_id_word_count_docids_merge,
+                        cbo_roaring_bitmap_merge,
                     ),
                 ]
                 .into_par_iter()
@@ -657,7 +654,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             self.wtxn,
             *self.index.facet_id_string_docids.as_polymorph(),
             facet_field_strings_docids_readers,
-            facet_field_value_docids_merge,
+            cbo_roaring_bitmap_merge,
             write_method,
         )?;
 
@@ -672,7 +669,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             self.wtxn,
             *self.index.field_id_docid_facet_f64s.as_polymorph(),
             field_id_docid_facet_numbers_readers,
-            field_id_docid_facet_values_merge,
+            keep_first,
             write_method,
         )?;
 
@@ -687,7 +684,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             self.wtxn,
             *self.index.field_id_docid_facet_strings.as_polymorph(),
             field_id_docid_facet_strings_readers,
-            field_id_docid_facet_values_merge,
+            keep_first,
             write_method,
         )?;
 
@@ -702,7 +699,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             self.wtxn,
             *self.index.word_pair_proximity_docids.as_polymorph(),
             words_pairs_proximities_docids_readers,
-            words_pairs_proximities_docids_merge,
+            cbo_roaring_bitmap_merge,
             write_method,
         )?;
 
@@ -721,7 +718,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         self.wtxn,
                         self.index.main,
                         content,
-                        main_merge,
+                        fst_merge,
                         WriteMethod::GetMergePut,
                     )?;
                 },
@@ -732,7 +729,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         self.wtxn,
                         db,
                         content,
-                        word_docids_merge,
+                        roaring_bitmap_merge,
                         write_method,
                     )?;
                 },
@@ -743,7 +740,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         self.wtxn,
                         db,
                         content,
-                        facet_field_value_docids_merge,
+                        cbo_roaring_bitmap_merge,
                         write_method,
                     )?;
                 },
@@ -754,7 +751,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         self.wtxn,
                         db,
                         content,
-                        field_id_word_count_docids_merge,
+                        cbo_roaring_bitmap_merge,
                         write_method,
                     )?;
                 },
@@ -765,7 +762,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         self.wtxn,
                         db,
                         content,
-                        word_level_position_docids_merge,
+                        cbo_roaring_bitmap_merge,
                         write_method,
                     )?;
                 }
