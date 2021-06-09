@@ -10,7 +10,7 @@ use convert_case::{Case, Casing};
 use flate2::read::GzDecoder;
 use reqwest::IntoUrl;
 
-const BASE_URL: &str = "https://meili-datasets.s3.fr-par.scw.cloud/benchmarks";
+const BASE_URL: &str = "https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets";
 
 const DATASET_SONGS: &str = "smol-songs";
 const DATASET_WIKI: &str = "smol-wiki-articles";

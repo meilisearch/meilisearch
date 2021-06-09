@@ -4,7 +4,6 @@ mod criterion;
 mod external_documents_ids;
 mod fields_ids_map;
 mod search;
-mod update_store;
 pub mod facet;
 pub mod heed_codec;
 pub mod index;
@@ -29,7 +28,6 @@ pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRo
 pub use self::index::Index;
 pub use self::search::{Search, FacetDistribution, FilterCondition, SearchResult, MatchingWords};
 pub use self::tree_level::TreeLevel;
-pub use self::update_store::UpdateStore;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;

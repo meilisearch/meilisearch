@@ -9,7 +9,6 @@ anyhow = "1.0.38"
 bstr = "0.2.15"
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }
-crossbeam-channel = "0.5.0"
 csv = "1.1.5"
 either = "1.6.1"
 flate2 = "1.0.20"

@@ -1,3 +1,5 @@
+mod update_store;
+
 use std::{io, mem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
@@ -29,9 +31,11 @@ use tokio::sync::broadcast;
 use warp::{Filter, http::Response};
 use warp::filters::ws::Message;
 
-use milli::{FilterCondition, Index, MatchingWords, obkv_to_json, SearchResult, UpdateStore};
+use milli::{FilterCondition, Index, MatchingWords, obkv_to_json, SearchResult};
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use milli::update::UpdateIndexingStep::*;
+
+use self::update_store::UpdateStore;
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 

@@ -87,7 +87,7 @@ The benchmarks are available for the following datasets:
 
 ### Songs
 
-`songs` is a subset of the [`songs.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/songs.csv.gz).
+`songs` is a subset of the [`songs.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/songs.csv.gz).
 
 It was generated with this command:
 
@@ -95,11 +95,11 @@ It was generated with this command:
 xsv sample --seed 42 1000000 songs.csv -o smol-songs.csv
 ```
 
-_[Download the generated `songs` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-songs.csv.gz)._
+_[Download the generated `songs` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-songs.csv.gz)._
 
 ### Wiki
 
-`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://meili-datasets.s3.fr-par.scw.cloud/wiki-articles.csv.gz).
+`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/wiki-articles.csv.gz).
 
 It was generated with the following command:
 
@@ -107,5 +107,5 @@ It was generated with the following command:
 xsv sample --seed 42 500000 wiki-articles.csv -o smol-wiki-articles.csv
 ```
 
-_[Download the generated `wiki` dataset](https://meili-datasets.s3.fr-par.scw.cloud/benchmarks/smol-wiki-articles.csv.gz)._
+_[Download the generated `wiki` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-wiki-articles.csv.gz)._
 

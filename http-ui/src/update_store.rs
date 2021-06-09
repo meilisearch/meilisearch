@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,7 +8,7 @@ use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
 use heed::{EnvOpenOptions, Env, Database};
 use serde::{Serialize, Deserialize};
 
-use crate::BEU64;
+pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 #[derive(Clone)]
 pub struct UpdateStore<M, N> {
