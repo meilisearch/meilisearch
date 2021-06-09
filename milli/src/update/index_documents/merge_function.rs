@@ -1,11 +1,27 @@
 use std::borrow::Cow;
 
-use anyhow::bail;
-use bstr::ByteSlice as _;
 use fst::IntoStreamer;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
+
+/// Only the last value associated with an id is kept.
+pub fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    Ok(obkvs.last().unwrap().clone().into_owned())
+}
+
+/// Merge all the obks in the order we see them.
+pub fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    let mut iter = obkvs.iter();
+    let first = iter.next().map(|b| b.clone().into_owned()).unwrap();
+    Ok(iter.fold(first, |acc, current| {
+        let first = obkv::KvReader::new(&acc);
+        let second = obkv::KvReader::new(current);
+        let mut buffer = Vec::new();
+        merge_two_obkvs(first, second, &mut buffer);
+        buffer
+    }))
+}
 
 // Union of multiple FSTs
 pub fn fst_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {

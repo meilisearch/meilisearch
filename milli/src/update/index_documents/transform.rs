@@ -10,8 +10,9 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
+use crate::update::index_documents::merge_function::{merge_obkvs, keep_latest_obkv};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
@@ -550,24 +551,6 @@ fn compute_primary_key_pair(
             Ok((id, name))
         },
     }
-}
-
-/// Only the last value associated with an id is kept.
-fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    obkvs.last().context("no last value").map(|last| last.clone().into_owned())
-}
-
-/// Merge all the obks in the order we see them.
-fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    let mut iter = obkvs.iter();
-    let first = iter.next().map(|b| b.clone().into_owned()).context("no first value")?;
-    Ok(iter.fold(first, |acc, current| {
-        let first = obkv::KvReader::new(&acc);
-        let second = obkv::KvReader::new(current);
-        let mut buffer = Vec::new();
-        merge_two_obkvs(first, second, &mut buffer);
-        buffer
-    }))
 }
 
 fn validate_document_id(document_id: &str) -> Option<&str> {
