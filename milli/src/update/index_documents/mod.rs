@@ -25,8 +25,7 @@ use crate::update::{
 };
 use self::store::{Store, Readers};
 pub use self::merge_function::{
-    fst_merge, cbo_roaring_bitmap_merge, roaring_bitmap_merge,
-    docid_word_positions_merge, keep_first
+    fst_merge, cbo_roaring_bitmap_merge, roaring_bitmap_merge, keep_first
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -619,12 +618,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             total_databases,
         });
 
-        debug!("Writing the docid word positions into LMDB on disk...");
+        debug!("Inserting the docid word positions into LMDB on disk...");
         merge_into_lmdb_database(
             self.wtxn,
             *self.index.docid_word_positions.as_polymorph(),
             docid_word_positions_readers,
-            docid_word_positions_merge,
+            keep_first,
             write_method
         )?;
 

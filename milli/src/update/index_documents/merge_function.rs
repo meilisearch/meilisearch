@@ -18,10 +18,6 @@ pub fn fst_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     Ok(build.into_inner().unwrap())
 }
 
-pub fn docid_word_positions_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    panic!("merging docid word positions is an error ({:?})", key.as_bstr())
-}
-
 pub fn keep_first(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     Ok(values.first().unwrap().to_vec())
 }
