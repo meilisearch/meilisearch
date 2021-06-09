@@ -249,8 +249,9 @@ impl IndexController {
     ) -> anyhow::Result<IndexMetadata> {
         let IndexSettings { uid, primary_key } = index_settings;
         let uid = uid.ok_or_else(|| anyhow::anyhow!("Can't create an index without a uid."))?;
-        let uuid = self.uuid_resolver.create(uid.clone()).await?;
+        let uuid = Uuid::new_v4();
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
+        self.uuid_resolver.insert(uid.clone(), uuid).await?;
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),

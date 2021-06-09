@@ -8,7 +8,7 @@ use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{Result, UuidResolverError, UUID_STORE_SIZE};
+use super::{Result, UUID_STORE_SIZE, UuidResolverError};
 use crate::helpers::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
@@ -23,7 +23,6 @@ const UUIDS_DB_PATH: &str = "index_uuids";
 pub trait UuidStore: Sized {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
-    async fn create_uuid(&self, uid: String, err: bool) -> Result<Uuid>;
     async fn get_uuid(&self, uid: String) -> Result<Option<Uuid>>;
     async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
@@ -50,27 +49,6 @@ impl HeedUuidStore {
         Ok(Self { env, db })
     }
 
-    pub fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
-        let env = self.env.clone();
-        let db = self.db;
-        let mut txn = env.write_txn()?;
-        match db.get(&txn, &name)? {
-            Some(uuid) => {
-                if err {
-                    Err(UuidResolverError::NameAlreadyExist)
-                } else {
-                    let uuid = Uuid::from_slice(uuid)?;
-                    Ok(uuid)
-                }
-            }
-            None => {
-                let uuid = Uuid::new_v4();
-                db.put(&mut txn, &name, uuid.as_bytes())?;
-                txn.commit()?;
-                Ok(uuid)
-            }
-        }
-    }
     pub fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
         let env = self.env.clone();
         let db = self.db;
@@ -116,6 +94,11 @@ impl HeedUuidStore {
         let env = self.env.clone();
         let db = self.db;
         let mut txn = env.write_txn()?;
+
+        if db.get(&txn, &name)?.is_some() {
+           return Err(UuidResolverError::NameAlreadyExist)
+        }
+
         db.put(&mut txn, &name, uuid.as_bytes())?;
         txn.commit()?;
         Ok(())
@@ -205,11 +188,6 @@ impl HeedUuidStore {
 
 #[async_trait::async_trait]
 impl UuidStore for HeedUuidStore {
-    async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
-        let this = self.clone();
-        tokio::task::spawn_blocking(move || this.create_uuid(name, err)).await?
-    }
-
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.get_uuid(name)).await?

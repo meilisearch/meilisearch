@@ -229,7 +229,7 @@ impl UpdateStore {
         let mut txn = self.env.write_txn()?;
 
         let (global_id, update_id) = self.next_update_id(&mut txn, index_uuid)?;
-        let meta = Enqueued::new(meta, update_id, content);
+        let meta = dbg!(Enqueued::new(meta, update_id, content));
 
         self.pending_queue
             .put(&mut txn, &(global_id, index_uuid, update_id), &meta)?;
@@ -280,7 +280,7 @@ impl UpdateStore {
     ) -> anyhow::Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
-        let first_meta = self.pending_queue.first(&rtxn)?;
+        let first_meta = dbg!(self.pending_queue.first(&rtxn)?);
         drop(rtxn);
 
         // If there is a pending update we process and only keep

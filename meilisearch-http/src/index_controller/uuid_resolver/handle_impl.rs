@@ -32,15 +32,6 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .expect("Uuid resolver actor has been killed")?)
     }
 
-    async fn create(&self, name: String) -> anyhow::Result<Uuid> {
-        let (ret, receiver) = oneshot::channel();
-        let msg = UuidResolveMsg::Create { uid: name, ret };
-        let _ = self.sender.send(msg).await;
-        Ok(receiver
-            .await
-            .expect("Uuid resolver actor has been killed")?)
-    }
-
     async fn delete(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Delete { uid: name, ret };

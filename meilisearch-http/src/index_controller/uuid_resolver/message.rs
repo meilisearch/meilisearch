@@ -11,10 +11,6 @@ pub enum UuidResolveMsg {
         uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
-    Create {
-        uid: String,
-        ret: oneshot::Sender<Result<Uuid>>,
-    },
     Delete {
         uid: String,
         ret: oneshot::Sender<Result<Uuid>>,
