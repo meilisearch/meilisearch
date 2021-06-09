@@ -112,6 +112,6 @@ fn cbo_roaring_bitmap_merge(values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     }
 
     let mut vec = Vec::new();
-    CboRoaringBitmapCodec::serialize_into(&head, &mut vec)?;
+    CboRoaringBitmapCodec::serialize_into(&head, &mut vec);
     Ok(vec)
 }

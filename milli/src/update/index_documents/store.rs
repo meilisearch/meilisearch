@@ -407,7 +407,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // We serialize the document ids into a buffer
             buffer.clear();
             buffer.reserve(CboRoaringBitmapCodec::serialized_size(&docids));
-            CboRoaringBitmapCodec::serialize_into(&docids, &mut buffer)?;
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut buffer);
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
@@ -469,8 +469,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                 data_buffer.clear();
                 let positions = RoaringBitmap::from_iter(Some(document_id));
                 // We serialize the positions into a buffer.
-                CboRoaringBitmapCodec::serialize_into(&positions, &mut data_buffer)
-                    .with_context(|| "could not serialize positions")?;
+                CboRoaringBitmapCodec::serialize_into(&positions, &mut data_buffer);
 
                 // that we write under the generated key into MTBL
                 if lmdb_key_valid_size(&key_buffer) {
@@ -706,7 +705,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         let mut docids_buffer = Vec::new();
         for ((fid, count), docids) in self.field_id_word_count_docids {
             docids_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&docids, &mut docids_buffer)?;
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut docids_buffer);
             self.field_id_word_count_docids_sorter.insert([fid, count], &docids_buffer)?;
         }
 
