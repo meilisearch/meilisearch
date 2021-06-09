@@ -6,6 +6,13 @@ use roaring::RoaringBitmap;
 
 pub struct BoRoaringBitmapCodec;
 
+impl BoRoaringBitmapCodec {
+    pub fn serialize_into(bitmap: &RoaringBitmap, out: &mut Vec<u8>) {
+        out.reserve(bitmap.len() as usize * size_of::<u32>());
+        bitmap.iter().map(u32::to_ne_bytes).for_each(|bytes| out.extend_from_slice(&bytes));
+    }
+}
+
 impl heed::BytesDecode<'_> for BoRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
@@ -25,12 +32,8 @@ impl heed::BytesEncode<'_> for BoRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
     fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
-        let mut out = Vec::with_capacity(item.len() as usize * size_of::<u32>());
-
-        item.iter()
-            .map(|i| i.to_ne_bytes())
-            .for_each(|bytes| out.extend_from_slice(&bytes));
-
+        let mut out = Vec::new();
+        BoRoaringBitmapCodec::serialize_into(item, &mut out);
         Some(Cow::Owned(out))
     }
 }

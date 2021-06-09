@@ -421,6 +421,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     {
         // We prefix the words by the document id.
         let mut key = id.to_be_bytes().to_vec();
+        let mut buffer = Vec::new();
         let base_size = key.len();
 
         // We order the words lexicographically, this way we avoid passing by a sorter.
@@ -429,13 +430,15 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         for (word, positions) in words_positions {
             key.truncate(base_size);
             key.extend_from_slice(word.as_bytes());
+            buffer.clear();
+
             // We serialize the positions into a buffer.
             let positions = RoaringBitmap::from_iter(positions.iter().cloned());
-            let bytes = BoRoaringBitmapCodec::bytes_encode(&positions)
-                .with_context(|| "could not serialize positions")?;
+            BoRoaringBitmapCodec::serialize_into(&positions, &mut buffer);
+
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
-                writer.insert(&key, &bytes)?;
+                writer.insert(&key, &buffer)?;
             }
         }
 
@@ -483,14 +486,18 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     ) -> anyhow::Result<()>
     where I: IntoIterator<Item=((FieldId, String), RoaringBitmap)>
     {
+        let mut key_buffer = Vec::new();
+        let mut data_buffer = Vec::new();
+
         for ((field_id, value), docids) in iter {
-            let key = FacetValueStringCodec::bytes_encode(&(field_id, &value))
-                .map(Cow::into_owned)
-                .context("could not serialize facet key")?;
-            let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)
-                .context("could not serialize docids")?;
-            if lmdb_key_valid_size(&key) {
-                sorter.insert(&key, &bytes)?;
+            key_buffer.clear();
+            data_buffer.clear();
+
+            FacetValueStringCodec::serialize_into(field_id, &value, &mut key_buffer);
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
+
+            if lmdb_key_valid_size(&key_buffer) {
+                sorter.insert(&key_buffer, &data_buffer)?;
             }
         }
 
@@ -503,14 +510,19 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     ) -> anyhow::Result<()>
     where I: IntoIterator<Item=((FieldId, OrderedFloat<f64>), RoaringBitmap)>
     {
+        let mut data_buffer = Vec::new();
+
         for ((field_id, value), docids) in iter {
+            data_buffer.clear();
+
             let key = FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *value, *value))
                 .map(Cow::into_owned)
-                .context("could not serialize facet key")?;
-            let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)
-                .context("could not serialize docids")?;
+                .context("could not serialize facet level value key")?;
+
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
+
             if lmdb_key_valid_size(&key) {
-                sorter.insert(&key, &bytes)?;
+                sorter.insert(&key, &data_buffer)?;
             }
         }
 
@@ -526,7 +538,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     {
         let key = FieldDocIdFacetF64Codec::bytes_encode(&(field_id, document_id, *value))
             .map(Cow::into_owned)
-            .context("could not serialize facet key")?;
+            .context("could not serialize facet level value key")?;
 
         if lmdb_key_valid_size(&key) {
             sorter.insert(&key, &[])?;
@@ -542,12 +554,12 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         value: &str,
     ) -> anyhow::Result<()>
     {
-        let key = FieldDocIdFacetStringCodec::bytes_encode(&(field_id, document_id, value))
-            .map(Cow::into_owned)
-            .context("could not serialize facet key")?;
+        let mut buffer = Vec::new();
 
-        if lmdb_key_valid_size(&key) {
-            sorter.insert(&key, &[])?;
+        FieldDocIdFacetStringCodec::serialize_into(field_id, document_id, value, &mut buffer);
+
+        if lmdb_key_valid_size(&buffer) {
+            sorter.insert(&buffer, &[])?;
         }
 
         Ok(())
