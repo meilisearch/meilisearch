@@ -108,7 +108,6 @@ impl UpdateStore {
         let updates = self
             .updates
             .iter(txn)?
-            .remap_key_type::<UpdateKeyCodec>()
             .lazily_decode_data();
 
         for update in updates {

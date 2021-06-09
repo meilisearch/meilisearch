@@ -106,7 +106,7 @@ where
         mut payload: mpsc::Receiver<PayloadData<D>>,
     ) -> Result<UpdateStatus> {
         let file_path = match meta {
-            UpdateMeta::DocumentsAddition { .. } | UpdateMeta::DeleteDocuments => {
+            UpdateMeta::DocumentsAddition { .. } => {
                 let update_file_id = uuid::Uuid::new_v4();
                 let path = self
                     .path
@@ -181,10 +181,13 @@ where
 
     async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let store = self.store.clone();
+        tokio::task::spawn_blocking(move || {
         let result = store
             .meta(uuid, id)?
             .ok_or(UpdateError::UnexistingUpdate(id))?;
-        Ok(result)
+            Ok(result)
+        })
+        .await?
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> Result<()> {

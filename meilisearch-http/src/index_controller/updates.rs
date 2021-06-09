@@ -23,7 +23,9 @@ pub enum UpdateMeta {
         primary_key: Option<String>,
     },
     ClearDocuments,
-    DeleteDocuments,
+    DeleteDocuments {
+        documents: Vec<String>
+    },
     Settings(Settings<Unchecked>),
 }
 

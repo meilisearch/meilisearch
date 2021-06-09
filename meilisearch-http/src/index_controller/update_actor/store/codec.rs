@@ -75,10 +75,10 @@ impl<'a> BytesDecode<'a> for UpdateKeyCodec {
     type DItem = (Uuid, u64);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let uuid_bytes = bytes.get(0..size_of::<Uuid>())?.try_into().ok()?;
+        let uuid_bytes = dbg!(bytes.get(0..size_of::<Uuid>())?.try_into().ok())?;
         let uuid = Uuid::from_bytes(uuid_bytes);
 
-        let update_id_bytes = bytes.get(size_of::<Uuid>()..)?.try_into().ok()?;
+        let update_id_bytes = dbg!(bytes.get(size_of::<Uuid>()..)?.try_into().ok())?;
         let update_id = u64::from_be_bytes(update_id_bytes);
 
         Some((uuid, update_id))

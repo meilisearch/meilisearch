@@ -81,7 +81,7 @@ impl UpdateHandler {
                 primary_key.as_deref(),
             ),
             ClearDocuments => index.clear_documents(update_builder),
-            DeleteDocuments => index.delete_documents(content, update_builder),
+            DeleteDocuments { documents } => index.delete_documents(documents.to_vec(), update_builder),
             Settings(settings) => index.update_settings(&settings.clone().check(), update_builder),
         };
 

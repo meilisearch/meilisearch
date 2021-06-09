@@ -97,7 +97,7 @@ pub struct UpdateStore {
     /// The keys are built as follow:
     /// |    Uuid  |   id    |
     /// | 16-bytes | 8-bytes |
-    updates: Database<ByteSlice, SerdeJson<UpdateStatus>>,
+    updates: Database<UpdateKeyCodec, SerdeJson<UpdateStatus>>,
     /// Indicates the current state of the update store,
     state: Arc<StateLock>,
     /// Wake up the loop when a new event occurs.
@@ -244,6 +244,8 @@ impl UpdateStore {
 
         txn.commit()?;
 
+        dbg!("here");
+
         self.notification_sender
             .blocking_send(())
             .expect("Update store loop exited.");
@@ -269,7 +271,7 @@ impl UpdateStore {
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.remap_key_type::<UpdateKeyCodec>().put(
+                self.updates.put(
                     wtxn,
                     &(index_uuid, update.id()),
                     &update,
@@ -324,6 +326,8 @@ impl UpdateStore {
         let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
         let update_id = processing.id();
 
+        dbg!(&processing);
+
         let file = match content_path {
             Some(ref path) => {
                 let file = File::open(path)?;
@@ -352,7 +356,7 @@ impl UpdateStore {
             Err(res) => res.into(),
         };
 
-        self.updates.remap_key_type::<UpdateKeyCodec>().put(
+        self.updates.put(
             &mut wtxn,
             &(index_uuid, update_id),
             &result,
@@ -381,7 +385,11 @@ impl UpdateStore {
             }
         }
 
-        let updates = self.updates.prefix_iter(&txn, index_uuid.as_bytes())?;
+        let updates = self
+            .updates
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(&txn, index_uuid.as_bytes())?;
+
         for entry in updates {
             let (_, update) = entry?;
             update_list.insert(update.id(), update);
@@ -412,26 +420,19 @@ impl UpdateStore {
 
         let txn = self.env.read_txn()?;
         // Else, check if it is in the updates database:
-        let update = self
-            .updates
-            .remap_key_type::<UpdateKeyCodec>()
-            .get(&txn, &(index_uuid, update_id))?;
+        let update = dbg!(self.updates.get(&txn, &(index_uuid, update_id)))?;
 
         if let Some(update) = update {
             return Ok(Some(update));
         }
 
         // If nothing was found yet, we resolve to iterate over the pending queue.
-        let pendings = self
-            .pending_queue
-            .remap_key_type::<UpdateKeyCodec>()
-            .iter(&txn)?
-            .lazily_decode_data();
+        let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
         for entry in pendings {
-            let ((uuid, id), pending) = entry?;
+            let ((_, uuid, id), pending) = entry?;
             if uuid == index_uuid && id == update_id {
-                return Ok(Some(pending.decode()?.into()));
+                return Ok(Some(dbg!(pending.decode())?.into()));
             }
         }
 
@@ -461,6 +462,7 @@ impl UpdateStore {
 
         let mut updates = self
             .updates
+            .remap_key_type::<ByteSlice>()
             .prefix_iter_mut(&mut txn, index_uuid.as_bytes())?
             .lazily_decode_data();
 
@@ -707,7 +709,6 @@ mod test {
         assert!(store.pending_queue.first(&txn).unwrap().is_none());
         let update = store
             .updates
-            .remap_key_type::<UpdateKeyCodec>()
             .get(&txn, &(uuid, 0))
             .unwrap()
             .unwrap();
@@ -715,7 +716,6 @@ mod test {
         assert!(matches!(update, UpdateStatus::Processed(_)));
         let update = store
             .updates
-            .remap_key_type::<UpdateKeyCodec>()
             .get(&txn, &(uuid, 1))
             .unwrap()
             .unwrap();

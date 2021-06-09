@@ -298,18 +298,14 @@ impl Index {
 
     pub fn delete_documents(
         &self,
-        document_ids: Option<impl io::Read>,
+        document_ids: Vec<String>,
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
-        let ids = match document_ids {
-            Some(reader) => serde_json::from_reader(reader)?,
-            None => Vec::<String>::new(),
-        };
         let mut txn = self.write_txn()?;
         let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
         // We ignore unexisting document ids
-        ids.iter().for_each(|id| {
+        document_ids.iter().for_each(|id| {
             builder.delete_external_id(id);
         });
 

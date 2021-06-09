@@ -114,7 +114,7 @@ async fn delete_no_document_batch() {
     index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
     index.wait_update_id(0).await;
     let (_response, code) = index.delete_batch(vec![]).await;
-    assert_eq!(code, 202);
+    assert_eq!(code, 202, "{}", _response);
 
     let _update = index.wait_update_id(1).await;
     let (response, code) = index
