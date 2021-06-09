@@ -52,13 +52,18 @@ impl MatchingWords {
 fn fetch_queries(tree: &Operation) -> HashSet<(&str, u8, IsPrefix)> {
     fn resolve_ops<'a>(tree: &'a Operation, out: &mut HashSet<(&'a str, u8, IsPrefix)>) {
         match tree {
-            Operation::Or(_, ops) | Operation::And(ops) | Operation::Consecutive(ops) => {
+            Operation::Or(_, ops) | Operation::And(ops) => {
                 ops.as_slice().iter().for_each(|op| resolve_ops(op, out));
             },
             Operation::Query(Query { prefix, kind }) => {
                 let typo = if kind.is_exact() { 0 } else { kind.typo() };
                 out.insert((kind.word(), typo, *prefix));
             },
+            Operation::Phrase(words) => {
+                for word in words {
+                    out.insert((word, 0, false));
+                }
+            }
         }
     }
 

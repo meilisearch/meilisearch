@@ -15,7 +15,8 @@ type IsPrefix = bool;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
     And(Vec<Operation>),
-    Consecutive(Vec<Operation>),
+    // serie of consecutive non prefix and exact words
+    Phrase(Vec<String>),
     Or(IsOptionalWord, Vec<Operation>),
     Query(Query),
 }
@@ -28,9 +29,8 @@ impl fmt::Debug for Operation {
                     writeln!(f, "{:1$}AND", "", depth * 2)?;
                     children.iter().try_for_each(|c| pprint_tree(f, c, depth + 1))
                 },
-                Operation::Consecutive(children) => {
-                    writeln!(f, "{:1$}CONSECUTIVE", "", depth * 2)?;
-                    children.iter().try_for_each(|c| pprint_tree(f, c, depth + 1))
+                Operation::Phrase(children) => {
+                    writeln!(f, "{:2$}PHRASE {:?}", "", children, depth * 2)
                 },
                 Operation::Or(true, children) => {
                     writeln!(f, "{:1$}OR(WORD)", "", depth * 2)?;
@@ -49,14 +49,6 @@ impl fmt::Debug for Operation {
 }
 
 impl Operation {
-    fn phrase(words: Vec<String>) -> Operation {
-        Operation::consecutive(
-            words.into_iter().map(|s| {
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact(s) })
-            }).collect()
-        )
-    }
-
     fn and(mut ops: Vec<Self>) -> Self {
         if ops.len() == 1 {
             ops.pop().unwrap()
@@ -73,11 +65,11 @@ impl Operation {
         }
     }
 
-    fn consecutive(mut ops: Vec<Self>) -> Self {
-        if ops.len() == 1 {
-            ops.pop().unwrap()
+    fn phrase(mut words: Vec<String>) -> Self {
+        if words.len() == 1 {
+            Self::Query(Query {prefix: false, kind: QueryKind::exact(words.pop().unwrap())})
         } else {
-            Self::Consecutive(ops)
+            Self::Phrase(words)
         }
     }
 
@@ -256,10 +248,10 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
         }
     }
 
-    Ok(best.map(|(_, left, right)| Operation::Consecutive(
+    Ok(best.map(|(_, left, right)| Operation::Phrase(
         vec![
-            Operation::Query(Query { prefix: false, kind: QueryKind::exact(left.to_string()) }),
-            Operation::Query(Query { prefix: false, kind: QueryKind::exact(right.to_string()) })
+            left.to_string(),
+            right.to_string()
         ]
     )))
 }
@@ -494,24 +486,26 @@ fn create_primitive_query(query: TokenStream, stop_words: Option<Set<&[u8]>>, wo
 
 /// Returns the maximum number of typos that this Operation allows.
 pub fn maximum_typo(operation: &Operation) -> usize {
-    use Operation::{Or, And, Query, Consecutive};
+    use Operation::{Or, And, Query, Phrase};
     match operation {
         Or(_, ops) => ops.iter().map(maximum_typo).max().unwrap_or(0),
-        And(ops) | Consecutive(ops) => ops.iter().map(maximum_typo).sum::<usize>(),
+        And(ops) => ops.iter().map(maximum_typo).sum::<usize>(),
         Query(q) => q.kind.typo() as usize,
+        // no typo allowed in phrases
+        Phrase(_) => 0,
     }
 }
 
 /// Returns the maximum proximity that this Operation allows.
 pub fn maximum_proximity(operation: &Operation) -> usize {
-    use Operation::{Or, And, Query, Consecutive};
+    use Operation::{Or, And, Query, Phrase};
     match operation {
         Or(_, ops) => ops.iter().map(maximum_proximity).max().unwrap_or(0),
         And(ops) => {
             ops.iter().map(maximum_proximity).sum::<usize>()
             + ops.len().saturating_sub(1) * 7
         },
-        Query(_) | Consecutive(_) => 0,
+        Query(_) | Phrase(_) => 0,
     }
 }
 
@@ -765,9 +759,9 @@ mod test {
         let expected = Operation::Or(false, vec![
             Operation::And(vec![
                 Operation::Or(false, vec![
-                    Operation::Consecutive(vec![
-                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("word".to_string()) }),
-                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                    Operation::Phrase(vec![
+                        "word".to_string(),
+                        "split".to_string(),
                     ]),
                     Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "wordsplit".to_string()) }),
                 ]),
@@ -789,9 +783,9 @@ mod test {
         let tokens = result.tokens();
 
         let expected = Operation::And(vec![
-            Operation::Consecutive(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friends".to_string()) }),
+            Operation::Phrase(vec![
+                "hey".to_string(),
+                "friends".to_string(),
             ]),
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
         ]);
@@ -809,13 +803,13 @@ mod test {
         let tokens = result.tokens();
 
         let expected = Operation::And(vec![
-            Operation::Consecutive(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friends".to_string()) }),
+            Operation::Phrase(vec![
+                "hey".to_string(),
+                "friends".to_string(),
             ]),
-            Operation::Consecutive(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("wooop".to_string()) }),
+            Operation::Phrase(vec![
+                "wooop".to_string(),
+                "wooop".to_string(),
             ]),
         ]);
 
@@ -870,9 +864,9 @@ mod test {
         let result = analyzer.analyze(query);
         let tokens = result.tokens();
 
-        let expected = Operation::Consecutive(vec![
-            Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
-            Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+        let expected = Operation::Phrase(vec![
+            "hey".to_string(),
+            "my".to_string(),
         ]);
         let (query_tree, _) = TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
 
@@ -940,9 +934,9 @@ mod test {
         let tokens = result.tokens();
 
         let expected = Operation::And(vec![
-            Operation::Consecutive(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+            Operation::Phrase(vec![
+                "hey".to_string(),
+                "my".to_string(),
             ]),
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("good".to_string()) }),
         ]);

@@ -1,6 +1,5 @@
 use std::{borrow::Cow, collections::HashMap, mem::take};
 
-use anyhow::bail;
 use log::debug;
 use roaring::RoaringBitmap;
 
@@ -13,7 +12,6 @@ use super::{
     CriterionParameters,
     CriterionResult,
     query_docids,
-    query_pair_proximity_docids,
     resolve_query_tree,
 };
 
@@ -174,12 +172,14 @@ fn alterate_query_tree(
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<()>
     {
-        use Operation::{And, Consecutive, Or};
+        use Operation::{And, Phrase, Or};
 
         match operation {
-            And(ops) | Consecutive(ops) | Or(_, ops) => {
+            And(ops) | Or(_, ops) => {
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, wdcache))
             },
+            // Because Phrases don't allow typos, no alteration can be done.
+            Phrase(_words) => return Ok(()),
             Operation::Query(q) => {
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
                     // if no typo is allowed we don't call word_derivations function,
@@ -228,32 +228,29 @@ fn resolve_candidates<'t>(
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
-        use Operation::{And, Consecutive, Or, Query};
+        use Operation::{And, Phrase, Or, Query};
 
         match query_tree {
             And(ops) => {
                 mdfs(ctx, ops, number_typos, cache, wdcache)
             },
-            Consecutive(ops) => {
+            Phrase(words) => {
                 let mut candidates = RoaringBitmap::new();
                 let mut first_loop = true;
-                for slice in ops.windows(2) {
-                    match (&slice[0], &slice[1]) {
-                        (Operation::Query(left), Operation::Query(right)) => {
-                            match query_pair_proximity_docids(ctx, left, right, 1, wdcache)? {
-                                pair_docids if pair_docids.is_empty() => {
-                                    return Ok(RoaringBitmap::new())
-                                },
-                                pair_docids if first_loop => {
-                                    candidates = pair_docids;
-                                    first_loop = false;
-                                },
-                                pair_docids => {
-                                    candidates.intersect_with(&pair_docids);
-                                },
+                for slice in words.windows(2) {
+                    let (left, right) = (&slice[0], &slice[1]);
+                    match ctx.word_pair_proximity_docids(left, right, 1)? {
+                        Some(pair_docids) => {
+                            if pair_docids.is_empty() {
+                                return Ok(RoaringBitmap::new());
+                            } else if first_loop {
+                                candidates = pair_docids;
+                                first_loop = false;
+                            } else {
+                                candidates &= pair_docids;
                             }
                         },
-                        _ => bail!("invalid consecutive query type"),
+                        None => return Ok(RoaringBitmap::new())
                     }
                 }
                 Ok(candidates)
