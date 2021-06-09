@@ -2,11 +2,14 @@
 members = ["milli", "http-ui", "benchmarks", "infos", "helpers", "search"]
 default-members = ["milli"]
 
+[profile.dev]
+opt-level = 3
+
 [profile.release]
 debug = true
 
-[profile.bench]
-debug = true
+[profile.test]
+opt-level = 3
 
 # Make sure that the build scripts and proc-macros are compiled with
 # all the optimizations. It speeds up the zip crate that we use in the build.rs.
