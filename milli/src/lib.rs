@@ -1,6 +1,7 @@
 #[macro_use] extern crate pest_derive;
 
 mod criterion;
+mod error;
 mod external_documents_ids;
 mod fields_ids_map;
 mod search;
