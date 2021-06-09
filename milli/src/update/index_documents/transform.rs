@@ -246,7 +246,7 @@ impl Transform<'_, '_> {
         // Returns the field id in the fields ids map, create an "id" field
         // in case it is not in the current headers.
         let alternative_name = primary_key_pos.map(|pos| headers[pos].to_string());
-        let (primary_key_id, _) = compute_primary_key_pair(
+        let (primary_key_id, primary_key_name) = compute_primary_key_pair(
             self.index.primary_key(self.rtxn)?,
             &mut fields_ids_map,
             alternative_name,
@@ -330,10 +330,6 @@ impl Transform<'_, '_> {
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        let primary_key_name = fields_ids_map
-            .name(primary_key_id)
-            .map(String::from)
-            .expect("Primary key must be present in fields id map");
         self.output_from_sorter(
             sorter,
             primary_key_name,
