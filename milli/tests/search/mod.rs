@@ -57,12 +57,8 @@ pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> V
     internal_ids.iter().map(|id| docid_map.get(id).unwrap().to_string()).collect()
 }
 
-fn fetch_dataset() -> Vec<TestDocument> {
-    serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect()
-}
-
 pub fn expected_order(criteria: &[Criterion], authorize_typo: bool, optional_words: bool) -> Vec<TestDocument> {
-    let dataset = fetch_dataset();
+    let dataset = serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect();
     let mut groups: Vec<Vec<TestDocument>> = vec![dataset];
 
     for criterion in criteria {
