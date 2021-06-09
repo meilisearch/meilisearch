@@ -43,7 +43,7 @@ impl IndexStore for MapIndexStore {
         let mut lock = self.index_store.write().await;
 
         if let Some(index) = lock.get(&uuid) {
-            return Ok(index.clone())
+            return Ok(index.clone());
         }
         let path = self.path.join(format!("index-{}", uuid));
         if path.exists() {

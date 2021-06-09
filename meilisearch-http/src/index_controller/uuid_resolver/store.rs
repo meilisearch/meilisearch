@@ -8,7 +8,7 @@ use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{Result, UUID_STORE_SIZE, UuidResolverError};
+use super::{Result, UuidResolverError, UUID_STORE_SIZE};
 use crate::helpers::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
@@ -96,7 +96,7 @@ impl HeedUuidStore {
         let mut txn = env.write_txn()?;
 
         if db.get(&txn, &name)?.is_some() {
-           return Err(UuidResolverError::NameAlreadyExist)
+            return Err(UuidResolverError::NameAlreadyExist);
         }
 
         db.put(&mut txn, &name, uuid.as_bytes())?;
