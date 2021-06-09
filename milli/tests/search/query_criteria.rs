@@ -57,7 +57,6 @@ fn criteria_mixup() {
     use Criterion::*;
     let index = search::setup_search_index_with_criteria(&vec![Words, Attribute, Desc(S("asc_desc_rank")), Exactness, Proximity, Typo]);
 
-
     let criteria_mix = {
         // Criterion doesn't implement Copy, we create a new Criterion using a closure
         let desc = || Desc(S("asc_desc_rank"));
