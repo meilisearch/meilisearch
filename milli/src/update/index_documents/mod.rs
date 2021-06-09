@@ -26,7 +26,7 @@ use crate::update::{
 use self::store::{Store, Readers};
 pub use self::merge_function::{
     fst_merge, cbo_roaring_bitmap_merge, roaring_bitmap_merge,
-    docid_word_positions_merge, documents_merge, keep_first
+    docid_word_positions_merge, keep_first
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -149,7 +149,7 @@ pub fn write_into_lmdb_database(
                 let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
                 match iter.next().transpose()? {
                     Some((key, old_val)) if key == k => {
-                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
+                        let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
                         let val = merge(k, &vals)?;
                         iter.put_current(k, &val)?;
                     },
@@ -634,12 +634,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             total_databases,
         });
 
-        debug!("Writing the documents into LMDB on disk...");
+        debug!("Inserting the documents into LMDB on disk...");
         merge_into_lmdb_database(
             self.wtxn,
             *self.index.documents.as_polymorph(),
             documents_readers,
-            documents_merge,
+            keep_first,
             write_method
         )?;
 
