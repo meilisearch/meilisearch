@@ -12,4 +12,4 @@ jobs:
     - name: Install cargo-flaky
       run: cargo install cargo-flaky
     - name: Run cargo flaky 1000 times
-      run: cargo flaky -i 1000
+      run: cargo flaky -i 1000 --release
