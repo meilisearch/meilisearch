@@ -4,7 +4,7 @@ on:
     - cron: "* */12 * * */5" # every friday at 12PM
 
 jobs:
-  build:
+  flaky:
     runs-on: ubuntu-18.04
 
     steps:
