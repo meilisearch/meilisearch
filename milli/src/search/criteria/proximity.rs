@@ -176,8 +176,8 @@ fn resolve_candidates<'t>(
         let result = match query_tree {
             And(ops) => mdfs(ctx, ops, proximity, cache, wdcache)?,
             Phrase(words) => if proximity == 0 {
-                let most_left = words.first().map(|w| Query {prefix: false, kind: QueryKind::exact(w.clone())});
-                let most_right = words.last().map(|w| Query {prefix: false, kind: QueryKind::exact(w.clone())});
+                let most_left = words.first().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
+                let most_right = words.last().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
                 let mut candidates = None;
                 for slice in words.windows(2) {
                     let (left, right) = (&slice[0], &slice[1]);
