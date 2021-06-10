@@ -1,0 +1,15 @@
+name: "Look for flaky tests"
+on:
+  schedule:
+    - cron: "* */12 * * */5" # every friday at 12PM
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: "install cargo-flaky"
+      run: cargo install cargo-flaky
+    - name: "Run cargo flaky 1000 times"
+      run: cargo flaky -i 1000
