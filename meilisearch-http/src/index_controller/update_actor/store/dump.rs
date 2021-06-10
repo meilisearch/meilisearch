@@ -9,8 +9,7 @@ use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::UpdateStore;
-use super::{codec::UpdateKeyCodec, State};
+use super::{State, UpdateStore};
 use crate::index_controller::{
     index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path, Enqueued,
     UpdateStatus,
@@ -105,10 +104,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         mut file: &mut File,
     ) -> anyhow::Result<()> {
-        let updates = self
-            .updates
-            .iter(txn)?
-            .lazily_decode_data();
+        let updates = self.updates.iter(txn)?.lazily_decode_data();
 
         for update in updates {
             let ((uuid, _), data) = update?;
