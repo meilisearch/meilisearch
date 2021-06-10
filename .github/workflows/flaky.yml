@@ -1,0 +1,15 @@
+name: Look for flaky tests
+on:
+  schedule:
+    - cron: "* */12 * * */5" # every friday at 12PM
+
+jobs:
+  flaky:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install cargo-flaky
+      run: cargo install cargo-flaky
+    - name: Run cargo flaky 1000 times
+      run: cargo flaky -i 1000 --release
