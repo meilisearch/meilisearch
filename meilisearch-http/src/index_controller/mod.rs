@@ -203,7 +203,7 @@ impl IndexController {
         documents: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
         let uuid = self.uuid_resolver.get(uid).await?;
-        let meta = UpdateMeta::DeleteDocuments { documents };
+        let meta = UpdateMeta::DeleteDocuments { ids: documents };
         let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
         Ok(status)

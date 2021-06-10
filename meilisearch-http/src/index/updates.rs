@@ -298,7 +298,7 @@ impl Index {
 
     pub fn delete_documents(
         &self,
-        document_ids: Vec<String>,
+        document_ids: &[String],
         update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         let mut txn = self.write_txn()?;

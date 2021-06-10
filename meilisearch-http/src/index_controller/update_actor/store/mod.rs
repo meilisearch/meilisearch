@@ -174,7 +174,7 @@ impl UpdateStore {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
                                 Err(e) => {
-                                    error!("Fatal error while processing update that requires the update store to shutdown: {}", e);
+                                    error!("Fatal error while processing an update that requires the update store to shutdown: {}", e);
                                     must_exit.store(true, Ordering::SeqCst);
                                     break 'outer;
                                 }
@@ -185,9 +185,9 @@ impl UpdateStore {
                     }
                 }
             }
-        });
 
-        error!("Update store loop exited.");
+            error!("Update store loop exited.");
+        });
 
         Ok(update_store)
     }
