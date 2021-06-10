@@ -67,7 +67,7 @@ impl Operation {
 
     fn phrase(mut words: Vec<String>) -> Self {
         if words.len() == 1 {
-            Self::Query(Query {prefix: false, kind: QueryKind::exact(words.pop().unwrap())})
+            Self::Query(Query { prefix: false, kind: QueryKind::exact(words.pop().unwrap()) })
         } else {
             Self::Phrase(words)
         }
