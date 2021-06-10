@@ -237,14 +237,12 @@ impl UpdateStore {
         let mut txn = self.env.write_txn()?;
 
         let (global_id, update_id) = self.next_update_id(&mut txn, index_uuid)?;
-        let meta = dbg!(Enqueued::new(meta, update_id, content));
+        let meta = Enqueued::new(meta, update_id, content);
 
         self.pending_queue
             .put(&mut txn, &(global_id, index_uuid, update_id), &meta)?;
 
         txn.commit()?;
-
-        dbg!("here");
 
         self.notification_sender
             .blocking_send(())
@@ -290,7 +288,7 @@ impl UpdateStore {
     ) -> anyhow::Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
-        let first_meta = dbg!(self.pending_queue.first(&rtxn)?);
+        let first_meta = self.pending_queue.first(&rtxn)?;
         drop(rtxn);
 
         // If there is a pending update we process and only keep
@@ -325,8 +323,6 @@ impl UpdateStore {
     ) -> anyhow::Result<Option<()>> {
         let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
         let update_id = processing.id();
-
-        dbg!(&processing);
 
         let file = match content_path {
             Some(ref path) => {
@@ -420,7 +416,7 @@ impl UpdateStore {
 
         let txn = self.env.read_txn()?;
         // Else, check if it is in the updates database:
-        let update = dbg!(self.updates.get(&txn, &(index_uuid, update_id)))?;
+        let update = self.updates.get(&txn, &(index_uuid, update_id))?;
 
         if let Some(update) = update {
             return Ok(Some(update));
@@ -432,7 +428,7 @@ impl UpdateStore {
         for entry in pendings {
             let ((_, uuid, id), pending) = entry?;
             if uuid == index_uuid && id == update_id {
-                return Ok(Some(dbg!(pending.decode())?.into()));
+                return Ok(Some(pending.decode()?.into()));
             }
         }
 
