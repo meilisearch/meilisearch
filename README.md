@@ -63,7 +63,7 @@ docker run -p 7700:7700 -v "$(pwd)/data.ms:/data.ms" getmeili/meilisearch
 
 #### Try MeiliSearch in our Sandbox
 
-Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisearch.com/). This instance is free, and will be active for 72 hours.
+Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisearch.com/). This instance is free, and will be active for 48 hours.
 
 #### Run on Digital Ocean
 
