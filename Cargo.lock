@@ -971,7 +971,7 @@ dependencies = [
  "heed",
  "log",
  "maplit",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.3",
  "memmap",
  "milli",
  "once_cell",
@@ -1333,6 +1333,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "meilisearch-tokenizer"
+version = "0.2.3"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.3#c2399c3f879144ad92e20ae057e14984dfd22781"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang",
+]
+
+[[package]]
 name = "memchr"
 version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1380,7 +1396,7 @@ dependencies = [
  "log",
  "logging_timer",
  "maplit",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.2",
  "memmap",
  "obkv",
  "once_cell",
