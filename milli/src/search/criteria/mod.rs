@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::borrow::Cow;
 
-use anyhow::bail;
 use roaring::RoaringBitmap;
 
 use crate::{FieldId, TreeLevel, search::{word_derivations, WordDerivationsCache}};
@@ -239,7 +238,7 @@ pub fn resolve_query_tree<'t>(
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
-        use Operation::{And, Consecutive, Or, Query};
+        use Operation::{And, Phrase, Or, Query};
 
         match query_tree {
             And(ops) => {
@@ -261,26 +260,23 @@ pub fn resolve_query_tree<'t>(
                 }
                 Ok(candidates)
             },
-            Consecutive(ops) => {
+            Phrase(words) => {
                 let mut candidates = RoaringBitmap::new();
                 let mut first_loop = true;
-                for slice in ops.windows(2) {
-                    match (&slice[0], &slice[1]) {
-                        (Operation::Query(left), Operation::Query(right)) => {
-                            match query_pair_proximity_docids(ctx, left, right, 1, wdcache)? {
-                                pair_docids if pair_docids.is_empty() => {
-                                    return Ok(RoaringBitmap::new())
-                                },
-                                pair_docids if first_loop => {
-                                    candidates = pair_docids;
-                                    first_loop = false;
-                                },
-                                pair_docids => {
-                                    candidates.intersect_with(&pair_docids);
-                                },
+                for slice in words.windows(2) {
+                    let (left, right) = (&slice[0], &slice[1]);
+                    match ctx.word_pair_proximity_docids(left, right, 1)? {
+                        Some(pair_docids) => {
+                            if pair_docids.is_empty() {
+                                return Ok(RoaringBitmap::new());
+                            } else if first_loop {
+                                candidates = pair_docids;
+                                first_loop = false;
+                            } else {
+                                candidates &= pair_docids;
                             }
                         },
-                        _ => bail!("invalid consecutive query type"),
+                        None => return Ok(RoaringBitmap::new())
                     }
                 }
                 Ok(candidates)

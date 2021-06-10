@@ -578,7 +578,6 @@ fn linear_compute_candidates(
     fn compute_candidate_rank(branches: &FlattenedQueryTree, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
         let mut min_rank = u64::max_value();
         for branch in branches {
-
             let branch_len = branch.len();
             let mut branch_rank = Vec::with_capacity(branch_len);
             for derivates in branch {
@@ -661,7 +660,7 @@ fn linear_compute_candidates(
 
 // TODO can we keep refs of Query
 fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
-    use crate::search::criteria::Operation::{And, Or, Consecutive};
+    use crate::search::criteria::Operation::{And, Or, Phrase};
 
     fn and_recurse(head: &Operation, tail: &[Operation]) -> FlattenedQueryTree {
         match tail.split_first() {
@@ -683,7 +682,7 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
 
     fn recurse(op: &Operation) -> FlattenedQueryTree {
         match op {
-            And(ops) | Consecutive(ops) => {
+            And(ops) => {
                 ops.split_first().map_or_else(Vec::new, |(h, t)| and_recurse(h, t))
             },
             Or(_, ops) => if ops.iter().all(|op| op.query().is_some()) {
@@ -691,6 +690,12 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
             } else {
                 ops.iter().map(recurse).flatten().collect()
             },
+            Phrase(words) => {
+                let queries = words.iter().map(|word| {
+                    vec![Query {prefix: false, kind: QueryKind::exact(word.clone())}]
+                }).collect();
+                vec![queries]
+            }
             Operation::Query(query) => vec![vec![vec![query.clone()]]],
         }
     }

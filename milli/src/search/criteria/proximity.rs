@@ -171,12 +171,33 @@ fn resolve_candidates<'t>(
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
     {
-        use Operation::{And, Consecutive, Or, Query};
+        use Operation::{And, Phrase, Or};
 
         let result = match query_tree {
             And(ops) => mdfs(ctx, ops, proximity, cache, wdcache)?,
-            Consecutive(ops) => if proximity == 0 {
-                mdfs(ctx, ops, 0, cache, wdcache)?
+            Phrase(words) => if proximity == 0 {
+                let most_left = words.first().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
+                let most_right = words.last().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
+                let mut candidates = None;
+                for slice in words.windows(2) {
+                    let (left, right) = (&slice[0], &slice[1]);
+                    match ctx.word_pair_proximity_docids(left, right, 1)? {
+                        Some(pair_docids) => {
+                            match candidates.as_mut() {
+                                Some(candidates) => *candidates &= pair_docids,
+                                None => candidates = Some(pair_docids),
+                            }
+                        },
+                        None => {
+                            candidates = None;
+                            break;
+                        }
+                    }
+                }
+                match (most_left, most_right, candidates) {
+                    (Some(l), Some(r), Some(c)) => vec![(l, r, c)],
+                    _otherwise => Default::default(),
+                }
             } else {
                 Default::default()
             },
@@ -188,7 +209,7 @@ fn resolve_candidates<'t>(
                 }
                 output
             },
-            Query(q) => if proximity == 0 {
+            Operation::Query(q) => if proximity == 0 {
                 let candidates = query_docids(ctx, q, wdcache)?;
                 vec![(q.clone(), q.clone(), candidates)]
             } else {
@@ -306,14 +327,9 @@ fn resolve_plane_sweep_candidates(
 ) -> anyhow::Result<BTreeMap<u8, RoaringBitmap>>
 {
     /// FIXME may be buggy with query like "new new york"
-    fn plane_sweep<'a>(
-        ctx: &dyn Context,
-        operations: &'a [Operation],
-        docid: DocumentId,
+    fn plane_sweep(
+        groups_positions: Vec<Vec<(Position, u8, Position)>>,
         consecutive: bool,
-        rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
-        words_positions: &HashMap<String, RoaringBitmap>,
-        wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Position, u8, Position)>>
     {
         fn compute_groups_proximity(
@@ -362,13 +378,9 @@ fn resolve_plane_sweep_candidates(
             }
         }
 
-        let groups_len = operations.len();
-        let mut groups_positions = Vec::with_capacity(groups_len);
+        let groups_len = groups_positions.len();
 
-        for operation in operations {
-            let positions = resolve_operation(ctx, operation, docid, rocache, words_positions, wdcache)?;
-            groups_positions.push(positions.into_iter());
-        }
+        let mut groups_positions: Vec<_> = groups_positions.into_iter().map(|pos| pos.into_iter()).collect();
 
         // Pop top elements of each list.
         let mut current = Vec::with_capacity(groups_len);
@@ -441,15 +453,32 @@ fn resolve_plane_sweep_candidates(
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Position, u8, Position)>>
     {
-        use Operation::{And, Consecutive, Or};
+        use Operation::{And, Phrase, Or};
 
         if let Some(result) = rocache.get(query_tree) {
             return Ok(result.clone());
         }
 
         let result = match query_tree {
-            And(ops) => plane_sweep(ctx, ops, docid, false, rocache, words_positions, wdcache)?,
-            Consecutive(ops) => plane_sweep(ctx, ops, docid, true, rocache, words_positions, wdcache)?,
+            And(ops) => {
+                 let mut groups_positions = Vec::with_capacity(ops.len());
+                for operation in ops {
+                    let positions = resolve_operation(ctx, operation, docid, rocache, words_positions, wdcache)?;
+                    groups_positions.push(positions);
+                }
+                plane_sweep(groups_positions, false)?
+            },
+            Phrase(words) => {
+                let mut groups_positions = Vec::with_capacity(words.len());
+                for word in words {
+                    let positions = match words_positions.get(word) {
+                        Some(positions) => positions.iter().map(|p| (p, 0, p)).collect(),
+                        None => vec![],
+                    };
+                    groups_positions.push(positions);
+                }
+                plane_sweep(groups_positions, true)?
+            },
             Or(_, ops) => {
                 let mut result = Vec::new();
                 for op in ops {
