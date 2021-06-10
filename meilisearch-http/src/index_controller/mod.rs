@@ -200,18 +200,11 @@ impl IndexController {
     pub async fn delete_documents(
         &self,
         uid: String,
-        document_ids: Vec<String>,
+        documents: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
         let uuid = self.uuid_resolver.get(uid).await?;
-        let meta = UpdateMeta::DeleteDocuments;
-        let (sender, receiver) = mpsc::channel(10);
-
-        tokio::task::spawn(async move {
-            let json = serde_json::to_vec(&document_ids).unwrap();
-            let bytes = Bytes::from(json);
-            let _ = sender.send(Ok(bytes)).await;
-        });
-
+        let meta = UpdateMeta::DeleteDocuments { ids: documents };
+        let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
         Ok(status)
     }
@@ -249,8 +242,9 @@ impl IndexController {
     ) -> anyhow::Result<IndexMetadata> {
         let IndexSettings { uid, primary_key } = index_settings;
         let uid = uid.ok_or_else(|| anyhow::anyhow!("Can't create an index without a uid."))?;
-        let uuid = self.uuid_resolver.create(uid.clone()).await?;
+        let uuid = Uuid::new_v4();
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
+        self.uuid_resolver.insert(uid.clone(), uuid).await?;
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),

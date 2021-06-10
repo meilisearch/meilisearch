@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use log::info;
@@ -19,6 +20,7 @@ pub struct UpdateActor<D, I> {
     store: Arc<UpdateStore>,
     inbox: mpsc::Receiver<UpdateMsg<D>>,
     index_handle: I,
+    must_exit: Arc<AtomicBool>,
 }
 
 impl<D, I> UpdateActor<D, I>
@@ -39,14 +41,17 @@ where
         let mut options = heed::EnvOpenOptions::new();
         options.map_size(update_db_size);
 
-        let store = UpdateStore::open(options, &path, index_handle.clone())?;
+        let must_exit = Arc::new(AtomicBool::new(false));
+
+        let store = UpdateStore::open(options, &path, index_handle.clone(), must_exit.clone())?;
         std::fs::create_dir_all(path.join("update_files"))?;
-        assert!(path.exists());
+
         Ok(Self {
             path,
             store,
             inbox,
             index_handle,
+            must_exit,
         })
     }
 
@@ -56,7 +61,13 @@ where
         info!("Started update actor.");
 
         loop {
-            match self.inbox.recv().await {
+            let msg = self.inbox.recv().await;
+
+            if self.must_exit.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+
+            match msg {
                 Some(Update {
                     uuid,
                     meta,
@@ -95,7 +106,7 @@ where
         mut payload: mpsc::Receiver<PayloadData<D>>,
     ) -> Result<UpdateStatus> {
         let file_path = match meta {
-            UpdateMeta::DocumentsAddition { .. } | UpdateMeta::DeleteDocuments => {
+            UpdateMeta::DocumentsAddition { .. } => {
                 let update_file_id = uuid::Uuid::new_v4();
                 let path = self
                     .path
@@ -170,10 +181,13 @@ where
 
     async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let store = self.store.clone();
+        tokio::task::spawn_blocking(move || {
         let result = store
             .meta(uuid, id)?
             .ok_or(UpdateError::UnexistingUpdate(id))?;
-        Ok(result)
+            Ok(result)
+        })
+        .await?
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> Result<()> {

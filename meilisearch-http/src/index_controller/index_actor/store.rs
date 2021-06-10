@@ -40,6 +40,13 @@ impl MapIndexStore {
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
     async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> IndexResult<Index> {
+        // We need to keep the lock until we are sure the db file has been opened correclty, to
+        // ensure that another db is not created at the same time.
+        let mut lock = self.index_store.write().await;
+
+        if let Some(index) = lock.get(&uuid) {
+            return Ok(index.clone());
+        }
         let path = self.path.join(format!("index-{}", uuid));
         if path.exists() {
             return Err(IndexError::IndexAlreadyExists);
@@ -57,7 +64,7 @@ impl IndexStore for MapIndexStore {
         })
         .await??;
 
-        self.index_store.write().await.insert(uuid, index.clone());
+        lock.insert(uuid, index.clone());
 
         Ok(index)
     }

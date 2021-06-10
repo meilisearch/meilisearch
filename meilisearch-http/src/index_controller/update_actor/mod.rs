@@ -30,6 +30,10 @@ pub enum UpdateError {
     UnexistingUpdate(u64),
     #[error("Internal error processing update: {0}")]
     Internal(String),
+    #[error(
+        "Update store was shut down due to a fatal error, please check your logs for more info."
+    )]
+    FatalUpdateStoreError,
 }
 
 macro_rules! internal_error {

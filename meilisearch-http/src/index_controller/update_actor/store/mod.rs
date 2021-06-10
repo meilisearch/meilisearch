@@ -3,6 +3,7 @@ pub mod dump;
 
 use std::fs::{copy, create_dir_all, remove_file, File};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -96,9 +97,9 @@ pub struct UpdateStore {
     /// The keys are built as follow:
     /// |    Uuid  |   id    |
     /// | 16-bytes | 8-bytes |
-    updates: Database<ByteSlice, SerdeJson<UpdateStatus>>,
+    updates: Database<UpdateKeyCodec, SerdeJson<UpdateStatus>>,
     /// Indicates the current state of the update store,
-    pub state: Arc<StateLock>,
+    state: Arc<StateLock>,
     /// Wake up the loop when a new event occurs.
     notification_sender: mpsc::Sender<()>,
     path: PathBuf,
@@ -138,6 +139,7 @@ impl UpdateStore {
         options: EnvOpenOptions,
         path: impl AsRef<Path>,
         index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
+        must_exit: Arc<AtomicBool>,
     ) -> anyhow::Result<Arc<Self>> {
         let (update_store, mut notification_receiver) = Self::new(options, path)?;
         let update_store = Arc::new(update_store);
@@ -171,7 +173,11 @@ impl UpdateStore {
                             match res {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
-                                Err(e) => error!("error while processing update: {}", e),
+                                Err(e) => {
+                                    error!("Fatal error while processing an update that requires the update store to shutdown: {}", e);
+                                    must_exit.store(true, Ordering::SeqCst);
+                                    break 'outer;
+                                }
                             }
                         }
                         // the ownership on the arc has been taken, we need to exit.
@@ -179,6 +185,8 @@ impl UpdateStore {
                     }
                 }
             }
+
+            error!("Update store loop exited.");
         });
 
         Ok(update_store)
@@ -261,7 +269,7 @@ impl UpdateStore {
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.remap_key_type::<UpdateKeyCodec>().put(
+                self.updates.put(
                     wtxn,
                     &(index_uuid, update.id()),
                     &update,
@@ -286,61 +294,77 @@ impl UpdateStore {
         // If there is a pending update we process and only keep
         // a reader while processing it, not a writer.
         match first_meta {
-            Some(((global_id, index_uuid, update_id), mut pending)) => {
-                let content_path = pending.content.take();
+            Some(((global_id, index_uuid, _), mut pending)) => {
+                let content = pending.content.take();
                 let processing = pending.processing();
-
                 // Acquire the state lock and set the current state to processing.
                 // txn must *always* be acquired after state lock, or it will dead lock.
                 let state = self.state.write();
                 state.swap(State::Processing(index_uuid, processing.clone()));
 
-                let file = match content_path {
-                    Some(uuid) => {
-                        let path = update_uuid_to_file_path(&self.path, uuid);
-                        let file = File::open(path)?;
-                        Some(file)
-                    }
-                    None => None,
-                };
+                let result =
+                    self.perform_update(content, processing, index_handle, index_uuid, global_id);
 
-                // Process the pending update using the provided user function.
-                let handle = Handle::current();
-                let result = match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
-                    Ok(result) => result,
-                    Err(e) => Err(processing.fail(e.to_string())),
-                };
-
-                // Once the pending update have been successfully processed
-                // we must remove the content from the pending and processing stores and
-                // write the *new* meta to the processed-meta store and commit.
-                let mut wtxn = self.env.write_txn()?;
-                self.pending_queue
-                    .delete(&mut wtxn, &(global_id, index_uuid, update_id))?;
-
-                if let Some(uuid) = content_path {
-                    let path = update_uuid_to_file_path(&self.path, uuid);
-                    remove_file(&path)?;
-                }
-
-                let result = match result {
-                    Ok(res) => res.into(),
-                    Err(res) => res.into(),
-                };
-
-                self.updates.remap_key_type::<UpdateKeyCodec>().put(
-                    &mut wtxn,
-                    &(index_uuid, update_id),
-                    &result,
-                )?;
-
-                wtxn.commit()?;
                 state.swap(State::Idle);
 
-                Ok(Some(()))
+                result
             }
             None => Ok(None),
         }
+    }
+
+    fn perform_update(
+        &self,
+        content: Option<Uuid>,
+        processing: Processing,
+        index_handle: impl IndexActorHandle,
+        index_uuid: Uuid,
+        global_id: u64,
+    ) -> anyhow::Result<Option<()>> {
+        let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
+        let update_id = processing.id();
+
+        let file = match content_path {
+            Some(ref path) => {
+                let file = File::open(path)?;
+                Some(file)
+            }
+            None => None,
+        };
+
+        // Process the pending update using the provided user function.
+        let handle = Handle::current();
+        let result =
+            match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
+                Ok(result) => result,
+                Err(e) => Err(processing.fail(e.to_string())),
+            };
+
+        // Once the pending update have been successfully processed
+        // we must remove the content from the pending and processing stores and
+        // write the *new* meta to the processed-meta store and commit.
+        let mut wtxn = self.env.write_txn()?;
+        self.pending_queue
+            .delete(&mut wtxn, &(global_id, index_uuid, update_id))?;
+
+        let result = match result {
+            Ok(res) => res.into(),
+            Err(res) => res.into(),
+        };
+
+        self.updates.put(
+            &mut wtxn,
+            &(index_uuid, update_id),
+            &result,
+        )?;
+
+        wtxn.commit()?;
+
+        if let Some(ref path) = content_path {
+            remove_file(&path)?;
+        }
+
+        Ok(Some(()))
     }
 
     /// List the updates for `index_uuid`.
@@ -357,7 +381,11 @@ impl UpdateStore {
             }
         }
 
-        let updates = self.updates.prefix_iter(&txn, index_uuid.as_bytes())?;
+        let updates = self
+            .updates
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(&txn, index_uuid.as_bytes())?;
+
         for entry in updates {
             let (_, update) = entry?;
             update_list.insert(update.id(), update);
@@ -388,24 +416,17 @@ impl UpdateStore {
 
         let txn = self.env.read_txn()?;
         // Else, check if it is in the updates database:
-        let update = self
-            .updates
-            .remap_key_type::<UpdateKeyCodec>()
-            .get(&txn, &(index_uuid, update_id))?;
+        let update = self.updates.get(&txn, &(index_uuid, update_id))?;
 
         if let Some(update) = update {
             return Ok(Some(update));
         }
 
         // If nothing was found yet, we resolve to iterate over the pending queue.
-        let pendings = self
-            .pending_queue
-            .remap_key_type::<UpdateKeyCodec>()
-            .iter(&txn)?
-            .lazily_decode_data();
+        let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
         for entry in pendings {
-            let ((uuid, id), pending) = entry?;
+            let ((_, uuid, id), pending) = entry?;
             if uuid == index_uuid && id == update_id {
                 return Ok(Some(pending.decode()?.into()));
             }
@@ -437,6 +458,7 @@ impl UpdateStore {
 
         let mut updates = self
             .updates
+            .remap_key_type::<ByteSlice>()
             .prefix_iter_mut(&mut txn, index_uuid.as_bytes())?
             .lazily_decode_data();
 
@@ -561,7 +583,13 @@ mod test {
         let mut options = EnvOpenOptions::new();
         let handle = Arc::new(MockIndexActorHandle::new());
         options.map_size(4096 * 100);
-        let update_store = UpdateStore::open(options, dir.path(), handle).unwrap();
+        let update_store = UpdateStore::open(
+            options,
+            dir.path(),
+            handle,
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
 
         let index1_uuid = Uuid::new_v4();
         let index2_uuid = Uuid::new_v4();
@@ -588,7 +616,13 @@ mod test {
         let mut options = EnvOpenOptions::new();
         let handle = Arc::new(MockIndexActorHandle::new());
         options.map_size(4096 * 100);
-        let update_store = UpdateStore::open(options, dir.path(), handle).unwrap();
+        let update_store = UpdateStore::open(
+            options,
+            dir.path(),
+            handle,
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
         let meta = UpdateMeta::ClearDocuments;
         let uuid = Uuid::new_v4();
         let store_clone = update_store.clone();
@@ -626,7 +660,13 @@ mod test {
 
         let mut options = EnvOpenOptions::new();
         options.map_size(4096 * 100);
-        let store = UpdateStore::open(options, dir.path(), handle.clone()).unwrap();
+        let store = UpdateStore::open(
+            options,
+            dir.path(),
+            handle.clone(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
 
         // wait a bit for the event loop exit.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -665,7 +705,6 @@ mod test {
         assert!(store.pending_queue.first(&txn).unwrap().is_none());
         let update = store
             .updates
-            .remap_key_type::<UpdateKeyCodec>()
             .get(&txn, &(uuid, 0))
             .unwrap()
             .unwrap();
@@ -673,7 +712,6 @@ mod test {
         assert!(matches!(update, UpdateStatus::Processed(_)));
         let update = store
             .updates
-            .remap_key_type::<UpdateKeyCodec>()
             .get(&txn, &(uuid, 1))
             .unwrap()
             .unwrap();

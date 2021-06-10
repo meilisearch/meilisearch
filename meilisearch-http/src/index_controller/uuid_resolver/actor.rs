@@ -23,9 +23,6 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
         loop {
             match self.inbox.recv().await {
-                Some(Create { uid: name, ret }) => {
-                    let _ = ret.send(self.handle_create(name).await);
-                }
                 Some(Get { uid: name, ret }) => {
                     let _ = ret.send(self.handle_get(name).await);
                 }
@@ -53,13 +50,6 @@ impl<S: UuidStore> UuidResolverActor<S> {
         }
 
         warn!("exiting uuid resolver loop");
-    }
-
-    async fn handle_create(&self, uid: String) -> Result<Uuid> {
-        if !is_index_uid_valid(&uid) {
-            return Err(UuidResolverError::BadlyFormatted(uid));
-        }
-        self.store.create_uuid(uid, true).await
     }
 
     async fn handle_get(&self, uid: String) -> Result<Uuid> {
