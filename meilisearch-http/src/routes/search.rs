@@ -23,7 +23,7 @@ pub struct SearchQueryGet {
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
     attributes_to_crop: Option<String>,
-    crop_length: Option<usize>,
+    crop_length: usize,
     attributes_to_highlight: Option<String>,
     filter: Option<String>,
     matches: Option<bool>,

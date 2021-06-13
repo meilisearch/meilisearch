@@ -22,8 +22,8 @@ const fn default_search_limit() -> usize {
 }
 
 pub const DEFAULT_CROP_LENGTH: usize = 200;
-const fn default_crop_length() -> Option<usize> {
-    Some(DEFAULT_CROP_LENGTH)
+const fn default_crop_length() -> usize {
+    DEFAULT_CROP_LENGTH
 }
 
 #[derive(Deserialize)]
@@ -36,7 +36,7 @@ pub struct SearchQuery {
     pub attributes_to_retrieve: Option<HashSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
     #[serde(default = "default_crop_length")]
-    pub crop_length: Option<usize>,
+    pub crop_length: usize,
     pub attributes_to_highlight: Option<HashSet<String>>,
     pub matches: Option<bool>,
     pub filter: Option<Value>,
@@ -133,7 +133,7 @@ impl Index {
                 let mut ids_length_crop = HashMap::new();
                 for attribute in attributes {
                     let mut attr_name = attribute.clone();
-                    let mut attr_len = query.crop_length;
+                    let mut attr_len = Some(query.crop_length);
 
                     if attr_name.contains(':') {
                         let mut split = attr_name.rsplit(':');
