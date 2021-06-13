@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::Instant;
-use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::bail;
 use either::Either;
