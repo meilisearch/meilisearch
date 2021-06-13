@@ -194,7 +194,7 @@ impl Index {
         };
 
         let stop_words = fst::Set::default();
-        let highlighter =
+        let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
@@ -202,7 +202,7 @@ impl Index {
             let formatted = compute_formatted(
                 &fields_ids_map,
                 obkv,
-                &highlighter,
+                &formatter,
                 &matching_words,
                 all_formatted.as_ref().as_slice(),
                 &to_highlight_ids,
@@ -268,7 +268,7 @@ fn make_document(
 fn compute_formatted<A: AsRef<[u8]>>(
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
-    highlighter: &Formatter<A>,
+    formatter: &Formatter<A>,
     matching_words: &impl Matcher,
     all_formatted: &[FieldId],
     to_highlight_fields: &HashSet<FieldId>,
@@ -280,7 +280,7 @@ fn compute_formatted<A: AsRef<[u8]>>(
         if let Some(value) = obkv.get(*field) {
             let mut value: Value = serde_json::from_slice(value)?;
 
-            value = highlighter.format_value(
+            value = formatter.format_value(
                 value,
                 matching_words,
                 to_crop_fields.get(field).copied().flatten(),
@@ -301,7 +301,7 @@ fn compute_formatted<A: AsRef<[u8]>>(
     Ok(document)
 }
 
-/// trait to allow unit testing of `compute_formated`
+/// trait to allow unit testing of `compute_formatted`
 trait Matcher {
     fn matches(&self, w: &str) -> bool;
 }
@@ -480,7 +480,7 @@ mod test {
     #[test]
     fn no_formatted() {
         let stop_words = fst::Set::default();
-        let highlighter =
+        let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
@@ -503,7 +503,7 @@ mod test {
         let value = compute_formatted(
             &fields,
             obkv,
-            &highlighter,
+            &formatter,
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
@@ -517,7 +517,7 @@ mod test {
     #[test]
     fn formatted_no_highlight() {
         let stop_words = fst::Set::default();
-        let highlighter =
+        let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
@@ -540,7 +540,7 @@ mod test {
         let value = compute_formatted(
             &fields,
             obkv,
-            &highlighter,
+            &formatter,
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
@@ -554,7 +554,7 @@ mod test {
     #[test]
     fn formatted_with_highlight() {
         let stop_words = fst::Set::default();
-        let highlighter =
+        let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
@@ -577,7 +577,7 @@ mod test {
         let value = compute_formatted(
             &fields,
             obkv,
-            &highlighter,
+            &formatter,
             &matching_words,
             &all_formatted,
             &to_highlight_ids,
