@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+// use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
@@ -65,6 +65,12 @@ pub struct SearchResult {
     pub facet_distributions: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
+#[derive(Copy, Clone)]
+struct FormatOptions {
+    highlight: bool,
+    crop: Option<usize>,
+}
+
 impl Index {
     pub fn perform_search(&self, query: SearchQuery) -> anyhow::Result<SearchResult> {
         let before_search = Instant::now();
@@ -108,7 +114,9 @@ impl Index {
                 }
 
                 if let Some(id) = fields_ids_map.id(attr) {
-                    ids.insert(id);
+                    if displayed_ids.contains(&id) {
+                        ids.insert(id);
+                    }
                 }
             }
             ids
@@ -120,51 +128,6 @@ impl Index {
             .map(fids)
             .unwrap_or_else(|| displayed_ids.clone());
 
-        let to_highlight_ids = query
-            .attributes_to_highlight
-            .as_ref()
-            .map(fids)
-            .unwrap_or_default();
-
-        let to_crop_ids_length = query
-            .attributes_to_crop
-            .as_ref()
-            .map(|attributes: &Vec<String>| {
-                let mut ids_length_crop = HashMap::new();
-                for attribute in attributes {
-                    let mut attr_name = attribute.clone();
-                    let mut attr_len = Some(query.crop_length);
-
-                    if attr_name.contains(':') {
-                        let mut split = attr_name.rsplit(':');
-                        attr_len = match split.next() {
-                            Some(s) => s.parse::<usize>().ok(),
-                            None => None,
-                        };
-                        attr_name = split.flat_map(|s| s.chars()).collect();
-                    }
-
-                    if attr_name == "*" {
-                        let ids = displayed_ids.clone();
-                        for id in ids {
-                            ids_length_crop.insert(id, attr_len);
-                        }
-                    }
-
-                    if let Some(id) = fields_ids_map.id(&attr_name) {
-                        ids_length_crop.insert(id, attr_len);
-                    }
-                }
-                ids_length_crop
-            })
-            .unwrap_or_default();
-
-        let to_crop_ids = to_crop_ids_length
-            .clone()
-            .into_iter()
-            .map(|(k, _)| k)
-            .collect::<HashSet<_>>();
-
         // The attributes to retrieve are:
         // - the ones explicitly marked as to retrieve that are also in the displayed attributes
         let all_attributes: Vec<_> = to_retrieve_ids
@@ -173,25 +136,152 @@ impl Index {
             .sorted()
             .collect();
 
+        let mut formatted_options = HashMap::new();
+
+        let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
+        for attr in attr_to_highlight {
+            let new_format = FormatOptions {
+                highlight: true,
+                crop: None,
+            };
+
+            if attr == "*" {
+                let ids = displayed_ids.clone();
+                for id in ids {
+                    formatted_options.insert(id, new_format);
+                }
+                break;
+            }
+
+            if let Some(id) = fields_ids_map.id(&attr) {
+                if displayed_ids.contains(&id) {
+                    formatted_options.insert(id, new_format);
+                }
+            }
+        };
+
+        let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
+        for attr in attr_to_crop {
+            let mut attr_name = attr.clone();
+            let mut attr_len = Some(query.crop_length);
+
+            if attr_name.contains(':') {
+                let mut split = attr_name.rsplit(':');
+                attr_len = match split.next() {
+                    Some(s) => s.parse::<usize>().ok(),
+                    None => None,
+                };
+                attr_name = split.flat_map(|s| s.chars()).collect();
+            }
+
+            if attr_name == "*" {
+                let ids = displayed_ids.clone();
+                for id in ids {
+                    let mut highlight = false;
+                    if let Some(f) = formatted_options.get(&id) {
+                        highlight = f.highlight;
+                    }
+                    formatted_options.insert(id, FormatOptions {
+                        highlight: highlight,
+                        crop: attr_len,
+                    });
+                }
+            }
+
+            if let Some(id) = fields_ids_map.id(&attr_name) {
+                if displayed_ids.contains(&id) {
+                    let mut highlight = false;
+                    if let Some(f) = formatted_options.get(&id) {
+                        highlight = f.highlight;
+                    }
+                    formatted_options.insert(id, FormatOptions {
+                        highlight: highlight,
+                        crop: attr_len,
+                    });
+                }
+            }
+        }
+
+        let formatted_ids = formatted_options
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        // All attributes present in `_formatted` that are not necessary highighted or croped
+        let ids_in_formatted = formatted_ids
+            .union(&to_retrieve_ids)
+            .cloned()
+            .sorted()
+            .collect::<Vec<_>>();
+
+
+        // let to_highlight_ids = query // PLUS BESOIN
+        //     .attributes_to_highlight
+        //     .as_ref()
+        //     .map(fids)
+        //     .unwrap_or_default();
+
+
+        // let to_crop_ids_length = query
+        //     .attributes_to_crop
+        //     .as_ref()
+        //     .map(|attributes: &Vec<String>| {
+        //         let mut ids_length_crop = HashMap::new();
+        //         for attribute in attributes {
+        //             let mut attr_name = attribute.clone();
+        //             let mut attr_len = Some(query.crop_length);
+
+        //             if attr_name.contains(':') {
+        //                 let mut split = attr_name.rsplit(':');
+        //                 attr_len = match split.next() {
+        //                     Some(s) => s.parse::<usize>().ok(),
+        //                     None => None,
+        //                 };
+        //                 attr_name = split.flat_map(|s| s.chars()).collect();
+        //             }
+
+        //             if attr_name == "*" {
+        //                 let ids = displayed_ids.clone();
+        //                 for id in ids {
+        //                     ids_length_crop.insert(id, attr_len);
+        //                 }
+        //             }
+
+        //             if let Some(id) = fields_ids_map.id(&attr_name) {
+        //                 if displayed_ids.contains(&id) {
+        //                     ids_length_crop.insert(id, attr_len);
+        //                 }
+        //             }
+        //         }
+        //         ids_length_crop
+        //     })
+        //     .unwrap_or_default();
+
+        // let to_crop_ids = to_crop_ids_length // PLUS BESOIN
+        //     .clone()
+        //     .into_iter()
+        //     .map(|(k, _)| k)
+        //     .collect::<HashSet<_>>();
+
         // The formatted attributes are:
         // - The one in either highlighted attributes or cropped attributes if there are attributes
         // to retrieve
         // - All the attributes to retrieve if there are either highlighted or cropped attributes
         // the request specified that all attributes are to retrieve (i.e attributes to retrieve is
         // empty in the query)
-        let all_formatted = if query.attributes_to_retrieve.is_none() {
-            if query.attributes_to_highlight.is_some() || query.attributes_to_crop.is_some() {
-                Cow::Borrowed(&all_attributes)
-            } else {
-                Cow::Owned(Vec::new())
-            }
-        } else {
-            let attrs = (&to_crop_ids | &to_highlight_ids)
-                .intersection(&displayed_ids)
-                .cloned()
-                .collect::<Vec<_>>();
-            Cow::Owned(attrs)
-        };
+        // let all_formatted = if query.attributes_to_retrieve.is_none() {
+        //     if query.attributes_to_highlight.is_some() || query.attributes_to_crop.is_some() {
+        //         Cow::Borrowed(&all_attributes)
+        //     } else {
+        //         Cow::Owned(Vec::new())
+        //     }
+        // } else {
+        //     let attrs = (&to_crop_ids | &to_highlight_ids)
+        //         .intersection(&displayed_ids)
+        //         .cloned()
+        //         .collect::<Vec<_>>();
+        //     Cow::Owned(attrs)
+        // };
 
         let stop_words = fst::Set::default();
         let formatter =
@@ -204,9 +294,11 @@ impl Index {
                 obkv,
                 &formatter,
                 &matching_words,
-                all_formatted.as_ref().as_slice(),
-                &to_highlight_ids,
-                &to_crop_ids_length,
+                &ids_in_formatted,
+                // all_formatted.as_ref().as_slice(),
+                &formatted_options,
+                // &to_highlight_ids, //ICI
+                // &to_crop_ids_length, //ICI
             )?;
             let hit = SearchHit {
                 document,
@@ -270,31 +362,38 @@ fn compute_formatted<A: AsRef<[u8]>>(
     obkv: obkv::KvReader,
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
-    all_formatted: &[FieldId],
-    to_highlight_fields: &HashSet<FieldId>,
-    to_crop_fields: &HashMap<FieldId, Option<usize>>,
+    ids_in_formatted: &Vec<FieldId>,
+    formatted_options: &HashMap<FieldId, FormatOptions>,
+    // to_highlight_fields: &HashSet<FieldId>, //ICI
+    // to_crop_fields: &HashMap<FieldId, Option<usize>>, //ICI
 ) -> anyhow::Result<Document> {
     let mut document = Document::new();
 
-    for field in all_formatted {
-        if let Some(value) = obkv.get(*field) {
-            let mut value: Value = serde_json::from_slice(value)?;
+    if formatted_options.len() > 0 {
+        for field in ids_in_formatted {
+            if let Some(value) = obkv.get(*field) {
+                let mut value: Value = serde_json::from_slice(value)?;
 
-            value = formatter.format_value(
-                value,
-                matching_words,
-                to_crop_fields.get(field).copied().flatten(),
-                to_highlight_fields.contains(field),
-            );
+                if let Some(format) = formatted_options.get(field) {
+                    value = formatter.format_value(
+                        value,
+                        matching_words,
+                        format.highlight,
+                        format.crop,
+                        // to_crop_fields.get(field).copied().flatten(), //ICI
+                        // to_highlight_fields.contains(field), //ICI
+                    );
+                }
 
-            // This unwrap must be safe since we got the ids from the fields_ids_map just
-            // before.
-            let key = field_ids_map
-                .name(*field)
-                .expect("Missing field name")
-                .to_string();
+                // This unwrap must be safe since we got the ids from the fields_ids_map just
+                // before.
+                let key = field_ids_map
+                    .name(*field)
+                    .expect("Missing field name")
+                    .to_string();
 
-            document.insert(key, value);
+                document.insert(key, value);
+            }
         }
     }
 
@@ -338,25 +437,25 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
         &self,
         value: Value,
         matcher: &impl Matcher,
-        need_to_crop: Option<usize>,
         need_to_highlight: bool,
+        need_to_crop: Option<usize>,
     ) -> Value {
         match value {
             Value::String(old_string) => {
                 let value =
-                    self.format_string(old_string, matcher, need_to_crop, need_to_highlight);
+                    self.format_string(old_string, matcher, need_to_highlight, need_to_crop);
                 Value::String(value)
             }
             Value::Array(values) => Value::Array(
                 values
                     .into_iter()
-                    .map(|v| self.format_value(v, matcher, None, need_to_highlight))
+                    .map(|v| self.format_value(v, matcher, need_to_highlight, None))
                     .collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.format_value(v, matcher, None, need_to_highlight)))
+                    .map(|(k, v)| (k, self.format_value(v, matcher, need_to_highlight, None)))
                     .collect(),
             ),
             value => value,
@@ -367,8 +466,8 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
         &self,
         s: String,
         matcher: &impl Matcher,
-        need_to_crop: Option<usize>,
         need_to_highlight: bool,
+        need_to_crop: Option<usize>,
     ) -> String {
         let analyzed = self.analyzer.analyze(&s);
 
@@ -478,7 +577,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn no_formatted() {
+    fn no_ids_no_formatted() {
         let stop_words = fst::Set::default();
         let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
@@ -494,9 +593,8 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let all_formatted = Vec::new();
-        let to_highlight_ids = HashSet::new();
-        let to_crop_ids = HashMap::new();
+        let ids_in_formatted = Vec::new();
+        let formatted_options = HashMap::new();
 
         let matching_words = MatchingWords::default();
 
@@ -505,9 +603,8 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &all_formatted,
-            &to_highlight_ids,
-            &to_crop_ids,
+            &ids_in_formatted,
+            &formatted_options,
         )
         .unwrap();
 
@@ -515,7 +612,7 @@ mod test {
     }
 
     #[test]
-    fn formatted_no_highlight() {
+    fn no_formatted_with_ids() {
         let stop_words = fst::Set::default();
         let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
@@ -531,9 +628,8 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let all_formatted = vec![id];
-        let to_highlight_ids = HashSet::new();
-        let to_crop_ids = HashMap::new();
+        let ids_in_formatted = vec![id];
+        let formatted_options = HashMap::new();
 
         let matching_words = MatchingWords::default();
 
@@ -542,13 +638,12 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &all_formatted,
-            &to_highlight_ids,
-            &to_crop_ids,
+            &ids_in_formatted,
+            &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["test"], "hello");
+        assert!(value.is_empty());
     }
 
     #[test]
@@ -558,33 +653,206 @@ mod test {
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
-        let id = fields.insert("test").unwrap();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
+        obkv.insert(title, Value::String("The Hobbit".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. R. R. Tolkien".into()).to_string().as_bytes())
             .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let all_formatted = vec![id];
-        let to_highlight_ids = HashSet::from_iter(Some(id));
-        let to_crop_ids = HashMap::new();
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
 
-        let matching_words = HashSet::from_iter(Some(String::from("hello")));
+        let matching_words = HashSet::from_iter(Some(String::from("hobbit")));
 
         let value = compute_formatted(
             &fields,
             obkv,
             &formatter,
             &matching_words,
-            &all_formatted,
-            &to_highlight_ids,
-            &to_crop_ids,
+            &ids_in_formatted,
+            &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["test"], "<em>hello</em>");
+        assert_eq!(value["title"], "The <em>Hobbit</em>");
+        assert_eq!(value["author"], "J. R. R. Tolkien");
+    }
+
+    #[test]
+    fn formatted_with_crop_2() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(2) });
+
+        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "Harry Potter and");
+        assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn formatted_with_crop_10() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(10) });
+
+        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "Harry Potter and the Half");
+        assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn formatted_with_crop_0() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(0) });
+
+        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "Potter");
+        assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn formatted_with_crop_and_highlight() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(1) });
+
+        let matching_words = HashSet::from_iter(Some(String::from("and")));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], " <em>and</em> ");
+        assert_eq!(value["author"], "J. K. Rowling");
     }
 }
