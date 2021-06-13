@@ -362,6 +362,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             value => value,
         }
     }
+
     fn format_string(
         &self,
         s: String,
