@@ -84,6 +84,8 @@ impl Index {
             .unwrap_or_else(BTreeSet::new);
         let distinct_field = self.distinct_field(&txn)?.map(String::from);
 
+        // in milli each word in the synonyms map were split on their separator. Since we lost
+        // this information we are going to put space between words.
         let synonyms = self
             .synonyms(&txn)?
             .iter()

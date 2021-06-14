@@ -277,14 +277,14 @@ impl Index {
         if let Some(ref stop_words) = settings.stop_words {
             match stop_words {
                 Some(stop_words) => builder.set_stop_words(stop_words.clone()),
-                _ => builder.reset_stop_words(),
+                None => builder.reset_stop_words(),
             }
         }
 
         if let Some(ref synonyms) = settings.synonyms {
             match synonyms {
                 Some(synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
-                _ => builder.reset_synonyms(),
+                None => builder.reset_synonyms(),
             }
         }
 
