@@ -74,15 +74,9 @@ impl Index {
         search.limit(query.limit);
         search.offset(query.offset.unwrap_or_default());
 
-<<<<<<< HEAD
         if let Some(ref filter) = query.filter {
             if let Some(facets) = parse_facets(filter, self, &rtxn)? {
-                search.facet_condition(facets);
-=======
-        if let Some(ref facets) = query.facet_filters {
-            if let Some(facets) = parse_facets(facets, self, &rtxn)? {
                 search.filter(facets);
->>>>>>> 562cc32 (Add changes according to milli update)
             }
         }
 
@@ -282,38 +276,6 @@ impl Matcher for MatchingWords {
     }
 }
 
-<<<<<<< HEAD
-=======
-fn parse_facets_array(
-    txn: &RoTxn,
-    index: &Index,
-    arr: &[Value],
-) -> anyhow::Result<Option<FilterCondition>> {
-    let mut ands = Vec::new();
-    for value in arr {
-        match value {
-            Value::String(s) => ands.push(Either::Right(s.clone())),
-            Value::Array(arr) => {
-                let mut ors = Vec::new();
-                for value in arr {
-                    match value {
-                        Value::String(s) => ors.push(s.clone()),
-                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
-                    }
-                }
-                ands.push(Either::Left(ors));
-            }
-            v => bail!(
-                "Invalid facet expression, expected String or [String], found: {:?}",
-                v
-            ),
-        }
-    }
-
-    FilterCondition::from_array(txn, &index.0, ands)
-}
-
->>>>>>> 562cc32 (Add changes according to milli update)
 struct Highlighter<'a, A> {
     analyzer: Analyzer<'a, A>,
     marks: (String, String),
@@ -375,7 +337,7 @@ fn parse_facets(
     txn: &RoTxn,
 ) -> anyhow::Result<Option<FilterCondition>> {
     match facets {
-        Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
+        Value::String(expr) => Ok(Some(FilterCondition::from_str(txn, index, expr)?)),
         Value::Array(arr) => parse_facets_array(txn, index, arr),
         v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
     }
@@ -385,7 +347,7 @@ fn parse_facets_array(
     txn: &RoTxn,
     index: &Index,
     arr: &[Value],
-) -> anyhow::Result<Option<FacetCondition>> {
+) -> anyhow::Result<Option<FilterCondition>> {
     let mut ands = Vec::new();
     for value in arr {
         match value {
@@ -407,7 +369,7 @@ fn parse_facets_array(
         }
     }
 
-    FacetCondition::from_array(txn, &index.0, ands)
+    FilterCondition::from_array(txn, &index.0, ands)
 }
 
 #[cfg(test)]
