@@ -182,7 +182,7 @@ impl Index {
                         highlight = f.highlight;
                     }
                     formatted_options.insert(id, FormatOptions {
-                        highlight: highlight,
+                        highlight,
                         crop: attr_len,
                     });
                 }
@@ -195,7 +195,7 @@ impl Index {
                         highlight = f.highlight;
                     }
                     formatted_options.insert(id, FormatOptions {
-                        highlight: highlight,
+                        highlight,
                         crop: attr_len,
                     });
                 }
@@ -362,14 +362,14 @@ fn compute_formatted<A: AsRef<[u8]>>(
     obkv: obkv::KvReader,
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
-    ids_in_formatted: &Vec<FieldId>,
+    ids_in_formatted: &[FieldId],
     formatted_options: &HashMap<FieldId, FormatOptions>,
     // to_highlight_fields: &HashSet<FieldId>, //ICI
     // to_crop_fields: &HashMap<FieldId, Option<usize>>, //ICI
 ) -> anyhow::Result<Document> {
     let mut document = Document::new();
 
-    if formatted_options.len() > 0 {
+    if !formatted_options.is_empty() {
         for field in ids_in_formatted {
             if let Some(value) = obkv.get(*field) {
                 let mut value: Value = serde_json::from_slice(value)?;
