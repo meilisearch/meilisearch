@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded};
+use std::result::Result as StdResult;
 use std::str::FromStr;
 
 use either::Either;
@@ -11,8 +12,9 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use roaring::RoaringBitmap;
 
+use crate::error::UserError;
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
-use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec};
+use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec, Result};
 
 use super::FacetRange;
 use super::parser::Rule;
@@ -60,7 +62,7 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         array: I,
-    ) -> anyhow::Result<Option<FilterCondition>>
+    ) -> Result<Option<FilterCondition>>
     where I: IntoIterator<Item=Either<J, B>>,
           J: IntoIterator<Item=A>,
           A: AsRef<str>,
@@ -104,11 +106,11 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         expression: &str,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields_ids(rtxn)?;
-        let lexed = FilterParser::parse(Rule::prgm, expression)?;
+        let lexed = FilterParser::parse(Rule::prgm, expression).map_err(UserError::FilterParsing)?;
         FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
@@ -116,7 +118,7 @@ impl FilterCondition {
         fim: &FieldsIdsMap,
         ff: &HashSet<FieldId>,
         expression: Pairs<Rule>,
-    ) -> anyhow::Result<Self>
+    ) -> Result<Self>
     {
         PREC_CLIMBER.climb(
             expression,
@@ -133,7 +135,7 @@ impl FilterCondition {
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
                 _ => unreachable!(),
             },
-            |lhs: anyhow::Result<Self>, op: Pair<Rule>, rhs: anyhow::Result<Self>| {
+            |lhs: Result<Self>, op: Pair<Rule>, rhs: Result<Self>| {
                 match op.as_rule() {
                     Rule::or => Ok(Or(Box::new(lhs?), Box::new(rhs?))),
                     Rule::and => Ok(And(Box::new(lhs?), Box::new(rhs?))),
@@ -158,16 +160,17 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
 
-        let lvalue = lresult?;
-        let rvalue = rresult?;
+        let lvalue = lresult.map_err(UserError::FilterParsing)?;
+        let rvalue = rresult.map_err(UserError::FilterParsing)?;
 
         Ok(Operator(fid, Between(lvalue, rvalue)))
     }
@@ -176,10 +179,11 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
@@ -192,60 +196,68 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
+        let value = result.map_err(UserError::FilterParsing)?;
 
-        Ok(Operator(fid, GreaterThan(result?)))
+        Ok(Operator(fid, GreaterThan(value)))
     }
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
+        let value = result.map_err(UserError::FilterParsing)?;
 
-        Ok(Operator(fid, GreaterThanOrEqual(result?)))
+        Ok(Operator(fid, GreaterThanOrEqual(value)))
     }
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
+        let value = result.map_err(UserError::FilterParsing)?;
 
-        Ok(Operator(fid, LowerThan(result?)))
+        Ok(Operator(fid, LowerThan(value)))
     }
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> anyhow::Result<FilterCondition>
+    ) -> Result<FilterCondition>
     {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)?;
+        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::FilterParsing)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
+        let value = result.map_err(UserError::FilterParsing)?;
 
-        Ok(Operator(fid, LowerThanOrEqual(result?)))
+        Ok(Operator(fid, LowerThanOrEqual(value)))
     }
 }
 
@@ -260,7 +272,7 @@ impl FilterCondition {
         left: Bound<f64>,
         right: Bound<f64>,
         output: &mut RoaringBitmap,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         match (left, right) {
             // If the request is an exact value we must go directly to the deepest level.
@@ -332,7 +344,7 @@ impl FilterCondition {
         strings_db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         operator: &Operator,
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> Result<RoaringBitmap>
     {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
@@ -390,7 +402,7 @@ impl FilterCondition {
         &self,
         rtxn: &heed::RoTxn,
         index: &Index,
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> Result<RoaringBitmap>
     {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
@@ -422,7 +434,7 @@ fn field_id(
     fields_ids_map: &FieldsIdsMap,
     filterable_fields: &HashSet<FieldId>,
     items: &mut Pairs<Rule>,
-) -> Result<FieldId, PestError<Rule>>
+) -> StdResult<FieldId, PestError<Rule>>
 {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
@@ -463,7 +475,7 @@ fn field_id(
 /// the original string that we tried to parse.
 ///
 /// Returns the parsing error associated with the span if the conversion fails.
-fn pest_parse<T>(pair: Pair<Rule>) -> (Result<T, pest::error::Error<Rule>>, String)
+fn pest_parse<T>(pair: Pair<Rule>) -> (StdResult<T, pest::error::Error<Rule>>, String)
 where T: FromStr,
       T::Err: ToString,
 {

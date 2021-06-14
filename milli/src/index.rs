@@ -2,14 +2,14 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use anyhow::Context;
 use chrono::{DateTime, Utc};
 use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use heed::types::*;
 use roaring::RoaringBitmap;
 
+use crate::error::UserError;
 use crate::{Criterion, default_criteria, FacetDistribution, FieldsDistribution, Search};
-use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId};
+use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId, Result};
 use crate::{
     BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
     ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
@@ -84,7 +84,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
+    pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         options.max_dbs(14);
 
         let env = options.open(path)?;
@@ -173,7 +173,7 @@ impl Index {
     }
 
     /// Returns the number of documents indexed in the database.
-    pub fn number_of_documents(&self, rtxn: &RoTxn) -> anyhow::Result<u64> {
+    pub fn number_of_documents(&self, rtxn: &RoTxn) -> Result<u64> {
         let count = self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
     }
@@ -215,7 +215,7 @@ impl Index {
 
     /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
-    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<ExternalDocumentsIds<'t>> {
+    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> Result<ExternalDocumentsIds<'t>> {
         let hard = self.main.get::<_, Str, ByteSlice>(rtxn, HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
         let soft = self.main.get::<_, Str, ByteSlice>(rtxn, SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
         let hard = match hard {
@@ -504,7 +504,7 @@ impl Index {
     }
 
     /// Returns the FST which is the words dictionary of the engine.
-    pub fn words_fst<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Set<Cow<'t, [u8]>>> {
+    pub fn words_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
@@ -521,7 +521,7 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, STOP_WORDS_KEY)
     }
 
-    pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
+    pub fn stop_words<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<fst::Set<&'t [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, STOP_WORDS_KEY)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
             None => Ok(None),
@@ -555,7 +555,7 @@ impl Index {
     }
 
     /// Returns the FST which is the words prefixes dictionnary of the engine.
-    pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Set<Cow<'t, [u8]>>> {
+    pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_PREFIXES_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
@@ -577,13 +577,13 @@ impl Index {
         &self,
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item=DocumentId>,
-    ) -> anyhow::Result<Vec<(DocumentId, obkv::KvReader<'t>)>>
+    ) -> Result<Vec<(DocumentId, obkv::KvReader<'t>)>>
     {
         let mut documents = Vec::new();
 
         for id in ids {
             let kv = self.documents.get(rtxn, &BEU32::new(id))?
-                .with_context(|| format!("Could not find document {}", id))?;
+                .ok_or_else(|| UserError::UnknownInternalDocumentId { document_id: id })?;
             documents.push((id, kv));
         }
 
@@ -594,7 +594,7 @@ impl Index {
     pub fn all_documents<'t>(
         &self,
         rtxn: &'t RoTxn,
-    ) -> anyhow::Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReader<'t>)>>> {
+    ) -> Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReader<'t>)>>> {
         Ok(self
             .documents
             .iter(rtxn)?

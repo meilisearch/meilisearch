@@ -1,6 +1,6 @@
 use roaring::{RoaringBitmap, bitmap::IntoIter};
 
-use crate::DocumentId;
+use crate::{DocumentId, Result};
 use super::{DocIter, Distinct};
 
 /// A distinct implementer that does not perform any distinct,
@@ -13,7 +13,7 @@ pub struct NoopDistinctIter {
 }
 
 impl Iterator for NoopDistinctIter {
-    type Item = anyhow::Result<DocumentId>;
+    type Item = Result<DocumentId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.candidates.next().map(Ok)

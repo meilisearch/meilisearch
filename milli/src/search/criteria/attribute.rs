@@ -5,7 +5,7 @@ use std::mem::take;
 
 use roaring::RoaringBitmap;
 
-use crate::{TreeLevel, search::build_dfa};
+use crate::{TreeLevel, Result, search::build_dfa};
 use crate::search::criteria::Query;
 use crate::search::query_tree::{Operation, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
@@ -48,7 +48,7 @@ impl<'t> Attribute<'t> {
 
 impl<'t> Criterion for Attribute<'t> {
     #[logging_timer::time("Attribute::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
         if let Some((_, _, allowed_candidates)) = self.state.as_mut() {
             *allowed_candidates -= params.excluded_candidates;
@@ -224,7 +224,12 @@ struct QueryLevelIterator<'t, 'q> {
 }
 
 impl<'t, 'q> QueryLevelIterator<'t, 'q> {
-    fn new(ctx: &'t dyn Context<'t>, queries: &'q [Query], wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<Self>> {
+    fn new(
+        ctx: &'t dyn Context<'t>,
+        queries: &'q [Query],
+        wdcache: &mut WordDerivationsCache,
+    ) -> Result<Option<Self>>
+    {
         let mut inner = Vec::with_capacity(queries.len());
         for query in queries {
             match &query.kind {
@@ -471,7 +476,7 @@ fn initialize_query_level_iterators<'t, 'q>(
     branches: &'q FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<BinaryHeap<Branch<'t, 'q>>> {
+) -> Result<BinaryHeap<Branch<'t, 'q>>> {
 
     let mut positions = BinaryHeap::with_capacity(branches.len());
     for branch in branches {
@@ -521,7 +526,7 @@ fn set_compute_candidates<'t>(
     branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<Option<RoaringBitmap>>
+) -> Result<Option<RoaringBitmap>>
 {
     let mut branches_heap = initialize_query_level_iterators(ctx, branches, allowed_candidates, wdcache)?;
     let lowest_level = TreeLevel::min_value();
@@ -573,7 +578,7 @@ fn linear_compute_candidates(
     ctx: &dyn Context,
     branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
-) -> anyhow::Result<BTreeMap<u64, RoaringBitmap>>
+) -> Result<BTreeMap<u64, RoaringBitmap>>
 {
     fn compute_candidate_rank(branches: &FlattenedQueryTree, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
         let mut min_rank = u64::max_value();

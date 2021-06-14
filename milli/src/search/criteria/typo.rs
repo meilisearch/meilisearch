@@ -5,6 +5,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
+use crate::Result;
 use super::{
     Candidates,
     Context,
@@ -43,7 +44,7 @@ impl<'t> Typo<'t> {
 
 impl<'t> Criterion for Typo<'t> {
     #[logging_timer::time("Typo::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         // remove excluded candidates when next is called, instead of doing it in the loop.
         match self.state.as_mut() {
@@ -163,14 +164,14 @@ fn alterate_query_tree(
     mut query_tree: Operation,
     number_typos: u8,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<Operation>
+) -> Result<Operation>
 {
     fn recurse(
         words_fst: &fst::Set<Cow<[u8]>>,
         operation: &mut Operation,
         number_typos: u8,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         use Operation::{And, Phrase, Or};
 
@@ -218,7 +219,7 @@ fn resolve_candidates<'t>(
     number_typos: u8,
     cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
@@ -226,7 +227,7 @@ fn resolve_candidates<'t>(
         number_typos: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> Result<RoaringBitmap>
     {
         use Operation::{And, Phrase, Or, Query};
 
@@ -277,7 +278,7 @@ fn resolve_candidates<'t>(
         mana: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> Result<RoaringBitmap>
     {
         match branches.split_first() {
             Some((head, [])) => {

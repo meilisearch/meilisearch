@@ -5,9 +5,10 @@ use std::mem::take;
 use roaring::RoaringBitmap;
 use log::debug;
 
-use crate::{DocumentId, Position, search::{query_tree::QueryKind}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::{build_dfa, WordDerivationsCache};
+use crate::search::{query_tree::QueryKind};
+use crate::{DocumentId, Position, Result};
 use super::{
     Context,
     Criterion,
@@ -55,7 +56,7 @@ impl<'t> Proximity<'t> {
 
 impl<'t> Criterion for Proximity<'t> {
     #[logging_timer::time("Proximity::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
         if let Some((_, _, allowed_candidates)) = self.state.as_mut() {
             *allowed_candidates -= params.excluded_candidates;
@@ -161,7 +162,7 @@ fn resolve_candidates<'t>(
     proximity: u8,
     cache: &mut Cache,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
@@ -169,7 +170,7 @@ fn resolve_candidates<'t>(
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
     {
         use Operation::{And, Phrase, Or};
 
@@ -227,7 +228,7 @@ fn resolve_candidates<'t>(
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
     {
         fn pair_combinations(mana: u8, left_max: u8) -> impl Iterator<Item = (u8, u8)> {
             (0..=mana.min(left_max)).map(move |m| (m, mana - m))
@@ -281,7 +282,7 @@ fn resolve_candidates<'t>(
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
     {
         // Extract the first two elements but gives the tail
         // that is just after the first element.
@@ -324,13 +325,13 @@ fn resolve_plane_sweep_candidates(
     query_tree: &Operation,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<BTreeMap<u8, RoaringBitmap>>
+) -> Result<BTreeMap<u8, RoaringBitmap>>
 {
     /// FIXME may be buggy with query like "new new york"
     fn plane_sweep(
         groups_positions: Vec<Vec<(Position, u8, Position)>>,
         consecutive: bool,
-    ) -> anyhow::Result<Vec<(Position, u8, Position)>>
+    ) -> Result<Vec<(Position, u8, Position)>>
     {
         fn compute_groups_proximity(
             groups: &[(usize, (Position, u8, Position))],
@@ -451,7 +452,7 @@ fn resolve_plane_sweep_candidates(
         rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
         words_positions: &HashMap<String, RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<Vec<(Position, u8, Position)>>
+    ) -> Result<Vec<(Position, u8, Position)>>
     {
         use Operation::{And, Phrase, Or};
 

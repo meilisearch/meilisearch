@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::result::Result as StdResult;
 
-use anyhow::Context;
 use chrono::Utc;
 use grenad::CompressionType;
 use itertools::Itertools;
@@ -9,9 +9,10 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::criterion::Criterion;
+use crate::error::UserError;
 use crate::update::index_documents::{IndexDocumentsMethod, Transform};
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
-use crate::{FieldsIdsMap, Index};
+use crate::{FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting<T> {
@@ -33,7 +34,7 @@ impl<T> Setting<T> {
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error> where S: Serializer {
         match self {
             Self::Set(value) => Some(value),
             // Usually not_set isn't serialized by setting skip_serializing_if field attribute
@@ -43,7 +44,7 @@ impl<T: Serialize> Serialize for Setting<T> {
 }
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error> where D: Deserializer<'de> {
         Deserialize::deserialize(deserializer).map(|x| match x {
             Some(x) => Self::Set(x),
             None => Self::Reset, // Reset is forced by sending null value
@@ -165,7 +166,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
-    fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
+    fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
     where
         F: Fn(UpdateIndexingStep, u64) + Sync
     {
@@ -192,7 +193,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         };
 
         // There already has been a document addition, the primary key should be set by now.
-        let primary_key = self.index.primary_key(&self.wtxn)?.context("Index must have a primary key")?;
+        let primary_key = self.index.primary_key(&self.wtxn)?.ok_or(UserError::MissingPrimaryKey)?;
 
         // We remap the documents fields based on the new `FieldsIdsMap`.
         let output = transform.remap_index_documents(
@@ -220,7 +221,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
-    fn update_displayed(&mut self) -> anyhow::Result<bool> {
+    fn update_displayed(&mut self) -> Result<bool> {
         match self.displayed_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -234,7 +235,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for name in names.iter() {
                     fields_ids_map
                         .insert(name)
-                        .context("field id limit exceeded")?;
+                        .ok_or(UserError::AttributeLimitReached)?;
                 }
                 self.index.put_displayed_fields(self.wtxn, &names)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -245,13 +246,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(true)
     }
 
-    fn update_distinct_field(&mut self) -> anyhow::Result<bool> {
+    fn update_distinct_field(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 fields_ids_map
                     .insert(attr)
-                    .context("field id limit exceeded")?;
+                    .ok_or(UserError::AttributeLimitReached)?;
 
                 self.index.put_distinct_field(self.wtxn, &attr)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -264,7 +265,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     /// Updates the index's searchable attributes. This causes the field map to be recomputed to
     /// reflect the order of the searchable attributes.
-    fn update_searchable(&mut self) -> anyhow::Result<bool> {
+    fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // every time the searchable attributes are updated, we need to update the
@@ -285,13 +286,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for name in names.iter() {
                     new_fields_ids_map
                         .insert(&name)
-                        .context("field id limit exceeded")?;
+                        .ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 for (_, name) in old_fields_ids_map.iter() {
                     new_fields_ids_map
                         .insert(&name)
-                        .context("field id limit exceeded")?;
+                        .ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 self.index.put_searchable_fields(self.wtxn, &names)?;
@@ -303,7 +304,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(true)
     }
 
-    fn update_stop_words(&mut self) -> anyhow::Result<bool> {
+    fn update_stop_words(&mut self) -> Result<bool> {
         match self.stop_words {
             Setting::Set(ref stop_words) => {
                 let current = self.index.stop_words(self.wtxn)?;
@@ -325,7 +326,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
-    fn update_synonyms(&mut self) -> anyhow::Result<bool> {
+    fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
             Setting::Set(ref synonyms) => {
                 fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> Vec<String> {
@@ -383,13 +384,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
-    fn update_filterable(&mut self) -> anyhow::Result<()> {
+    fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_facets = HashSet::new();
                 for name in fields {
-                    fields_ids_map.insert(name).context("field id limit exceeded")?;
+                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                     new_facets.insert(name.clone());
                 }
                 self.index.put_filterable_fields(self.wtxn, &new_facets)?;
@@ -401,7 +402,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
-    fn update_criteria(&mut self) -> anyhow::Result<()> {
+    fn update_criteria(&mut self) -> Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -409,7 +410,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for name in fields {
                     let criterion: Criterion = name.parse()?;
                     if let Some(name) = criterion.field_name() {
-                        fields_ids_map.insert(name).context("field id limit exceeded")?;
+                        fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                     }
                     new_criteria.push(criterion);
                 }
@@ -422,7 +423,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
-    pub fn execute<F>(mut self, progress_callback: F) -> anyhow::Result<()>
+    pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
         where
             F: Fn(UpdateIndexingStep, u64) + Sync
     {

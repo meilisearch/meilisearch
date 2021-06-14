@@ -9,8 +9,9 @@ use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::{Index, FieldId};
 
-pub use self::filter_condition::{FilterCondition, Operator};
 pub use self::facet_distribution::FacetDistribution;
+pub use self::filter_condition::{FilterCondition, Operator};
+pub(crate) use self::parser::Rule as ParserRule;
 
 mod filter_condition;
 mod facet_distribution;

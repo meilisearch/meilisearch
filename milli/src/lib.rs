@@ -15,12 +15,13 @@ pub mod update;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::result::Result as StdResult;
 
-use anyhow::Context;
 use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
 pub use self::criterion::{Criterion, default_criteria};
+pub use self::error::Error;
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, StrLevelPositionCodec, ObkvCodec, FieldIdWordCountCodec};
@@ -29,6 +30,8 @@ pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRo
 pub use self::index::Index;
 pub use self::search::{Search, FacetDistribution, FilterCondition, SearchResult, MatchingWords};
 pub use self::tree_level::TreeLevel;
+
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
@@ -44,21 +47,24 @@ pub type FieldId = u8;
 pub type Position = u32;
 pub type FieldsDistribution = HashMap<String, u64>;
 
-type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
+type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Vec<u8>, E>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
     displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
-) -> anyhow::Result<Map<String, Value>>
+) -> Result<Map<String, Value>>
 {
     displayed_fields.iter()
         .copied()
         .flat_map(|id| obkv.get(id).map(|value| (id, value)))
         .map(|(id, value)| {
-            let name = fields_ids_map.name(id).context("unknown obkv field id")?;
-            let value = serde_json::from_slice(value)?;
+            let name = fields_ids_map.name(id).ok_or(error::FieldIdMapMissingEntry::FieldId {
+                field_id: id,
+                from_db_name: "documents",
+            })?;
+            let value = serde_json::from_slice(value).map_err(error::InternalError::SerdeJson)?;
             Ok((name.to_owned(), value))
         })
         .collect()

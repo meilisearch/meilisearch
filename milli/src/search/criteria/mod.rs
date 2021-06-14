@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use roaring::RoaringBitmap;
 
 use crate::{FieldId, TreeLevel, search::{word_derivations, WordDerivationsCache}};
-use crate::{Index, DocumentId};
+use crate::{Index, DocumentId, Result};
 
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use self::asc_desc::AscDesc;
@@ -26,7 +26,7 @@ mod words;
 pub mod r#final;
 
 pub trait Criterion {
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>>;
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>>;
 }
 
 /// The result of a call to the parent criterion.
@@ -78,8 +78,9 @@ pub trait Context<'c> {
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn searchable_fields_ids(&self) ->  heed::Result<Vec<FieldId>>;
     fn field_id_word_count_docids(&self, field_id: FieldId, word_count: u8) -> heed::Result<Option<RoaringBitmap>>;
-    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error>;
+    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> heed::Result<Option<RoaringBitmap>>;
 }
+
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     index: &'t Index,
@@ -185,14 +186,14 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         self.index.field_id_word_count_docids.get(self.rtxn, &key)
     }
 
-    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
+    fn word_level_position_docids(&self, word: &str, level: TreeLevel, left: u32, right: u32) -> heed::Result<Option<RoaringBitmap>> {
         let key = (word, level, left, right);
         self.index.word_level_position_docids.get(self.rtxn, &key)
     }
 }
 
 impl<'t> CriteriaBuilder<'t> {
-    pub fn new(rtxn: &'t heed::RoTxn<'t>, index: &'t Index) -> anyhow::Result<Self> {
+    pub fn new(rtxn: &'t heed::RoTxn<'t>, index: &'t Index) -> Result<Self> {
         let words_fst = index.words_fst(rtxn)?;
         let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
         Ok(Self { rtxn, index, words_fst, words_prefixes_fst })
@@ -203,7 +204,7 @@ impl<'t> CriteriaBuilder<'t> {
         query_tree: Option<Operation>,
         primitive_query: Option<Vec<PrimitiveQueryPart>>,
         filtered_candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Final<'t>>
+    ) -> Result<Final<'t>>
     {
         use crate::criterion::Criterion as Name;
 
@@ -230,13 +231,13 @@ pub fn resolve_query_tree<'t>(
     ctx: &'t dyn Context,
     query_tree: &Operation,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> Result<RoaringBitmap>
     {
         use Operation::{And, Phrase, Or, Query};
 
@@ -244,7 +245,7 @@ pub fn resolve_query_tree<'t>(
             And(ops) => {
                 let mut ops = ops.iter().map(|op| {
                     resolve_operation(ctx, op, wdcache)
-                }).collect::<anyhow::Result<Vec<_>>>()?;
+                }).collect::<Result<Vec<_>>>()?;
 
                 ops.sort_unstable_by_key(|cds| cds.len());
 
@@ -302,7 +303,7 @@ fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     left_words: &[(T, u8)],
     right_words: &[(U, u8)],
     proximity: u8
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     let mut docids = RoaringBitmap::new();
     for (left, _l_typo) in left_words {
@@ -318,7 +319,7 @@ fn query_docids(
     ctx: &dyn Context,
     query: &Query,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     match &query.kind {
         QueryKind::Exact { word, .. } => {
@@ -354,7 +355,7 @@ fn query_pair_proximity_docids(
     right: &Query,
     proximity: u8,
     wdcache: &mut WordDerivationsCache,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     if proximity >= 8 {
         let mut candidates = query_docids(ctx, left, wdcache)?;
@@ -481,7 +482,7 @@ pub mod test {
             todo!()
         }
 
-        fn word_level_position_docids(&self, _word: &str, _level: TreeLevel, _left: u32, _right: u32) -> Result<Option<RoaringBitmap>, heed::Error> {
+        fn word_level_position_docids(&self, _word: &str, _level: TreeLevel, _left: u32, _right: u32) -> heed::Result<Option<RoaringBitmap>> {
             todo!()
         }
 

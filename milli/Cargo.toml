@@ -5,7 +5,6 @@ authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.38"
 bstr = "0.2.15"
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }

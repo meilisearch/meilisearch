@@ -2,7 +2,7 @@ use std::iter::FromIterator;
 use std::str;
 
 use fst::Streamer;
-use crate::{Index, SmallString32};
+use crate::{Index, SmallString32, Result};
 
 pub struct WordsPrefixesFst<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -48,7 +48,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
         self
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub fn execute(self) -> Result<()> {
         let words_fst = self.index.words_fst(&self.wtxn)?;
         let number_of_words = words_fst.len();
         let min_number_of_words = (number_of_words as f64 * self.threshold) as usize;

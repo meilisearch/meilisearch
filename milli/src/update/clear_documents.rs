@@ -1,6 +1,7 @@
 use chrono::Utc;
 use roaring::RoaringBitmap;
-use crate::{ExternalDocumentsIds, Index, FieldsDistribution};
+
+use crate::{ExternalDocumentsIds, Index, FieldsDistribution, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -18,7 +19,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         ClearDocuments { wtxn, index, _update_id: update_id }
     }
 
-    pub fn execute(self) -> anyhow::Result<u64> {
+    pub fn execute(self) -> Result<u64> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         let Index {
             env: _env,

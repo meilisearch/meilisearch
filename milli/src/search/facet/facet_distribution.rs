@@ -2,15 +2,15 @@ use std::collections::{HashSet, BTreeMap};
 use std::ops::Bound::Unbounded;
 use std::{cmp, fmt};
 
-use anyhow::Context;
 use heed::{Database, BytesDecode};
 use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 
+use crate::error::FieldIdMapMissingEntry;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::search::facet::{FacetIter, FacetRange};
-use crate::{Index, FieldId, DocumentId};
+use crate::{Index, FieldId, DocumentId, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -195,14 +195,15 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
-    pub fn execute(&self) -> anyhow::Result<BTreeMap<String, BTreeMap<String, u64>>> {
+    pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
 
         let mut distribution = BTreeMap::new();
         for name in filterable_fields {
-            let fid = fields_ids_map.id(&name).with_context(|| {
-                format!("missing field name {:?} from the fields id map", name)
+            let fid = fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                field_name: name.clone(),
+                from_db_name: "filterable-fields",
             })?;
             let values = self.facet_values(fid)?;
             distribution.insert(name, values);

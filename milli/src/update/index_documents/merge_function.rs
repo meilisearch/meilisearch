@@ -1,17 +1,19 @@
 use std::borrow::Cow;
+use std::result::Result as StdResult;
 
 use fst::IntoStreamer;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::Result;
 
 /// Only the last value associated with an id is kept.
-pub fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+pub fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     Ok(obkvs.last().unwrap().clone().into_owned())
 }
 
 /// Merge all the obks in the order we see them.
-pub fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+pub fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     let mut iter = obkvs.iter();
     let first = iter.next().map(|b| b.clone().into_owned()).unwrap();
     Ok(iter.fold(first, |acc, current| {
@@ -24,8 +26,8 @@ pub fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> 
 }
 
 // Union of multiple FSTs
-pub fn fst_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    let fsts = values.iter().map(fst::Set::new).collect::<Result<Vec<_>, _>>()?;
+pub fn fst_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
+    let fsts = values.iter().map(fst::Set::new).collect::<StdResult<Vec<_>, _>>()?;
     let op_builder: fst::set::OpBuilder = fsts.iter().map(|fst| fst.into_stream()).collect();
     let op = op_builder.r#union();
 
@@ -34,7 +36,7 @@ pub fn fst_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     Ok(build.into_inner().unwrap())
 }
 
-pub fn keep_first(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+pub fn keep_first(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     Ok(values.first().unwrap().to_vec())
 }
 
@@ -54,7 +56,7 @@ pub fn merge_two_obkvs(base: obkv::KvReader, update: obkv::KvReader, buffer: &mu
     writer.finish().unwrap();
 }
 
-pub fn roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+pub fn roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     let (head, tail) = values.split_first().unwrap();
     let mut head = RoaringBitmap::deserialize_from(&head[..])?;
 
@@ -68,7 +70,7 @@ pub fn roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result
     Ok(vec)
 }
 
-pub fn cbo_roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+pub fn cbo_roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     let (head, tail) = values.split_first().unwrap();
     let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
 

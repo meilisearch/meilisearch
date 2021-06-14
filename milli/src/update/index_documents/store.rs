@@ -6,7 +6,6 @@ use std::iter::FromIterator;
 use std::time::Instant;
 use std::{cmp, iter};
 
-use anyhow::Context;
 use bstr::ByteSlice as _;
 use fst::Set;
 use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
@@ -19,11 +18,12 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 use tempfile::tempfile;
 
+use crate::error::{Error, InternalError, SerializationError};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec};
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec32, Position, DocumentId, FieldId};
+use crate::{json_to_string, SmallVec32, Position, DocumentId, FieldId, Result};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{fst_merge, keep_first, roaring_bitmap_merge, cbo_roaring_bitmap_merge};
@@ -66,15 +66,15 @@ pub struct Store<'s, A> {
     chunk_compression_level: Option<u32>,
     chunk_fusing_shrink_size: Option<u64>,
     // MTBL sorters
-    main_sorter: Sorter<MergeFn>,
-    word_docids_sorter: Sorter<MergeFn>,
-    words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
-    word_level_position_docids_sorter: Sorter<MergeFn>,
-    field_id_word_count_docids_sorter: Sorter<MergeFn>,
-    facet_field_numbers_docids_sorter: Sorter<MergeFn>,
-    facet_field_strings_docids_sorter: Sorter<MergeFn>,
-    field_id_docid_facet_numbers_sorter: Sorter<MergeFn>,
-    field_id_docid_facet_strings_sorter: Sorter<MergeFn>,
+    main_sorter: Sorter<MergeFn<Error>>,
+    word_docids_sorter: Sorter<MergeFn<Error>>,
+    words_pairs_proximities_docids_sorter: Sorter<MergeFn<Error>>,
+    word_level_position_docids_sorter: Sorter<MergeFn<Error>>,
+    field_id_word_count_docids_sorter: Sorter<MergeFn<Error>>,
+    facet_field_numbers_docids_sorter: Sorter<MergeFn<Error>>,
+    facet_field_strings_docids_sorter: Sorter<MergeFn<Error>>,
+    field_id_docid_facet_numbers_sorter: Sorter<MergeFn<Error>>,
+    field_id_docid_facet_strings_sorter: Sorter<MergeFn<Error>>,
     // MTBL writers
     docid_word_positions_writer: Writer<File>,
     documents_writer: Writer<File>,
@@ -93,7 +93,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         chunk_compression_level: Option<u32>,
         chunk_fusing_shrink_size: Option<u64>,
         stop_words: Option<&'s Set<A>>,
-    ) -> anyhow::Result<Self>
+    ) -> Result<Self>
     {
         // We divide the max memory by the number of sorter the Store have.
         let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 5));
@@ -221,7 +221,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     }
 
     // Save the documents ids under the position and word we have seen it.
-    fn insert_word_docid(&mut self, word: &str, id: DocumentId) -> anyhow::Result<()> {
+    fn insert_word_docid(&mut self, word: &str, id: DocumentId) -> Result<()> {
         // if get_refresh finds the element it is assured to be at the end of the linked hash map.
         match self.word_docids.get_refresh(word.as_bytes()) {
             Some(old) => { old.insert(id); },
@@ -246,7 +246,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         field_id: FieldId,
         value: OrderedFloat<f64>,
         id: DocumentId,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         let sorter = &mut self.field_id_docid_facet_numbers_sorter;
         Self::write_field_id_docid_facet_number_value(sorter, field_id, id, value)?;
@@ -279,7 +279,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         field_id: FieldId,
         value: String,
         id: DocumentId,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         let sorter = &mut self.field_id_docid_facet_strings_sorter;
         Self::write_field_id_docid_facet_string_value(sorter, field_id, id, &value)?;
@@ -311,7 +311,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         &mut self,
         words_pairs_proximities: impl IntoIterator<Item=((&'a str, &'a str), u8)>,
         id: DocumentId,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         for ((w1, w2), prox) in words_pairs_proximities {
             let w1 = SmallVec32::from(w1.as_bytes());
@@ -350,7 +350,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         facet_numbers_values: &mut HashMap<FieldId, Vec<f64>>,
         facet_strings_values: &mut HashMap<FieldId, Vec<String>>,
         record: &[u8],
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         // We compute the list of words pairs proximities (self-join) and write it directly to disk.
         let words_pair_proximities = compute_words_pair_proximities(&words_positions);
@@ -385,10 +385,12 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_words_pairs_proximities(
-        sorter: &mut Sorter<MergeFn>,
+    fn write_words_pairs_proximities<E>(
+        sorter: &mut Sorter<MergeFn<E>>,
         iter: impl IntoIterator<Item=((SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap)>,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
+    where
+        Error: From<E>,
     {
         let mut key = Vec::new();
         let mut buffer = Vec::new();
@@ -417,7 +419,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         writer: &mut Writer<File>,
         id: DocumentId,
         words_positions: &HashMap<String, SmallVec32<Position>>,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
     {
         // We prefix the words by the document id.
         let mut key = id.to_be_bytes().to_vec();
@@ -445,11 +447,13 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_word_position_docids(
-        writer: &mut Sorter<MergeFn>,
+    fn write_word_position_docids<E>(
+        writer: &mut Sorter<MergeFn<E>>,
         document_id: DocumentId,
         words_positions: &HashMap<String, SmallVec32<Position>>,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
+    where
+        Error: From<E>,
     {
         let mut key_buffer = Vec::new();
         let mut data_buffer = Vec::new();
@@ -480,11 +484,13 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_facet_field_string_docids<I>(
-        sorter: &mut Sorter<MergeFn>,
+    fn write_facet_field_string_docids<I, E>(
+        sorter: &mut Sorter<MergeFn<E>>,
         iter: I,
-    ) -> anyhow::Result<()>
-    where I: IntoIterator<Item=((FieldId, String), RoaringBitmap)>
+    ) -> Result<()>
+    where
+        I: IntoIterator<Item=((FieldId, String), RoaringBitmap)>,
+        Error: From<E>,
     {
         let mut key_buffer = Vec::new();
         let mut data_buffer = Vec::new();
@@ -504,11 +510,13 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_facet_field_number_docids<I>(
-        sorter: &mut Sorter<MergeFn>,
+    fn write_facet_field_number_docids<I, E>(
+        sorter: &mut Sorter<MergeFn<E>>,
         iter: I,
-    ) -> anyhow::Result<()>
-    where I: IntoIterator<Item=((FieldId, OrderedFloat<f64>), RoaringBitmap)>
+    ) -> Result<()>
+    where
+        I: IntoIterator<Item=((FieldId, OrderedFloat<f64>), RoaringBitmap)>,
+        Error: From<E>,
     {
         let mut data_buffer = Vec::new();
 
@@ -517,7 +525,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
             let key = FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *value, *value))
                 .map(Cow::into_owned)
-                .context("could not serialize facet level value key")?;
+                .ok_or(SerializationError::Encoding { db_name: Some("facet level value") })?;
 
             CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
 
@@ -529,16 +537,18 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_field_id_docid_facet_number_value(
-        sorter: &mut Sorter<MergeFn>,
+    fn write_field_id_docid_facet_number_value<E>(
+        sorter: &mut Sorter<MergeFn<E>>,
         field_id: FieldId,
         document_id: DocumentId,
         value: OrderedFloat<f64>,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
+    where
+        Error: From<E>,
     {
         let key = FieldDocIdFacetF64Codec::bytes_encode(&(field_id, document_id, *value))
             .map(Cow::into_owned)
-            .context("could not serialize facet level value key")?;
+            .ok_or(SerializationError::Encoding { db_name: Some("facet level value") })?;
 
         if lmdb_key_valid_size(&key) {
             sorter.insert(&key, &[])?;
@@ -547,12 +557,14 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_field_id_docid_facet_string_value(
-        sorter: &mut Sorter<MergeFn>,
+    fn write_field_id_docid_facet_string_value<E>(
+        sorter: &mut Sorter<MergeFn<E>>,
         field_id: FieldId,
         document_id: DocumentId,
         value: &str,
-    ) -> anyhow::Result<()>
+    ) -> Result<()>
+    where
+        Error: From<E>,
     {
         let mut buffer = Vec::new();
 
@@ -565,8 +577,10 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(())
     }
 
-    fn write_word_docids<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
-    where I: IntoIterator<Item=(SmallVec32<u8>, RoaringBitmap)>
+    fn write_word_docids<I, E>(sorter: &mut Sorter<MergeFn<E>>, iter: I) -> Result<()>
+    where
+        I: IntoIterator<Item=(SmallVec32<u8>, RoaringBitmap)>,
+        Error: From<E>,
     {
         let mut key = Vec::new();
         let mut buffer = Vec::new();
@@ -596,7 +610,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         num_threads: usize,
         log_every_n: Option<usize>,
         mut progress_callback: F,
-    ) -> anyhow::Result<Readers>
+    ) -> Result<Readers>
     where F: FnMut(UpdateIndexingStep),
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
@@ -625,7 +639,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
                 for (attr, content) in document.iter() {
                     if self.faceted_fields.contains(&attr) || self.searchable_fields.contains(&attr) {
-                        let value = serde_json::from_slice(content)?;
+                        let value = serde_json::from_slice(content).map_err(InternalError::SerdeJson)?;
 
                         let (facet_numbers, facet_strings) = extract_facet_values(&value);
                         facet_numbers_values.entry(attr).or_insert_with(Vec::new).extend(facet_numbers);
@@ -679,7 +693,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(readers)
     }
 
-    fn finish(mut self) -> anyhow::Result<Readers> {
+    fn finish(mut self) -> Result<Readers> {
         let comp_type = self.chunk_compression_type;
         let comp_level = self.chunk_compression_level;
         let shrink_size = self.chunk_fusing_shrink_size;

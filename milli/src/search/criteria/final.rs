@@ -1,6 +1,7 @@
 use log::debug;
 use roaring::RoaringBitmap;
 
+use crate::Result;
 use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
 use super::{resolve_query_tree, Criterion, CriterionResult, CriterionParameters, Context};
@@ -29,7 +30,7 @@ impl<'t> Final<'t> {
     }
 
     #[logging_timer::time("Final::{}")]
-    pub fn next(&mut self, excluded_candidates: &RoaringBitmap) -> anyhow::Result<Option<FinalResult>> {
+    pub fn next(&mut self, excluded_candidates: &RoaringBitmap) -> Result<Option<FinalResult>> {
         debug!("Final iteration");
         let excluded_candidates = &self.returned_candidates | excluded_candidates;
         let mut criterion_parameters = CriterionParameters {

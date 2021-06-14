@@ -3,11 +3,11 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom, BufReader, BufRead};
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::result::Result as StdResult;
 use std::str;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
-use anyhow::Context;
 use bstr::ByteSlice as _;
 use chrono::Utc;
 use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
@@ -18,7 +18,8 @@ use rayon::prelude::*;
 use rayon::ThreadPool;
 use serde::{Serialize, Deserialize};
 
-use crate::index::Index;
+use crate::error::{Error, InternalError};
+use crate::{Index, Result};
 use crate::update::{
     Facets, WordsLevelPositions, WordPrefixDocids, WordsPrefixesFst, UpdateIndexingStep,
     WordPrefixPairProximityDocids,
@@ -56,14 +57,14 @@ pub fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io
     builder.build(file)
 }
 
-pub fn create_sorter(
-    merge: MergeFn,
+pub fn create_sorter<E>(
+    merge: MergeFn<E>,
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
     chunk_fusing_shrink_size: Option<u64>,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
-) -> Sorter<MergeFn>
+) -> Sorter<MergeFn<E>>
 {
     let mut builder = Sorter::builder(merge);
     if let Some(shrink_size) = chunk_fusing_shrink_size {
@@ -82,7 +83,7 @@ pub fn create_sorter(
     builder.build()
 }
 
-pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> anyhow::Result<Reader<FileFuse>> {
+pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> Result<Reader<FileFuse>> {
     let mut file = writer.into_inner()?;
     file.seek(SeekFrom::Start(0))?;
     let file = if let Some(shrink_size) = shrink_size {
@@ -93,19 +94,25 @@ pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> any
     Reader::new(file).map_err(Into::into)
 }
 
-pub fn merge_readers(sources: Vec<Reader<FileFuse>>, merge: MergeFn) -> Merger<FileFuse, MergeFn> {
+pub fn merge_readers<E>(
+    sources: Vec<Reader<FileFuse>>,
+    merge: MergeFn<E>,
+) -> Merger<FileFuse, MergeFn<E>>
+{
     let mut builder = Merger::builder(merge);
     builder.extend(sources);
     builder.build()
 }
 
-pub fn merge_into_lmdb_database(
+pub fn merge_into_lmdb_database<E>(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     sources: Vec<Reader<FileFuse>>,
-    merge: MergeFn,
+    merge: MergeFn<E>,
     method: WriteMethod,
-) -> anyhow::Result<()>
+) -> Result<()>
+where
+    Error: From<E>,
 {
     debug!("Merging {} MTBL stores...", sources.len());
     let before = Instant::now();
@@ -123,13 +130,15 @@ pub fn merge_into_lmdb_database(
     Ok(())
 }
 
-pub fn write_into_lmdb_database(
+pub fn write_into_lmdb_database<E>(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     mut reader: Reader<FileFuse>,
-    merge: MergeFn,
+    merge: MergeFn<E>,
     method: WriteMethod,
-) -> anyhow::Result<()>
+) -> Result<()>
+where
+    Error: From<E>,
 {
     debug!("Writing MTBL stores...");
     let before = Instant::now();
@@ -138,9 +147,7 @@ pub fn write_into_lmdb_database(
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = reader.next()? {
-                out_iter.append(k, v).with_context(|| {
-                    format!("writing {:?} into LMDB", k.as_bstr())
-                })?;
+                out_iter.append(k, v)?;
             }
         },
         WriteMethod::GetMergePut => {
@@ -165,13 +172,16 @@ pub fn write_into_lmdb_database(
     Ok(())
 }
 
-pub fn sorter_into_lmdb_database(
+pub fn sorter_into_lmdb_database<E>(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
-    sorter: Sorter<MergeFn>,
-    merge: MergeFn,
+    sorter: Sorter<MergeFn<E>>,
+    merge: MergeFn<E>,
     method: WriteMethod,
-) -> anyhow::Result<()>
+) -> Result<()>
+where
+    Error: From<E>,
+    Error: From<grenad::Error<E>>
 {
     debug!("Writing MTBL sorter...");
     let before = Instant::now();
@@ -188,21 +198,21 @@ pub fn sorter_into_lmdb_database(
     Ok(())
 }
 
-fn merger_iter_into_lmdb_database<R: io::Read>(
+fn merger_iter_into_lmdb_database<R: io::Read, E>(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
-    mut sorter: MergerIter<R, MergeFn>,
-    merge: MergeFn,
+    mut sorter: MergerIter<R, MergeFn<E>>,
+    merge: MergeFn<E>,
     method: WriteMethod,
-) -> anyhow::Result<()>
+) -> Result<()>
+where
+    Error: From<E>,
 {
     match method {
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = sorter.next()? {
-                out_iter.append(k, v).with_context(|| {
-                    format!("writing {:?} into LMDB", k.as_bstr())
-                })?;
+                out_iter.append(k, v)?;
             }
         },
         WriteMethod::GetMergePut => {
@@ -211,7 +221,10 @@ fn merger_iter_into_lmdb_database<R: io::Read>(
                 match iter.next().transpose()? {
                     Some((key, old_val)) if key == k => {
                         let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).expect("merge failed");
+                        let val = merge(k, &vals).map_err(|_| {
+                            // TODO just wrap this error?
+                            InternalError::IndexingMergingKeys { process: "get-put-merge" }
+                        })?;
                         iter.put_current(k, &val)?;
                     },
                     _ => {
@@ -318,7 +331,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.autogenerate_docids = false;
     }
 
-    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<DocumentAdditionResult>
+    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> Result<DocumentAdditionResult>
     where
         R: io::Read,
         F: Fn(UpdateIndexingStep, u64) + Sync,
@@ -365,7 +378,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         Ok(DocumentAdditionResult { nb_documents })
     }
 
-    pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> anyhow::Result<()>
+    pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync
     {
@@ -403,15 +416,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             debug!("{} documents actually deleted", deleted_documents_count);
         }
 
-        let mmap;
-        let bytes = if documents_count == 0 {
-            &[][..]
-        } else {
-            mmap = unsafe { Mmap::map(&documents_file).context("mmaping the transform documents file")? };
-            &mmap
-        };
+        if documents_count == 0 {
+            return Ok(());
+        }
 
-        let documents = grenad::Reader::new(bytes).unwrap();
+        let bytes = unsafe { Mmap::map(&documents_file)? };
+        let documents = grenad::Reader::new(bytes.as_bytes()).unwrap();
 
         // The enum which indicates the type of the readers
         // merges that are potentially done on different threads.
@@ -477,7 +487,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         &progress_callback,
                     )
                 })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<StdResult<Vec<_>, _>>()?;
 
             let mut main_readers = Vec::with_capacity(readers.len());
             let mut word_docids_readers = Vec::with_capacity(readers.len());
@@ -535,7 +545,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             debug!("Merging the main, word docids and words pairs proximity docids in parallel...");
             rayon::spawn(move || {
                 vec![
-                    (DatabaseType::Main, main_readers, fst_merge as MergeFn),
+                    (DatabaseType::Main, main_readers, fst_merge as MergeFn<_>),
                     (DatabaseType::WordDocids, word_docids_readers, roaring_bitmap_merge),
                     (
                         DatabaseType::FacetLevel0NumbersDocids,
@@ -570,7 +580,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 facet_field_strings_docids_readers,
                 field_id_docid_facet_numbers_readers,
                 field_id_docid_facet_strings_readers,
-            )) as anyhow::Result<_>
+            )) as Result<_>
         })?;
 
         let (

@@ -5,6 +5,7 @@ use fst::Streamer;
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 
+use crate::Result;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{
     create_sorter, roaring_bitmap_merge, sorter_into_lmdb_database,
@@ -33,7 +34,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         }
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub fn execute(self) -> Result<()> {
         // Clear the word prefix docids database.
         self.index.word_prefix_docids.clear(self.wtxn)?;
 

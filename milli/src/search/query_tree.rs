@@ -7,7 +7,7 @@ use meilisearch_tokenizer::TokenKind;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
-use crate::Index;
+use crate::{Index, Result};
 
 type IsOptionalWord = bool;
 type IsPrefix = bool;
@@ -219,7 +219,7 @@ impl<'a> QueryTreeBuilder<'a> {
     /// - if `authorize_typos` is set to `false` the query tree will be generated
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
-    pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<(Operation, PrimitiveQuery)>> {
+    pub fn build(&self, query: TokenStream) -> Result<Option<(Operation, PrimitiveQuery)>> {
         let stop_words = self.index.stop_words(self.rtxn)?;
         let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
         if !primitive_query.is_empty() {
@@ -291,14 +291,14 @@ fn create_query_tree(
     optional_words: bool,
     authorize_typos: bool,
     query: &[PrimitiveQueryPart],
-) -> anyhow::Result<Operation>
+) -> Result<Operation>
 {
     /// Matches on the `PrimitiveQueryPart` and create an operation from it.
     fn resolve_primitive_part(
         ctx: &impl Context,
         authorize_typos: bool,
         part: PrimitiveQueryPart,
-    ) -> anyhow::Result<Operation>
+    ) -> Result<Operation>
     {
         match part {
             // 1. try to split word in 2
@@ -325,7 +325,7 @@ fn create_query_tree(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
-    ) -> anyhow::Result<Operation>
+    ) -> Result<Operation>
     {
         const MAX_NGRAM: usize = 3;
         let mut op_children = Vec::new();
@@ -379,7 +379,7 @@ fn create_query_tree(
         ctx: &impl Context,
         authorize_typos: bool,
         query: PrimitiveQuery,
-    ) -> anyhow::Result<Operation>
+    ) -> Result<Operation>
     {
         let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
         let mut operation_children = Vec::new();
@@ -532,7 +532,7 @@ mod test {
             authorize_typos: bool,
             words_limit: Option<usize>,
             query: TokenStream,
-        ) -> anyhow::Result<Option<(Operation, PrimitiveQuery)>>
+        ) -> Result<Option<(Operation, PrimitiveQuery)>>
         {
             let primitive_query = create_primitive_query(query, None, words_limit);
             if !primitive_query.is_empty() {

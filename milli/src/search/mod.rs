@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::{Entry, HashMap};
 use std::fmt;
 use std::mem::take;
+use std::result::Result as StdResult;
 use std::str::Utf8Error;
 use std::time::Instant;
 
@@ -14,10 +15,11 @@ use roaring::bitmap::RoaringBitmap;
 
 use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 use crate::search::criteria::r#final::{Final, FinalResult};
-use crate::{Index, DocumentId};
+use crate::{Index, DocumentId, Result};
 
 pub use self::facet::{FilterCondition, FacetDistribution, FacetIter, Operator};
 pub use self::matching_words::MatchingWords;
+pub(crate) use self::facet::ParserRule;
 use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
@@ -93,7 +95,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn execute(&self) -> anyhow::Result<SearchResult> {
+    pub fn execute(&self) -> Result<SearchResult> {
         // We create the query tree by spliting the query into tokens.
         let before = Instant::now();
         let (query_tree, primitive_query) = match self.query.as_ref() {
@@ -152,7 +154,7 @@ impl<'a> Search<'a> {
         mut distinct: D,
         matching_words: MatchingWords,
         mut criteria: Final,
-    ) -> anyhow::Result<SearchResult>
+    ) -> Result<SearchResult>
     {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
@@ -225,7 +227,7 @@ pub fn word_derivations<'c>(
     max_typo: u8,
     fst: &fst::Set<Cow<[u8]>>,
     cache: &'c mut WordDerivationsCache,
-) -> Result<&'c [(String, u8)], Utf8Error> {
+) -> StdResult<&'c [(String, u8)], Utf8Error> {
     match cache.entry((word.to_string(), is_prefix, max_typo)) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
