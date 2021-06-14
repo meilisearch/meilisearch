@@ -1,9 +1,12 @@
+use std::convert::Infallible;
 use std::error::Error as StdError;
-use std::{fmt, io};
+use std::{fmt, io, str};
 
 use heed::{MdbError, Error as HeedError};
+use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
+use crate::search::ParserRule;
 use crate::{DocumentId, FieldId};
 
 pub type Object = Map<String, Value>;
@@ -17,13 +20,18 @@ pub enum Error {
 
 #[derive(Debug)]
 pub enum InternalError {
+    DatabaseClosing,
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
     FieldIdMapMissingEntry(FieldIdMapMissingEntry),
+    Fst(fst::Error),
+    GrenadInvalidCompressionType,
     IndexingMergingKeys { process: &'static str },
-    SerializationError(SerializationError),
-    StoreError(MdbError),
     InvalidDatabaseTyping,
-    DatabaseClosing,
+    RayonThreadPool(ThreadPoolBuildError),
+    SerdeJson(serde_json::Error),
+    Serialization(SerializationError),
+    Store(MdbError),
+    Utf8(str::Utf8Error),
 }
 
 #[derive(Debug)]
@@ -42,20 +50,54 @@ pub enum FieldIdMapMissingEntry {
 #[derive(Debug)]
 pub enum UserError {
     AttributeLimitReached,
+    Csv(csv::Error),
+    DatabaseSizeReached,
     DocumentLimitReached,
+    FilterParsing(pest::error::Error<ParserRule>),
     InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
+    InvalidStoreFile,
     MissingDocumentId { document: Object },
     MissingPrimaryKey,
-    DatabaseSizeReached,
     NoSpaceLeftOnDevice,
-    InvalidStoreFile,
+    SerdeJson(serde_json::Error),
+    UnknownInternalDocumentId { document_id: DocumentId },
 }
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         // TODO must be improved and more precise
         Error::IoError(error)
+    }
+}
+
+impl From<fst::Error> for Error {
+    fn from(error: fst::Error) -> Error {
+        Error::InternalError(InternalError::Fst(error))
+    }
+}
+
+impl<E> From<grenad::Error<E>> for Error where Error: From<E> {
+    fn from(error: grenad::Error<E>) -> Error {
+        match error {
+            grenad::Error::Io(error) => Error::IoError(error),
+            grenad::Error::Merge(error) => Error::from(error),
+            grenad::Error::InvalidCompressionType => {
+                Error::InternalError(InternalError::GrenadInvalidCompressionType)
+            },
+        }
+    }
+}
+
+impl From<str::Utf8Error> for Error {
+    fn from(error: str::Utf8Error) -> Error {
+        Error::InternalError(InternalError::Utf8(error))
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_error: Infallible) -> Error {
+        unreachable!()
     }
 }
 
@@ -70,12 +112,42 @@ impl From<HeedError> for Error {
             HeedError::Io(error) => Error::from(error),
             HeedError::Mdb(MdbError::MapFull) => UserError(DatabaseSizeReached),
             HeedError::Mdb(MdbError::Invalid) => UserError(InvalidStoreFile),
-            HeedError::Mdb(error) => InternalError(StoreError(error)),
-            HeedError::Encoding => InternalError(SerializationError(Encoding { db_name: None })),
-            HeedError::Decoding => InternalError(SerializationError(Decoding { db_name: None })),
+            HeedError::Mdb(error) => InternalError(Store(error)),
+            HeedError::Encoding => InternalError(Serialization(Encoding { db_name: None })),
+            HeedError::Decoding => InternalError(Serialization(Decoding { db_name: None })),
             HeedError::InvalidDatabaseTyping => InternalError(InvalidDatabaseTyping),
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
         }
+    }
+}
+
+impl From<ThreadPoolBuildError> for Error {
+    fn from(error: ThreadPoolBuildError) -> Error {
+        Error::InternalError(InternalError::RayonThreadPool(error))
+    }
+}
+
+impl From<FieldIdMapMissingEntry> for Error {
+    fn from(error: FieldIdMapMissingEntry) -> Error {
+        Error::InternalError(InternalError::FieldIdMapMissingEntry(error))
+    }
+}
+
+impl From<InternalError> for Error {
+    fn from(error: InternalError) -> Error {
+        Error::InternalError(error)
+    }
+}
+
+impl From<UserError> for Error {
+    fn from(error: UserError) -> Error {
+        Error::UserError(error)
+    }
+}
+
+impl From<SerializationError> for Error {
+    fn from(error: SerializationError) -> Error {
+        Error::InternalError(InternalError::Serialization(error))
     }
 }
 
@@ -98,13 +170,20 @@ impl fmt::Display for InternalError {
                 write!(f, "missing {} in the {} database", key.unwrap_or("key"), db_name)
             },
             Self::FieldIdMapMissingEntry(error) => error.fmt(f),
+            Self::Fst(error) => error.fmt(f),
+            Self::GrenadInvalidCompressionType => {
+                f.write_str("invalid compression type have been specified to grenad")
+            },
             Self::IndexingMergingKeys { process } => {
                 write!(f, "invalid merge while processing {}", process)
             },
-            Self::SerializationError(error) => error.fmt(f),
-            Self::StoreError(error) => error.fmt(f),
+            Self::Serialization(error) => error.fmt(f),
             Self::InvalidDatabaseTyping => HeedError::InvalidDatabaseTyping.fmt(f),
+            Self::RayonThreadPool(error) => error.fmt(f),
+            Self::SerdeJson(error) => error.fmt(f),
             Self::DatabaseClosing => HeedError::DatabaseClosing.fmt(f),
+            Self::Store(error) => error.fmt(f),
+            Self::Utf8(error) => error.fmt(f),
         }
     }
 }
@@ -115,7 +194,9 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
+            Self::Csv(error) => error.fmt(f),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
+            Self::FilterParsing(error) => error.fmt(f),
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
@@ -130,6 +211,10 @@ impl fmt::Display for UserError {
             // TODO where can we find it instead of writing the text ourselves?
             Self::NoSpaceLeftOnDevice => f.write_str("no space left on device"),
             Self::InvalidStoreFile => f.write_str("store file is not a valid database file"),
+            Self::SerdeJson(error) => error.fmt(f),
+            Self::UnknownInternalDocumentId { document_id } => {
+                write!(f, "an unknown internal document id have been used ({})", document_id)
+            },
         }
     }
 }
