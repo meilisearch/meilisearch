@@ -110,11 +110,11 @@ async fn reset_all_settings() {
     assert_eq!(response["searchableAttributes"], json!(["*"]));
     assert_eq!(response["stopWords"], json!([]));
     assert_eq!(response["filterableAttributes"], json!([]));
+    assert_eq!(response["synonyms"], json!({}));
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
     assert!(response.as_object().unwrap().get("age").is_some());
-    assert_eq!(response["synonyms"], json!({}));
 }
 
 #[actix_rt::test]
