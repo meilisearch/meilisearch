@@ -1,7 +1,6 @@
 use std::fs::File;
 
 use crate::index::Index;
-use anyhow::Result;
 use grenad::CompressionType;
 use milli::update::UpdateBuilder;
 use rayon::ThreadPool;
@@ -22,7 +21,7 @@ pub struct UpdateHandler {
 }
 
 impl UpdateHandler {
-    pub fn new(opt: &IndexerOpts) -> anyhow::Result<Self> {
+    pub fn new(opt: &IndexerOpts) -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(opt.indexing_jobs.unwrap_or(0))
             .build()?;

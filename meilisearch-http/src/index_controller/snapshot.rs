@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::bail;
 use log::{error, info};
 use tokio::fs;
 use tokio::task::spawn_blocking;
@@ -53,7 +52,7 @@ where
         }
     }
 
-    async fn perform_snapshot(&self) -> anyhow::Result<()> {
+    async fn perform_snapshot(&self) -> std::result::Result<(), Box<dyn std::error::Error + Sync + Send + 'static>> {
         info!("Performing snapshot.");
 
         let snapshot_dir = self.snapshot_path.clone();
@@ -78,7 +77,7 @@ where
         let snapshot_path = self
             .snapshot_path
             .join(format!("{}.snapshot", self.db_name));
-        let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
+        let snapshot_path = spawn_blocking(move || -> Result<PathBuf, Box<dyn std::error::Error + Sync + Send + 'static>> {
             let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
             let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
             compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
@@ -98,7 +97,7 @@ pub fn load_snapshot(
     snapshot_path: impl AsRef<Path>,
     ignore_snapshot_if_db_exists: bool,
     ignore_missing_snapshot: bool,
-) -> anyhow::Result<()> {
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
     if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
         match compression::from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),
@@ -109,7 +108,7 @@ pub fn load_snapshot(
             }
         }
     } else if db_path.as_ref().exists() && !ignore_snapshot_if_db_exists {
-        bail!(
+        todo!(
             "database already exists at {:?}, try to delete it or rename it",
             db_path
                 .as_ref()
@@ -117,7 +116,7 @@ pub fn load_snapshot(
                 .unwrap_or_else(|_| db_path.as_ref().to_owned())
         )
     } else if !snapshot_path.as_ref().exists() && !ignore_missing_snapshot {
-        bail!(
+        todo!(
             "snapshot doesn't exist at {:?}",
             snapshot_path
                 .as_ref()
@@ -142,7 +141,7 @@ mod test {
     use super::*;
     use crate::index_controller::index_actor::MockIndexActorHandle;
     use crate::index_controller::update_actor::{
-        MockUpdateActorHandle, UpdateActorHandleImpl, UpdateError,
+        MockUpdateActorHandle, UpdateActorHandleImpl, error::UpdateActorError,
     };
     use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidResolverError};
 
@@ -224,7 +223,7 @@ mod test {
         update_handle
             .expect_snapshot()
             // abitrary error
-            .returning(|_, _| Box::pin(err(UpdateError::UnexistingUpdate(0))));
+            .returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
 
         let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(

@@ -8,16 +8,16 @@ use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use super::{IndexError, IndexResult};
+use super::error::{IndexActorError, Result};
 use crate::index::Index;
 
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
 #[async_trait::async_trait]
 pub trait IndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> IndexResult<Index>;
-    async fn get(&self, uuid: Uuid) -> IndexResult<Option<Index>>;
-    async fn delete(&self, uuid: Uuid) -> IndexResult<Option<Index>>;
+    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
+    async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>>;
 }
 
 pub struct MapIndexStore {
@@ -40,7 +40,7 @@ impl MapIndexStore {
 
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> IndexResult<Index> {
+    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index> {
         // We need to keep the lock until we are sure the db file has been opened correclty, to
         // ensure that another db is not created at the same time.
         let mut lock = self.index_store.write().await;
@@ -50,11 +50,11 @@ impl IndexStore for MapIndexStore {
         }
         let path = self.path.join(format!("index-{}", uuid));
         if path.exists() {
-            return Err(IndexError::IndexAlreadyExists);
+            return Err(IndexActorError::IndexAlreadyExists);
         }
 
         let index_size = self.index_size;
-        let index = spawn_blocking(move || -> IndexResult<Index> {
+        let index = spawn_blocking(move || -> Result<Index> {
             let index = Index::open(path, index_size)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
@@ -62,7 +62,7 @@ impl IndexStore for MapIndexStore {
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
                 builder.set_primary_key(primary_key);
                 builder.execute(|_, _| ())
-                    .map_err(|e| IndexError::Internal(e.to_string()))?;
+                    .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
 
                 txn.commit()?;
             }
@@ -75,7 +75,7 @@ impl IndexStore for MapIndexStore {
         Ok(index)
     }
 
-    async fn get(&self, uuid: Uuid) -> IndexResult<Option<Index>> {
+    async fn get(&self, uuid: Uuid) -> Result<Option<Index>> {
         let guard = self.index_store.read().await;
         match guard.get(&uuid) {
             Some(index) => Ok(Some(index.clone())),
@@ -95,7 +95,7 @@ impl IndexStore for MapIndexStore {
         }
     }
 
-    async fn delete(&self, uuid: Uuid) -> IndexResult<Option<Index>> {
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>> {
         let db_path = self.path.join(format!("index-{}", uuid));
         fs::remove_dir_all(db_path).await?;
         let index = self.index_store.write().await.remove(&uuid);

@@ -6,6 +6,7 @@ use sha2::Digest;
 use crate::index::{Checked, Settings};
 use crate::index_controller::{
     DumpInfo, IndexController, IndexMetadata, IndexSettings, IndexStats, Stats,
+    error::Result
 };
 use crate::option::Opt;
 
@@ -56,7 +57,7 @@ impl ApiKeys {
 }
 
 impl Data {
-    pub fn new(options: Opt) -> anyhow::Result<Data> {
+    pub fn new(options: Opt) -> std::result::Result<Data, Box<dyn std::error::Error>> {
         let path = options.db_path.clone();
 
         let index_controller = IndexController::new(&path, &options)?;
@@ -79,15 +80,15 @@ impl Data {
         Ok(Data { inner })
     }
 
-    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings<Checked>> {
+    pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {
         self.index_controller.settings(uid).await
     }
 
-    pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+    pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {
         self.index_controller.list_indexes().await
     }
 
-    pub async fn index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
+    pub async fn index(&self, uid: String) -> Result<IndexMetadata> {
         self.index_controller.get_index(uid).await
     }
 
@@ -95,7 +96,7 @@ impl Data {
         &self,
         uid: String,
         primary_key: Option<String>,
-    ) -> anyhow::Result<IndexMetadata> {
+    ) -> Result<IndexMetadata> {
         let settings = IndexSettings {
             uid: Some(uid),
             primary_key,
@@ -105,19 +106,19 @@ impl Data {
         Ok(meta)
     }
 
-    pub async fn get_index_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
+    pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         Ok(self.index_controller.get_index_stats(uid).await?)
     }
 
-    pub async fn get_all_stats(&self) -> anyhow::Result<Stats> {
+    pub async fn get_all_stats(&self) -> Result<Stats> {
         Ok(self.index_controller.get_all_stats().await?)
     }
 
-    pub async fn create_dump(&self) -> anyhow::Result<DumpInfo> {
+    pub async fn create_dump(&self) -> Result<DumpInfo> {
         Ok(self.index_controller.create_dump().await?)
     }
 
-    pub async fn dump_status(&self, uid: String) -> anyhow::Result<DumpInfo> {
+    pub async fn dump_status(&self, uid: String) -> Result<DumpInfo> {
         Ok(self.index_controller.dump_info(uid).await?)
     }
 

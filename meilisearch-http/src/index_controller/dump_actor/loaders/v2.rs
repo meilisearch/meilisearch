@@ -34,7 +34,7 @@ impl MetadataV2 {
         index_db_size: usize,
         update_db_size: usize,
         indexing_options: &IndexerOpts,
-    ) -> anyhow::Result<()> {
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         info!(
             "Loading dump from {}, dump database version: {}, dump version: V2",
             self.dump_date, self.db_version

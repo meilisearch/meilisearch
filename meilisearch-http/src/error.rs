@@ -1,14 +1,32 @@
 use std::error;
+use std::error::Error;
 use std::fmt;
 
 use actix_web as aweb;
 use actix_web::body::Body;
 use actix_web::dev::BaseHttpResponseBuilder;
-use actix_web::error::{JsonPayloadError, QueryPayloadError};
-use actix_web::http::Error as HttpError;
 use actix_web::http::StatusCode;
 use meilisearch_error::{Code, ErrorCode};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+
+use crate::index_controller::error::IndexControllerError;
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthenticationError {
+    #[error("You must have an authorization token")]
+    MissingAuthorizationHeader,
+    #[error("Invalid API key")]
+    InvalidToken(String),
+}
+
+impl ErrorCode for AuthenticationError {
+    fn error_code(&self) -> Code {
+        match self {
+            AuthenticationError ::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
+            AuthenticationError::InvalidToken(_) => Code::InvalidToken,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ResponseError {
@@ -29,30 +47,26 @@ impl fmt::Display for ResponseError {
     }
 }
 
-// TODO: remove this when implementing actual error handling
-impl From<anyhow::Error> for ResponseError {
-    fn from(other: anyhow::Error) -> ResponseError {
-        ResponseError {
-            inner: Box::new(Error::NotFound(other.to_string())),
-        }
-    }
+macro_rules! response_error {
+    ($($other:path), *) => {
+        $(
+            impl From<$other> for ResponseError {
+                fn from(error: $other) -> ResponseError {
+                    ResponseError {
+                        inner: Box::new(error),
+                    }
+                }
+            }
+
+        )*
+    };
 }
 
-impl From<Error> for ResponseError {
-    fn from(error: Error) -> ResponseError {
-        ResponseError {
-            inner: Box::new(error),
-        }
-    }
-}
+response_error!(
+    IndexControllerError,
+    AuthenticationError
+);
 
-impl From<FacetCountError> for ResponseError {
-    fn from(err: FacetCountError) -> ResponseError {
-        ResponseError {
-            inner: Box::new(err),
-        }
-    }
-}
 
 impl Serialize for ResponseError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -83,239 +97,35 @@ impl aweb::error::ResponseError for ResponseError {
 }
 
 #[derive(Debug)]
-pub enum Error {
-    BadParameter(String, String),
-    BadRequest(String),
-    CreateIndex(String),
-    DocumentNotFound(String),
-    IndexNotFound(String),
-    IndexAlreadyExists(String),
-    Internal(String),
-    InvalidIndexUid,
-    InvalidToken(String),
-    MissingAuthorizationHeader,
-    NotFound(String),
-    OpenIndex(String),
-    RetrieveDocument(u32, String),
-    SearchDocuments(String),
-    PayloadTooLarge,
-    UnsupportedMediaType,
-    DumpAlreadyInProgress,
-    DumpProcessFailed(String),
-}
+struct PayloadError<E>(E);
 
-impl error::Error for Error {}
-
-impl ErrorCode for Error {
-    fn error_code(&self) -> Code {
-        use Error::*;
-        match self {
-            BadParameter(_, _) => Code::BadParameter,
-            BadRequest(_) => Code::BadRequest,
-            CreateIndex(_) => Code::CreateIndex,
-            DocumentNotFound(_) => Code::DocumentNotFound,
-            IndexNotFound(_) => Code::IndexNotFound,
-            IndexAlreadyExists(_) => Code::IndexAlreadyExists,
-            Internal(_) => Code::Internal,
-            InvalidIndexUid => Code::InvalidIndexUid,
-            InvalidToken(_) => Code::InvalidToken,
-            MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
-            NotFound(_) => Code::NotFound,
-            OpenIndex(_) => Code::OpenIndex,
-            RetrieveDocument(_, _) => Code::RetrieveDocument,
-            SearchDocuments(_) => Code::SearchDocuments,
-            PayloadTooLarge => Code::PayloadTooLarge,
-            UnsupportedMediaType => Code::UnsupportedMediaType,
-            _ => unreachable!()
-            //DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
-            //DumpProcessFailed(_) => Code::DumpProcessFailed,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum FacetCountError {
-    AttributeNotSet(String),
-    SyntaxError(String),
-    UnexpectedToken {
-        found: String,
-        expected: &'static [&'static str],
-    },
-    NoFacetSet,
-}
-
-impl error::Error for FacetCountError {}
-
-impl ErrorCode for FacetCountError {
-    fn error_code(&self) -> Code {
-        Code::BadRequest
-    }
-}
-
-impl FacetCountError {
-    pub fn unexpected_token(
-        found: impl ToString,
-        expected: &'static [&'static str],
-    ) -> FacetCountError {
-        let found = found.to_string();
-        FacetCountError::UnexpectedToken { expected, found }
-    }
-}
-
-impl From<serde_json::error::Error> for FacetCountError {
-    fn from(other: serde_json::error::Error) -> FacetCountError {
-        FacetCountError::SyntaxError(other.to_string())
-    }
-}
-
-impl fmt::Display for FacetCountError {
+impl<E: Error> fmt::Display for PayloadError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use FacetCountError::*;
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
 
-        match self {
-            AttributeNotSet(attr) => write!(f, "Attribute {} is not set as facet", attr),
-            SyntaxError(msg) => write!(f, "Syntax error: {}", msg),
-            UnexpectedToken { expected, found } => {
-                write!(f, "Unexpected {} found, expected {:?}", found, expected)
-            }
-            NoFacetSet => write!(f, "Can't perform facet count, as no facet is set"),
+impl<E: Error> Error for PayloadError<E> {}
+
+impl<E: Error> ErrorCode for PayloadError<E> {
+    fn error_code(&self) -> Code {
+        Code::Internal
+    }
+}
+
+impl<E> From<PayloadError<E>> for ResponseError
+where E: Error + Sync + Send + 'static
+{
+    fn from(other: PayloadError<E>) -> Self {
+        ResponseError {
+            inner: Box::new(other),
         }
     }
 }
 
-impl Error {
-    pub fn internal(err: impl fmt::Display) -> Error {
-        Error::Internal(err.to_string())
-    }
-
-    pub fn bad_request(err: impl fmt::Display) -> Error {
-        Error::BadRequest(err.to_string())
-    }
-
-    pub fn missing_authorization_header() -> Error {
-        Error::MissingAuthorizationHeader
-    }
-
-    pub fn invalid_token(err: impl fmt::Display) -> Error {
-        Error::InvalidToken(err.to_string())
-    }
-
-    pub fn not_found(err: impl fmt::Display) -> Error {
-        Error::NotFound(err.to_string())
-    }
-
-    pub fn index_not_found(err: impl fmt::Display) -> Error {
-        Error::IndexNotFound(err.to_string())
-    }
-
-    pub fn document_not_found(err: impl fmt::Display) -> Error {
-        Error::DocumentNotFound(err.to_string())
-    }
-
-    pub fn bad_parameter(param: impl fmt::Display, err: impl fmt::Display) -> Error {
-        Error::BadParameter(param.to_string(), err.to_string())
-    }
-
-    pub fn open_index(err: impl fmt::Display) -> Error {
-        Error::OpenIndex(err.to_string())
-    }
-
-    pub fn create_index(err: impl fmt::Display) -> Error {
-        Error::CreateIndex(err.to_string())
-    }
-
-    pub fn invalid_index_uid() -> Error {
-        Error::InvalidIndexUid
-    }
-
-    pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> Error {
-        Error::RetrieveDocument(doc_id, err.to_string())
-    }
-
-    pub fn search_documents(err: impl fmt::Display) -> Error {
-        Error::SearchDocuments(err.to_string())
-    }
-
-    pub fn dump_conflict() -> Error {
-        Error::DumpAlreadyInProgress
-    }
-
-    pub fn dump_failed(message: String) -> Error {
-        Error::DumpProcessFailed(message)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
-            Self::BadRequest(err) => f.write_str(err),
-            Self::CreateIndex(err) => write!(f, "Impossible to create index; {}", err),
-            Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
-            Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
-            Self::IndexAlreadyExists(index_uid) => write!(f, "Index {} already exists", index_uid),
-            Self::Internal(err) => f.write_str(err),
-            Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
-            Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
-            Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
-            Self::NotFound(err) => write!(f, "{} not found", err),
-            Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
-            Self::RetrieveDocument(id, err) => write!(f, "Impossible to retrieve the document with id: {}; {}", id, err),
-            Self::SearchDocuments(err) => write!(f, "Impossible to search documents; {}", err),
-            Self::PayloadTooLarge => f.write_str("Payload too large"),
-            Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
-            Self::DumpAlreadyInProgress => f.write_str("Another dump is already in progress"),
-            Self::DumpProcessFailed(message) => write!(f, "Dump process failed: {}", message),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Internal(err.to_string())
-    }
-}
-
-impl From<HttpError> for Error {
-    fn from(err: HttpError) -> Error {
-        Error::Internal(err.to_string())
-    }
-}
-
-impl From<serde_json::error::Error> for Error {
-    fn from(err: serde_json::error::Error) -> Error {
-        Error::Internal(err.to_string())
-    }
-}
-
-impl From<JsonPayloadError> for Error {
-    fn from(err: JsonPayloadError) -> Error {
-        match err {
-            JsonPayloadError::Deserialize(err) => {
-                Error::BadRequest(format!("Invalid JSON: {}", err))
-            }
-            JsonPayloadError::Overflow => Error::PayloadTooLarge,
-            JsonPayloadError::ContentType => Error::UnsupportedMediaType,
-            JsonPayloadError::Payload(err) => {
-                Error::BadRequest(format!("Problem while decoding the request: {}", err))
-            }
-            e => Error::Internal(format!("Unexpected Json error: {}", e)),
-        }
-    }
-}
-
-impl From<QueryPayloadError> for Error {
-    fn from(err: QueryPayloadError) -> Error {
-        match err {
-            QueryPayloadError::Deserialize(err) => {
-                Error::BadRequest(format!("Invalid query parameters: {}", err))
-            }
-            e => Error::Internal(format!("Unexpected query payload error: {}", e)),
-        }
-    }
-}
-
-pub fn payload_error_handler<E: Into<Error>>(err: E) -> ResponseError {
-    let error: Error = err.into();
+pub fn payload_error_handler<E>(err: E) -> ResponseError
+where E: Error + Sync + Send + 'static
+{
+    let error = PayloadError(err);
     error.into()
 }

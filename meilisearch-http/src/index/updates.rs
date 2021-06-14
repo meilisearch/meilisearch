@@ -8,11 +8,16 @@ use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize, Serializer};
 
+use crate::index::error::IndexError;
 use crate::index_controller::UpdateResult;
 
+use super::error::Result;
 use super::{deserialize_some, Index};
 
-fn serialize_with_wildcard<S>(field: &Option<Option<Vec<String>>>, s: S) -> Result<S::Ok, S::Error>
+fn serialize_with_wildcard<S>(
+    field: &Option<Option<Vec<String>>>,
+    s: S,
+) -> std::result::Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -174,7 +179,7 @@ impl Index {
         content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
         let result = self.update_documents_txn(
             &mut txn,
@@ -196,7 +201,7 @@ impl Index {
         content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         info!("performing document addition");
 
         // Set the primary key if not set already, ignore if already set.
@@ -204,7 +209,8 @@ impl Index {
             let mut builder = UpdateBuilder::new(0)
                 .settings(txn, &self);
             builder.set_primary_key(primary_key.to_string());
-            builder.execute(|_, _| ())?;
+            builder.execute(|_, _| ())
+                .map_err(|e| IndexError::Internal(Box::new(e)))?;
         }
 
         let mut builder = update_builder.index_documents(txn, self);
@@ -216,11 +222,15 @@ impl Index {
 
         let gzipped = false;
         let addition = match content {
-            Some(content) if gzipped => {
-                builder.execute(GzDecoder::new(content), indexing_callback)?
-            }
-            Some(content) => builder.execute(content, indexing_callback)?,
-            None => builder.execute(std::io::empty(), indexing_callback)?,
+            Some(content) if gzipped => builder
+                .execute(GzDecoder::new(content), indexing_callback)
+                .map_err(|e| IndexError::Internal(e.into()))?,
+            Some(content) => builder
+                .execute(content, indexing_callback)
+                .map_err(|e| IndexError::Internal(e.into()))?,
+            None => builder
+                .execute(std::io::empty(), indexing_callback)
+                .map_err(|e| IndexError::Internal(e.into()))?,
         };
 
         info!("document addition done: {:?}", addition);
@@ -228,7 +238,7 @@ impl Index {
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
+    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.write_txn()?;
         let builder = update_builder.clear_documents(&mut wtxn, self);
@@ -238,7 +248,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(IndexError::Internal(Box::new(e))),
         }
     }
 
@@ -247,7 +257,7 @@ impl Index {
         txn: &mut heed::RwTxn<'a, 'b>,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut builder = update_builder.settings(txn, self);
 
@@ -300,7 +310,8 @@ impl Index {
 
         builder.execute(|indexing_step, update_id| {
             info!("update {}: {:?}", update_id, indexing_step)
-        })?;
+        })
+        .map_err(|e| IndexError::Internal(e.into()))?;
 
         Ok(UpdateResult::Other)
     }
@@ -309,7 +320,7 @@ impl Index {
         &self,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
         let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
         txn.commit()?;
@@ -320,9 +331,10 @@ impl Index {
         &self,
         document_ids: &[String],
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
-        let mut builder = update_builder.delete_documents(&mut txn, self)?;
+        let mut builder = update_builder.delete_documents(&mut txn, self)
+            .map_err(|e| IndexError::Internal(e.into()))?;
 
         // We ignore unexisting document ids
         document_ids.iter().for_each(|id| {
@@ -334,7 +346,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::DocumentDeletion { deleted }))
                 .map_err(Into::into),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(IndexError::Internal(Box::new(e))),
         }
     }
 }

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
-use anyhow::bail;
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
@@ -24,8 +23,10 @@ use uuid_resolver::{UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
+use error::Result;
 
 use self::dump_actor::load_dump;
+use self::error::IndexControllerError;
 
 mod dump_actor;
 mod index_actor;
@@ -33,6 +34,7 @@ mod snapshot;
 mod update_actor;
 mod updates;
 mod uuid_resolver;
+pub mod error;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -81,7 +83,7 @@ pub struct Stats {
 }
 
 impl IndexController {
-    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
+        pub fn new(path: impl AsRef<Path>, options: &Opt) -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 
@@ -151,7 +153,7 @@ impl IndexController {
         format: milli::update::UpdateFormat,
         payload: Payload,
         primary_key: Option<String>,
-    ) -> anyhow::Result<UpdateStatus> {
+    ) -> Result<UpdateStatus> {
         let perform_update = |uuid| async move {
             let meta = UpdateMeta::DocumentsAddition {
                 method,
@@ -189,7 +191,7 @@ impl IndexController {
         }
     }
 
-    pub async fn clear_documents(&self, uid: String) -> anyhow::Result<UpdateStatus> {
+    pub async fn clear_documents(&self, uid: String) -> Result<UpdateStatus> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let meta = UpdateMeta::ClearDocuments;
         let (_, receiver) = mpsc::channel(1);
@@ -201,7 +203,7 @@ impl IndexController {
         &self,
         uid: String,
         documents: Vec<String>,
-    ) -> anyhow::Result<UpdateStatus> {
+    ) -> Result<UpdateStatus> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let meta = UpdateMeta::DeleteDocuments { ids: documents };
         let (_, receiver) = mpsc::channel(1);
@@ -214,7 +216,7 @@ impl IndexController {
         uid: String,
         settings: Settings<Checked>,
         create: bool,
-    ) -> anyhow::Result<UpdateStatus> {
+    ) -> Result<UpdateStatus> {
         let perform_udpate = |uuid| async move {
             let meta = UpdateMeta::Settings(settings.into_unchecked());
             // Nothing so send, drop the sender right away, as not to block the update actor.
@@ -239,9 +241,9 @@ impl IndexController {
     pub async fn create_index(
         &self,
         index_settings: IndexSettings,
-    ) -> anyhow::Result<IndexMetadata> {
+    ) -> Result<IndexMetadata> {
         let IndexSettings { uid, primary_key } = index_settings;
-        let uid = uid.ok_or_else(|| anyhow::anyhow!("Can't create an index without a uid."))?;
+        let uid = uid.ok_or(IndexControllerError::MissingUid)?;
         let uuid = Uuid::new_v4();
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
         self.uuid_resolver.insert(uid.clone(), uuid).await?;
@@ -255,26 +257,26 @@ impl IndexController {
         Ok(meta)
     }
 
-    pub async fn delete_index(&self, uid: String) -> anyhow::Result<()> {
+    pub async fn delete_index(&self, uid: String) -> Result<()> {
         let uuid = self.uuid_resolver.delete(uid).await?;
         self.update_handle.delete(uuid).await?;
         self.index_handle.delete(uuid).await?;
         Ok(())
     }
 
-    pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<UpdateStatus> {
+    pub async fn update_status(&self, uid: String, id: u64) -> Result<UpdateStatus> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.update_handle.update_status(uuid, id).await?;
         Ok(result)
     }
 
-    pub async fn all_update_status(&self, uid: String) -> anyhow::Result<Vec<UpdateStatus>> {
+    pub async fn all_update_status(&self, uid: String) -> Result<Vec<UpdateStatus>> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.update_handle.get_all_updates_status(uuid).await?;
         Ok(result)
     }
 
-    pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+    pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {
         let uuids = self.uuid_resolver.list().await?;
 
         let mut ret = Vec::new();
@@ -293,7 +295,7 @@ impl IndexController {
         Ok(ret)
     }
 
-    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings<Checked>> {
+    pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
@@ -305,7 +307,7 @@ impl IndexController {
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> anyhow::Result<Vec<Document>> {
+    ) -> Result<Vec<Document>> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let documents = self
             .index_handle
@@ -319,7 +321,7 @@ impl IndexController {
         uid: String,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> anyhow::Result<Document> {
+    ) -> Result<Document> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let document = self
             .index_handle
@@ -332,9 +334,9 @@ impl IndexController {
         &self,
         uid: String,
         index_settings: IndexSettings,
-    ) -> anyhow::Result<IndexMetadata> {
+    ) -> Result<IndexMetadata> {
         if index_settings.uid.is_some() {
-            bail!("Can't change the index uid.")
+            todo!("Can't change the index uid.")
         }
 
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
@@ -348,13 +350,13 @@ impl IndexController {
         Ok(meta)
     }
 
-    pub async fn search(&self, uid: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
+    pub async fn search(&self, uid: String, query: SearchQuery) -> Result<SearchResult> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
 
-    pub async fn get_index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
+    pub async fn get_index(&self, uid: String) -> Result<IndexMetadata> {
         let uuid = self.uuid_resolver.get(uid.clone()).await?;
         let meta = self.index_handle.get_index_meta(uuid).await?;
         let meta = IndexMetadata {
@@ -366,11 +368,11 @@ impl IndexController {
         Ok(meta)
     }
 
-    pub async fn get_uuids_size(&self) -> anyhow::Result<u64> {
+    pub async fn get_uuids_size(&self) -> Result<u64> {
         Ok(self.uuid_resolver.get_size().await?)
     }
 
-    pub async fn get_index_stats(&self, uid: String) -> anyhow::Result<IndexStats> {
+    pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let uuid = self.uuid_resolver.get(uid).await?;
         let update_infos = self.update_handle.get_info().await?;
         let mut stats = self.index_handle.get_index_stats(uuid).await?;
@@ -379,7 +381,7 @@ impl IndexController {
         Ok(stats)
     }
 
-    pub async fn get_all_stats(&self) -> anyhow::Result<Stats> {
+    pub async fn get_all_stats(&self) -> Result<Stats> {
         let update_infos = self.update_handle.get_info().await?;
         let mut database_size = self.get_uuids_size().await? + update_infos.size;
         let mut last_update: Option<DateTime<_>> = None;
@@ -405,11 +407,11 @@ impl IndexController {
         })
     }
 
-    pub async fn create_dump(&self) -> anyhow::Result<DumpInfo> {
+    pub async fn create_dump(&self) -> Result<DumpInfo> {
         Ok(self.dump_handle.create_dump().await?)
     }
 
-    pub async fn dump_info(&self, uid: String) -> anyhow::Result<DumpInfo> {
+    pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
         Ok(self.dump_handle.dump_info(uid).await?)
     }
 }

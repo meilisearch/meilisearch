@@ -6,6 +6,8 @@ pub mod store;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use meilisearch_error::Code;
+use meilisearch_error::ErrorCode;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -27,9 +29,9 @@ pub type Result<T> = std::result::Result<T, UuidResolverError>;
 #[cfg_attr(test, automock)]
 pub trait UuidResolverHandle {
     async fn get(&self, name: String) -> Result<Uuid>;
-    async fn insert(&self, name: String, uuid: Uuid) -> anyhow::Result<()>;
-    async fn delete(&self, name: String) -> anyhow::Result<Uuid>;
-    async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>>;
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()>;
+    async fn delete(&self, name: String) -> Result<Uuid>;
+    async fn list(&self) -> Result<Vec<(String, Uuid)>>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
@@ -44,7 +46,7 @@ pub enum UuidResolverError {
     #[error("Badly formatted index uid: {0}")]
     BadlyFormatted(String),
     #[error("Internal error resolving index uid: {0}")]
-    Internal(String),
+    Internal(Box<dyn std::error::Error + Sync + Send + 'static>),
 }
 
 macro_rules! internal_error {
@@ -52,7 +54,7 @@ macro_rules! internal_error {
         $(
             impl From<$other> for UuidResolverError {
                 fn from(other: $other) -> Self {
-                    Self::Internal(other.to_string())
+                    Self::Internal(Box::new(other))
                 }
             }
         )*
@@ -66,3 +68,14 @@ internal_error!(
     tokio::task::JoinError,
     serde_json::Error
 );
+
+impl ErrorCode for UuidResolverError {
+    fn error_code(&self) -> Code {
+        match self {
+            UuidResolverError::NameAlreadyExist => Code::IndexAlreadyExists,
+            UuidResolverError::UnexistingIndex(_) => Code::IndexNotFound,
+            UuidResolverError::BadlyFormatted(_) => Code::InvalidIndexUid,
+            UuidResolverError::Internal(_) => Code::Internal,
+        }
+    }
+}

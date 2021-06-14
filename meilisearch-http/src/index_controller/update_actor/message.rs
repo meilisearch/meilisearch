@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use super::{PayloadData, Result, UpdateMeta, UpdateStatus, UpdateStoreInfo};
+use super::{PayloadData, UpdateMeta, UpdateStatus, UpdateStoreInfo};
+use super::error::Result;
 
 pub enum UpdateMsg<D> {
     Update {

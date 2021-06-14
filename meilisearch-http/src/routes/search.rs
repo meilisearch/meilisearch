@@ -31,9 +31,9 @@ pub struct SearchQueryGet {
 }
 
 impl TryFrom<SearchQueryGet> for SearchQuery {
-    type Error = anyhow::Error;
+    type Error = Box<dyn std::error::Error>;
 
-    fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
+    fn try_from(other: SearchQueryGet) -> Result<Self, Self::Error> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
             .map(|attrs| attrs.split(',').map(String::from).collect::<BTreeSet<_>>());

@@ -3,7 +3,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
@@ -12,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::option::IndexerOpts;
 
 use super::{update_handler::UpdateHandler, Index, Settings, Unchecked};
+use super::error::{IndexError, Result};
 
 #[derive(Serialize, Deserialize)]
 struct DumpMeta {
@@ -23,7 +23,7 @@ const META_FILE_NAME: &str = "meta.json";
 const DATA_FILE_NAME: &str = "documents.jsonl";
 
 impl Index {
-    pub fn dump(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
         // acquire write txn make sure any ongoing write is finished before we start.
         let txn = self.env.write_txn()?;
 
@@ -33,11 +33,12 @@ impl Index {
         Ok(())
     }
 
-    fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> Result<()> {
         let document_file_path = path.as_ref().join(DATA_FILE_NAME);
         let mut document_file = File::create(&document_file_path)?;
 
-        let documents = self.all_documents(txn)?;
+        let documents = self.all_documents(txn)
+            .map_err(|e| IndexError::Internal(e.into()))?;
         let fields_ids_map = self.fields_ids_map(txn)?;
 
         // dump documents
@@ -60,7 +61,7 @@ impl Index {
         Ok(())
     }
 
-    fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> Result<()> {
         let meta_file_path = path.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_file_path)?;
 
@@ -81,11 +82,13 @@ impl Index {
         dst: impl AsRef<Path>,
         size: usize,
         indexing_options: &IndexerOpts,
-    ) -> anyhow::Result<()> {
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let dir_name = src
             .as_ref()
             .file_name()
-            .with_context(|| format!("invalid dump index: {}", src.as_ref().display()))?;
+            // TODO: remove
+            //.with_context(|| format!("invalid dump index: {}", src.as_ref().display()))?;
+            .unwrap();
         let dst_dir_path = dst.as_ref().join("indexes").join(dir_name);
         create_dir_all(&dst_dir_path)?;
 
@@ -124,7 +127,7 @@ impl Index {
 
         match Arc::try_unwrap(index.0) {
             Ok(inner) => inner.prepare_for_closing().wait(),
-            Err(_) => bail!("Could not close index properly."),
+            Err(_) => todo!("Could not close index properly."),
         }
 
         Ok(())

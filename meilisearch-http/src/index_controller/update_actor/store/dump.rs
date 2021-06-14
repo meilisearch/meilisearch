@@ -9,7 +9,7 @@ use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{State, UpdateStore};
+use super::{State, UpdateStore, Result};
 use crate::index_controller::{
     index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path, Enqueued,
     UpdateStatus,
@@ -27,7 +27,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: PathBuf,
         handle: impl IndexActorHandle,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
 
@@ -52,7 +52,7 @@ impl UpdateStore {
         txn: &RoTxn,
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let dump_data_path = path.as_ref().join("data.jsonl");
         let mut dump_data_file = File::create(dump_data_path)?;
 
@@ -71,7 +71,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         mut file: &mut File,
         dst_path: impl AsRef<Path>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
 
         for pending in pendings {
@@ -103,7 +103,7 @@ impl UpdateStore {
         txn: &RoTxn,
         uuids: &HashSet<Uuid>,
         mut file: &mut File,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let updates = self.updates.iter(txn)?.lazily_decode_data();
 
         for update in updates {
@@ -125,7 +125,7 @@ impl UpdateStore {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         db_size: usize,
-    ) -> anyhow::Result<()> {
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let dst_update_path = dst.as_ref().join("updates/");
         create_dir_all(&dst_update_path)?;
 
@@ -175,7 +175,7 @@ async fn dump_indexes(
     uuids: &HashSet<Uuid>,
     handle: impl IndexActorHandle,
     path: impl AsRef<Path>,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     for uuid in uuids {
         handle.dump(*uuid, path.as_ref().to_owned()).await?;
     }

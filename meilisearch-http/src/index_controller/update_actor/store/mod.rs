@@ -24,8 +24,9 @@ use uuid::Uuid;
 use codec::*;
 
 use super::UpdateMeta;
+use super::error::Result;
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
-use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
+use crate::helpers::EnvSizer;
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -109,7 +110,7 @@ impl UpdateStore {
     fn new(
         mut options: EnvOpenOptions,
         path: impl AsRef<Path>,
-    ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
+    ) -> std::result::Result<(Self, mpsc::Receiver<()>), Box<dyn std::error::Error>> {
         options.max_dbs(5);
 
         let env = options.open(&path)?;
@@ -140,7 +141,7 @@ impl UpdateStore {
         path: impl AsRef<Path>,
         index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
         must_exit: Arc<AtomicBool>,
-    ) -> anyhow::Result<Arc<Self>> {
+    ) -> std::result::Result<Arc<Self>, Box<dyn std::error::Error>> {
         let (update_store, mut notification_receiver) = Self::new(options, path)?;
         let update_store = Arc::new(update_store);
 
@@ -285,7 +286,7 @@ impl UpdateStore {
     fn process_pending_update(
         &self,
         index_handle: impl IndexActorHandle,
-    ) -> anyhow::Result<Option<()>> {
+    ) -> Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -320,7 +321,7 @@ impl UpdateStore {
         index_handle: impl IndexActorHandle,
         index_uuid: Uuid,
         global_id: u64,
-    ) -> anyhow::Result<Option<()>> {
+    ) -> Result<Option<()>> {
         let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
         let update_id = processing.id();
 
@@ -368,7 +369,7 @@ impl UpdateStore {
     }
 
     /// List the updates for `index_uuid`.
-    pub fn list(&self, index_uuid: Uuid) -> anyhow::Result<Vec<UpdateStatus>> {
+    pub fn list(&self, index_uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let mut update_list = BTreeMap::<u64, UpdateStatus>::new();
 
         let txn = self.env.read_txn()?;
@@ -437,7 +438,7 @@ impl UpdateStore {
     }
 
     /// Delete all updates for an index from the update store.
-    pub fn delete_all(&self, index_uuid: Uuid) -> anyhow::Result<()> {
+    pub fn delete_all(&self, index_uuid: Uuid) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
         let mut uuids_to_remove = Vec::new();
@@ -488,7 +489,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
         handle: impl IndexActorHandle + Clone,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
 
@@ -535,13 +536,13 @@ impl UpdateStore {
             while let Some(res) = stream.next().await {
                 res?;
             }
-            Ok(()) as IndexResult<()>
+            Ok(()) as Result<()>
         })?;
 
         Ok(())
     }
 
-    pub fn get_info(&self) -> anyhow::Result<UpdateStoreInfo> {
+    pub fn get_info(&self) -> Result<UpdateStoreInfo> {
         let mut size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
