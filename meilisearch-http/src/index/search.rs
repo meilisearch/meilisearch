@@ -402,19 +402,25 @@ fn compute_formatted<A: AsRef<[u8]>>(
 
 /// trait to allow unit testing of `compute_formatted`
 trait Matcher {
-    fn matches(&self, w: &str) -> bool;
+    fn matches(&self, w: &str) -> Option<usize>;
 }
 
+// #[cfg(test)]
+// impl Matcher for HashSet<String> {
+//     fn matches(&self, w: &str) -> bool {
+//         self.contains(w)
+//     }
+// }
 #[cfg(test)]
-impl Matcher for HashSet<String> {
-    fn matches(&self, w: &str) -> bool {
-        self.contains(w)
+impl Matcher for HashMap<&str, Option<usize>> {
+    fn matches(&self, w: &str) -> Option<usize> {
+        self.get(w).cloned().flatten()
     }
 }
 
 impl Matcher for MatchingWords {
-    fn matches(&self, w: &str) -> bool {
-        self.matching_bytes(w).is_some()
+    fn matches(&self, w: &str) -> Option<usize> {
+        self.matching_bytes(w)
     }
 }
 
@@ -476,7 +482,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 let mut buffer = VecDeque::new();
                 let mut tokens = analyzed.reconstruct().peekable();
                 let mut taken_before = 0;
-                while let Some((word, token)) = tokens.next_if(|(_, token)| !matcher.matches(token.text())) {
+                while let Some((word, token)) = tokens.next_if(|(_, token)| !matcher.matches(token.text()).is_some()) {
                     buffer.push_back((word, token));
                     taken_before += word.chars().count();
                     while taken_before > crop_len {
@@ -515,11 +521,14 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         tokens
             .map(|(word, token)| {
-                if need_to_highlight && token.is_word() && matcher.matches(token.text()) {
+                if need_to_highlight && token.is_word() && matcher.matches(token.text()).is_some() {
                     let mut new_word = String::new();
                     new_word.push_str(&self.marks.0);
-                    new_word.push_str(&word);
-                    new_word.push_str(&self.marks.1);
+                    if let Some(match_len) = matcher.matches(token.text()) {
+                        new_word.push_str(&word[..match_len]);
+                        new_word.push_str(&self.marks.1);
+                        new_word.push_str(&word[match_len..]);
+                    }
                     new_word
                 } else {
                     word.to_string()
@@ -672,7 +681,9 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
 
-        let matching_words = HashSet::from_iter(Some(String::from("hobbit")));
+        // let matching_words = HashSet::from_iter(Some(String::from("hobbit")));
+        let mut matching_words = HashMap::new();
+        matching_words.insert("hobbit", Some(6));
 
         let value = compute_formatted(
             &fields,
@@ -685,6 +696,49 @@ mod test {
         .unwrap();
 
         assert_eq!(value["title"], "The <em>Hobbit</em>");
+        assert_eq!(value["author"], "J. R. R. Tolkien");
+    }
+
+    #[test]
+    fn formatted_with_highlight_in_word() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("The Hobbit".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. R. R. Tolkien".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
+
+        let mut matching_words = HashMap::new();
+        matching_words.insert("hobbit", Some(3));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "The <em>Hob</em>bit");
         assert_eq!(value["author"], "J. R. R. Tolkien");
     }
 
@@ -714,7 +768,8 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(2) });
 
-        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+        let mut matching_words = HashMap::new();
+        matching_words.insert("potter", Some(6));
 
         let value = compute_formatted(
             &fields,
@@ -756,7 +811,8 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(10) });
 
-        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+        let mut matching_words = HashMap::new();
+        matching_words.insert("potter", Some(6));
 
         let value = compute_formatted(
             &fields,
@@ -798,7 +854,8 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(0) });
 
-        let matching_words = HashSet::from_iter(Some(String::from("potter")));
+        let mut matching_words = HashMap::new();
+        matching_words.insert("potter", Some(6));
 
         let value = compute_formatted(
             &fields,
@@ -840,7 +897,8 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(1) });
 
-        let matching_words = HashSet::from_iter(Some(String::from("and")));
+        let mut matching_words = HashMap::new();
+        matching_words.insert("and", Some(3));
 
         let value = compute_formatted(
             &fields,
@@ -853,6 +911,49 @@ mod test {
         .unwrap();
 
         assert_eq!(value["title"], " <em>and</em> ");
+        assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn formatted_with_crop_and_highlight_in_word() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let ids_in_formatted = vec![title, author];
+        let mut formatted_options = HashMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(9) });
+
+        let mut matching_words = HashMap::new();
+        matching_words.insert("blood", Some(3));
+
+        let value = compute_formatted(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &ids_in_formatted,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 }
