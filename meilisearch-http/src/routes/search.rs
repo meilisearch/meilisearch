@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 
 use actix_web::{get, post, web, HttpResponse};
+use serde_json::Value;
 use serde::Deserialize;
 
 use crate::error::ResponseError;
@@ -24,9 +25,8 @@ pub struct SearchQueryGet {
     attributes_to_crop: Option<String>,
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
-    filters: Option<String>,
+    filter: Option<String>,
     matches: Option<bool>,
-    facet_filters: Option<String>,
     facet_distributions: Option<String>,
 }
 
@@ -50,8 +50,13 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             .facet_distributions
             .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
-        let facet_filters = match other.facet_filters {
-            Some(ref f) => Some(serde_json::from_str(f)?),
+        let filter = match other.filter {
+            Some(f) => {
+                match serde_json::from_str(&f) {
+                    Ok(v) => Some(v),
+                    _ => Some(Value::String(f)),
+                }
+            },
             None => None,
         };
 
@@ -63,9 +68,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             attributes_to_crop,
             crop_length: other.crop_length,
             attributes_to_highlight,
-            filters: other.filters,
+            filter,
             matches: other.matches,
-            facet_filters,
             facet_distributions,
         })
     }

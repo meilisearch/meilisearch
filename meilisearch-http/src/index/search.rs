@@ -33,9 +33,8 @@ pub struct SearchQuery {
     pub attributes_to_crop: Option<HashSet<String>>,
     pub crop_length: Option<usize>,
     pub attributes_to_highlight: Option<HashSet<String>>,
-    pub filters: Option<String>,
     pub matches: Option<bool>,
-    pub facet_filters: Option<Value>,
+    pub filter: Option<Value>,
     pub facet_distributions: Option<Vec<String>>,
 }
 
@@ -75,8 +74,8 @@ impl Index {
         search.limit(query.limit);
         search.offset(query.offset.unwrap_or_default());
 
-        if let Some(ref facets) = query.facet_filters {
-            if let Some(facets) = parse_facets(facets, self, &rtxn)? {
+        if let Some(ref filter) = query.filter {
+            if let Some(facets) = parse_facets(filter, self, &rtxn)? {
                 search.facet_condition(facets);
             }
         }
@@ -277,35 +276,6 @@ impl Matcher for MatchingWords {
     }
 }
 
-fn parse_facets_array(
-    txn: &RoTxn,
-    index: &Index,
-    arr: &[Value],
-) -> anyhow::Result<Option<FacetCondition>> {
-    let mut ands = Vec::new();
-    for value in arr {
-        match value {
-            Value::String(s) => ands.push(Either::Right(s.clone())),
-            Value::Array(arr) => {
-                let mut ors = Vec::new();
-                for value in arr {
-                    match value {
-                        Value::String(s) => ors.push(s.clone()),
-                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
-                    }
-                }
-                ands.push(Either::Left(ors));
-            }
-            v => bail!(
-                "Invalid facet expression, expected String or [String], found: {:?}",
-                v
-            ),
-        }
-    }
-
-    FacetCondition::from_array(txn, &index.0, ands)
-}
-
 struct Highlighter<'a, A> {
     analyzer: Analyzer<'a, A>,
     marks: (String, String),
@@ -367,11 +337,39 @@ fn parse_facets(
     txn: &RoTxn,
 ) -> anyhow::Result<Option<FacetCondition>> {
     match facets {
-        // Disabled for now
-        //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
+        Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
         Value::Array(arr) => parse_facets_array(txn, index, arr),
         v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
     }
+}
+
+fn parse_facets_array(
+    txn: &RoTxn,
+    index: &Index,
+    arr: &[Value],
+) -> anyhow::Result<Option<FacetCondition>> {
+    let mut ands = Vec::new();
+    for value in arr {
+        match value {
+            Value::String(s) => ands.push(Either::Right(s.clone())),
+            Value::Array(arr) => {
+                let mut ors = Vec::new();
+                for value in arr {
+                    match value {
+                        Value::String(s) => ors.push(s.clone()),
+                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
+                    }
+                }
+                ands.push(Either::Left(ors));
+            }
+            v => bail!(
+                "Invalid facet expression, expected String or [String], found: {:?}",
+                v
+            ),
+        }
+    }
+
+    FacetCondition::from_array(txn, &index.0, ands)
 }
 
 #[cfg(test)]
