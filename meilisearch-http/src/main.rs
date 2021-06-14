@@ -15,18 +15,8 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    let _sentry = sentry::init((
-        if !opt.no_sentry {
-            Some(opt.sentry_dsn.clone())
-        } else {
-            None
-        },
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    let mut log_builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
 
     match opt.env.as_ref() {
         "production" => {
@@ -36,16 +26,26 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-
             #[cfg(all(not(debug_assertions), feature = "sentry"))]
-            if !opt.no_sentry && _sentry.is_enabled() {
-                sentry::integrations::panic::register_panic_handler(); // TODO: This shouldn't be needed when upgrading to sentry 0.19.0. These integrations are turned on by default when using `sentry::init`.
-                sentry::integrations::env_logger::init(None, Default::default());
+            if !opt.no_sentry {
+                let logger = sentry::integrations::log::SentryLogger::with_dest(log_builder.build());
+                log::set_boxed_logger(Box::new(logger))
+                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                    .unwrap();
+
+                let sentry = sentry::init(sentry::ClientOptions {
+                    release: sentry::release_name!(),
+                    dsn: Some(opt.sentry_dsn.parse()?),
+                    ..Default::default()
+                });
+                // sentry must stay alive as long as possible
+                std::mem::forget(sentry);
+            } else {
+                log_builder.init();
             }
         }
         "development" => {
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-                .init();
+            log_builder.init();
         }
         _ => unreachable!(),
     }

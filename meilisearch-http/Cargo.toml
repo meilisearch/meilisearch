@@ -78,17 +78,15 @@ pin-project = "1.0.7"
 [dependencies.sentry]
 default-features = false
 features = [
-    "with_client_implementation",
-    "with_panic",
-    "with_failure",
-    "with_device_info",
-    "with_rust_info",
-    "with_reqwest_transport",
-    "with_rustls",
-    "with_env_logger"
+    "backtrace",
+    "contexts",
+    "panic",
+    "reqwest",
+    "rustls",
+    "log",
 ]
 optional = true
-version = "0.18.1"
+version = "0.22.0"
 
 
 [dev-dependencies]
