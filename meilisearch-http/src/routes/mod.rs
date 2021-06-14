@@ -15,9 +15,9 @@ pub mod key;
 pub mod search;
 pub mod settings;
 pub mod stats;
-pub mod synonym;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::clippy::large_enum_variant)]
 #[serde(tag = "name")]
 pub enum UpdateType {
     ClearAll,

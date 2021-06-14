@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, BTreeMap, HashSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -70,6 +70,12 @@ pub struct Settings<T> {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
+    pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub distinct_attribute: Option<Option<String>>,
 
     #[serde(skip)]
@@ -84,6 +90,7 @@ impl Settings<Checked> {
             filterable_attributes: Some(None),
             ranking_rules: Some(None),
             stop_words: Some(None),
+            synonyms: Some(None),
             distinct_attribute: Some(None),
             _kind: PhantomData,
         }
@@ -96,6 +103,7 @@ impl Settings<Checked> {
             filterable_attributes,
             ranking_rules,
             stop_words,
+            synonyms,
             distinct_attribute,
             ..
         } = self;
@@ -106,6 +114,7 @@ impl Settings<Checked> {
             filterable_attributes,
             ranking_rules,
             stop_words,
+            synonyms,
             distinct_attribute,
             _kind: PhantomData,
         }
@@ -142,6 +151,7 @@ impl Settings<Unchecked> {
             filterable_attributes: self.filterable_attributes,
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
+            synonyms: self.synonyms,
             distinct_attribute: self.distinct_attribute,
             _kind: PhantomData,
         }
@@ -267,7 +277,14 @@ impl Index {
         if let Some(ref stop_words) = settings.stop_words {
             match stop_words {
                 Some(stop_words) => builder.set_stop_words(stop_words.clone()),
-                _ => builder.reset_stop_words(),
+                None => builder.reset_stop_words(),
+            }
+        }
+
+        if let Some(ref synonyms) = settings.synonyms {
+            match synonyms {
+                Some(synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
+                None => builder.reset_synonyms(),
             }
         }
 
@@ -332,6 +349,7 @@ mod test {
             filterable_attributes: None,
             ranking_rules: None,
             stop_words: None,
+            synonyms: None,
             distinct_attribute: None,
             _kind: PhantomData::<Unchecked>,
         };
@@ -351,6 +369,7 @@ mod test {
             filterable_attributes: None,
             ranking_rules: None,
             stop_words: None,
+            synonyms: None,
             distinct_attribute: None,
             _kind: PhantomData::<Unchecked>,
         };
