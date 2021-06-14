@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -51,7 +51,7 @@ pub struct Settings<T> {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub attributes_for_faceting: Option<Option<HashMap<String, String>>>,
+    pub filterable_attributes: Option<Option<HashSet<String>>>,
 
     #[serde(
         default,
@@ -81,7 +81,7 @@ impl Settings<Checked> {
         Settings {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
-            attributes_for_faceting: Some(None),
+            filterable_attributes: Some(None),
             ranking_rules: Some(None),
             stop_words: Some(None),
             distinct_attribute: Some(None),
@@ -93,7 +93,7 @@ impl Settings<Checked> {
         let Self {
             displayed_attributes,
             searchable_attributes,
-            attributes_for_faceting,
+            filterable_attributes,
             ranking_rules,
             stop_words,
             distinct_attribute,
@@ -103,7 +103,7 @@ impl Settings<Checked> {
         Settings {
             displayed_attributes,
             searchable_attributes,
-            attributes_for_faceting,
+            filterable_attributes,
             ranking_rules,
             stop_words,
             distinct_attribute,
@@ -139,7 +139,7 @@ impl Settings<Unchecked> {
         Settings {
             displayed_attributes,
             searchable_attributes,
-            attributes_for_faceting: self.attributes_for_faceting,
+            filterable_attributes: self.filterable_attributes,
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
             distinct_attribute: self.distinct_attribute,
@@ -252,9 +252,9 @@ impl Index {
             }
         }
 
-        if let Some(ref facet_types) = settings.attributes_for_faceting {
-            let facet_types = facet_types.clone().unwrap_or_else(HashMap::new);
-            builder.set_faceted_fields(facet_types);
+        if let Some(ref facet_types) = settings.filterable_attributes {
+            let facet_types = facet_types.clone().unwrap_or_else(HashSet::new);
+            builder.set_filterable_fields(facet_types);
         }
 
         if let Some(ref criteria) = settings.ranking_rules {
@@ -273,8 +273,8 @@ impl Index {
 
         if let Some(ref distinct_attribute) = settings.distinct_attribute {
             match distinct_attribute {
-                Some(attr) => builder.set_distinct_attribute(attr.clone()),
-                None => builder.reset_distinct_attribute(),
+                Some(attr) => builder.set_distinct_field(attr.clone()),
+                None => builder.reset_distinct_field(),
             }
         }
 
@@ -329,7 +329,7 @@ mod test {
         let settings = Settings {
             displayed_attributes: Some(Some(vec![String::from("hello")])),
             searchable_attributes: Some(Some(vec![String::from("hello")])),
-            attributes_for_faceting: None,
+            filterable_attributes: None,
             ranking_rules: None,
             stop_words: None,
             distinct_attribute: None,
@@ -348,7 +348,7 @@ mod test {
         let settings = Settings {
             displayed_attributes: Some(Some(vec![String::from("*")])),
             searchable_attributes: Some(Some(vec![String::from("hello"), String::from("*")])),
-            attributes_for_faceting: None,
+            filterable_attributes: None,
             ranking_rules: None,
             stop_words: None,
             distinct_attribute: None,

@@ -1660,14 +1660,13 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.2.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.2.1#25f75d4d03732131e6edcf20f4d126210b159d43"
+version = "0.3.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.3.1#bc020317935da4ea08061b3d4518cbbd40184856"
 dependencies = [
  "anyhow",
  "bstr",
  "byteorder",
  "chrono",
- "crossbeam-channel",
  "csv",
  "either",
  "flate2",

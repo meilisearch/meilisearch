@@ -74,9 +74,9 @@ macro_rules! make_setting_route {
 }
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/attributes-for-faceting",
-    std::collections::HashMap<String, String>,
-    attributes_for_faceting
+    "/indexes/{index_uid}/settings/filterable-attributes",
+    std::collections::HashSet<String>,
+    filterable_attributes
 );
 
 make_setting_route!(
@@ -126,7 +126,7 @@ macro_rules! create_services {
 }
 
 create_services!(
-    attributes_for_faceting,
+    filterable_attributes,
     displayed_attributes,
     searchable_attributes,
     distinct_attribute,
