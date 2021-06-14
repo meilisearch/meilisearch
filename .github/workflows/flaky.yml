@@ -1,7 +1,7 @@
 name: Look for flaky tests
 on:
   schedule:
-    - cron: "* */12 * * */5" # every friday at 12PM
+    - cron: "0 12 * * FRI" # every friday at 12:00PM
 
 jobs:
   flaky:
