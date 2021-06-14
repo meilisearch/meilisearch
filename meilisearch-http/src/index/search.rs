@@ -1,4 +1,3 @@
-// use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
@@ -207,81 +206,12 @@ impl Index {
             .cloned()
             .collect::<HashSet<_>>();
 
-        // All attributes present in `_formatted` that are not necessary highighted or croped
+        // All attributes present in `_formatted` that are not necessary highighted or cropped
         let ids_in_formatted = formatted_ids
             .union(&to_retrieve_ids)
             .cloned()
             .sorted()
             .collect::<Vec<_>>();
-
-
-        // let to_highlight_ids = query // PLUS BESOIN
-        //     .attributes_to_highlight
-        //     .as_ref()
-        //     .map(fids)
-        //     .unwrap_or_default();
-
-
-        // let to_crop_ids_length = query
-        //     .attributes_to_crop
-        //     .as_ref()
-        //     .map(|attributes: &Vec<String>| {
-        //         let mut ids_length_crop = HashMap::new();
-        //         for attribute in attributes {
-        //             let mut attr_name = attribute.clone();
-        //             let mut attr_len = Some(query.crop_length);
-
-        //             if attr_name.contains(':') {
-        //                 let mut split = attr_name.rsplit(':');
-        //                 attr_len = match split.next() {
-        //                     Some(s) => s.parse::<usize>().ok(),
-        //                     None => None,
-        //                 };
-        //                 attr_name = split.flat_map(|s| s.chars()).collect();
-        //             }
-
-        //             if attr_name == "*" {
-        //                 let ids = displayed_ids.clone();
-        //                 for id in ids {
-        //                     ids_length_crop.insert(id, attr_len);
-        //                 }
-        //             }
-
-        //             if let Some(id) = fields_ids_map.id(&attr_name) {
-        //                 if displayed_ids.contains(&id) {
-        //                     ids_length_crop.insert(id, attr_len);
-        //                 }
-        //             }
-        //         }
-        //         ids_length_crop
-        //     })
-        //     .unwrap_or_default();
-
-        // let to_crop_ids = to_crop_ids_length // PLUS BESOIN
-        //     .clone()
-        //     .into_iter()
-        //     .map(|(k, _)| k)
-        //     .collect::<HashSet<_>>();
-
-        // The formatted attributes are:
-        // - The one in either highlighted attributes or cropped attributes if there are attributes
-        // to retrieve
-        // - All the attributes to retrieve if there are either highlighted or cropped attributes
-        // the request specified that all attributes are to retrieve (i.e attributes to retrieve is
-        // empty in the query)
-        // let all_formatted = if query.attributes_to_retrieve.is_none() {
-        //     if query.attributes_to_highlight.is_some() || query.attributes_to_crop.is_some() {
-        //         Cow::Borrowed(&all_attributes)
-        //     } else {
-        //         Cow::Owned(Vec::new())
-        //     }
-        // } else {
-        //     let attrs = (&to_crop_ids | &to_highlight_ids)
-        //         .intersection(&displayed_ids)
-        //         .cloned()
-        //         .collect::<Vec<_>>();
-        //     Cow::Owned(attrs)
-        // };
 
         let stop_words = fst::Set::default();
         let formatter =
@@ -295,10 +225,7 @@ impl Index {
                 &formatter,
                 &matching_words,
                 &ids_in_formatted,
-                // all_formatted.as_ref().as_slice(),
                 &formatted_options,
-                // &to_highlight_ids, //ICI
-                // &to_crop_ids_length, //ICI
             )?;
             let hit = SearchHit {
                 document,
@@ -364,8 +291,6 @@ fn compute_formatted<A: AsRef<[u8]>>(
     matching_words: &impl Matcher,
     ids_in_formatted: &[FieldId],
     formatted_options: &HashMap<FieldId, FormatOptions>,
-    // to_highlight_fields: &HashSet<FieldId>, //ICI
-    // to_crop_fields: &HashMap<FieldId, Option<usize>>, //ICI
 ) -> anyhow::Result<Document> {
     let mut document = Document::new();
 
@@ -380,8 +305,6 @@ fn compute_formatted<A: AsRef<[u8]>>(
                         matching_words,
                         format.highlight,
                         format.crop,
-                        // to_crop_fields.get(field).copied().flatten(), //ICI
-                        // to_highlight_fields.contains(field), //ICI
                     );
                 }
 
@@ -405,12 +328,6 @@ trait Matcher {
     fn matches(&self, w: &str) -> Option<usize>;
 }
 
-// #[cfg(test)]
-// impl Matcher for HashSet<String> {
-//     fn matches(&self, w: &str) -> bool {
-//         self.contains(w)
-//     }
-// }
 #[cfg(test)]
 impl Matcher for HashMap<&str, Option<usize>> {
     fn matches(&self, w: &str) -> Option<usize> {
@@ -681,7 +598,6 @@ mod test {
         let mut formatted_options = HashMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
 
-        // let matching_words = HashSet::from_iter(Some(String::from("hobbit")));
         let mut matching_words = HashMap::new();
         matching_words.insert("hobbit", Some(6));
 
