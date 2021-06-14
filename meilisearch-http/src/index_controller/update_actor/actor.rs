@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use async_stream::stream;
+use futures::StreamExt;
 use log::info;
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
@@ -18,7 +20,7 @@ use crate::index_controller::{UpdateMeta, UpdateStatus};
 pub struct UpdateActor<D, I> {
     path: PathBuf,
     store: Arc<UpdateStore>,
-    inbox: mpsc::Receiver<UpdateMsg<D>>,
+    inbox: Option<mpsc::Receiver<UpdateMsg<D>>>,
     index_handle: I,
     must_exit: Arc<AtomicBool>,
 }
@@ -45,7 +47,7 @@ where
 
         let store = UpdateStore::open(options, &path, index_handle.clone(), must_exit.clone())?;
         std::fs::create_dir_all(path.join("update_files"))?;
-
+        let inbox = Some(inbox);
         Ok(Self {
             path,
             store,
@@ -60,43 +62,59 @@ where
 
         info!("Started update actor.");
 
-        loop {
-            let msg = self.inbox.recv().await;
+        let mut inbox = self
+            .inbox
+            .take()
+            .expect("A receiver should be present by now.");
 
-            if self.must_exit.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
+        let must_exit = self.must_exit.clone();
+        let stream = stream! {
+            loop {
+                let msg = inbox.recv().await;
 
-            match msg {
-                Some(Update {
-                    uuid,
-                    meta,
-                    data,
-                    ret,
-                }) => {
-                    let _ = ret.send(self.handle_update(uuid, meta, data).await);
+                if must_exit.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
                 }
-                Some(ListUpdates { uuid, ret }) => {
-                    let _ = ret.send(self.handle_list_updates(uuid).await);
+
+                match msg {
+                    Some(msg) => yield msg,
+                    None => break,
                 }
-                Some(GetUpdate { uuid, ret, id }) => {
-                    let _ = ret.send(self.handle_get_update(uuid, id).await);
-                }
-                Some(Delete { uuid, ret }) => {
-                    let _ = ret.send(self.handle_delete(uuid).await);
-                }
-                Some(Snapshot { uuids, path, ret }) => {
-                    let _ = ret.send(self.handle_snapshot(uuids, path).await);
-                }
-                Some(Dump { uuids, path, ret }) => {
-                    let _ = ret.send(self.handle_dump(uuids, path).await);
-                }
-                Some(GetInfo { ret }) => {
-                    let _ = ret.send(self.handle_get_info().await);
-                }
-                None => break,
             }
-        }
+        };
+
+        stream
+            .for_each_concurrent(Some(10), |msg| async {
+                match msg {
+                    Update {
+                        uuid,
+                        meta,
+                        data,
+                        ret,
+                    } => {
+                        let _ = ret.send(self.handle_update(uuid, meta, data).await);
+                    }
+                    ListUpdates { uuid, ret } => {
+                        let _ = ret.send(self.handle_list_updates(uuid).await);
+                    }
+                    GetUpdate { uuid, ret, id } => {
+                        let _ = ret.send(self.handle_get_update(uuid, id).await);
+                    }
+                    Delete { uuid, ret } => {
+                        let _ = ret.send(self.handle_delete(uuid).await);
+                    }
+                    Snapshot { uuids, path, ret } => {
+                        let _ = ret.send(self.handle_snapshot(uuids, path).await);
+                    }
+                    GetInfo { ret } => {
+                        let _ = ret.send(self.handle_get_info().await);
+                    }
+                    Dump { uuids, path, ret } => {
+                        let _ = ret.send(self.handle_dump(uuids, path).await);
+                    }
+                }
+            })
+            .await;
     }
 
     async fn handle_update(

@@ -33,16 +33,14 @@ async fn add_documents_no_index_creation() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+    assert_eq!(response["type"]["name"], "DocumentsAddition");
+    assert_eq!(response["type"]["number"], 1);
 
     let processed_at =
         DateTime::parse_from_rfc3339(response["processedAt"].as_str().unwrap()).unwrap();
     let enqueued_at =
         DateTime::parse_from_rfc3339(response["enqueuedAt"].as_str().unwrap()).unwrap();
-    let started_processing_at =
-        DateTime::parse_from_rfc3339(response["startedProcessingAt"].as_str().unwrap()).unwrap();
-    assert!(processed_at > started_processing_at);
-    assert!(started_processing_at > enqueued_at);
+    assert!(processed_at > enqueued_at);
 
     // index was created, and primary key was infered.
     let (response, code) = index.get().await;
@@ -86,7 +84,8 @@ async fn document_addition_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+    assert_eq!(response["type"]["name"], "DocumentsAddition");
+    assert_eq!(response["type"]["number"], 1);
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -113,7 +112,8 @@ async fn document_update_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+    assert_eq!(response["type"]["name"], "DocumentsPartial");
+    assert_eq!(response["type"]["number"], 1);
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -282,7 +282,8 @@ async fn add_larger_dataset() {
     let (response, code) = index.get_update(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
+    assert_eq!(response["type"]["name"], "DocumentsAddition");
+    assert_eq!(response["type"]["number"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
             limit: Some(1000),
@@ -302,8 +303,8 @@ async fn update_larger_dataset() {
     index.wait_update_id(0).await;
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
+    assert_eq!(response["type"]["name"], "DocumentsPartial");
+    assert_eq!(response["type"]["number"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
             limit: Some(1000),

@@ -84,6 +84,10 @@ impl Processed {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
+
+    pub fn meta(&self) -> &UpdateMeta {
+        self.from.meta()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -132,20 +136,28 @@ impl Aborted {
     pub fn id(&self) -> u64 {
         self.from.id()
     }
+
+    pub fn meta(&self) -> &UpdateMeta {
+        self.from.meta()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Failed {
     #[serde(flatten)]
-    from: Processing,
-    error: UpdateError,
-    failed_at: DateTime<Utc>,
+    pub from: Processing,
+    pub error: UpdateError,
+    pub failed_at: DateTime<Utc>,
 }
 
 impl Failed {
     pub fn id(&self) -> u64 {
         self.from.id()
+    }
+
+    pub fn meta(&self) -> &UpdateMeta {
+        self.from.meta()
     }
 }
 
@@ -167,6 +179,16 @@ impl UpdateStatus {
             UpdateStatus::Processed(u) => u.id(),
             UpdateStatus::Aborted(u) => u.id(),
             UpdateStatus::Failed(u) => u.id(),
+        }
+    }
+
+    pub fn meta(&self) -> &UpdateMeta {
+        match self {
+            UpdateStatus::Processing(u) => u.meta(),
+            UpdateStatus::Enqueued(u) => u.meta(),
+            UpdateStatus::Processed(u) => u.meta(),
+            UpdateStatus::Aborted(u) => u.meta(),
+            UpdateStatus::Failed(u) => u.meta(),
         }
     }
 
