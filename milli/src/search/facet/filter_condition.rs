@@ -110,7 +110,7 @@ impl FilterCondition {
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields_ids(rtxn)?;
-        let lexed = FilterParser::parse(Rule::prgm, expression).map_err(UserError::FilterParsing)?;
+        let lexed = FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
         FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
@@ -169,8 +169,8 @@ impl FilterCondition {
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
 
-        let lvalue = lresult.map_err(UserError::FilterParsing)?;
-        let rvalue = rresult.map_err(UserError::FilterParsing)?;
+        let lvalue = lresult.map_err(UserError::InvalidFilter)?;
+        let rvalue = rresult.map_err(UserError::InvalidFilter)?;
 
         Ok(Operator(fid, Between(lvalue, rvalue)))
     }
@@ -204,7 +204,7 @@ impl FilterCondition {
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::FilterParsing)?;
+        let value = result.map_err(UserError::InvalidFilter)?;
 
         Ok(Operator(fid, GreaterThan(value)))
     }
@@ -221,7 +221,7 @@ impl FilterCondition {
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::FilterParsing)?;
+        let value = result.map_err(UserError::InvalidFilter)?;
 
         Ok(Operator(fid, GreaterThanOrEqual(value)))
     }
@@ -238,7 +238,7 @@ impl FilterCondition {
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::FilterParsing)?;
+        let value = result.map_err(UserError::InvalidFilter)?;
 
         Ok(Operator(fid, LowerThan(value)))
     }
@@ -255,7 +255,7 @@ impl FilterCondition {
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::FilterParsing)?;
+        let value = result.map_err(UserError::InvalidFilter)?;
 
         Ok(Operator(fid, LowerThanOrEqual(value)))
     }

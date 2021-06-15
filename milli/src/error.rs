@@ -53,7 +53,7 @@ pub enum UserError {
     Csv(csv::Error),
     MaxDatabaseSizeReached,
     DocumentLimitReached,
-    FilterParsing(pest::error::Error<ParserRule>),
+    InvalidFilter(pest::error::Error<ParserRule>),
     InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
@@ -199,7 +199,7 @@ impl fmt::Display for UserError {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::Csv(error) => error.fmt(f),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
-            Self::FilterParsing(error) => error.fmt(f),
+            Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
