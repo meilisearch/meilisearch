@@ -11,6 +11,7 @@ use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, UserError, InternalError};
+use crate::index::db_name;
 use crate::update::index_documents::merge_function::{merge_obkvs, keep_latest_obkv};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
@@ -411,7 +412,7 @@ impl Transform<'_, '_> {
                             let key = BEU32::new(docid);
                             let base_obkv = self.index.documents.get(&self.rtxn, &key)?
                                 .ok_or(InternalError::DatabaseMissingEntry {
-                                    db_name: "documents",
+                                    db_name: db_name::DOCUMENTS,
                                     key: None,
                                 })?;
                             let update_obkv = obkv::KvReader::new(update_obkv);

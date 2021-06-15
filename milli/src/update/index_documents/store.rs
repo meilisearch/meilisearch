@@ -32,7 +32,7 @@ const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_KILOBYTE: usize = 1024 * 1024;
 
 const MAX_POSITION: usize = 1000;
-const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
+const WORDS_FST_KEY: &[u8] = crate::index::main_key::WORDS_FST_KEY.as_bytes();
 
 pub struct Readers {
     pub main: Reader<FileFuse>,

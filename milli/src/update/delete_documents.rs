@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::error::{InternalError, UserError};
 use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::index::{db_name, main_key};
 use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds, Result};
 use super::ClearDocuments;
 
@@ -78,7 +79,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let primary_key = self.index.primary_key(self.wtxn)?.ok_or_else(|| {
-            InternalError::DatabaseMissingEntry { db_name: "main", key: Some("primary-key") }
+            InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::PRIMARY_KEY_KEY),
+            }
         })?;
         let id_field = fields_ids_map.id(primary_key).expect(r#"the field "id" to be present"#);
 

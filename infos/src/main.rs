@@ -5,9 +5,11 @@ use std::{str, io, fmt};
 use anyhow::Context;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
-use milli::facet::FacetType;
-use milli::{Index, TreeLevel};
 use structopt::StructOpt;
+
+use milli::facet::FacetType;
+use milli::index::db_name::*;
+use milli::{Index, TreeLevel};
 
 use Command::*;
 
@@ -15,45 +17,29 @@ use Command::*;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-const MAIN_DB_NAME: &str = "main";
-const WORD_DOCIDS_DB_NAME: &str = "word-docids";
-const WORD_PREFIX_DOCIDS_DB_NAME: &str = "word-prefix-docids";
-const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
-const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
-const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
-const WORD_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-level-position-docids";
-const WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME: &str = "word-prefix-level-position-docids";
-const FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME: &str = "field-id-word-count-docids";
-const FACET_ID_F64_DOCIDS_DB_NAME: &str = "facet-id-f64-docids";
-const FACET_ID_STRING_DOCIDS_DB_NAME: &str = "facet-id-string-docids";
-const FIELD_ID_DOCID_FACET_F64S_DB_NAME: &str = "field-id-docid-facet-f64s";
-const FIELD_ID_DOCID_FACET_STRINGS_DB_NAME: &str = "field-id-docid-facet-strings";
-
-const DOCUMENTS_DB_NAME: &str = "documents";
-
 const ALL_DATABASE_NAMES: &[&str] = &[
-    MAIN_DB_NAME,
-    WORD_DOCIDS_DB_NAME,
-    WORD_PREFIX_DOCIDS_DB_NAME,
-    DOCID_WORD_POSITIONS_DB_NAME,
-    WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
-    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
-    WORD_LEVEL_POSITION_DOCIDS_DB_NAME,
-    WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME,
-    FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME,
-    FACET_ID_F64_DOCIDS_DB_NAME,
-    FACET_ID_STRING_DOCIDS_DB_NAME,
-    FIELD_ID_DOCID_FACET_F64S_DB_NAME,
-    FIELD_ID_DOCID_FACET_STRINGS_DB_NAME,
-    DOCUMENTS_DB_NAME,
+    MAIN,
+    WORD_DOCIDS,
+    WORD_PREFIX_DOCIDS,
+    DOCID_WORD_POSITIONS,
+    WORD_PAIR_PROXIMITY_DOCIDS,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS,
+    WORD_LEVEL_POSITION_DOCIDS,
+    WORD_PREFIX_LEVEL_POSITION_DOCIDS,
+    FIELD_ID_WORD_COUNT_DOCIDS,
+    FACET_ID_F64_DOCIDS,
+    FACET_ID_STRING_DOCIDS,
+    FIELD_ID_DOCID_FACET_F64S,
+    FIELD_ID_DOCID_FACET_STRINGS,
+    DOCUMENTS,
 ];
 
 const POSTINGS_DATABASE_NAMES: &[&str] = &[
-    WORD_DOCIDS_DB_NAME,
-    WORD_PREFIX_DOCIDS_DB_NAME,
-    DOCID_WORD_POSITIONS_DB_NAME,
-    WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
-    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_DOCIDS,
+    WORD_PREFIX_DOCIDS,
+    DOCID_WORD_POSITIONS,
+    WORD_PAIR_PROXIMITY_DOCIDS,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS,
 ];
 
 #[derive(Debug, StructOpt)]
@@ -944,21 +930,21 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
 
     for name in names {
         let database = match name.as_str() {
-            MAIN_DB_NAME => &main,
-            WORD_PREFIX_DOCIDS_DB_NAME => word_prefix_docids.as_polymorph(),
-            WORD_DOCIDS_DB_NAME => word_docids.as_polymorph(),
-            DOCID_WORD_POSITIONS_DB_NAME => docid_word_positions.as_polymorph(),
-            WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => word_pair_proximity_docids.as_polymorph(),
-            WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => word_prefix_pair_proximity_docids.as_polymorph(),
-            WORD_LEVEL_POSITION_DOCIDS_DB_NAME => word_level_position_docids.as_polymorph(),
-            WORD_PREFIX_LEVEL_POSITION_DOCIDS_DB_NAME => word_prefix_level_position_docids.as_polymorph(),
-            FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME => field_id_word_count_docids.as_polymorph(),
-            FACET_ID_F64_DOCIDS_DB_NAME => facet_id_f64_docids.as_polymorph(),
-            FACET_ID_STRING_DOCIDS_DB_NAME => facet_id_string_docids.as_polymorph(),
-            FIELD_ID_DOCID_FACET_F64S_DB_NAME => field_id_docid_facet_f64s.as_polymorph(),
-            FIELD_ID_DOCID_FACET_STRINGS_DB_NAME => field_id_docid_facet_strings.as_polymorph(),
+            MAIN => &main,
+            WORD_PREFIX_DOCIDS => word_prefix_docids.as_polymorph(),
+            WORD_DOCIDS => word_docids.as_polymorph(),
+            DOCID_WORD_POSITIONS => docid_word_positions.as_polymorph(),
+            WORD_PAIR_PROXIMITY_DOCIDS => word_pair_proximity_docids.as_polymorph(),
+            WORD_PREFIX_PAIR_PROXIMITY_DOCIDS => word_prefix_pair_proximity_docids.as_polymorph(),
+            WORD_LEVEL_POSITION_DOCIDS => word_level_position_docids.as_polymorph(),
+            WORD_PREFIX_LEVEL_POSITION_DOCIDS => word_prefix_level_position_docids.as_polymorph(),
+            FIELD_ID_WORD_COUNT_DOCIDS => field_id_word_count_docids.as_polymorph(),
+            FACET_ID_F64_DOCIDS => facet_id_f64_docids.as_polymorph(),
+            FACET_ID_STRING_DOCIDS => facet_id_string_docids.as_polymorph(),
+            FIELD_ID_DOCID_FACET_F64S => field_id_docid_facet_f64s.as_polymorph(),
+            FIELD_ID_DOCID_FACET_STRINGS => field_id_docid_facet_strings.as_polymorph(),
 
-            DOCUMENTS_DB_NAME => documents.as_polymorph(),
+            DOCUMENTS => documents.as_polymorph(),
             unknown => anyhow::bail!("unknown database {:?}", unknown),
         };
 
@@ -1039,27 +1025,27 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
     }
 
     match name {
-        WORD_DOCIDS_DB_NAME => {
+        WORD_DOCIDS => {
             let db = index.word_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
         },
-        WORD_PREFIX_DOCIDS_DB_NAME => {
+        WORD_PREFIX_DOCIDS => {
             let db = index.word_prefix_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
         },
-        DOCID_WORD_POSITIONS_DB_NAME => {
+        DOCID_WORD_POSITIONS => {
             let db = index.docid_word_positions.as_polymorph();
             compute_stats::<BoRoaringBitmapCodec>(*db, rtxn, name)
         },
-        WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
+        WORD_PAIR_PROXIMITY_DOCIDS => {
             let db = index.word_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
-        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
+        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS => {
             let db = index.word_prefix_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
-        FIELD_ID_WORD_COUNT_DOCIDS_DB_NAME => {
+        FIELD_ID_WORD_COUNT_DOCIDS => {
             let db = index.field_id_word_count_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
