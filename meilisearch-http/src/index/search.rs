@@ -85,7 +85,7 @@ impl Index {
         search.offset(query.offset.unwrap_or_default());
 
         if let Some(ref filter) = query.filter {
-            if let Some(facets) = parse_facets(filter, self, &rtxn)? {
+            if let Some(facets) = parse_filter(filter, self, &rtxn)? {
                 search.filter(facets);
             }
         }
@@ -464,19 +464,19 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     }
 }
 
-fn parse_facets(
+fn parse_filter(
     facets: &Value,
     index: &Index,
     txn: &RoTxn,
 ) -> anyhow::Result<Option<FilterCondition>> {
     match facets {
         Value::String(expr) => Ok(Some(FilterCondition::from_str(txn, index, expr)?)),
-        Value::Array(arr) => parse_facets_array(txn, index, arr),
+        Value::Array(arr) => parse_filter_array(txn, index, arr),
         v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
     }
 }
 
-fn parse_facets_array(
+fn parse_filter_array(
     txn: &RoTxn,
     index: &Index,
     arr: &[Value],
