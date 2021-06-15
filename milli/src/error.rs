@@ -60,6 +60,8 @@ pub enum UserError {
     MissingDocumentId { document: Object },
     MissingPrimaryKey,
     NoSpaceLeftOnDevice,
+    PrimaryKeyCannotBeChanged,
+    PrimaryKeyCannotBeReset,
     SerdeJson(serde_json::Error),
     UnknownInternalDocumentId { document_id: DocumentId },
 }
@@ -211,6 +213,12 @@ impl fmt::Display for UserError {
             // TODO where can we find it instead of writing the text ourselves?
             Self::NoSpaceLeftOnDevice => f.write_str("no space left on device"),
             Self::InvalidStoreFile => f.write_str("store file is not a valid database file"),
+            Self::PrimaryKeyCannotBeChanged => {
+                f.write_str("primary key cannot be changed if the database contains documents")
+            },
+            Self::PrimaryKeyCannotBeReset => {
+                f.write_str("primary key cannot be reset if the database contains documents")
+            },
             Self::SerdeJson(error) => error.fmt(f),
             Self::UnknownInternalDocumentId { document_id } => {
                 write!(f, "an unknown internal document id have been used ({})", document_id)

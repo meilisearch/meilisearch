@@ -72,6 +72,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     stop_words: Setting<BTreeSet<String>>,
     distinct_field: Setting<String>,
     synonyms: Setting<HashMap<String, Vec<String>>>,
+    primary_key: Setting<String>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -98,6 +99,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             stop_words: Setting::NotSet,
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
+            primary_key: Setting::NotSet,
             update_id,
         }
     }
@@ -164,6 +166,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         } else {
             Setting::Set(synonyms)
         }
+    }
+
+    pub fn reset_primary_key(&mut self) {
+        self.primary_key = Setting::Reset;
+    }
+
+    pub fn set_primary_key(&mut self, primary_key: String) {
+        self.primary_key = Setting::Set(primary_key);
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -423,6 +433,31 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
+    fn update_primary_key(&mut self) -> Result<()> {
+        match self.primary_key {
+            Setting::Set(ref primary_key) => {
+                if self.index.number_of_documents(&self.wtxn)? == 0 {
+                    let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+                    fields_ids_map.insert(primary_key).ok_or(UserError::AttributeLimitReached)?;
+                    self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+                    self.index.put_primary_key(self.wtxn, primary_key)?;
+                    Ok(())
+                } else {
+                    Err(UserError::PrimaryKeyCannotBeChanged.into())
+                }
+            },
+            Setting::Reset => {
+                if self.index.number_of_documents(&self.wtxn)? == 0 {
+                    self.index.delete_primary_key(self.wtxn)?;
+                    Ok(())
+                } else {
+                    Err(UserError::PrimaryKeyCannotBeReset.into())
+                }
+            },
+            Setting::NotSet => Ok(()),
+        }
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
         where
             F: Fn(UpdateIndexingStep, u64) + Sync
@@ -436,6 +471,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_filterable()?;
         self.update_distinct_field()?;
         self.update_criteria()?;
+        self.update_primary_key()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
@@ -462,8 +498,9 @@ mod tests {
     use maplit::{btreeset, hashmap, hashset};
     use big_s::S;
 
-    use crate::{Criterion, FilterCondition, SearchResult};
+    use crate::error::Error;
     use crate::update::{IndexDocuments, UpdateFormat};
+    use crate::{Criterion, FilterCondition, SearchResult};
 
     use super::*;
 
@@ -976,5 +1013,55 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         FilterCondition::from_str(&rtxn, &index, "toto = 32").unwrap_err();
+    }
+
+    #[test]
+    fn setting_primary_key() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the primary key settings
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_primary_key(S("mykey"));
+
+        builder.execute(|_, _| ()).unwrap();
+        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
+
+        // Then index some documents with the "mykey" primary key.
+        let content = &br#"[
+            { "mykey": 1, "name": "kevin",  "age": 23 },
+            { "mykey": 2, "name": "kevina", "age": 21 },
+            { "mykey": 3, "name": "benoit", "age": 34 },
+            { "mykey": 4, "name": "bernard", "age": 34 },
+            { "mykey": 5, "name": "bertrand", "age": 34 },
+            { "mykey": 6, "name": "bernie", "age": 34 },
+            { "mykey": 7, "name": "ben", "age": 34 }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.disable_autogenerate_docids();
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // We now try to reset the primary key
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.reset_primary_key();
+
+        let err = builder.execute(|_, _| ()).unwrap_err();
+        assert!(matches!(err, Error::UserError(UserError::PrimaryKeyCannotBeReset)));
+
+        // But if we clear the database...
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = ClearDocuments::new(&mut wtxn, &index, 0);
+        builder.execute().unwrap();
+
+        // ...we can change the primary key
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_primary_key(S("myid"));
+        builder.execute(|_, _| ()).unwrap();
     }
 }

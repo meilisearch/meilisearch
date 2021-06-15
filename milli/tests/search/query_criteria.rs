@@ -1,5 +1,6 @@
-use milli::{Search, SearchResult, Criterion};
 use big_s::S;
+use milli::update::Settings;
+use milli::{Search, SearchResult, Criterion};
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 use Criterion::*;
@@ -189,7 +190,9 @@ fn criteria_mixup() {
         eprintln!("Testing with criteria order: {:?}", &criteria);
         //update criteria
         let mut wtxn = index.write_txn().unwrap();
-        index.put_criteria(&mut wtxn, &criteria).unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_criteria(criteria.iter().map(ToString::to_string).collect());
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();

@@ -375,7 +375,7 @@ impl Transform<'_, '_> {
 
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
-            |_id, _obkvs| Err(InternalError::IndexingMergingKeys { process: "merging documents" }),
+            |_id, _obkvs| Err(InternalError::IndexingMergingKeys { process: "documents" }),
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.chunk_fusing_shrink_size,

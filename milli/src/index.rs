@@ -184,7 +184,7 @@ impl Index {
     /* documents ids */
 
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
-    pub fn put_documents_ids(&self, wtxn: &mut RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
+    pub(crate) fn put_documents_ids(&self, wtxn: &mut RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
         self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, main_key::DOCUMENTS_IDS_KEY, docids)
     }
 
@@ -202,7 +202,7 @@ impl Index {
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
-    pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
+    pub(crate) fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
         self.set_updated_at(wtxn, &Utc::now())?;
         self.main.put::<_, Str, Str>(wtxn, main_key::PRIMARY_KEY_KEY, &primary_key)
     }
@@ -220,7 +220,7 @@ impl Index {
     /* external documents ids */
 
     /// Writes the external documents ids and internal ids (i.e. `u32`).
-    pub fn put_external_documents_ids<'a>(
+    pub(crate) fn put_external_documents_ids<'a>(
         &self,
         wtxn: &mut RwTxn,
         external_documents_ids: &ExternalDocumentsIds<'a>,
@@ -254,7 +254,7 @@ impl Index {
 
     /// Writes the fields ids map which associate the documents keys with an internal field id
     /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
-    pub fn put_fields_ids_map(&self, wtxn: &mut RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
+    pub(crate) fn put_fields_ids_map(&self, wtxn: &mut RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, main_key::FIELDS_IDS_MAP_KEY, map)
     }
 
@@ -271,7 +271,7 @@ impl Index {
 
     /// Writes the fields distribution which associates every field name with
     /// the number of times it occurs in the documents.
-    pub fn put_fields_distribution(&self, wtxn: &mut RwTxn, distribution: &FieldsDistribution) -> heed::Result<()> {
+    pub(crate) fn put_fields_distribution(&self, wtxn: &mut RwTxn, distribution: &FieldsDistribution) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(wtxn, main_key::FIELDS_DISTRIBUTION_KEY, distribution)
     }
 
@@ -288,7 +288,7 @@ impl Index {
 
     /// Writes the fields that must be displayed in the defined order.
     /// There must be not be any duplicate field id.
-    pub fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
+    pub(crate) fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, main_key::DISPLAYED_FIELDS_KEY, &fields)
     }
 
@@ -328,7 +328,7 @@ impl Index {
     /* searchable fields */
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
-    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
+    pub(crate) fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, main_key::SEARCHABLE_FIELDS_KEY, &fields)
     }
 
@@ -367,7 +367,7 @@ impl Index {
     /* filterable fields */
 
     /// Writes the filterable fields names in the database.
-    pub fn put_filterable_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
+    pub(crate) fn put_filterable_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::FILTERABLE_FIELDS_KEY, fields)
     }
 
@@ -453,7 +453,7 @@ impl Index {
     /* faceted documents ids */
 
     /// Writes the documents ids that are faceted with numbers under this field id.
-    pub fn put_number_faceted_documents_ids(
+    pub(crate) fn put_number_faceted_documents_ids(
         &self,
         wtxn: &mut RwTxn,
         field_id: FieldId,
@@ -485,7 +485,7 @@ impl Index {
     }
 
     /// Writes the documents ids that are faceted with strings under this field id.
-    pub fn put_string_faceted_documents_ids(
+    pub(crate) fn put_string_faceted_documents_ids(
         &self,
         wtxn: &mut RwTxn,
         field_id: FieldId,
@@ -532,7 +532,7 @@ impl Index {
 
     /* criteria */
 
-    pub fn put_criteria(&self, wtxn: &mut RwTxn, criteria: &[Criterion]) -> heed::Result<()> {
+    pub(crate) fn put_criteria(&self, wtxn: &mut RwTxn, criteria: &[Criterion]) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
     }
 
@@ -550,7 +550,7 @@ impl Index {
     /* words fst */
 
     /// Writes the FST which is the words dictionary of the engine.
-    pub fn put_words_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+    pub(crate) fn put_words_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::WORDS_FST_KEY, fst.as_fst().as_bytes())
     }
 
@@ -564,7 +564,7 @@ impl Index {
 
     /* stop words */
 
-    pub fn put_stop_words<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+    pub(crate) fn put_stop_words<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::STOP_WORDS_KEY, fst.as_fst().as_bytes())
     }
 
@@ -581,7 +581,7 @@ impl Index {
 
     /* synonyms */
 
-    pub fn put_synonyms(
+    pub(crate) fn put_synonyms(
         &self,
         wtxn: &mut RwTxn,
         synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
@@ -611,7 +611,7 @@ impl Index {
     /* words prefixes fst */
 
     /// Writes the FST which is the words prefixes dictionnary of the engine.
-    pub fn put_words_prefixes_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+    pub(crate) fn put_words_prefixes_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::WORDS_PREFIXES_FST_KEY, fst.as_fst().as_bytes())
     }
 
