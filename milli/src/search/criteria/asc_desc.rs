@@ -61,7 +61,7 @@ impl<'t> AscDesc<'t> {
             .id(&field_name)
             .ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                 field_name: field_name.clone(),
-                from_db_name: "asc-desc",
+                process: "AscDesc::new",
             })?;
 
         Ok(AscDesc {

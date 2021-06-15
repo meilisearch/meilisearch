@@ -43,8 +43,8 @@ pub enum SerializationError {
 
 #[derive(Debug)]
 pub enum FieldIdMapMissingEntry {
-    FieldId { field_id: FieldId, from_db_name: &'static str },
-    FieldName { field_name: String, from_db_name: &'static str },
+    FieldId { field_id: FieldId, process: &'static str },
+    FieldName { field_name: String, process: &'static str },
 }
 
 #[derive(Debug)]
@@ -224,11 +224,11 @@ impl StdError for UserError {}
 impl fmt::Display for FieldIdMapMissingEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::FieldId { field_id, from_db_name } => {
-                write!(f, "unknown field id {} coming from {} database", field_id, from_db_name)
+            Self::FieldId { field_id, process } => {
+                write!(f, "unknown field id {} coming from the {} process", field_id, process)
             },
-            Self::FieldName { field_name, from_db_name } => {
-                write!(f, "unknown field name {} coming from {} database", field_name, from_db_name)
+            Self::FieldName { field_name, process } => {
+                write!(f, "unknown field name {} coming from the {} process", field_name, process)
             },
         }
     }

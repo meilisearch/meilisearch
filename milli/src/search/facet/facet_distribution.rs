@@ -203,7 +203,7 @@ impl<'a> FacetDistribution<'a> {
         for name in filterable_fields {
             let fid = fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                 field_name: name.clone(),
-                from_db_name: "filterable-fields",
+                process: "FacetDistribution::execute",
             })?;
             let values = self.facet_values(fid)?;
             distribution.insert(name, values);

@@ -62,7 +62,7 @@ pub fn obkv_to_json(
         .map(|(id, value)| {
             let name = fields_ids_map.name(id).ok_or(error::FieldIdMapMissingEntry::FieldId {
                 field_id: id,
-                from_db_name: "documents",
+                process: "obkv_to_json",
             })?;
             let value = serde_json::from_slice(value).map_err(error::InternalError::SerdeJson)?;
             Ok((name.to_owned(), value))
