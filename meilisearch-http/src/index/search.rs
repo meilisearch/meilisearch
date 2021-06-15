@@ -235,9 +235,8 @@ fn parse_formatted_options(
         };
 
         if attr == "*" {
-            let ids = displayed_ids.clone();
-            for id in ids {
-                formatted_options.insert(id, new_format);
+            for id in displayed_ids {
+                formatted_options.insert(*id, new_format);
             }
             break;
         }
@@ -245,44 +244,41 @@ fn parse_formatted_options(
         if let Some(id) = fields_ids_map.id(&attr) {
             formatted_options.insert(id, new_format);
         }
-    };
+    }
 
     for attr in attr_to_crop {
         let mut attr_name = attr.clone();
-        let mut attr_len = Some(query_crop_length);
+        let mut attr_len = query_crop_length;
 
-        if attr_name.contains(':') {
-            let mut split = attr_name.rsplit(':');
-            attr_len = match split.next() {
-                Some(s) => s.parse::<usize>().ok(),
-                None => None,
-            };
-            attr_name = split.flat_map(|s| s.chars()).collect();
-        }
+        let mut split = attr_name.rsplitn(2, ':');
+        attr_name = match split.next().zip(split.next()) {
+            Some((len, name)) => {
+                attr_len = len.parse().unwrap_or(query_crop_length);
+                name.to_string()
+            },
+            None => attr_name,
+        };
 
         if attr_name == "*" {
-            let ids = displayed_ids.clone();
-            for id in ids {
-                let mut highlight = false;
-                if let Some(f) = formatted_options.get(&id) {
-                    highlight = f.highlight;
-                }
-                formatted_options.insert(id, FormatOptions {
-                    highlight,
-                    crop: attr_len,
-                });
+            for id in displayed_ids {
+                formatted_options
+                    .entry(*id)
+                    .and_modify(|f| f.crop = Some(attr_len))
+                    .or_insert(FormatOptions {
+                        highlight: false,
+                        crop: Some(attr_len),
+                    });
             }
         }
 
         if let Some(id) = fields_ids_map.id(&attr_name) {
-            let mut highlight = false;
-            if let Some(f) = formatted_options.get(&id) {
-                highlight = f.highlight;
-            }
-            formatted_options.insert(id, FormatOptions {
-                highlight,
-                crop: attr_len,
-            });
+            formatted_options
+                .entry(id)
+                .and_modify(|f| f.crop = Some(attr_len))
+                .or_insert(FormatOptions {
+                    highlight: false,
+                    crop: Some(attr_len),
+                });
         }
     }
 
