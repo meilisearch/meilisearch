@@ -113,31 +113,37 @@ impl Index {
                 }
 
                 if let Some(id) = fields_ids_map.id(attr) {
-                    if displayed_ids.contains(&id) {
-                        ids.insert(id);
-                    }
+                    ids.insert(id);
                 }
             }
             ids
         };
 
-        let to_retrieve_ids = query
+        // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
+        // but these attributes must be also
+        // - present in the fields_ids_map
+        // - present in the the displayed attributes
+        let to_retrieve_ids: HashSet<_> = query
             .attributes_to_retrieve
             .as_ref()
             .map(fids)
-            .unwrap_or_else(|| displayed_ids.clone());
-
-        // The attributes to retrieve are:
-        // - the ones explicitly marked as to retrieve that are also in the displayed attributes
-        let all_attributes: Vec<_> = to_retrieve_ids
+            .unwrap_or_else(|| displayed_ids.clone())
             .intersection(&displayed_ids)
             .cloned()
+            .collect();
+
+        let to_retrieve_ids_sorted: Vec<_> = to_retrieve_ids
+            .clone()
+            .into_iter()
             .sorted()
             .collect();
 
         let mut formatted_options = HashMap::new();
 
-        let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
+        let attr_to_highlight = query
+            .attributes_to_highlight
+            .unwrap_or_default();
+
         for attr in attr_to_highlight {
             let new_format = FormatOptions {
                 highlight: true,
@@ -159,7 +165,10 @@ impl Index {
             }
         };
 
-        let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
+        let attr_to_crop = query
+            .attributes_to_crop
+            .unwrap_or_default();
+
         for attr in attr_to_crop {
             let mut attr_name = attr.clone();
             let mut attr_len = Some(query.crop_length);
@@ -201,13 +210,13 @@ impl Index {
             }
         }
 
-        let formatted_ids = formatted_options
+        // All attributes present in `_formatted`:
+        // - attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
+        // - attributes asked to be retrieved: these attributes will not be formatted
+        let ids_in_formatted = formatted_options
             .keys()
             .cloned()
-            .collect::<HashSet<_>>();
-
-        // All attributes present in `_formatted` that are not necessary highighted or cropped
-        let ids_in_formatted = formatted_ids
+            .collect::<HashSet<_>>()
             .union(&to_retrieve_ids)
             .cloned()
             .sorted()
@@ -218,7 +227,7 @@ impl Index {
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let document = make_document(&all_attributes, &fields_ids_map, obkv)?;
+            let document = make_document(&to_retrieve_ids_sorted, &fields_ids_map, obkv)?;
             let formatted = compute_formatted(
                 &fields_ids_map,
                 obkv,
@@ -498,8 +507,6 @@ fn parse_facets_array(
 
 #[cfg(test)]
 mod test {
-    use std::iter::FromIterator;
-
     use super::*;
 
     #[test]
