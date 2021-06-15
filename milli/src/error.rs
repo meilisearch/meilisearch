@@ -51,7 +51,7 @@ pub enum FieldIdMapMissingEntry {
 pub enum UserError {
     AttributeLimitReached,
     Csv(csv::Error),
-    DatabaseSizeReached,
+    MaxDatabaseSizeReached,
     DocumentLimitReached,
     FilterParsing(pest::error::Error<ParserRule>),
     InvalidCriterionName { name: String },
@@ -113,7 +113,7 @@ impl From<HeedError> for Error {
 
         match error {
             HeedError::Io(error) => Error::from(error),
-            HeedError::Mdb(MdbError::MapFull) => UserError(DatabaseSizeReached),
+            HeedError::Mdb(MdbError::MapFull) => UserError(MaxDatabaseSizeReached),
             HeedError::Mdb(MdbError::Invalid) => UserError(InvalidStoreFile),
             HeedError::Mdb(error) => InternalError(Store(error)),
             HeedError::Encoding => InternalError(Serialization(Encoding { db_name: None })),
@@ -211,7 +211,7 @@ impl fmt::Display for UserError {
                 write!(f, "document doesn't have an identifier {}", json)
             },
             Self::MissingPrimaryKey => f.write_str("missing primary key"),
-            Self::DatabaseSizeReached => f.write_str("database size reached"),
+            Self::MaxDatabaseSizeReached => f.write_str("maximum database size reached"),
             // TODO where can we find it instead of writing the text ourselves?
             Self::NoSpaceLeftOnDevice => f.write_str("no space left on device"),
             Self::InvalidStoreFile => f.write_str("store file is not a valid database file"),

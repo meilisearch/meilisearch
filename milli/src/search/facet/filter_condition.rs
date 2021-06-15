@@ -164,7 +164,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
@@ -183,7 +183,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
@@ -200,7 +200,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -217,7 +217,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -234,7 +234,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -251,7 +251,7 @@ impl FilterCondition {
     {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::FilterParsing)?;
+            .map_err(UserError::InvalidFilterAttribute)?;
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
