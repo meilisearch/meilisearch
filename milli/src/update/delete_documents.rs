@@ -7,7 +7,7 @@ use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use crate::error::{InternalError, UserError};
+use crate::error::{InternalError, FieldIdMapMissingEntry, UserError};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds, Result};
@@ -84,7 +84,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 key: Some(main_key::PRIMARY_KEY_KEY),
             }
         })?;
-        let id_field = fields_ids_map.id(primary_key).expect(r#"the field "id" to be present"#);
+        let id_field = fields_ids_map.id(primary_key).ok_or_else(|| {
+            FieldIdMapMissingEntry::FieldName {
+                field_name: primary_key.to_string(),
+                process: "DeleteDocuments::execute",
+            }
+        })?;
 
         let Index {
             env: _env,

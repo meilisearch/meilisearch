@@ -3,9 +3,11 @@ use std::mem::size_of;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
-use super::{Distinct, DocIter};
+use crate::error::InternalError;
 use crate::heed_codec::facet::*;
+use crate::index::db_name;
 use crate::{DocumentId, FieldId, Index, Result};
+use super::{Distinct, DocIter};
 
 const FID_SIZE: usize = size_of::<FieldId>();
 const DOCID_SIZE: usize = size_of::<DocumentId>();
@@ -64,7 +66,10 @@ impl<'a> FacetDistinctIter<'a> {
             let ((_, _, value), _) = item?;
             let facet_docids = self
                 .facet_string_docids(value)?
-                .expect("Corrupted data: Facet values must exist");
+                .ok_or(InternalError::DatabaseMissingEntry {
+                    db_name: db_name::FACET_ID_STRING_DOCIDS,
+                    key: None,
+                })?;
             self.excluded.union_with(&facet_docids);
         }
 
@@ -80,7 +85,10 @@ impl<'a> FacetDistinctIter<'a> {
             let ((_, _, value), _) = item?;
             let facet_docids = self
                 .facet_number_docids(value)?
-                .expect("Corrupted data: Facet values must exist");
+                .ok_or(InternalError::DatabaseMissingEntry {
+                    db_name: db_name::FACET_ID_F64_DOCIDS,
+                    key: None,
+                })?;
             self.excluded.union_with(&facet_docids);
         }
 

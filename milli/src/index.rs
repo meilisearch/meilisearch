@@ -7,7 +7,7 @@ use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use heed::types::*;
 use roaring::RoaringBitmap;
 
-use crate::error::UserError;
+use crate::error::{UserError, FieldIdMapMissingEntry, InternalError};
 use crate::{Criterion, default_criteria, FacetDistribution, FieldsDistribution, Search};
 use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId, Result};
 use crate::{
@@ -304,14 +304,25 @@ impl Index {
         self.main.get::<_, Str, SerdeBincode<Vec<&'t str>>>(rtxn, main_key::DISPLAYED_FIELDS_KEY)
     }
 
-    pub fn displayed_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<Option<Vec<FieldId>>> {
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-        let ids = self.displayed_fields(rtxn)?
-            .map(|fields| fields
-                .into_iter()
-                .map(|name| fields_ids_map.id(name).expect("Field not found"))
-                .collect::<Vec<_>>());
-        Ok(ids)
+    /// Identical to `displayed_fields`, but returns the ids instead.
+    pub fn displayed_fields_ids(&self, rtxn: &RoTxn) -> Result<Option<Vec<FieldId>>> {
+        match self.displayed_fields(rtxn)? {
+            Some(fields) => {
+                let fields_ids_map = self.fields_ids_map(rtxn)?;
+                let mut fields_ids = Vec::new();
+                for name in fields.into_iter() {
+                    match fields_ids_map.id(name) {
+                        Some(field_id) => fields_ids.push(field_id),
+                        None => return Err(FieldIdMapMissingEntry::FieldName {
+                            field_name: name.to_string(),
+                            process: "Index::displayed_fields_ids",
+                        }.into()),
+                    }
+                }
+                Ok(Some(fields_ids))
+            },
+            None => Ok(None),
+        }
     }
 
     /* searchable fields */
@@ -333,20 +344,22 @@ impl Index {
     }
 
     /// Identical to `searchable_fields`, but returns the ids instead.
-    pub fn searchable_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<Option<Vec<FieldId>>> {
+    pub fn searchable_fields_ids(&self, rtxn: &RoTxn) -> Result<Option<Vec<FieldId>>> {
         match self.searchable_fields(rtxn)? {
-            Some(names) => {
-                let fields_map = self.fields_ids_map(rtxn)?;
-                let mut ids = Vec::new();
-                for name in names {
-                    let id = fields_map
-                        .id(name)
-                        .ok_or_else(|| format!("field id map must contain {:?}", name))
-                        .expect("corrupted data: ");
-                    ids.push(id);
+            Some(fields) => {
+                let fields_ids_map = self.fields_ids_map(rtxn)?;
+                let mut fields_ids = Vec::new();
+                for name in fields {
+                    match fields_ids_map.id(name) {
+                        Some(field_id) => fields_ids.push(field_id),
+                        None => return Err(FieldIdMapMissingEntry::FieldName {
+                            field_name: name.to_string(),
+                            process: "Index::searchable_fields_ids",
+                        }.into()),
+                    }
                 }
-                Ok(Some(ids))
-            }
+                Ok(Some(fields_ids))
+            },
             None => Ok(None),
         }
     }
@@ -371,21 +384,25 @@ impl Index {
         )?.unwrap_or_default())
     }
 
-    /// Same as `filterable_fields`, but returns ids instead.
-    pub fn filterable_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashSet<FieldId>> {
-        let filterable_fields = self.filterable_fields(rtxn)?;
+    /// Identical to `filterable_fields`, but returns ids instead.
+    pub fn filterable_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let fields = self.filterable_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
-        let filterable_fields = filterable_fields
-            .iter()
-            .map(|k| {
-                fields_ids_map
-                    .id(k)
-                    .ok_or_else(|| format!("{:?} should be present in the field id map", k))
-                    .expect("corrupted data: ")
-            })
-            .collect();
 
-        Ok(filterable_fields)
+        let mut fields_ids = HashSet::new();
+        for name in fields {
+            match fields_ids_map.id(&name) {
+                Some(field_id) => {
+                    fields_ids.insert(field_id);
+                },
+                None => return Err(FieldIdMapMissingEntry::FieldName {
+                    field_name: name,
+                    process: "Index::filterable_fields_ids",
+                }.into()),
+            }
+        }
+
+        Ok(fields_ids)
     }
 
     /* faceted documents ids */
@@ -393,7 +410,7 @@ impl Index {
     /// Returns the faceted fields names.
     ///
     /// Faceted fields are the union of all the filterable, distinct, and Asc/Desc fields.
-    pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
+    pub fn faceted_fields(&self, rtxn: &RoTxn) -> Result<HashSet<String>> {
         let filterable_fields = self.filterable_fields(rtxn)?;
         let distinct_field = self.distinct_field(rtxn)?;
         let asc_desc_fields = self.criteria(rtxn)?
@@ -412,21 +429,25 @@ impl Index {
         Ok(faceted_fields)
     }
 
-    /// Same as `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashSet<FieldId>> {
-        let faceted_fields = self.faceted_fields(rtxn)?;
+    /// Identical to `faceted_fields`, but returns ids instead.
+    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let fields = self.faceted_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
-        let faceted_fields = faceted_fields
-            .iter()
-            .map(|k| {
-                fields_ids_map
-                    .id(k)
-                    .ok_or_else(|| format!("{:?} should be present in the field id map", k))
-                    .expect("corrupted data: ")
-            })
-            .collect();
 
-        Ok(faceted_fields)
+        let mut fields_ids = HashSet::new();
+        for name in fields.into_iter() {
+            match fields_ids_map.id(&name) {
+                Some(field_id) => {
+                    fields_ids.insert(field_id);
+                },
+                None => return Err(FieldIdMapMissingEntry::FieldName {
+                    field_name: name,
+                    process: "Index::faceted_fields_ids",
+                }.into()),
+            }
+        }
+
+        Ok(fields_ids)
     }
 
     /* faceted documents ids */
@@ -651,19 +672,23 @@ impl Index {
     }
 
     /// Returns the index creation time.
-    pub fn created_at(&self, rtxn: &RoTxn) -> heed::Result<DateTime<Utc>> {
-        let time = self.main
+    pub fn created_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
+        Ok(self.main
             .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::CREATED_AT_KEY)?
-            .expect("Index without creation time");
-        Ok(time)
+            .ok_or(InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::CREATED_AT_KEY),
+            })?)
     }
 
     /// Returns the index last updated time.
-    pub fn updated_at(&self, rtxn: &RoTxn) -> heed::Result<DateTime<Utc>> {
-        let time = self.main
+    pub fn updated_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
+        Ok(self.main
             .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::UPDATED_AT_KEY)?
-            .expect("Index without update time");
-        Ok(time)
+            .ok_or(InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::UPDATED_AT_KEY),
+            })?)
     }
 
     pub(crate) fn set_updated_at(&self, wtxn: &mut RwTxn, time: &DateTime<Utc>) -> heed::Result<()> {

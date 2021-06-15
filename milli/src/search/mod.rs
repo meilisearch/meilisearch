@@ -13,7 +13,7 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
+use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{Index, DocumentId, Result};
 
@@ -21,6 +21,8 @@ pub use self::facet::{FilterCondition, FacetDistribution, FacetIter, Operator};
 pub use self::matching_words::MatchingWords;
 pub(crate) use self::facet::ParserRule;
 use self::query_tree::QueryTreeBuilder;
+
+use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -142,7 +144,10 @@ impl<'a> Search<'a> {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
-                let id = field_ids_map.id(name).expect("distinct not present in field map");
+                let id = field_ids_map.id(name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                    field_name: name.to_string(),
+                    process: "fetching distint attribute",
+                })?;
                 let distinct = FacetDistinct::new(id, self.index, self.rtxn);
                 self.perform_sort(distinct, matching_words, criteria)
             }
