@@ -127,3 +127,15 @@ where
     let error = PayloadError(err);
     error.into()
 }
+
+macro_rules! internal_error {
+    ($target:ty : $($other:path), *) => {
+        $(
+            impl From<$other> for $target {
+                fn from(other: $other) -> Self {
+                    Self::Internal(Box::new(other))
+                }
+            }
+        )*
+    }
+}

@@ -1,19 +1,15 @@
-use std::error::Error;
-
 use meilisearch_error::Code;
 use meilisearch_error::ErrorCode;
 
 use super::dump_actor::error::DumpActorError;
 use super::index_actor::error::IndexActorError;
 use super::update_actor::error::UpdateActorError;
-use super::uuid_resolver::UuidResolverError;
+use super::uuid_resolver::error::UuidResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexControllerError {
-    #[error("Internal error: {0}")]
-    Internal(Box<dyn Error>),
     #[error("Missing index uid")]
     MissingUid,
     #[error("index resolution error: {0}")]
@@ -29,7 +25,6 @@ pub enum IndexControllerError {
 impl ErrorCode for IndexControllerError {
     fn error_code(&self) -> Code {
         match self {
-            IndexControllerError::Internal(_) => Code::Internal,
             IndexControllerError::MissingUid => Code::InvalidIndexUid,
             IndexControllerError::Uuid(e) => e.error_code(),
             IndexControllerError::IndexActor(e) => e.error_code(),

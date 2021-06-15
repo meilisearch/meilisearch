@@ -4,7 +4,7 @@ use log::{info, warn};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::{Result, UuidResolveMsg, UuidResolverError, UuidStore};
+use super::{Result, UuidResolveMsg, error::UuidResolverError, UuidStore};
 
 pub struct UuidResolverActor<S> {
     inbox: mpsc::Receiver<UuidResolveMsg>,

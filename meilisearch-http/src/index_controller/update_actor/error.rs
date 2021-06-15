@@ -20,18 +20,6 @@ pub enum UpdateActorError {
     FatalUpdateStoreError,
 }
 
-macro_rules! internal_error {
-    ($($other:path), *) => {
-        $(
-            impl From<$other> for UpdateActorError {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
-    }
-}
-
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateActorError {
     fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
         Self::FatalUpdateStoreError

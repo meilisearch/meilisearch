@@ -19,7 +19,7 @@ use index_actor::IndexActorHandle;
 use snapshot::{load_snapshot, SnapshotService};
 use update_actor::UpdateActorHandle;
 pub use updates::*;
-use uuid_resolver::{UuidResolverError, UuidResolverHandle};
+use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;

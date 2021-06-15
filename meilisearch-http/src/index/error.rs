@@ -15,19 +15,13 @@ pub enum IndexError {
     Facet(#[from] FacetError),
 }
 
-macro_rules! internal_error {
-    ($($other:path), *) => {
-        $(
-            impl From<$other> for IndexError {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
-    }
-}
-
-internal_error!(std::io::Error, heed::Error, fst::Error, serde_json::Error);
+internal_error!(
+    IndexError:
+    std::io::Error,
+    heed::Error,
+    fst::Error,
+    serde_json::Error
+);
 
 impl ErrorCode for IndexError {
     fn error_code(&self) -> Code {
