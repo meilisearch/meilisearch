@@ -1053,6 +1053,7 @@ mod tests {
 
         let err = builder.execute(|_, _| ()).unwrap_err();
         assert!(matches!(err, Error::UserError(UserError::PrimaryKeyCannotBeReset)));
+        wtxn.abort().unwrap();
 
         // But if we clear the database...
         let mut wtxn = index.write_txn().unwrap();
@@ -1063,5 +1064,6 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_primary_key(S("myid"));
         builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
     }
 }
