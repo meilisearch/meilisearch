@@ -146,7 +146,7 @@ impl<'a> Search<'a> {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 let id = field_ids_map.id(name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                     field_name: name.to_string(),
-                    process: "fetching distint attribute",
+                    process: "distinct attribute",
                 })?;
                 let distinct = FacetDistinct::new(id, self.index, self.rtxn);
                 self.perform_sort(distinct, matching_words, criteria)
