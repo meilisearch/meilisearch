@@ -138,81 +138,26 @@ impl Index {
             .sorted()
             .collect();
 
-        let mut formatted_options = HashMap::new();
-
         let attr_to_highlight = query
             .attributes_to_highlight
             .unwrap_or_default();
-
-        for attr in attr_to_highlight {
-            let new_format = FormatOptions {
-                highlight: true,
-                crop: None,
-            };
-
-            if attr == "*" {
-                let ids = displayed_ids.clone();
-                for id in ids {
-                    formatted_options.insert(id, new_format);
-                }
-                break;
-            }
-
-            if let Some(id) = fields_ids_map.id(&attr) {
-                if displayed_ids.contains(&id) {
-                    formatted_options.insert(id, new_format);
-                }
-            }
-        };
 
         let attr_to_crop = query
             .attributes_to_crop
             .unwrap_or_default();
 
-        for attr in attr_to_crop {
-            let mut attr_name = attr.clone();
-            let mut attr_len = Some(query.crop_length);
-
-            if attr_name.contains(':') {
-                let mut split = attr_name.rsplit(':');
-                attr_len = match split.next() {
-                    Some(s) => s.parse::<usize>().ok(),
-                    None => None,
-                };
-                attr_name = split.flat_map(|s| s.chars()).collect();
-            }
-
-            if attr_name == "*" {
-                let ids = displayed_ids.clone();
-                for id in ids {
-                    let mut highlight = false;
-                    if let Some(f) = formatted_options.get(&id) {
-                        highlight = f.highlight;
-                    }
-                    formatted_options.insert(id, FormatOptions {
-                        highlight,
-                        crop: attr_len,
-                    });
-                }
-            }
-
-            if let Some(id) = fields_ids_map.id(&attr_name) {
-                if displayed_ids.contains(&id) {
-                    let mut highlight = false;
-                    if let Some(f) = formatted_options.get(&id) {
-                        highlight = f.highlight;
-                    }
-                    formatted_options.insert(id, FormatOptions {
-                        highlight,
-                        crop: attr_len,
-                    });
-                }
-            }
-        }
+        let formatted_options = parse_formatted_options(
+            &attr_to_highlight,
+            &attr_to_crop,
+            query.crop_length,
+            &fields_ids_map,
+            &displayed_ids,
+        );
 
         // All attributes present in `_formatted`:
         // - attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
         // - attributes asked to be retrieved: these attributes will not be formatted
+        // - attributes that are present in displayed attributes
         let ids_in_formatted = formatted_options
             .keys()
             .cloned()
@@ -268,6 +213,81 @@ impl Index {
         };
         Ok(result)
     }
+}
+
+fn parse_formatted_options(
+    attr_to_highlight: &HashSet<String>,
+    attr_to_crop: &[String],
+    query_crop_length: usize,
+    fields_ids_map: &FieldsIdsMap,
+    displayed_ids: &HashSet<u8>,
+    ) -> HashMap<FieldId, FormatOptions> {
+
+    let mut formatted_options = HashMap::new();
+
+    for attr in attr_to_highlight {
+        let new_format = FormatOptions {
+            highlight: true,
+            crop: None,
+        };
+
+        if attr == "*" {
+            let ids = displayed_ids.clone();
+            for id in ids {
+                formatted_options.insert(id, new_format);
+            }
+            break;
+        }
+
+        if let Some(id) = fields_ids_map.id(&attr) {
+            if displayed_ids.contains(&id) {
+                formatted_options.insert(id, new_format);
+            }
+        }
+    };
+
+    for attr in attr_to_crop {
+        let mut attr_name = attr.clone();
+        let mut attr_len = Some(query_crop_length);
+
+        if attr_name.contains(':') {
+            let mut split = attr_name.rsplit(':');
+            attr_len = match split.next() {
+                Some(s) => s.parse::<usize>().ok(),
+                None => None,
+            };
+            attr_name = split.flat_map(|s| s.chars()).collect();
+        }
+
+        if attr_name == "*" {
+            let ids = displayed_ids.clone();
+            for id in ids {
+                let mut highlight = false;
+                if let Some(f) = formatted_options.get(&id) {
+                    highlight = f.highlight;
+                }
+                formatted_options.insert(id, FormatOptions {
+                    highlight,
+                    crop: attr_len,
+                });
+            }
+        }
+
+        if let Some(id) = fields_ids_map.id(&attr_name) {
+            if displayed_ids.contains(&id) {
+                let mut highlight = false;
+                if let Some(f) = formatted_options.get(&id) {
+                    highlight = f.highlight;
+                }
+                formatted_options.insert(id, FormatOptions {
+                    highlight,
+                    crop: attr_len,
+                });
+            }
+        }
+    }
+
+    formatted_options
 }
 
 fn make_document(
