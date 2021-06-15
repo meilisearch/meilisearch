@@ -162,6 +162,9 @@ impl Index {
             .keys()
             .cloned()
             .collect::<HashSet<_>>()
+            .intersection(&displayed_ids)
+            .cloned()
+            .collect::<HashSet<_>>()
             .union(&to_retrieve_ids)
             .cloned()
             .sorted()
@@ -240,9 +243,7 @@ fn parse_formatted_options(
         }
 
         if let Some(id) = fields_ids_map.id(&attr) {
-            if displayed_ids.contains(&id) {
-                formatted_options.insert(id, new_format);
-            }
+            formatted_options.insert(id, new_format);
         }
     };
 
@@ -274,16 +275,14 @@ fn parse_formatted_options(
         }
 
         if let Some(id) = fields_ids_map.id(&attr_name) {
-            if displayed_ids.contains(&id) {
-                let mut highlight = false;
-                if let Some(f) = formatted_options.get(&id) {
-                    highlight = f.highlight;
-                }
-                formatted_options.insert(id, FormatOptions {
-                    highlight,
-                    crop: attr_len,
-                });
+            let mut highlight = false;
+            if let Some(f) = formatted_options.get(&id) {
+                highlight = f.highlight;
             }
+            formatted_options.insert(id, FormatOptions {
+                highlight,
+                crop: attr_len,
+            });
         }
     }
 
