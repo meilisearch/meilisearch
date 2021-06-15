@@ -56,6 +56,7 @@ pub enum UserError {
     FilterParsing(pest::error::Error<ParserRule>),
     InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
+    InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidStoreFile,
     MissingDocumentId { document: Object },
     MissingPrimaryKey,
@@ -204,6 +205,7 @@ impl fmt::Display for UserError {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(f, "document identifier is invalid {}", json)
             },
+            Self::InvalidFilterAttribute(error) => error.fmt(f),
             Self::MissingDocumentId { document } => {
                 let json = serde_json::to_string(document).unwrap();
                 write!(f, "document doesn't have an identifier {}", json)
