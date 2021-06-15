@@ -30,7 +30,7 @@ async fn get_unexisting_index() {
 
     let (_response, code) = index.get().await;
 
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]

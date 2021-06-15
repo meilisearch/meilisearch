@@ -4,7 +4,7 @@ use crate::common::Server;
 async fn get_update_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").get_update(0).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -13,7 +13,7 @@ async fn get_unexisting_update_status() {
     let index = server.index("test");
     index.create(None).await;
     let (_response, code) = index.get_update(0).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -39,7 +39,7 @@ async fn get_update_status() {
 async fn list_updates_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").list_updates().await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]

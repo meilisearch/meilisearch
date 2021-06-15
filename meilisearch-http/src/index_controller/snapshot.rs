@@ -143,7 +143,7 @@ mod test {
     use crate::index_controller::update_actor::{
         MockUpdateActorHandle, UpdateActorHandleImpl, error::UpdateActorError,
     };
-    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidResolverError};
+    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, error::UuidResolverError};
 
     #[actix_rt::test]
     async fn test_normal() {

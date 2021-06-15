@@ -5,7 +5,7 @@ use serde_json::json;
 async fn get_settings_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").settings().await;
-    assert_eq!(code, 400)
+    assert_eq!(code, 404)
 }
 
 #[actix_rt::test]
@@ -33,7 +33,7 @@ async fn update_settings_unknown_field() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_response, code) = index.update_settings(json!({"foo": 12})).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 500);
 }
 
 #[actix_rt::test]
@@ -65,7 +65,7 @@ async fn delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_response, code) = index.delete_settings().await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -152,7 +152,7 @@ macro_rules! test_setting_routes {
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
                     let (_response, code) = server.service.get(url).await;
-                    assert_eq!(code, 400);
+                    assert_eq!(code, 404);
                 }
 
                 #[actix_rt::test]
@@ -178,7 +178,7 @@ macro_rules! test_setting_routes {
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
                     let (_response, code) = server.service.delete(url).await;
-                    assert_eq!(code, 400);
+                    assert_eq!(code, 404);
                 }
             }
         )*

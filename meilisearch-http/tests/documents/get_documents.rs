@@ -9,7 +9,7 @@ use serde_json::json;
 async fn get_unexisting_index_single_document() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").get_document(1, None).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -18,7 +18,7 @@ async fn get_unexisting_document() {
     let index = server.index("test");
     index.create(None).await;
     let (_response, code) = index.get_document(1, None).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -53,7 +53,7 @@ async fn get_unexisting_index_all_documents() {
         .index("test")
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
