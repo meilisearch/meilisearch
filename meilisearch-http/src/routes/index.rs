@@ -3,9 +3,9 @@ use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::{IndexParam, UpdateStatusResponse};
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use super::{UpdateStatusResponse, IndexParam};
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -20,12 +20,8 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    match data.list_indexes().await {
-        Ok(indexes) => Ok(HttpResponse::Ok().json(indexes)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let indexes = data.list_indexes().await?;
+    Ok(HttpResponse::Ok().json(indexes))
 }
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
@@ -33,12 +29,8 @@ async fn get_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.index(path.index_uid.clone()).await {
-        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let meta = data.index(path.index_uid.clone()).await?;
+    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,12 +46,8 @@ async fn create_index(
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
-    match data.create_index(body.uid, body.primary_key).await {
-        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let meta = data.create_index(body.uid, body.primary_key).await?;
+    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,15 +74,10 @@ async fn update_index(
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
-    match data
+    let meta = data
         .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
-        .await
-    {
-        Ok(meta) => Ok(HttpResponse::Ok().json(meta)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
@@ -102,12 +85,8 @@ async fn delete_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.delete_index(path.index_uid.clone()).await {
-        Ok(_) => Ok(HttpResponse::NoContent().finish()),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    data.delete_index(path.index_uid.clone()).await?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[derive(Deserialize)]
@@ -125,18 +104,11 @@ async fn get_update_status(
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = path.into_inner();
-    let result = data
+    let meta = data
         .get_update_status(params.index_uid, params.update_id)
-        .await;
-    match result {
-        Ok(meta) => {
-            let meta = UpdateStatusResponse::from(meta);
-            Ok(HttpResponse::Ok().json(meta))
-        },
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    let meta = UpdateStatusResponse::from(meta);
+    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
@@ -144,18 +116,11 @@ async fn get_all_updates_status(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let result = data.get_updates_status(path.into_inner().index_uid).await;
-    match result {
-        Ok(metas) => {
-            let metas = metas
-                .into_iter()
-                .map(UpdateStatusResponse::from)
-                .collect::<Vec<_>>();
+    let metas = data.get_updates_status(path.into_inner().index_uid).await?;
+    let metas = metas
+        .into_iter()
+        .map(UpdateStatusResponse::from)
+        .collect::<Vec<_>>();
 
-            Ok(HttpResponse::Ok().json(metas))
-        },
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    Ok(HttpResponse::Ok().json(metas))
 }
