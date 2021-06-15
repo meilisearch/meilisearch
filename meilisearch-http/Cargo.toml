@@ -74,6 +74,8 @@ uuid = { version =  "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
 obkv = "0.1.1"
 pin-project = "1.0.7"
+whoami = { version = "1.1.2", optional = true }
+reqwest = { version = "0.11.3", features = ["json"], optional = true }
 
 [dependencies.sentry]
 default-features = false
@@ -109,8 +111,8 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-telemetry = ["sentry"]
-default = ["telemetry", "mini-dashboard"]
+analytics = ["sentry", "whoami", "reqwest"]
+default = ["analytics", "mini-dashboard"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"

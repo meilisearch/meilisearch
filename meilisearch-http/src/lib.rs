@@ -6,6 +6,9 @@ mod index_controller;
 pub mod option;
 pub mod routes;
 
+#[cfg(feature = "analytics")]
+pub mod analytics;
+
 pub use self::data::Data;
 pub use option::Opt;
 

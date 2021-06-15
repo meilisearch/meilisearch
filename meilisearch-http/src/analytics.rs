@@ -1,14 +1,10 @@
 use std::hash::{Hash, Hasher};
-use std::{error, thread};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use log::error;
+use log::debug;
 use serde::Serialize;
-use serde_qs as qs;
 use siphasher::sip::SipHasher;
-use walkdir::WalkDir;
 
-use crate::helpers::EnvSizer;
 use crate::Data;
 use crate::Opt;
 
@@ -22,26 +18,21 @@ struct EventProperties {
 }
 
 impl EventProperties {
-    fn from(data: Data) -> Result<EventProperties, Box<dyn error::Error>> {
-        let mut index_list = Vec::new();
+    async fn from(data: Data) -> anyhow::Result<EventProperties> {
+        let stats = data.index_controller.get_all_stats().await?;
 
-        let reader = data.db.main_read_txn()?;
-
-        for index_uid in data.db.indexes_uids() {
-            if let Some(index) = data.db.open_index(&index_uid) {
-                let number_of_documents = index.main.number_of_documents(&reader)?;
-                index_list.push(number_of_documents);
-            }
-        }
-
-        let database_size = data.env.size();
-
-        let last_update_timestamp = data.db.last_update(&reader)?.map(|u| u.timestamp());
+        let database_size = stats.database_size;
+        let last_update_timestamp = stats.last_update.map(|u| u.timestamp());
+        let number_of_documents = stats
+            .indexes
+            .values()
+            .map(|index| index.number_of_documents)
+            .collect();
 
         Ok(EventProperties {
             database_size,
             last_update_timestamp,
-            number_of_documents: index_list,
+            number_of_documents,
         })
     }
 }
@@ -68,10 +59,10 @@ struct Event<'a> {
 #[derive(Debug, Serialize)]
 struct AmplitudeRequest<'a> {
     api_key: &'a str,
-    event: &'a str,
+    events: Vec<Event<'a>>,
 }
 
-pub fn analytics_sender(data: Data, opt: Opt) {
+pub async fn analytics_sender(data: Data, opt: Opt) {
     let username = whoami::username();
     let hostname = whoami::hostname();
     let platform = whoami::platform();
@@ -93,7 +84,7 @@ pub fn analytics_sender(data: Data, opt: Opt) {
         let time = n.as_secs();
         let event_type = "runtime_tick";
         let elapsed_since_start = first_start.elapsed().as_secs() / 86_400; // One day
-        let event_properties = EventProperties::from(data.clone()).ok();
+        let event_properties = EventProperties::from(data.clone()).await.ok();
         let app_version = env!("CARGO_PKG_VERSION").to_string();
         let app_version = app_version.as_str();
         let user_email = std::env::var("MEILI_USER_EMAIL").ok();
@@ -114,20 +105,22 @@ pub fn analytics_sender(data: Data, opt: Opt) {
             user_properties,
             event_properties,
         };
-        let event = serde_json::to_string(&event).unwrap();
 
         let request = AmplitudeRequest {
             api_key: AMPLITUDE_API_KEY,
-            event: &event,
+            events: vec![event],
         };
 
-        let body = qs::to_string(&request).unwrap();
-        let response = ureq::post("https://api.amplitude.com/httpapi").send_string(&body);
-        if !response.ok() {
-            let body = response.into_string().unwrap();
-            error!("Unsuccessful call to Amplitude: {}", body);
+        let response = reqwest::Client::new()
+            .post("https://api2.amplitude.com/2/httpapi")
+            .timeout(Duration::from_secs(60)) // 1 minute max
+            .json(&request)
+            .send()
+            .await;
+        if let Err(e) = response {
+            debug!("Unsuccessful call to Amplitude: {}", e);
         }
 
-        thread::sleep(Duration::from_secs(3600)) // one hour
+        tokio::time::sleep(Duration::from_secs(3600)).await;
     }
 }
