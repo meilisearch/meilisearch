@@ -61,15 +61,10 @@ async fn get_document(
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
-    match data
+    let document = data
         .retrieve_document(index, id, None as Option<Vec<String>>)
-        .await
-    {
-        Ok(document) => Ok(HttpResponse::Ok().json(document)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    Ok(HttpResponse::Ok().json(document))
 }
 
 #[delete(
@@ -80,17 +75,10 @@ async fn delete_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data
+    let update_status = data
         .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
-        .await
-    {
-        Ok(update_status) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
 #[derive(Deserialize)]
@@ -118,20 +106,15 @@ async fn get_all_documents(
         Some(names)
     });
 
-    match data
+    let documents = data
         .retrieve_documents(
             path.index_uid.clone(),
             params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
             params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
             attributes_to_retrieve,
         )
-        .await
-    {
-        Ok(documents) => Ok(HttpResponse::Ok().json(documents)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    Ok(HttpResponse::Ok().json(documents))
 }
 
 #[derive(Deserialize)]
@@ -149,7 +132,7 @@ async fn add_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    let addition_result = data
+    let update_status = data
         .add_documents(
             path.into_inner().index_uid,
             IndexDocumentsMethod::ReplaceDocuments,
@@ -157,16 +140,9 @@ async fn add_documents(
             body,
             params.primary_key.clone(),
         )
-        .await;
+        .await?;
 
-    match addition_result {
-        Ok(update_status) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
 /// Default route for adding documents, this should return an error and redirect to the documentation
@@ -200,7 +176,7 @@ async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    let addition_result = data
+    let update = data
         .add_documents(
             path.into_inner().index_uid,
             IndexDocumentsMethod::UpdateDocuments,
@@ -208,16 +184,9 @@ async fn update_documents(
             body,
             params.primary_key.clone(),
         )
-        .await;
+        .await?;
 
-    match addition_result {
-        Ok(update) => {
-            Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
-        }
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
 }
 
 #[post(
@@ -238,14 +207,8 @@ async fn delete_documents(
         })
         .collect();
 
-    match data.delete_documents(path.index_uid.clone(), ids).await {
-        Ok(update_status) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let update_status = data.delete_documents(path.index_uid.clone(), ids).await?;
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
 /// delete all documents
@@ -254,12 +217,6 @@ async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.clear_documents(path.index_uid.clone()).await {
-        Ok(update_status) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let update_status = data.clear_documents(path.index_uid.clone()).await?;
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
