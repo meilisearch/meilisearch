@@ -16,7 +16,7 @@ pub enum IndexControllerError {
     Internal(Box<dyn Error>),
     #[error("Missing index uid")]
     MissingUid,
-    #[error("error resolving index uid: {0}")]
+    #[error("index resolution error: {0}")]
     Uuid(#[from] UuidResolverError),
     #[error("error with index: {0}")]
     IndexActor(#[from] IndexActorError),
