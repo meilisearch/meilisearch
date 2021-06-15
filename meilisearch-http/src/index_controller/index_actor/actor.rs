@@ -19,8 +19,8 @@ use crate::index_controller::{
 };
 use crate::option::IndexerOpts;
 
+use super::error::{IndexActorError, Result};
 use super::{IndexMeta, IndexMsg, IndexSettings, IndexStore};
-use super::error::{Result, IndexActorError};
 
 pub const CONCURRENT_INDEX_MSG: usize = 10;
 
@@ -31,7 +31,7 @@ pub struct IndexActor<S> {
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> anyhow::Result<Self> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options)?;
         let update_handler = Arc::new(update_handler);
@@ -146,7 +146,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .ok_or(IndexActorError::UnexistingIndex)?;
         let result = spawn_blocking(move || index.perform_search(query)).await??;
         Ok(result)
-
     }
 
     async fn handle_create_index(
@@ -269,7 +268,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 }
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
                 builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())
+                builder
+                    .execute(|_, _| ())
                     .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
                 let meta = IndexMeta::new_txn(&index, &txn)?;
                 txn.commit()?;
@@ -340,10 +340,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
             Ok(IndexStats {
                 size: index.size(),
-                number_of_documents: index.number_of_documents(&rtxn)
+                number_of_documents: index
+                    .number_of_documents(&rtxn)
                     .map_err(|e| IndexActorError::Internal(Box::new(e)))?,
                 is_indexing: None,
-                fields_distribution: index.fields_distribution(&rtxn)
+                fields_distribution: index
+                    .fields_distribution(&rtxn)
                     .map_err(|e| IndexActorError::Internal(e.into()))?,
             })
         })

@@ -52,7 +52,7 @@ where
         }
     }
 
-    async fn perform_snapshot(&self) -> std::result::Result<(), Box<dyn std::error::Error + Sync + Send + 'static>> {
+    async fn perform_snapshot(&self) -> anyhow::Result<()> {
         info!("Performing snapshot.");
 
         let snapshot_dir = self.snapshot_path.clone();
@@ -77,7 +77,7 @@ where
         let snapshot_path = self
             .snapshot_path
             .join(format!("{}.snapshot", self.db_name));
-        let snapshot_path = spawn_blocking(move || -> Result<PathBuf, Box<dyn std::error::Error + Sync + Send + 'static>> {
+        let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
             let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
             let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
             compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
@@ -97,7 +97,7 @@ pub fn load_snapshot(
     snapshot_path: impl AsRef<Path>,
     ignore_snapshot_if_db_exists: bool,
     ignore_missing_snapshot: bool,
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
         match compression::from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),

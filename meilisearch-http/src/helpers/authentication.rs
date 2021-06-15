@@ -9,7 +9,7 @@ use futures::future::{ok, Future, Ready};
 use futures::ready;
 use pin_project::pin_project;
 
-use crate::error::{ResponseError, AuthenticationError};
+use crate::error::{AuthenticationError, ResponseError};
 use crate::Data;
 
 #[derive(Clone, Copy)]
@@ -117,7 +117,8 @@ where
             AuthProj::NoHeader(req) => {
                 match req.take() {
                     Some(req) => {
-                        let response = ResponseError::from(AuthenticationError::MissingAuthorizationHeader);
+                        let response =
+                            ResponseError::from(AuthenticationError::MissingAuthorizationHeader);
                         let response = response.error_response();
                         let response = req.into_response(response);
                         Poll::Ready(Ok(response))
@@ -134,7 +135,8 @@ where
                             .get("X-Meili-API-Key")
                             .map(|h| h.to_str().map(String::from).unwrap_or_default())
                             .unwrap_or_default();
-                        let response = ResponseError::from(AuthenticationError::InvalidToken(bad_token));
+                        let response =
+                            ResponseError::from(AuthenticationError::InvalidToken(bad_token));
                         let response = response.error_response();
                         let response = req.into_response(response);
                         Poll::Ready(Ok(response))

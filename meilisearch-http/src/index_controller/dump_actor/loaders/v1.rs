@@ -31,7 +31,7 @@ impl MetadataV1 {
         dst: impl AsRef<Path>,
         size: usize,
         indexer_options: &IndexerOpts,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<()> {
         info!(
             "Loading dump, dump database version: {}, dump version: V1",
             self.db_version
@@ -83,7 +83,7 @@ fn load_index(
     primary_key: Option<&str>,
     size: usize,
     indexer_options: &IndexerOpts,
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let index_path = dst.as_ref().join(&format!("indexes/index-{}", uuid));
 
     create_dir_all(&index_path)?;
@@ -172,7 +172,7 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
 }
 
 /// Extract Settings from `settings.json` file present at provided `dir_path`
-fn import_settings(dir_path: impl AsRef<Path>) -> std::result::Result<Settings, Box<dyn std::error::Error>> {
+fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
     let path = dir_path.as_ref().join("settings.json");
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);

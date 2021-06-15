@@ -30,11 +30,7 @@ macro_rules! internal_error {
     }
 }
 
-internal_error!(
-    heed::Error,
-    tokio::task::JoinError,
-    std::io::Error
-);
+internal_error!(heed::Error, tokio::task::JoinError, std::io::Error);
 
 impl ErrorCode for IndexActorError {
     fn error_code(&self) -> Code {

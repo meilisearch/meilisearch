@@ -5,8 +5,7 @@ use sha2::Digest;
 
 use crate::index::{Checked, Settings};
 use crate::index_controller::{
-    DumpInfo, IndexController, IndexMetadata, IndexSettings, IndexStats, Stats,
-    error::Result
+    error::Result, DumpInfo, IndexController, IndexMetadata, IndexSettings, IndexStats, Stats,
 };
 use crate::option::Opt;
 
@@ -57,7 +56,7 @@ impl ApiKeys {
 }
 
 impl Data {
-    pub fn new(options: Opt) -> std::result::Result<Data, Box<dyn std::error::Error>> {
+    pub fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
 
         let index_controller = IndexController::new(&path, &options)?;

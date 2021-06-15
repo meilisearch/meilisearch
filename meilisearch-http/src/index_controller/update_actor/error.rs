@@ -45,6 +45,7 @@ impl From<tokio::sync::oneshot::error::RecvError> for UpdateActorError {
 }
 
 internal_error!(
+    UpdateActorError:
     heed::Error,
     std::io::Error,
     serde_json::Error,

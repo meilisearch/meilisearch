@@ -24,17 +24,19 @@ pub enum UpdateType {
     Customs,
     DocumentsAddition {
         #[serde(skip_serializing_if = "Option::is_none")]
-        number: Option<usize>
+        number: Option<usize>,
     },
     DocumentsPartial {
         #[serde(skip_serializing_if = "Option::is_none")]
-        number: Option<usize>
+        number: Option<usize>,
     },
     DocumentsDeletion {
         #[serde(skip_serializing_if = "Option::is_none")]
-        number: Option<usize>
+        number: Option<usize>,
     },
-    Settings { settings: Settings<Unchecked> },
+    Settings {
+        settings: Settings<Unchecked>,
+    },
 }
 
 impl From<&UpdateStatus> for UpdateType {
@@ -60,9 +62,9 @@ impl From<&UpdateStatus> for UpdateType {
                 }
             }
             UpdateMeta::ClearDocuments => UpdateType::ClearAll,
-            UpdateMeta::DeleteDocuments { ids } => {
-                UpdateType::DocumentsDeletion { number: Some(ids.len()) }
-            }
+            UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
+                number: Some(ids.len()),
+            },
             UpdateMeta::Settings(settings) => UpdateType::Settings {
                 settings: settings.clone(),
             },

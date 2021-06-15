@@ -25,7 +25,7 @@ pub enum UpdateMeta {
     },
     ClearDocuments,
     DeleteDocuments {
-        ids: Vec<String>
+        ids: Vec<String>,
     },
     Settings(Settings<Unchecked>),
 }

@@ -5,11 +5,7 @@ use crate::index::{SearchQuery, SearchResult};
 use crate::index_controller::error::Result;
 
 impl Data {
-    pub async fn search(
-        &self,
-        index: String,
-        search_query: SearchQuery,
-    ) -> Result<SearchResult> {
+    pub async fn search(&self, index: String, search_query: SearchQuery) -> Result<SearchResult> {
         self.index_controller.search(index, search_query).await
     }
 

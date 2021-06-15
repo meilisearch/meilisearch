@@ -13,8 +13,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::{PayloadData, UpdateMsg, UpdateStore, UpdateStoreInfo};
 use super::error::{Result, UpdateActorError};
+use super::{PayloadData, UpdateMsg, UpdateStore, UpdateStoreInfo};
 use crate::index_controller::index_actor::IndexActorHandle;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
 
@@ -36,7 +36,7 @@ where
         inbox: mpsc::Receiver<UpdateMsg<D>>,
         path: impl AsRef<Path>,
         index_handle: I,
-    ) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let path = path.as_ref().join("updates");
 
         std::fs::create_dir_all(&path)?;
@@ -201,9 +201,9 @@ where
     async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let store = self.store.clone();
         tokio::task::spawn_blocking(move || {
-        let result = store
-            .meta(uuid, id)?
-            .ok_or(UpdateActorError::UnexistingUpdate(id))?;
+            let result = store
+                .meta(uuid, id)?
+                .ok_or(UpdateActorError::UnexistingUpdate(id))?;
             Ok(result)
         })
         .await?

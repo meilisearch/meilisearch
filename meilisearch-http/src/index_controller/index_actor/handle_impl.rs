@@ -12,8 +12,8 @@ use crate::{
     index_controller::{Failed, Processed},
 };
 
-use super::{IndexActor, IndexActorHandle, IndexMeta, IndexMsg, MapIndexStore};
 use super::error::Result;
+use super::{IndexActor, IndexActorHandle, IndexMeta, IndexMsg, MapIndexStore};
 
 #[derive(Clone)]
 pub struct IndexActorHandleImpl {
@@ -22,11 +22,7 @@ pub struct IndexActorHandleImpl {
 
 #[async_trait::async_trait]
 impl IndexActorHandle for IndexActorHandleImpl {
-    async fn create_index(
-        &self,
-        uuid: Uuid,
-        primary_key: Option<String>,
-    ) -> Result<IndexMeta> {
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::CreateIndex {
             ret,
@@ -118,11 +114,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> Result<IndexMeta> {
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::UpdateIndex {
             uuid,
@@ -156,7 +148,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
 }
 
 impl IndexActorHandleImpl {
-    pub fn new(path: impl AsRef<Path>, index_size: usize) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(100);
 
         let store = MapIndexStore::new(path, index_size);

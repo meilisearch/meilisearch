@@ -22,7 +22,7 @@ where
         index_handle: I,
         path: impl AsRef<Path>,
         update_store_size: usize,
-    ) -> std::result::Result<Self, Box<dyn std::error::Error>>
+    ) -> anyhow::Result<Self>
     where
         I: IndexActorHandle + Clone + Send + Sync + 'static,
     {

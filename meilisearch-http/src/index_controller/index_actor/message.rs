@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+use super::error::Result as IndexResult;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
-use super::error::Result as IndexResult;
 
 use super::{IndexMeta, IndexSettings};
 

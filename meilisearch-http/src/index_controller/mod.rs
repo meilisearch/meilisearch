@@ -29,12 +29,12 @@ use self::dump_actor::load_dump;
 use self::error::IndexControllerError;
 
 mod dump_actor;
+pub mod error;
 mod index_actor;
 mod snapshot;
 mod update_actor;
 mod updates;
 mod uuid_resolver;
-pub mod error;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -83,7 +83,7 @@ pub struct Stats {
 }
 
 impl IndexController {
-        pub fn new(path: impl AsRef<Path>, options: &Opt) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
         let index_size = options.max_mdb_size.get_bytes() as usize;
         let update_store_size = options.max_udb_size.get_bytes() as usize;
 
@@ -238,10 +238,7 @@ impl IndexController {
         }
     }
 
-    pub async fn create_index(
-        &self,
-        index_settings: IndexSettings,
-    ) -> Result<IndexMetadata> {
+    pub async fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata> {
         let IndexSettings { uid, primary_key } = index_settings;
         let uid = uid.ok_or(IndexControllerError::MissingUid)?;
         let uuid = Uuid::new_v4();

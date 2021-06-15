@@ -23,10 +23,10 @@ use uuid::Uuid;
 
 use codec::*;
 
-use super::UpdateMeta;
 use super::error::Result;
-use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
+use super::UpdateMeta;
 use crate::helpers::EnvSizer;
+use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -110,7 +110,7 @@ impl UpdateStore {
     fn new(
         mut options: EnvOpenOptions,
         path: impl AsRef<Path>,
-    ) -> std::result::Result<(Self, mpsc::Receiver<()>), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
         let env = options.open(&path)?;
@@ -141,7 +141,7 @@ impl UpdateStore {
         path: impl AsRef<Path>,
         index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
         must_exit: Arc<AtomicBool>,
-    ) -> std::result::Result<Arc<Self>, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Arc<Self>> {
         let (update_store, mut notification_receiver) = Self::new(options, path)?;
         let update_store = Arc::new(update_store);
 
@@ -270,11 +270,8 @@ impl UpdateStore {
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.put(
-                    wtxn,
-                    &(index_uuid, update.id()),
-                    &update,
-                )?;
+                self.updates
+                    .put(wtxn, &(index_uuid, update.id()), &update)?;
             }
         }
         Ok(())
@@ -283,10 +280,7 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(
-        &self,
-        index_handle: impl IndexActorHandle,
-    ) -> Result<Option<()>> {
+    fn process_pending_update(&self, index_handle: impl IndexActorHandle) -> Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -353,11 +347,8 @@ impl UpdateStore {
             Err(res) => res.into(),
         };
 
-        self.updates.put(
-            &mut wtxn,
-            &(index_uuid, update_id),
-            &result,
-        )?;
+        self.updates
+            .put(&mut wtxn, &(index_uuid, update_id), &result)?;
 
         wtxn.commit()?;
 
@@ -704,18 +695,10 @@ mod test {
         let txn = store.env.read_txn().unwrap();
 
         assert!(store.pending_queue.first(&txn).unwrap().is_none());
-        let update = store
-            .updates
-            .get(&txn, &(uuid, 0))
-            .unwrap()
-            .unwrap();
+        let update = store.updates.get(&txn, &(uuid, 0)).unwrap().unwrap();
 
         assert!(matches!(update, UpdateStatus::Processed(_)));
-        let update = store
-            .updates
-            .get(&txn, &(uuid, 1))
-            .unwrap()
-            .unwrap();
+        let update = store.updates.get(&txn, &(uuid, 1)).unwrap().unwrap();
 
         assert!(matches!(update, UpdateStatus::Failed(_)));
     }

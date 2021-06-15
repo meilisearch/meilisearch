@@ -22,10 +22,10 @@ use self::error::IndexActorError;
 use super::IndexSettings;
 
 mod actor;
+pub mod error;
 mod handle_impl;
 mod message;
 mod store;
-pub mod error;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -60,8 +60,7 @@ impl IndexMeta {
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait IndexActorHandle {
-    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>)
-        -> Result<IndexMeta>;
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn update(
         &self,
         uuid: Uuid,
@@ -86,11 +85,7 @@ pub trait IndexActorHandle {
     ) -> Result<Document>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
     async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta>;
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> Result<IndexMeta>;
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta>;
     async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
     async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
     async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats>;
@@ -105,11 +100,7 @@ mod test {
     #[async_trait::async_trait]
     /// Useful for passing around an `Arc<MockIndexActorHandle>` in tests.
     impl IndexActorHandle for Arc<MockIndexActorHandle> {
-        async fn create_index(
-            &self,
-            uuid: Uuid,
-            primary_key: Option<String>,
-        ) -> Result<IndexMeta> {
+        async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
             self.as_ref().create_index(uuid, primary_key).await
         }
 

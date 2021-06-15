@@ -3,8 +3,8 @@ use std::path::Path;
 use actix_web::web::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
 use super::error::Result;
+use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
 
 #[derive(Clone)]
 pub struct DumpActorHandleImpl {
@@ -35,7 +35,7 @@ impl DumpActorHandleImpl {
         update: crate::index_controller::update_actor::UpdateActorHandleImpl<Bytes>,
         index_db_size: usize,
         update_db_size: usize,
-    ) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(10);
         let actor = DumpActor::new(
             receiver,

@@ -21,7 +21,7 @@ pub struct UpdateHandler {
 }
 
 impl UpdateHandler {
-    pub fn new(opt: &IndexerOpts) -> std::result::Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(opt: &IndexerOpts) -> anyhow::Result<Self> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(opt.indexing_jobs.unwrap_or(0))
             .build()?;

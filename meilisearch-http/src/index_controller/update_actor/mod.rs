@@ -7,16 +7,16 @@ use uuid::Uuid;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
 
 use actor::UpdateActor;
-use message::UpdateMsg;
 use error::Result;
+use message::UpdateMsg;
 
 pub use handle_impl::UpdateActorHandleImpl;
 pub use store::{UpdateStore, UpdateStoreInfo};
 
 mod actor;
+pub mod error;
 mod handle_impl;
 mod message;
-pub mod error;
 pub mod store;
 
 type PayloadData<D> = std::result::Result<D, PayloadError>;

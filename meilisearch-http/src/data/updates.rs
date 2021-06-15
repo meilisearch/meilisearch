@@ -3,7 +3,7 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
 use super::Data;
 use crate::index::{Checked, Settings};
-use crate::index_controller::{IndexMetadata, IndexSettings, UpdateStatus, error::Result};
+use crate::index_controller::{error::Result, IndexMetadata, IndexSettings, UpdateStatus};
 
 impl Data {
     pub async fn add_documents(

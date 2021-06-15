@@ -22,7 +22,7 @@ pub enum AuthenticationError {
 impl ErrorCode for AuthenticationError {
     fn error_code(&self) -> Code {
         match self {
-            AuthenticationError ::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
+            AuthenticationError::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
             AuthenticationError::InvalidToken(_) => Code::InvalidToken,
         }
     }
@@ -62,11 +62,7 @@ macro_rules! response_error {
     };
 }
 
-response_error!(
-    IndexControllerError,
-    AuthenticationError
-);
-
+response_error!(IndexControllerError, AuthenticationError);
 
 impl Serialize for ResponseError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -114,7 +110,8 @@ impl<E: Error> ErrorCode for PayloadError<E> {
 }
 
 impl<E> From<PayloadError<E>> for ResponseError
-where E: Error + Sync + Send + 'static
+where
+    E: Error + Sync + Send + 'static,
 {
     fn from(other: PayloadError<E>) -> Self {
         ResponseError {
@@ -124,7 +121,8 @@ where E: Error + Sync + Send + 'static
 }
 
 pub fn payload_error_handler<E>(err: E) -> ResponseError
-where E: Error + Sync + Send + 'static
+where
+    E: Error + Sync + Send + 'static,
 {
     let error = PayloadError(err);
     error.into()

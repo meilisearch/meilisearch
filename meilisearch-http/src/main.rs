@@ -30,6 +30,7 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
+
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             if !opt.no_analytics {
                 let logger =

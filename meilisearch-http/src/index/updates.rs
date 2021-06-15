@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -308,10 +308,9 @@ impl Index {
             }
         }
 
-        builder.execute(|indexing_step, update_id| {
-            info!("update {}: {:?}", update_id, indexing_step)
-        })
-        .map_err(|e| IndexError::Internal(e.into()))?;
+        builder
+            .execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step))
+            .map_err(|e| IndexError::Internal(e.into()))?;
 
         Ok(UpdateResult::Other)
     }
@@ -333,7 +332,8 @@ impl Index {
         update_builder: UpdateBuilder,
     ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
-        let mut builder = update_builder.delete_documents(&mut txn, self)
+        let mut builder = update_builder
+            .delete_documents(&mut txn, self)
             .map_err(|e| IndexError::Internal(e.into()))?;
 
         // We ignore unexisting document ids

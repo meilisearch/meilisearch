@@ -10,9 +10,9 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
 
+use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
 use crate::index_controller::{update_actor, uuid_resolver};
-use super::error::{DumpActorError, Result};
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 

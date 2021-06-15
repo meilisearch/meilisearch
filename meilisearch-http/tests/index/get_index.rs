@@ -21,7 +21,7 @@ async fn create_and_get_index() {
     assert_eq!(response.as_object().unwrap().len(), 5);
 }
 
-// TODO: partial test since we are testing error, amd error is not yet fully implemented in
+// TODO: partial test since we are testing error, and error is not yet fully implemented in
 // transplant
 #[actix_rt::test]
 async fn get_unexisting_index() {

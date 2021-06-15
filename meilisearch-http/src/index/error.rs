@@ -27,12 +27,7 @@ macro_rules! internal_error {
     }
 }
 
-internal_error!(
-    std::io::Error,
-    heed::Error,
-    fst::Error,
-    serde_json::Error
-);
+internal_error!(std::io::Error, heed::Error, fst::Error, serde_json::Error);
 
 impl ErrorCode for IndexError {
     fn error_code(&self) -> Code {
@@ -47,14 +42,13 @@ impl ErrorCode for IndexError {
 #[derive(Debug, thiserror::Error)]
 pub enum FacetError {
     #[error("Invalid facet expression, expected {}, found: {1}", .0.join(", "))]
-    InvalidExpression(&'static [&'static str], Value)
+    InvalidExpression(&'static [&'static str], Value),
 }
 
-impl ErrorCode for  FacetError {
+impl ErrorCode for FacetError {
     fn error_code(&self) -> Code {
         match self {
             FacetError::InvalidExpression(_, _) => Code::Facet,
         }
     }
 }
-

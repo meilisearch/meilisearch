@@ -9,7 +9,7 @@ use heed::{EnvOpenOptions, RoTxn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{State, UpdateStore, Result};
+use super::{Result, State, UpdateStore};
 use crate::index_controller::{
     index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path, Enqueued,
     UpdateStatus,
@@ -125,7 +125,7 @@ impl UpdateStore {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         db_size: usize,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<()> {
         let dst_update_path = dst.as_ref().join("updates/");
         create_dir_all(&dst_update_path)?;
 

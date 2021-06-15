@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use log::{info, warn};
 #[cfg(test)]
@@ -21,10 +22,10 @@ use crate::{helpers::compression, option::IndexerOpts};
 use error::Result;
 
 mod actor;
+pub mod error;
 mod handle_impl;
 mod loaders;
 mod message;
-pub mod error;
 
 const META_FILE_NAME: &str = "metadata.json";
 
@@ -107,7 +108,7 @@ pub fn load_dump(
     index_db_size: usize,
     update_db_size: usize,
     indexer_opts: &IndexerOpts,
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let tmp_src = tempfile::tempdir_in(".")?;
     let tmp_src_path = tmp_src.path();
 
@@ -120,9 +121,7 @@ pub fn load_dump(
     let dst_dir = dst_path
         .as_ref()
         .parent()
-        // TODO
-        //.with_context(|| format!("Invalid db path: {}", dst_path.as_ref().display()))?;
-        .unwrap();
+        .with_context(|| format!("Invalid db path: {}", dst_path.as_ref().display()))?;
 
     let tmp_dst = tempfile::tempdir_in(dst_dir)?;
 
@@ -188,7 +187,7 @@ where
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
             compression::to_tar_gz(temp_dump_path, temp_dump_file.path())
-                .map_err(|e| DumpActorError::Internal(e))?;
+                .map_err(|e| DumpActorError::Internal(e.into()))?;
 
             let dump_path = self.path.join(self.uid).with_extension("dump");
             temp_dump_file.persist(&dump_path)?;
