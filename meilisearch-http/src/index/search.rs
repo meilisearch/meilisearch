@@ -154,10 +154,10 @@ impl Index {
             &displayed_ids,
         );
 
-        // All attributes present in `_formatted`:
-        // - attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
-        // - attributes asked to be retrieved: these attributes will not be formatted
-        // - attributes that are present in displayed attributes
+        // All attributes present in `_formatted` are:
+        // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
+        // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
+        // But these attributes must be present in displayed attributes
         let ids_in_formatted = formatted_options
             .keys()
             .cloned()
@@ -427,7 +427,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 let mut buffer = VecDeque::new();
                 let mut tokens = analyzed.reconstruct().peekable();
                 let mut taken_before = 0;
-                while let Some((word, token)) = tokens.next_if(|(_, token)| !matcher.matches(token.text()).is_some()) {
+                while let Some((word, token)) = tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none()) {
                     buffer.push_back((word, token));
                     taken_before += word.chars().count();
                     while taken_before > crop_len {
