@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
@@ -492,9 +493,9 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                         new_word.push_str(&self.marks.1);
                         new_word.push_str(&word[match_len..]);
                     }
-                    new_word
+                    Cow::Owned(new_word)
                 } else {
-                    word.to_string()
+                    Cow::Borrowed(word)
                 }
             })
             .collect::<String>()
