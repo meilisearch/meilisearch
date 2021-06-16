@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 
 use actix_web::{get, post, web, HttpResponse};
@@ -36,7 +36,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
     fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<BTreeSet<_>>());
 
         let attributes_to_crop = other
             .attributes_to_crop

@@ -1,11 +1,10 @@
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use anyhow::bail;
 use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
-use itertools::Itertools;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{FilterCondition, FieldId, FieldsIdsMap, MatchingWords};
 use serde::{Deserialize, Serialize};
@@ -32,7 +31,7 @@ pub struct SearchQuery {
     pub offset: Option<usize>,
     #[serde(default = "default_search_limit")]
     pub limit: usize,
-    pub attributes_to_retrieve: Option<HashSet<String>>,
+    pub attributes_to_retrieve: Option<BTreeSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
     #[serde(default = "default_crop_length")]
     pub crop_length: usize,
@@ -101,11 +100,11 @@ impl Index {
 
         let displayed_ids = self
             .displayed_fields_ids(&rtxn)?
-            .map(|fields| fields.into_iter().collect::<HashSet<_>>())
+            .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
             .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
-        let fids = |attrs: &HashSet<String>| {
-            let mut ids = HashSet::new();
+        let fids = |attrs: &BTreeSet<String>| {
+            let mut ids = BTreeSet::new();
             for attr in attrs {
                 if attr == "*" {
                     ids = displayed_ids.clone();
@@ -123,19 +122,13 @@ impl Index {
         // but these attributes must be also
         // - present in the fields_ids_map
         // - present in the the displayed attributes
-        let to_retrieve_ids: HashSet<_> = query
+        let to_retrieve_ids: BTreeSet<_> = query
             .attributes_to_retrieve
             .as_ref()
             .map(fids)
             .unwrap_or_else(|| displayed_ids.clone())
             .intersection(&displayed_ids)
             .cloned()
-            .collect();
-
-        let to_retrieve_ids_sorted: Vec<_> = to_retrieve_ids
-            .clone()
-            .into_iter()
-            .sorted()
             .collect();
 
         let attr_to_highlight = query
@@ -161,13 +154,12 @@ impl Index {
         let ids_in_formatted = formatted_options
             .keys()
             .cloned()
-            .collect::<HashSet<_>>()
+            .collect::<BTreeSet<_>>()
             .intersection(&displayed_ids)
             .cloned()
-            .collect::<HashSet<_>>()
+            .collect::<BTreeSet<_>>()
             .union(&to_retrieve_ids)
             .cloned()
-            .sorted()
             .collect::<Vec<_>>();
 
         let stop_words = fst::Set::default();
@@ -175,7 +167,7 @@ impl Index {
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let document = make_document(&to_retrieve_ids_sorted, &fields_ids_map, obkv)?;
+            let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
             let formatted = format_fields(
                 &fields_ids_map,
                 obkv,
@@ -223,7 +215,7 @@ fn compute_formatted_options(
     attr_to_crop: &[String],
     query_crop_length: usize,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &HashSet<u8>,
+    displayed_ids: &BTreeSet<u8>,
     ) -> HashMap<FieldId, FormatOptions> {
 
     let mut formatted_options = HashMap::new();
@@ -286,7 +278,7 @@ fn compute_formatted_options(
 }
 
 fn make_document(
-    attributes_to_retrieve: &[FieldId],
+    attributes_to_retrieve: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
 ) -> anyhow::Result<Document> {
@@ -327,8 +319,7 @@ fn format_fields<A: AsRef<[u8]>>(
                     value = formatter.format_value(
                         value,
                         matching_words,
-                        format.highlight,
-                        format.crop,
+                        *format,
                     );
                 }
 
@@ -384,25 +375,24 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
         &self,
         value: Value,
         matcher: &impl Matcher,
-        need_to_highlight: bool,
-        need_to_crop: Option<usize>,
+        format_options: FormatOptions,
     ) -> Value {
         match value {
             Value::String(old_string) => {
                 let value =
-                    self.format_string(old_string, matcher, need_to_highlight, need_to_crop);
+                    self.format_string(old_string, matcher, format_options);
                 Value::String(value)
             }
             Value::Array(values) => Value::Array(
                 values
                     .into_iter()
-                    .map(|v| self.format_value(v, matcher, need_to_highlight, None))
+                    .map(|v| self.format_value(v, matcher, FormatOptions { highlight: format_options.highlight, crop: None }))
                     .collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.format_value(v, matcher, need_to_highlight, None)))
+                    .map(|(k, v)| (k, self.format_value(v, matcher, FormatOptions { highlight: format_options.highlight, crop: None })))
                     .collect(),
             ),
             value => value,
@@ -413,12 +403,11 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
         &self,
         s: String,
         matcher: &impl Matcher,
-        need_to_highlight: bool,
-        need_to_crop: Option<usize>,
+        format_options: FormatOptions,
     ) -> String {
         let analyzed = self.analyzer.analyze(&s);
 
-        let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match need_to_crop {
+        let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
             Some(crop_len) => {
                 let mut buffer = VecDeque::new();
                 let mut tokens = analyzed.reconstruct().peekable();
@@ -462,7 +451,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         tokens
             .map(|(word, token)| {
-                if need_to_highlight && token.is_word() && matcher.matches(token.text()).is_some() {
+                if format_options.highlight && token.is_word() && matcher.matches(token.text()).is_some() {
                     let mut new_word = String::new();
                     new_word.push_str(&self.marks.0);
                     if let Some(match_len) = matcher.matches(token.text()) {
