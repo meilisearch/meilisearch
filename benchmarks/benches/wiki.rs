@@ -6,16 +6,14 @@ use milli::update::Settings;
 use utils::Conf;
 
 fn base_conf(builder: &mut Settings) {
-    let displayed_fields = ["title", "body", "url"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let displayed_fields = ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
     builder.set_displayed_fields(displayed_fields);
 
     let searchable_fields = ["title", "body"].iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
 }
 
+#[rustfmt::skip]
 const BASE_CONF: Conf = Conf {
     dataset: datasets_paths::SMOL_WIKI_ARTICLES,
     queries: &[
@@ -37,18 +35,13 @@ fn bench_songs(c: &mut criterion::Criterion) {
         .queries
         .iter()
         .map(|s| {
-            s.trim()
-                .split(' ')
-                .map(|s| format!(r#""{}""#, s))
-                .collect::<Vec<String>>()
-                .join(" ")
+            s.trim().split(' ').map(|s| format!(r#""{}""#, s)).collect::<Vec<String>>().join(" ")
         })
         .collect();
-    let basic_with_quote: &[&str] = &basic_with_quote
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<&str>>();
+    let basic_with_quote: &[&str] =
+        &basic_with_quote.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
 
+    #[rustfmt::skip]
     let confs = &[
         /* first we bench each criterion alone */
         utils::Conf {

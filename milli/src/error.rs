@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::{fmt, io, str};
 
-use heed::{MdbError, Error as HeedError};
+use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
@@ -80,14 +80,17 @@ impl From<fst::Error> for Error {
     }
 }
 
-impl<E> From<grenad::Error<E>> for Error where Error: From<E> {
+impl<E> From<grenad::Error<E>> for Error
+where
+    Error: From<E>,
+{
     fn from(error: grenad::Error<E>) -> Error {
         match error {
             grenad::Error::Io(error) => Error::IoError(error),
             grenad::Error::Merge(error) => Error::from(error),
             grenad::Error::InvalidCompressionType => {
                 Error::InternalError(InternalError::GrenadInvalidCompressionType)
-            },
+            }
         }
     }
 }
@@ -171,15 +174,15 @@ impl fmt::Display for InternalError {
         match self {
             Self::DatabaseMissingEntry { db_name, key } => {
                 write!(f, "missing {} in the {} database", key.unwrap_or("key"), db_name)
-            },
+            }
             Self::FieldIdMapMissingEntry(error) => error.fmt(f),
             Self::Fst(error) => error.fmt(f),
             Self::GrenadInvalidCompressionType => {
                 f.write_str("invalid compression type have been specified to grenad")
-            },
+            }
             Self::IndexingMergingKeys { process } => {
                 write!(f, "invalid merge while processing {}", process)
-            },
+            }
             Self::Serialization(error) => error.fmt(f),
             Self::InvalidDatabaseTyping => HeedError::InvalidDatabaseTyping.fmt(f),
             Self::RayonThreadPool(error) => error.fmt(f),
@@ -204,12 +207,12 @@ impl fmt::Display for UserError {
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(f, "document identifier is invalid {}", json)
-            },
+            }
             Self::InvalidFilterAttribute(error) => error.fmt(f),
             Self::MissingDocumentId { document } => {
                 let json = serde_json::to_string(document).unwrap();
                 write!(f, "document doesn't have an identifier {}", json)
-            },
+            }
             Self::MissingPrimaryKey => f.write_str("missing primary key"),
             Self::MaxDatabaseSizeReached => f.write_str("maximum database size reached"),
             // TODO where can we find it instead of writing the text ourselves?
@@ -217,14 +220,14 @@ impl fmt::Display for UserError {
             Self::InvalidStoreFile => f.write_str("store file is not a valid database file"),
             Self::PrimaryKeyCannotBeChanged => {
                 f.write_str("primary key cannot be changed if the database contains documents")
-            },
+            }
             Self::PrimaryKeyCannotBeReset => {
                 f.write_str("primary key cannot be reset if the database contains documents")
-            },
+            }
             Self::SerdeJson(error) => error.fmt(f),
             Self::UnknownInternalDocumentId { document_id } => {
                 write!(f, "an unknown internal document id have been used ({})", document_id)
-            },
+            }
         }
     }
 }
@@ -236,10 +239,10 @@ impl fmt::Display for FieldIdMapMissingEntry {
         match self {
             Self::FieldId { field_id, process } => {
                 write!(f, "unknown field id {} coming from the {} process", field_id, process)
-            },
+            }
             Self::FieldName { field_name, process } => {
                 write!(f, "unknown field name {} coming from the {} process", field_name, process)
-            },
+            }
         }
     }
 }
@@ -251,11 +254,11 @@ impl fmt::Display for SerializationError {
         match self {
             Self::Decoding { db_name: Some(name) } => {
                 write!(f, "decoding from the {} database failed", name)
-            },
+            }
             Self::Decoding { db_name: None } => f.write_str("decoding failed"),
             Self::Encoding { db_name: Some(name) } => {
                 write!(f, "encoding into the {} database failed", name)
-            },
+            }
             Self::Encoding { db_name: None } => f.write_str("encoding failed"),
             Self::InvalidNumberSerialization => f.write_str("number is not a valid finite number"),
         }

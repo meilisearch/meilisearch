@@ -10,14 +10,15 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::error::{Error, UserError, InternalError};
-use crate::index::db_name;
-use crate::update::index_documents::merge_function::{merge_obkvs, keep_latest_obkv};
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
-use crate::{BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId, FieldsDistribution};
-use crate::{Index, Result};
 use super::merge_function::merge_two_obkvs;
-use super::{create_writer, create_sorter, IndexDocumentsMethod};
+use super::{create_sorter, create_writer, IndexDocumentsMethod};
+use crate::error::{Error, InternalError, UserError};
+use crate::index::db_name;
+use crate::update::index_documents::merge_function::{keep_latest_obkv, merge_obkvs};
+use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::{
+    ExternalDocumentsIds, FieldId, FieldsDistribution, FieldsIdsMap, Index, MergeFn, Result, BEU32,
+};
 
 const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 
@@ -64,7 +65,11 @@ impl Transform<'_, '_> {
         self.output_from_generic_json(reader, false, progress_callback)
     }
 
-    pub fn output_from_json_stream<R, F>(self, reader: R, progress_callback: F) -> Result<TransformOutput>
+    pub fn output_from_json_stream<R, F>(
+        self,
+        reader: R,
+        progress_callback: F,
+    ) -> Result<TransformOutput>
     where
         R: Read,
         F: Fn(UpdateIndexingStep) + Sync,
@@ -86,14 +91,16 @@ impl Transform<'_, '_> {
         let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
 
         // Deserialize the whole batch of documents in memory.
-        let mut documents: Peekable<Box<dyn Iterator<Item=serde_json::Result<Map<String, Value>>>>> = if is_stream {
+        let mut documents: Peekable<
+            Box<dyn Iterator<Item = serde_json::Result<Map<String, Value>>>>,
+        > = if is_stream {
             let iter = serde_json::Deserializer::from_reader(reader).into_iter();
-            let iter = Box::new(iter) as Box<dyn Iterator<Item=_>>;
+            let iter = Box::new(iter) as Box<dyn Iterator<Item = _>>;
             iter.peekable()
         } else {
             let vec: Vec<_> = serde_json::from_reader(reader).map_err(UserError::SerdeJson)?;
             let iter = vec.into_iter().map(Ok);
-            let iter = Box::new(iter) as Box<dyn Iterator<Item=_>>;
+            let iter = Box::new(iter) as Box<dyn Iterator<Item = _>>;
             iter.peekable()
         };
 
@@ -104,15 +111,16 @@ impl Transform<'_, '_> {
             Err(_) => {
                 let error = documents.next().unwrap().unwrap_err();
                 return Err(UserError::SerdeJson(error).into());
-            },
+            }
         };
 
-        let alternative_name = first.and_then(|doc| doc.keys().find(|f| is_primary_key(f)).cloned());
+        let alternative_name =
+            first.and_then(|doc| doc.keys().find(|f| is_primary_key(f)).cloned());
         let (primary_key_id, primary_key) = compute_primary_key_pair(
             self.index.primary_key(self.rtxn)?,
             &mut fields_ids_map,
             alternative_name,
-            self.autogenerate_docids
+            self.autogenerate_docids,
         )?;
 
         if documents.peek().is_none() {
@@ -173,9 +181,11 @@ impl Transform<'_, '_> {
                 Some(value) => match value {
                     Value::String(string) => Cow::Borrowed(string.as_str()),
                     Value::Number(number) => Cow::Owned(number.to_string()),
-                    content => return Err(UserError::InvalidDocumentId {
-                        document_id: content.clone(),
-                    }.into()),
+                    content => {
+                        return Err(
+                            UserError::InvalidDocumentId { document_id: content.clone() }.into()
+                        )
+                    }
                 },
                 None => {
                     if !self.autogenerate_docids {
@@ -183,7 +193,7 @@ impl Transform<'_, '_> {
                     }
                     let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
                     Cow::Borrowed(uuid)
-                },
+                }
             };
 
             // We iterate in the fields ids ordered.
@@ -194,7 +204,8 @@ impl Transform<'_, '_> {
                 // and this should be the document id we return the one we generated.
                 if let Some(value) = document.get(name) {
                     // We serialize the attribute values.
-                    serde_json::to_writer(&mut json_buffer, value).map_err(InternalError::SerdeJson)?;
+                    serde_json::to_writer(&mut json_buffer, value)
+                        .map_err(InternalError::SerdeJson)?;
                     writer.insert(field_id, &json_buffer)?;
                 }
 
@@ -202,7 +213,8 @@ impl Transform<'_, '_> {
                 if field_id == primary_key_id && validate_document_id(&external_id).is_none() {
                     return Err(UserError::InvalidDocumentId {
                         document_id: Value::from(external_id),
-                    }.into());
+                    }
+                    .into());
                 }
             }
 
@@ -248,9 +260,9 @@ impl Transform<'_, '_> {
         // Extract the position of the primary key in the current headers, None if not found.
         let primary_key_pos = match self.index.primary_key(self.rtxn)? {
             Some(primary_key) => {
-               // The primary key is known so we must find the position in the CSV headers.
-               headers.iter().position(|h| h == primary_key)
-            },
+                // The primary key is known so we must find the position in the CSV headers.
+                headers.iter().position(|h| h == primary_key)
+            }
             None => headers.iter().position(is_primary_key),
         };
 
@@ -261,7 +273,7 @@ impl Transform<'_, '_> {
             self.index.primary_key(self.rtxn)?,
             &mut fields_ids_map,
             alternative_name,
-            self.autogenerate_docids
+            self.autogenerate_docids,
         )?;
 
         // The primary key field is not present in the header, so we need to create it.
@@ -308,27 +320,30 @@ impl Transform<'_, '_> {
                     // We validate the document id [a-zA-Z0-9\-_].
                     match validate_document_id(&external_id) {
                         Some(valid) => valid,
-                        None => return Err(UserError::InvalidDocumentId {
-                            document_id: Value::from(external_id),
-                        }.into()),
+                        None => {
+                            return Err(UserError::InvalidDocumentId {
+                                document_id: Value::from(external_id),
+                            }
+                            .into())
+                        }
                     }
-                },
+                }
                 None => uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer),
             };
 
             // When the primary_key_field_id is found in the fields ids list
             // we return the generated document id instead of the record field.
-            let iter = fields_ids.iter()
-                .map(|(fi, i)| {
-                    let field = if *fi == primary_key_id { external_id } else { &record[*i] };
-                    (fi, field)
-                });
+            let iter = fields_ids.iter().map(|(fi, i)| {
+                let field = if *fi == primary_key_id { external_id } else { &record[*i] };
+                (fi, field)
+            });
 
             // We retrieve the field id based on the fields ids map fields ids order.
             for (field_id, field) in iter {
                 // We serialize the attribute values as JSON strings.
                 json_buffer.clear();
-                serde_json::to_writer(&mut json_buffer, &field).map_err(InternalError::SerdeJson)?;
+                serde_json::to_writer(&mut json_buffer, &field)
+                    .map_err(InternalError::SerdeJson)?;
                 writer.insert(*field_id, &json_buffer)?;
             }
 
@@ -410,26 +425,27 @@ impl Transform<'_, '_> {
                         IndexDocumentsMethod::ReplaceDocuments => (docid, update_obkv),
                         IndexDocumentsMethod::UpdateDocuments => {
                             let key = BEU32::new(docid);
-                            let base_obkv = self.index.documents.get(&self.rtxn, &key)?
-                                .ok_or(InternalError::DatabaseMissingEntry {
+                            let base_obkv = self.index.documents.get(&self.rtxn, &key)?.ok_or(
+                                InternalError::DatabaseMissingEntry {
                                     db_name: db_name::DOCUMENTS,
                                     key: None,
-                                })?;
+                                },
+                            )?;
                             let update_obkv = obkv::KvReader::new(update_obkv);
                             merge_two_obkvs(base_obkv, update_obkv, &mut obkv_buffer);
                             (docid, obkv_buffer.as_slice())
                         }
                     }
-                },
+                }
                 None => {
                     // If this user id is new we add it to the external documents ids map
                     // for new ids and into the list of new documents.
-                    let new_docid = available_documents_ids.next()
-                        .ok_or(UserError::DocumentLimitReached)?;
+                    let new_docid =
+                        available_documents_ids.next().ok_or(UserError::DocumentLimitReached)?;
                     new_external_documents_ids_builder.insert(external_id, new_docid as u64)?;
                     new_documents_ids.insert(new_docid);
                     (new_docid, update_obkv)
-                },
+                }
             };
 
             // We insert the document under the documents ids map into the final file.
@@ -450,7 +466,8 @@ impl Transform<'_, '_> {
 
         // We create a final writer to write the new documents in order from the sorter.
         let file = tempfile::tempfile()?;
-        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+        let mut writer =
+            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
 
         // Once we have written all the documents into the final sorter, we write the documents
         // into this writer, extract the file and reset the seek to be able to read it again.
@@ -485,8 +502,7 @@ impl Transform<'_, '_> {
         primary_key: String,
         old_fields_ids_map: FieldsIdsMap,
         new_fields_ids_map: FieldsIdsMap,
-    ) -> Result<TransformOutput>
-    {
+    ) -> Result<TransformOutput> {
         let fields_distribution = self.index.fields_distribution(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
         let documents_ids = self.index.documents_ids(self.rtxn)?;
@@ -494,7 +510,8 @@ impl Transform<'_, '_> {
 
         // We create a final writer to write the new documents in order from the sorter.
         let file = tempfile::tempfile()?;
-        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+        let mut writer =
+            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
 
         let mut obkv_buffer = Vec::new();
         for result in self.index.documents.iter(self.rtxn)? {
@@ -561,20 +578,19 @@ fn compute_primary_key_pair(
                         return Err(UserError::MissingPrimaryKey.into());
                     }
                     DEFAULT_PRIMARY_KEY_NAME.to_string()
-                },
+                }
             };
             let id = fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
             Ok((id, name))
-        },
+        }
     }
 }
 
 fn validate_document_id(document_id: &str) -> Option<&str> {
     let document_id = document_id.trim();
     Some(document_id).filter(|id| {
-        !id.is_empty() && id.chars().all(|c| {
-            matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_')
-        })
+        !id.is_empty()
+            && id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
     })
 }
 
@@ -583,8 +599,7 @@ mod test {
     use super::*;
 
     mod compute_primary_key {
-        use super::compute_primary_key_pair;
-        use super::FieldsIdsMap;
+        use super::{compute_primary_key_pair, FieldsIdsMap};
 
         #[test]
         fn should_return_primary_key_if_is_some() {
@@ -594,7 +609,8 @@ mod test {
                 Some("toto"),
                 &mut fields_map,
                 Some("tata".to_string()),
-                false);
+                false,
+            );
             assert_eq!(result.unwrap(), (0u8, "toto".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
@@ -602,11 +618,8 @@ mod test {
         #[test]
         fn should_return_alternative_if_primary_is_none() {
             let mut fields_map = FieldsIdsMap::new();
-            let result = compute_primary_key_pair(
-                None,
-                &mut fields_map,
-                Some("tata".to_string()),
-                false);
+            let result =
+                compute_primary_key_pair(None, &mut fields_map, Some("tata".to_string()), false);
             assert_eq!(result.unwrap(), (0u8, "tata".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
@@ -614,23 +627,15 @@ mod test {
         #[test]
         fn should_return_default_if_both_are_none() {
             let mut fields_map = FieldsIdsMap::new();
-            let result = compute_primary_key_pair(
-                None,
-                &mut fields_map,
-                None,
-                true);
+            let result = compute_primary_key_pair(None, &mut fields_map, None, true);
             assert_eq!(result.unwrap(), (0u8, "id".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
 
         #[test]
-        fn should_return_err_if_both_are_none_and_recompute_is_false(){
+        fn should_return_err_if_both_are_none_and_recompute_is_false() {
             let mut fields_map = FieldsIdsMap::new();
-            let result = compute_primary_key_pair(
-                None,
-                &mut fields_map,
-                None,
-                false);
+            let result = compute_primary_key_pair(None, &mut fields_map, None, false);
             assert!(result.is_err());
             assert_eq!(fields_map.len(), 0);
         }

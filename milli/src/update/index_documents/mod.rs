@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom, BufReader, BufRead};
+use std::io::{self, BufRead, BufReader, Seek, SeekFrom};
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::result::Result as StdResult;
 use std::str;
@@ -10,28 +10,26 @@ use std::time::Instant;
 
 use bstr::ByteSlice as _;
 use chrono::Utc;
-use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
+use grenad::{CompressionType, FileFuse, Merger, MergerIter, Reader, Sorter, Writer};
 use heed::types::ByteSlice;
-use log::{debug, info, error};
+use log::{debug, error, info};
 use memmap::Mmap;
 use rayon::prelude::*;
 use rayon::ThreadPool;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, InternalError};
-use crate::{Index, Result};
-use crate::update::{
-    Facets, WordsLevelPositions, WordPrefixDocids, WordsPrefixesFst, UpdateIndexingStep,
-    WordPrefixPairProximityDocids,
-};
-use self::store::{Store, Readers};
 pub use self::merge_function::{
-    fst_merge, cbo_roaring_bitmap_merge, roaring_bitmap_merge, keep_first
+    cbo_roaring_bitmap_merge, fst_merge, keep_first, roaring_bitmap_merge,
 };
+use self::store::{Readers, Store};
 pub use self::transform::{Transform, TransformOutput};
-
-use crate::MergeFn;
 use super::UpdateBuilder;
+use crate::error::{Error, InternalError};
+use crate::update::{
+    Facets, UpdateIndexingStep, WordPrefixDocids, WordPrefixPairProximityDocids,
+    WordsLevelPositions, WordsPrefixesFst,
+};
+use crate::{Index, MergeFn, Result};
 
 mod merge_function;
 mod store;
@@ -48,7 +46,11 @@ pub enum WriteMethod {
     GetMergePut,
 }
 
-pub fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
+pub fn create_writer(
+    typ: CompressionType,
+    level: Option<u32>,
+    file: File,
+) -> io::Result<Writer<File>> {
     let mut builder = Writer::builder();
     builder.compression_type(typ);
     if let Some(level) = level {
@@ -64,8 +66,7 @@ pub fn create_sorter<E>(
     chunk_fusing_shrink_size: Option<u64>,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
-) -> Sorter<MergeFn<E>>
-{
+) -> Sorter<MergeFn<E>> {
     let mut builder = Sorter::builder(merge);
     if let Some(shrink_size) = chunk_fusing_shrink_size {
         builder.file_fusing_shrink_size(shrink_size);
@@ -83,7 +84,10 @@ pub fn create_sorter<E>(
     builder.build()
 }
 
-pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> Result<Reader<FileFuse>> {
+pub fn writer_into_reader(
+    writer: Writer<File>,
+    shrink_size: Option<u64>,
+) -> Result<Reader<FileFuse>> {
     let mut file = writer.into_inner()?;
     file.seek(SeekFrom::Start(0))?;
     let file = if let Some(shrink_size) = shrink_size {
@@ -97,8 +101,7 @@ pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> Res
 pub fn merge_readers<E>(
     sources: Vec<Reader<FileFuse>>,
     merge: MergeFn<E>,
-) -> Merger<FileFuse, MergeFn<E>>
-{
+) -> Merger<FileFuse, MergeFn<E>> {
     let mut builder = Merger::builder(merge);
     builder.extend(sources);
     builder.build()
@@ -118,13 +121,7 @@ where
     let before = Instant::now();
 
     let merger = merge_readers(sources, merge);
-    merger_iter_into_lmdb_database(
-        wtxn,
-        database,
-        merger.into_merge_iter()?,
-        merge,
-        method,
-    )?;
+    merger_iter_into_lmdb_database(wtxn, database, merger.into_merge_iter()?, merge, method)?;
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
     Ok(())
@@ -149,7 +146,7 @@ where
             while let Some((k, v)) = reader.next()? {
                 out_iter.append(k, v)?;
             }
-        },
+        }
         WriteMethod::GetMergePut => {
             while let Some((k, v)) = reader.next()? {
                 let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
@@ -158,11 +155,11 @@ where
                         let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
                         let val = merge(k, &vals)?;
                         iter.put_current(k, &val)?;
-                    },
+                    }
                     _ => {
                         drop(iter);
                         database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    },
+                    }
                 }
             }
         }
@@ -181,18 +178,12 @@ pub fn sorter_into_lmdb_database<E>(
 ) -> Result<()>
 where
     Error: From<E>,
-    Error: From<grenad::Error<E>>
+    Error: From<grenad::Error<E>>,
 {
     debug!("Writing MTBL sorter...");
     let before = Instant::now();
 
-    merger_iter_into_lmdb_database(
-        wtxn,
-        database,
-        sorter.into_iter()?,
-        merge,
-        method,
-    )?;
+    merger_iter_into_lmdb_database(wtxn, database, sorter.into_iter()?, merge, method)?;
 
     debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
@@ -214,7 +205,7 @@ where
             while let Some((k, v)) = sorter.next()? {
                 out_iter.append(k, v)?;
             }
-        },
+        }
         WriteMethod::GetMergePut => {
             while let Some((k, v)) = sorter.next()? {
                 let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
@@ -226,14 +217,14 @@ where
                             InternalError::IndexingMergingKeys { process: "get-put-merge" }
                         })?;
                         iter.put_current(k, &val)?;
-                    },
+                    }
                     _ => {
                         drop(iter);
                         database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    },
+                    }
                 }
             }
-        },
+        }
     }
 
     Ok(())
@@ -341,9 +332,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
         // Early return when there is no document to add
         if reader.buffer().is_empty() {
-            return Ok(DocumentAdditionResult {
-                nb_documents: 0,
-            })
+            return Ok(DocumentAdditionResult { nb_documents: 0 });
         }
 
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
@@ -367,7 +356,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let output = match self.update_format {
             UpdateFormat::Csv => transform.output_from_csv(reader, &progress_callback)?,
             UpdateFormat::Json => transform.output_from_json(reader, &progress_callback)?,
-            UpdateFormat::JsonStream => transform.output_from_json_stream(reader, &progress_callback)?,
+            UpdateFormat::JsonStream => {
+                transform.output_from_json_stream(reader, &progress_callback)?
+            }
         };
 
         let nb_documents = output.documents_count;
@@ -380,7 +371,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
     pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep) + Sync
+        F: Fn(UpdateIndexingStep) + Sync,
     {
         let before_indexing = Instant::now();
 
@@ -457,7 +448,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 // settings if none have already been set.
                 backup_pool = rayon::ThreadPoolBuilder::new().build()?;
                 &backup_pool
-            },
+            }
         };
 
         let readers = pool.install(|| {
@@ -595,11 +586,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
         let contains_documents = !documents_ids.is_empty();
-        let write_method = if contains_documents {
-            WriteMethod::GetMergePut
-        } else {
-            WriteMethod::Append
-        };
+        let write_method =
+            if contains_documents { WriteMethod::GetMergePut } else { WriteMethod::Append };
 
         debug!("Writing using the write method: {:?}", write_method);
 
@@ -634,7 +622,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             *self.index.docid_word_positions.as_polymorph(),
             docid_word_positions_readers,
             keep_first,
-            write_method
+            write_method,
         )?;
 
         database_count += 1;
@@ -649,7 +637,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             *self.index.documents.as_polymorph(),
             documents_readers,
             keep_first,
-            write_method
+            write_method,
         )?;
 
         database_count += 1;
@@ -730,7 +718,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         fst_merge,
                         WriteMethod::GetMergePut,
                     )?;
-                },
+                }
                 DatabaseType::WordDocids => {
                     debug!("Writing the words docids into LMDB on disk...");
                     let db = *self.index.word_docids.as_polymorph();
@@ -741,7 +729,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         roaring_bitmap_merge,
                         write_method,
                     )?;
-                },
+                }
                 DatabaseType::FacetLevel0NumbersDocids => {
                     debug!("Writing the facet numbers docids into LMDB on disk...");
                     let db = *self.index.facet_id_f64_docids.as_polymorph();
@@ -752,7 +740,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         cbo_roaring_bitmap_merge,
                         write_method,
                     )?;
-                },
+                }
                 DatabaseType::FieldIdWordCountDocids => {
                     debug!("Writing the field id word count docids into LMDB on disk...");
                     let db = *self.index.field_id_word_count_docids.as_polymorph();
@@ -763,7 +751,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         cbo_roaring_bitmap_merge,
                         write_method,
                     )?;
-                },
+                }
                 DatabaseType::WordLevel0PositionDocids => {
                     debug!("Writing the word level 0 positions docids into LMDB on disk...");
                     let db = *self.index.word_level_position_docids.as_polymorph();
@@ -848,8 +836,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use heed::EnvOpenOptions;
+
+    use super::*;
 
     #[test]
     fn simple_document_replacement() {
@@ -1053,9 +1042,8 @@ mod tests {
         assert_eq!(count, 3);
 
         let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
-        let (kevin_id, _) = docs.iter().find(|(_, d)| {
-            d.get(0).unwrap() == br#""updated kevin""#
-        }).unwrap();
+        let (kevin_id, _) =
+            docs.iter().find(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
         let (id, doc) = docs[*kevin_id as usize];
         assert_eq!(id, *kevin_id);
 

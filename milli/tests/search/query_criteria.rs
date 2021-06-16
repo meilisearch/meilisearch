@@ -1,9 +1,9 @@
 use big_s::S;
 use milli::update::Settings;
-use milli::{Search, SearchResult, Criterion};
+use milli::{Criterion, Search, SearchResult};
+use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
-use Criterion::*;
 
 const ALLOW_TYPOS: bool = true;
 const DISALLOW_TYPOS: bool = false;
@@ -35,29 +35,54 @@ macro_rules! test_criterion {
     }
 }
 
+#[rustfmt::skip]
 test_criterion!(none_allow_typo,                     ALLOW_OPTIONAL_WORDS,      ALLOW_TYPOS);
+#[rustfmt::skip]
 test_criterion!(none_disallow_typo,                  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS);
+#[rustfmt::skip]
 test_criterion!(words_allow_typo,                    ALLOW_OPTIONAL_WORDS,      ALLOW_TYPOS,    Words);
+#[rustfmt::skip]
 test_criterion!(attribute_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Attribute);
+#[rustfmt::skip]
 test_criterion!(attribute_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Attribute);
+#[rustfmt::skip]
 test_criterion!(exactness_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Exactness);
+#[rustfmt::skip]
 test_criterion!(exactness_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Exactness);
+#[rustfmt::skip]
 test_criterion!(proximity_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Proximity);
+#[rustfmt::skip]
 test_criterion!(proximity_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Proximity);
+#[rustfmt::skip]
 test_criterion!(asc_allow_typo,                      DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Asc(S("asc_desc_rank")));
+#[rustfmt::skip]
 test_criterion!(asc_disallow_typo,                   DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Asc(S("asc_desc_rank")));
+#[rustfmt::skip]
 test_criterion!(desc_allow_typo,                     DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Desc(S("asc_desc_rank")));
+#[rustfmt::skip]
 test_criterion!(desc_disallow_typo,                  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Desc(S("asc_desc_rank")));
+#[rustfmt::skip]
 test_criterion!(asc_unexisting_field_allow_typo,     DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Asc(S("unexisting_field")));
+#[rustfmt::skip]
 test_criterion!(asc_unexisting_field_disallow_typo,  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Asc(S("unexisting_field")));
+#[rustfmt::skip]
 test_criterion!(desc_unexisting_field_allow_typo,    DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Desc(S("unexisting_field")));
+#[rustfmt::skip]
 test_criterion!(desc_unexisting_field_disallow_typo, DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Desc(S("unexisting_field")));
 
 #[test]
 fn criteria_mixup() {
     use Criterion::*;
-    let index = search::setup_search_index_with_criteria(&vec![Words, Attribute, Desc(S("asc_desc_rank")), Exactness, Proximity, Typo]);
+    let index = search::setup_search_index_with_criteria(&vec![
+        Words,
+        Attribute,
+        Desc(S("asc_desc_rank")),
+        Exactness,
+        Proximity,
+        Typo,
+    ]);
 
+    #[rustfmt::skip]
     let criteria_mix = {
         // Criterion doesn't implement Copy, we create a new Criterion using a closure
         let desc = || Desc(S("asc_desc_rank"));
@@ -205,10 +230,11 @@ fn criteria_mixup() {
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
-        let expected_external_ids: Vec<_> = search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS)
-            .into_iter()
-            .map(|d| d.id)
-            .collect();
+        let expected_external_ids: Vec<_> =
+            search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS)
+                .into_iter()
+                .map(|d| d.id)
+                .collect();
         let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
 
         assert_eq!(documents_ids, expected_external_ids);

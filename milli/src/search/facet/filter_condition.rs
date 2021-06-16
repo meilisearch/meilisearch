@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::ops::Bound::{self, Included, Excluded};
+use std::ops::Bound::{self, Excluded, Included};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
@@ -12,16 +12,13 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use roaring::RoaringBitmap;
 
-use crate::error::UserError;
-use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec};
-use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec, Result};
-
-use super::FacetRange;
-use super::parser::Rule;
-use super::parser::{PREC_CLIMBER, FilterParser};
-
 use self::FilterCondition::*;
 use self::Operator::*;
+use super::parser::{FilterParser, Rule, PREC_CLIMBER};
+use super::FacetRange;
+use crate::error::UserError;
+use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetValueStringCodec};
+use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
@@ -39,13 +36,13 @@ impl Operator {
     /// an OR operation for the between case (i.e. `TO`).
     fn negate(self) -> (Self, Option<Self>) {
         match self {
-            GreaterThan(n)        => (LowerThanOrEqual(n), None),
+            GreaterThan(n) => (LowerThanOrEqual(n), None),
             GreaterThanOrEqual(n) => (LowerThan(n), None),
-            Equal(n, s)           => (NotEqual(n, s), None),
-            NotEqual(n, s)        => (Equal(n, s), None),
-            LowerThan(n)          => (GreaterThanOrEqual(n), None),
-            LowerThanOrEqual(n)   => (GreaterThan(n), None),
-            Between(n, m)         => (LowerThan(n), Some(GreaterThan(m))),
+            Equal(n, s) => (NotEqual(n, s), None),
+            NotEqual(n, s) => (Equal(n, s), None),
+            LowerThan(n) => (GreaterThanOrEqual(n), None),
+            LowerThanOrEqual(n) => (GreaterThan(n), None),
+            Between(n, m) => (LowerThan(n), Some(GreaterThan(m))),
         }
     }
 }
@@ -63,10 +60,11 @@ impl FilterCondition {
         index: &Index,
         array: I,
     ) -> Result<Option<FilterCondition>>
-    where I: IntoIterator<Item=Either<J, B>>,
-          J: IntoIterator<Item=A>,
-          A: AsRef<str>,
-          B: AsRef<str>,
+    where
+        I: IntoIterator<Item = Either<J, B>>,
+        J: IntoIterator<Item = A>,
+        A: AsRef<str>,
+        B: AsRef<str>,
     {
         let mut ands = None;
 
@@ -88,7 +86,7 @@ impl FilterCondition {
                             None => Some(rule),
                         };
                     }
-                },
+                }
                 Either::Right(rule) => {
                     let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
                     ands = match ands.take() {
@@ -106,11 +104,11 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         expression: &str,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields_ids(rtxn)?;
-        let lexed = FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
+        let lexed =
+            FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
         FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
@@ -118,8 +116,7 @@ impl FilterCondition {
         fim: &FieldsIdsMap,
         ff: &HashSet<FieldId>,
         expression: Pairs<Rule>,
-    ) -> Result<Self>
-    {
+    ) -> Result<Self> {
         PREC_CLIMBER.climb(
             expression,
             |pair: Pair<Rule>| match pair.as_rule() {
@@ -135,12 +132,10 @@ impl FilterCondition {
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
                 _ => unreachable!(),
             },
-            |lhs: Result<Self>, op: Pair<Rule>, rhs: Result<Self>| {
-                match op.as_rule() {
-                    Rule::or => Ok(Or(Box::new(lhs?), Box::new(rhs?))),
-                    Rule::and => Ok(And(Box::new(lhs?), Box::new(rhs?))),
-                    _ => unreachable!(),
-                }
+            |lhs: Result<Self>, op: Pair<Rule>, rhs: Result<Self>| match op.as_rule() {
+                Rule::or => Ok(Or(Box::new(lhs?), Box::new(rhs?))),
+                Rule::and => Ok(And(Box::new(lhs?), Box::new(rhs?))),
+                _ => unreachable!(),
             },
         )
     }
@@ -160,8 +155,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -179,8 +173,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -196,8 +189,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -213,8 +205,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -230,8 +221,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -247,8 +237,7 @@ impl FilterCondition {
         fields_ids_map: &FieldsIdsMap,
         filterable_fields: &HashSet<FieldId>,
         item: Pair<Rule>,
-    ) -> Result<FilterCondition>
-    {
+    ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
         let fid = field_id(fields_ids_map, filterable_fields, &mut items)
             .map_err(UserError::InvalidFilterAttribute)?;
@@ -272,13 +261,14 @@ impl FilterCondition {
         left: Bound<f64>,
         right: Bound<f64>,
         output: &mut RoaringBitmap,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         match (left, right) {
             // If the request is an exact value we must go directly to the deepest level.
             (Included(l), Included(r)) if l == r && level > 0 => {
-                return Self::explore_facet_number_levels(rtxn, db, field_id, 0, left, right, output);
-            },
+                return Self::explore_facet_number_levels(
+                    rtxn, db, field_id, 0, left, right, output,
+                );
+            }
             // lower TO upper when lower > upper must return no result
             (Included(l), Included(r)) if l > r => return Ok(()),
             (Included(l), Excluded(r)) if l >= r => return Ok(()),
@@ -301,7 +291,9 @@ impl FilterCondition {
             debug!("{:?} to {:?} (level {}) found {} documents", l, r, level, docids.len());
             output.union_with(&docids);
             // We save the leftest and rightest bounds we actually found at this level.
-            if i == 0 { left_found = Some(l); }
+            if i == 0 {
+                left_found = Some(l);
+            }
             right_found = Some(r);
         }
 
@@ -318,20 +310,50 @@ impl FilterCondition {
                 // If the bound is satisfied we avoid calling this function again.
                 if !matches!(left, Included(l) if l == left_found) {
                     let sub_right = Excluded(left_found);
-                    debug!("calling left with {:?} to {:?} (level {})",  left, sub_right, deeper_level);
-                    Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, left, sub_right, output)?;
+                    debug!(
+                        "calling left with {:?} to {:?} (level {})",
+                        left, sub_right, deeper_level
+                    );
+                    Self::explore_facet_number_levels(
+                        rtxn,
+                        db,
+                        field_id,
+                        deeper_level,
+                        left,
+                        sub_right,
+                        output,
+                    )?;
                 }
                 if !matches!(right, Included(r) if r == right_found) {
                     let sub_left = Excluded(right_found);
-                    debug!("calling right with {:?} to {:?} (level {})", sub_left, right, deeper_level);
-                    Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, sub_left, right, output)?;
+                    debug!(
+                        "calling right with {:?} to {:?} (level {})",
+                        sub_left, right, deeper_level
+                    );
+                    Self::explore_facet_number_levels(
+                        rtxn,
+                        db,
+                        field_id,
+                        deeper_level,
+                        sub_left,
+                        right,
+                        output,
+                    )?;
                 }
-            },
+            }
             None => {
                 // If we found nothing at this level it means that we must find
                 // the same bounds but at a deeper, more precise level.
-                Self::explore_facet_number_levels(rtxn, db, field_id, deeper_level, left, right, output)?;
-            },
+                Self::explore_facet_number_levels(
+                    rtxn,
+                    db,
+                    field_id,
+                    deeper_level,
+                    left,
+                    right,
+                    output,
+                )?;
+            }
         }
 
         Ok(())
@@ -344,27 +366,34 @@ impl FilterCondition {
         strings_db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         operator: &Operator,
-    ) -> Result<RoaringBitmap>
-    {
+    ) -> Result<RoaringBitmap> {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
         let (left, right) = match operator {
-            GreaterThan(val)        => (Excluded(*val), Included(f64::MAX)),
+            GreaterThan(val) => (Excluded(*val), Included(f64::MAX)),
             GreaterThanOrEqual(val) => (Included(*val), Included(f64::MAX)),
-            Equal(number, string)   => {
+            Equal(number, string) => {
                 let string_docids = strings_db.get(rtxn, &(field_id, &string))?.unwrap_or_default();
                 let number_docids = match number {
                     Some(n) => {
                         let n = Included(*n);
                         let mut output = RoaringBitmap::new();
-                        Self::explore_facet_number_levels(rtxn, numbers_db, field_id, 0, n, n, &mut output)?;
+                        Self::explore_facet_number_levels(
+                            rtxn,
+                            numbers_db,
+                            field_id,
+                            0,
+                            n,
+                            n,
+                            &mut output,
+                        )?;
                         output
-                    },
+                    }
                     None => RoaringBitmap::new(),
                 };
                 return Ok(string_docids | number_docids);
-            },
+            }
             NotEqual(number, string) => {
                 let all_numbers_ids = if number.is_some() {
                     index.number_faceted_documents_ids(rtxn, field_id)?
@@ -373,12 +402,14 @@ impl FilterCondition {
                 };
                 let all_strings_ids = index.string_faceted_documents_ids(rtxn, field_id)?;
                 let operator = Equal(*number, string.clone());
-                let docids = Self::evaluate_operator(rtxn, index, numbers_db, strings_db, field_id, &operator)?;
+                let docids = Self::evaluate_operator(
+                    rtxn, index, numbers_db, strings_db, field_id, &operator,
+                )?;
                 return Ok((all_numbers_ids | all_strings_ids) - docids);
-            },
-            LowerThan(val)        => (Included(f64::MIN), Excluded(*val)),
+            }
+            LowerThan(val) => (Included(f64::MIN), Excluded(*val)),
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
-            Between(left, right)  => (Included(*left),    Included(*right)),
+            Between(left, right) => (Included(*left), Included(*right)),
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
@@ -391,36 +422,39 @@ impl FilterCondition {
         match biggest_level {
             Some(level) => {
                 let mut output = RoaringBitmap::new();
-                Self::explore_facet_number_levels(rtxn, numbers_db, field_id, level, left, right, &mut output)?;
+                Self::explore_facet_number_levels(
+                    rtxn,
+                    numbers_db,
+                    field_id,
+                    level,
+                    left,
+                    right,
+                    &mut output,
+                )?;
                 Ok(output)
-            },
+            }
             None => Ok(RoaringBitmap::new()),
         }
     }
 
-    pub fn evaluate(
-        &self,
-        rtxn: &heed::RoTxn,
-        index: &Index,
-    ) -> Result<RoaringBitmap>
-    {
+    pub fn evaluate(&self, rtxn: &heed::RoTxn, index: &Index) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
 
         match self {
             Operator(fid, op) => {
                 Self::evaluate_operator(rtxn, index, numbers_db, strings_db, *fid, op)
-            },
+            }
             Or(lhs, rhs) => {
                 let lhs = lhs.evaluate(rtxn, index)?;
                 let rhs = rhs.evaluate(rtxn, index)?;
                 Ok(lhs | rhs)
-            },
+            }
             And(lhs, rhs) => {
                 let lhs = lhs.evaluate(rtxn, index)?;
                 let rhs = rhs.evaluate(rtxn, index)?;
                 Ok(lhs & rhs)
-            },
+            }
         }
     }
 }
@@ -434,23 +468,24 @@ fn field_id(
     fields_ids_map: &FieldsIdsMap,
     filterable_fields: &HashSet<FieldId>,
     items: &mut Pairs<Rule>,
-) -> StdResult<FieldId, PestError<Rule>>
-{
+) -> StdResult<FieldId, PestError<Rule>> {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
 
     let field_id = match fields_ids_map.id(key.as_str()) {
         Some(field_id) => field_id,
-        None => return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` not found, available attributes are: {}",
-                    key.as_str(),
-                    fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
-                ),
-            },
-            key.as_span(),
-        )),
+        None => {
+            return Err(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                        "attribute `{}` not found, available attributes are: {}",
+                        key.as_str(),
+                        fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
+                    ),
+                },
+                key.as_span(),
+            ))
+        }
     };
 
     if !filterable_fields.contains(&field_id) {
@@ -459,9 +494,11 @@ fn field_id(
                 message: format!(
                     "attribute `{}` is not filterable, available filterable attributes are: {}",
                     key.as_str(),
-                    filterable_fields.iter().flat_map(|id| {
-                        fields_ids_map.name(*id)
-                    }).collect::<Vec<_>>().join(", "),
+                    filterable_fields
+                        .iter()
+                        .flat_map(|id| { fields_ids_map.name(*id) })
+                        .collect::<Vec<_>>()
+                        .join(", "),
                 ),
             },
             key.as_span(),
@@ -476,8 +513,9 @@ fn field_id(
 ///
 /// Returns the parsing error associated with the span if the conversion fails.
 fn pest_parse<T>(pair: Pair<Rule>) -> (StdResult<T, pest::error::Error<Rule>>, String)
-where T: FromStr,
-      T::Err: ToString,
+where
+    T: FromStr,
+    T::Err: ToString,
 {
     let result = match pair.as_str().parse::<T>() {
         Ok(value) => Ok(value),
@@ -492,11 +530,12 @@ where T: FromStr,
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::update::Settings;
+    use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::hashset;
-    use big_s::S;
+
+    use super::*;
+    use crate::update::Settings;
 
     #[test]
     fn string() {
@@ -508,7 +547,7 @@ mod tests {
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset!{ S("channel") });
+        builder.set_filterable_fields(hashset! { S("channel") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -537,7 +576,7 @@ mod tests {
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset!{ "timestamp".into() });
+        builder.set_filterable_fields(hashset! { "timestamp".into() });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -548,10 +587,8 @@ mod tests {
         assert_eq!(condition, expected);
 
         let condition = FilterCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
-        let expected = Or(
-            Box::new(Operator(0, LowerThan(22.0))),
-            Box::new(Operator(0, GreaterThan(44.0))),
-        );
+        let expected =
+            Or(Box::new(Operator(0, LowerThan(22.0))), Box::new(Operator(0, GreaterThan(44.0))));
         assert_eq!(condition, expected);
     }
 
@@ -566,29 +603,33 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FilterCondition::from_str(
-            &rtxn, &index,
+            &rtxn,
+            &index,
             "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
-        ).unwrap();
+        )
+        .unwrap();
         let expected = Or(
             Box::new(Operator(0, Operator::Equal(None, S("gotaga")))),
             Box::new(And(
                 Box::new(Operator(1, Between(22.0, 44.0))),
                 Box::new(Operator(0, Operator::NotEqual(None, S("ponce")))),
-            ))
+            )),
         );
         assert_eq!(condition, expected);
 
         let condition = FilterCondition::from_str(
-            &rtxn, &index,
+            &rtxn,
+            &index,
             "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
-        ).unwrap();
+        )
+        .unwrap();
         let expected = Or(
             Box::new(Operator(0, Operator::Equal(None, S("gotaga")))),
             Box::new(Or(
@@ -613,20 +654,28 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_filterable_fields(hashset!{ S("channel"), S("timestamp") });
+        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FilterCondition::from_array(
-            &rtxn, &index,
-            vec![Either::Right("channel = gotaga"), Either::Left(vec!["timestamp = 44", "channel != ponce"])],
-        ).unwrap().unwrap();
+            &rtxn,
+            &index,
+            vec![
+                Either::Right("channel = gotaga"),
+                Either::Left(vec!["timestamp = 44", "channel != ponce"]),
+            ],
+        )
+        .unwrap()
+        .unwrap();
         let expected = FilterCondition::from_str(
-            &rtxn, &index,
+            &rtxn,
+            &index,
             "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(condition, expected);
     }
 }

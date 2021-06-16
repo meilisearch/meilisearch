@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
-use fst::{Streamer, IntoStreamer};
+
+use fst::{IntoStreamer, Streamer};
 
 pub struct ExternalDocumentsIds<'a> {
     pub(crate) hard: fst::Map<Cow<'a, [u8]>>,
@@ -8,7 +9,10 @@ pub struct ExternalDocumentsIds<'a> {
 }
 
 impl<'a> ExternalDocumentsIds<'a> {
-    pub fn new(hard: fst::Map<Cow<'a, [u8]>>, soft: fst::Map<Cow<'a, [u8]>>) -> ExternalDocumentsIds<'a> {
+    pub fn new(
+        hard: fst::Map<Cow<'a, [u8]>>,
+        soft: fst::Map<Cow<'a, [u8]>>,
+    ) -> ExternalDocumentsIds<'a> {
         ExternalDocumentsIds { hard, soft }
     }
 
@@ -29,7 +33,7 @@ impl<'a> ExternalDocumentsIds<'a> {
         match self.soft.get(external_id).or_else(|| self.hard.get(external_id)) {
             // u64 MAX means deleted in the soft fst map
             Some(id) if id != u64::MAX => Some(id.try_into().unwrap()),
-            _otherwise => None
+            _otherwise => None,
         }
     }
 

@@ -1,13 +1,11 @@
-use std::collections::HashSet;
 use std::cmp::{min, Reverse};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ops::{Index, IndexMut};
 
-use levenshtein_automata::{DFA, Distance};
-
-use crate::search::query_tree::{Operation, Query};
+use levenshtein_automata::{Distance, DFA};
 
 use super::build_dfa;
+use crate::search::query_tree::{Operation, Query};
 
 type IsPrefix = bool;
 
@@ -28,7 +26,9 @@ impl MatchingWords {
             .collect();
         // Sort word by len in DESC order prioritizing the longuest word,
         // in order to highlight the longuest part of the matched word.
-        dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix)| Reverse(query_word.len()));
+        dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix)| {
+            Reverse(query_word.len())
+        });
         Self { dfas }
     }
 
@@ -37,12 +37,13 @@ impl MatchingWords {
         self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| match dfa.eval(word) {
             Distance::Exact(t) if t <= *typo => {
                 if *is_prefix {
-                    let (_dist, len) = prefix_damerau_levenshtein(query_word.as_bytes(), word.as_bytes());
+                    let (_dist, len) =
+                        prefix_damerau_levenshtein(query_word.as_bytes(), word.as_bytes());
                     Some(len)
                 } else {
                     Some(word.len())
                 }
-            },
+            }
             _otherwise => None,
         })
     }
@@ -54,11 +55,11 @@ fn fetch_queries(tree: &Operation) -> HashSet<(&str, u8, IsPrefix)> {
         match tree {
             Operation::Or(_, ops) | Operation::And(ops) => {
                 ops.as_slice().iter().for_each(|op| resolve_ops(op, out));
-            },
+            }
             Operation::Query(Query { prefix, kind }) => {
                 let typo = if kind.is_exact() { 0 } else { kind.typo() };
                 out.insert((kind.word(), typo, *prefix));
-            },
+            }
             Operation::Phrase(words) => {
                 for word in words {
                     out.insert((word, 0, false));
@@ -80,10 +81,7 @@ struct N2Array<T> {
 
 impl<T: Clone> N2Array<T> {
     fn new(x: usize, y: usize, value: T) -> N2Array<T> {
-        N2Array {
-            y_size: y,
-            buf: vec![value; x * y],
-        }
+        N2Array { y_size: y, buf: vec![value; x * y] }
     }
 }
 
@@ -178,9 +176,8 @@ fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::MatchingWords;
     use crate::search::query_tree::{Operation, Query, QueryKind};
+    use crate::MatchingWords;
 
     #[test]
     fn matched_length() {
@@ -194,13 +191,23 @@ mod tests {
 
     #[test]
     fn matching_words() {
-        let query_tree = Operation::Or(false, vec![
-            Operation::And(vec![
-                Operation::Query(Query { prefix: true, kind: QueryKind::exact("split".to_string()) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
-                Operation::Query(Query { prefix: true, kind: QueryKind::tolerant(1, "world".to_string()) }),
-            ]),
-        ]);
+        let query_tree = Operation::Or(
+            false,
+            vec![Operation::And(vec![
+                Operation::Query(Query {
+                    prefix: true,
+                    kind: QueryKind::exact("split".to_string()),
+                }),
+                Operation::Query(Query {
+                    prefix: false,
+                    kind: QueryKind::exact("this".to_string()),
+                }),
+                Operation::Query(Query {
+                    prefix: true,
+                    kind: QueryKind::tolerant(1, "world".to_string()),
+                }),
+            ])],
+        );
 
         let matching_words = MatchingWords::from_query_tree(&query_tree);
 

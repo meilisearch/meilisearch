@@ -1,4 +1,5 @@
-use std::{borrow::Cow, convert::TryInto};
+use std::borrow::Cow;
+use std::convert::TryInto;
 
 use crate::FieldId;
 

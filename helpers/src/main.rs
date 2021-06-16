@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 
 use byte_unit::Byte;
-use heed::{Env, EnvOpenOptions, CompactionOption};
+use heed::{CompactionOption, Env, EnvOpenOptions};
 use structopt::StructOpt;
-
 use Command::*;
 
 #[cfg(target_os = "linux")]
@@ -65,7 +64,7 @@ fn main() -> anyhow::Result<()> {
             use CompactionOption::*;
             let compaction = if enable_compaction { Enabled } else { Disabled };
             copy_main_database_to_stdout(env, compaction)
-        },
+        }
     }
 }
 

@@ -2,10 +2,9 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FacetType {
     String,
     Number,
@@ -43,4 +42,4 @@ impl fmt::Display for InvalidFacetType {
     }
 }
 
-impl Error for InvalidFacetType { }
+impl Error for InvalidFacetType {}

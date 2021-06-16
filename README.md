@@ -41,3 +41,18 @@ the `content-type:application/json` and `content-type:application/x-ndjson` head
 ### Querying the engine via the website
 
 You can query the engine by going to [the HTML page itself](http://127.0.0.1:9700).
+
+
+## Contributing
+
+You can setup a `git-hook` to stop you from making a commit too fast. It'll stop you if:
+- Any of the workspaces does not build
+- Your code is not well-formatted
+
+These two things are also checked in the CI, so ignoring the hook won't help you merge your code.
+But if you need to, you can still add `--no-verify` when creating your commit to ignore the hook.
+
+To enable the hook, run the following command from the root of the project:
+```
+cp script/pre-commit .git/hooks/pre-commit
+```

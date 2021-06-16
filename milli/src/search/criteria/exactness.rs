@@ -2,19 +2,15 @@ use std::convert::TryFrom;
 use std::mem::take;
 use std::ops::BitOr;
 
+use itertools::Itertools;
 use log::debug;
 use roaring::RoaringBitmap;
-use itertools::Itertools;
 
-use crate::search::query_tree::{Operation, PrimitiveQueryPart};
 use crate::search::criteria::{
-    Context,
-    Criterion,
-    CriterionParameters,
-    CriterionResult,
-    resolve_query_tree,
+    resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult,
 };
-use crate::{TreeLevel, Result};
+use crate::search::query_tree::{Operation, PrimitiveQueryPart};
+use crate::{Result, TreeLevel};
 
 pub struct Exactness<'t> {
     ctx: &'t dyn Context<'t>,
@@ -26,7 +22,11 @@ pub struct Exactness<'t> {
 }
 
 impl<'t> Exactness<'t> {
-    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>, primitive_query: &[PrimitiveQueryPart]) -> heed::Result<Self> {
+    pub fn new(
+        ctx: &'t dyn Context<'t>,
+        parent: Box<dyn Criterion + 't>,
+        primitive_query: &[PrimitiveQueryPart],
+    ) -> heed::Result<Self> {
         let mut query: Vec<_> = Vec::with_capacity(primitive_query.len());
         for part in primitive_query {
             query.push(ExactQueryPart::from_primitive_query_part(ctx, part)?);
@@ -59,7 +59,7 @@ impl<'t> Criterion for Exactness<'t> {
                     // reset state
                     self.state = None;
                     self.query_tree = None;
-                },
+                }
                 Some(state) => {
                     let (candidates, state) = resolve_state(self.ctx, take(state), &self.query)?;
                     self.state = state;
@@ -70,40 +70,51 @@ impl<'t> Criterion for Exactness<'t> {
                         filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
-                },
-                None => {
-                    match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
-                            let mut candidates = match candidates {
-                                Some(candidates) => candidates,
-                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
-                            };
-
-                            if let Some(filtered_candidates) = filtered_candidates {
-                                candidates &= filtered_candidates;
+                }
+                None => match self.parent.next(params)? {
+                    Some(CriterionResult {
+                        query_tree: Some(query_tree),
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        let mut candidates = match candidates {
+                            Some(candidates) => candidates,
+                            None => {
+                                resolve_query_tree(self.ctx, &query_tree, params.wdcache)?
+                                    - params.excluded_candidates
                             }
+                        };
 
-                            match bucket_candidates {
-                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                                None => self.bucket_candidates |= &candidates,
-                            }
+                        if let Some(filtered_candidates) = filtered_candidates {
+                            candidates &= filtered_candidates;
+                        }
 
-                            self.state = Some(State::new(candidates));
-                            self.query_tree = Some(query_tree);
-                        },
-                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
-                            return Ok(Some(CriterionResult {
-                                query_tree: None,
-                                candidates,
-                                filtered_candidates,
-                                bucket_candidates,
-                            }));
-                        },
-                        None => return Ok(None),
+                        match bucket_candidates {
+                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                            None => self.bucket_candidates |= &candidates,
+                        }
+
+                        self.state = Some(State::new(candidates));
+                        self.query_tree = Some(query_tree);
                     }
+                    Some(CriterionResult {
+                        query_tree: None,
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        return Ok(Some(CriterionResult {
+                            query_tree: None,
+                            candidates,
+                            filtered_candidates,
+                            bucket_candidates,
+                        }));
+                    }
+                    None => return Ok(None),
                 },
             }
-         }
+        }
     }
 }
 
@@ -125,9 +136,9 @@ impl State {
 
     fn difference_with(&mut self, lhs: &RoaringBitmap) {
         match self {
-            Self::ExactAttribute(candidates) |
-            Self::AttributeStartsWith(candidates) |
-            Self::ExactWords(candidates) => *candidates -= lhs,
+            Self::ExactAttribute(candidates)
+            | Self::AttributeStartsWith(candidates)
+            | Self::ExactWords(candidates) => *candidates -= lhs,
             Self::Remainings(candidates_array) => {
                 candidates_array.iter_mut().for_each(|candidates| *candidates -= lhs);
                 candidates_array.retain(|candidates| !candidates.is_empty());
@@ -137,9 +148,9 @@ impl State {
 
     fn is_empty(&self) -> bool {
         match self {
-            Self::ExactAttribute(candidates) |
-            Self::AttributeStartsWith(candidates) |
-            Self::ExactWords(candidates) => candidates.is_empty(),
+            Self::ExactAttribute(candidates)
+            | Self::AttributeStartsWith(candidates)
+            | Self::ExactWords(candidates) => candidates.is_empty(),
             Self::Remainings(candidates_array) => {
                 candidates_array.iter().all(RoaringBitmap::is_empty)
             }
@@ -158,8 +169,7 @@ fn resolve_state(
     ctx: &dyn Context,
     state: State,
     query: &[ExactQueryPart],
-) -> Result<(RoaringBitmap, Option<State>)>
-{
+) -> Result<(RoaringBitmap, Option<State>)> {
     use State::*;
     match state {
         ExactAttribute(mut allowed_candidates) => {
@@ -167,8 +177,11 @@ fn resolve_state(
             if let Ok(query_len) = u8::try_from(query.len()) {
                 let attributes_ids = ctx.searchable_fields_ids()?;
                 for id in attributes_ids {
-                    if let Some(attribute_allowed_docids) = ctx.field_id_word_count_docids(id, query_len)? {
-                        let mut attribute_candidates_array = attribute_start_with_docids(ctx, id as u32, query)?;
+                    if let Some(attribute_allowed_docids) =
+                        ctx.field_id_word_count_docids(id, query_len)?
+                    {
+                        let mut attribute_candidates_array =
+                            attribute_start_with_docids(ctx, id as u32, query)?;
                         attribute_candidates_array.push(attribute_allowed_docids);
                         candidates |= intersection_of(attribute_candidates_array.iter().collect());
                     }
@@ -181,12 +194,13 @@ fn resolve_state(
             }
 
             Ok((candidates, Some(AttributeStartsWith(allowed_candidates))))
-        },
+        }
         AttributeStartsWith(mut allowed_candidates) => {
             let mut candidates = RoaringBitmap::new();
             let attributes_ids = ctx.searchable_fields_ids()?;
             for id in attributes_ids {
-                let attribute_candidates_array = attribute_start_with_docids(ctx, id as u32, query)?;
+                let attribute_candidates_array =
+                    attribute_start_with_docids(ctx, id as u32, query)?;
                 candidates |= intersection_of(attribute_candidates_array.iter().collect());
             }
 
@@ -195,7 +209,7 @@ fn resolve_state(
             // remove current candidates from allowed candidates
             allowed_candidates -= &candidates;
             Ok((candidates, Some(ExactWords(allowed_candidates))))
-        },
+        }
         ExactWords(mut allowed_candidates) => {
             let number_of_part = query.len();
             let mut parts_candidates_array = Vec::with_capacity(number_of_part);
@@ -210,7 +224,7 @@ fn resolve_state(
                                 candidates |= synonym_candidates;
                             }
                         }
-                    },
+                    }
                     // compute intersection on pair of words with a proximity of 0.
                     Phrase(phrase) => {
                         let mut bitmaps = Vec::with_capacity(phrase.len().saturating_sub(1));
@@ -220,8 +234,8 @@ fn resolve_state(
                                     Some(docids) => bitmaps.push(docids),
                                     None => {
                                         bitmaps.clear();
-                                        break
-                                    },
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -247,7 +261,7 @@ fn resolve_state(
                     // intersect each word candidates in combinations
                     .map(intersection_of)
                     // union combinations of `c_count` exact words
-                    .fold(RoaringBitmap::new(),  RoaringBitmap::bitor);
+                    .fold(RoaringBitmap::new(), RoaringBitmap::bitor);
                 // only keep allowed candidates
                 combinations_candidates &= &allowed_candidates;
                 // remove current candidates from allowed candidates
@@ -261,7 +275,7 @@ fn resolve_state(
             candidates_array.reverse();
 
             Ok((all_exact_candidates, Some(Remainings(candidates_array))))
-        },
+        }
         // pop remainings candidates until the emptiness
         Remainings(mut candidates_array) => {
             let candidates = candidates_array.pop().unwrap_or_default();
@@ -270,12 +284,15 @@ fn resolve_state(
             } else {
                 Ok((candidates, None))
             }
-        },
-
+        }
     }
 }
 
-fn attribute_start_with_docids(ctx: &dyn Context, attribute_id: u32, query: &[ExactQueryPart]) -> heed::Result<Vec<RoaringBitmap>> {
+fn attribute_start_with_docids(
+    ctx: &dyn Context,
+    attribute_id: u32,
+    query: &[ExactQueryPart],
+) -> heed::Result<Vec<RoaringBitmap>> {
     let lowest_level = TreeLevel::min_value();
     let mut attribute_candidates_array = Vec::new();
     // start from attribute first position
@@ -293,7 +310,7 @@ fn attribute_start_with_docids(ctx: &dyn Context, attribute_id: u32, query: &[Ex
                 }
                 attribute_candidates_array.push(synonyms_candidates);
                 pos += 1;
-            },
+            }
             Phrase(phrase) => {
                 for word in phrase {
                     let wc = ctx.word_level_position_docids(word, lowest_level, pos, pos)?;
@@ -325,24 +342,30 @@ pub enum ExactQueryPart {
 }
 
 impl ExactQueryPart {
-    fn from_primitive_query_part(ctx: &dyn Context, part: &PrimitiveQueryPart) -> heed::Result<Self> {
+    fn from_primitive_query_part(
+        ctx: &dyn Context,
+        part: &PrimitiveQueryPart,
+    ) -> heed::Result<Self> {
         let part = match part {
             PrimitiveQueryPart::Word(word, _) => {
                 match ctx.synonyms(word)? {
                     Some(synonyms) => {
-                        let mut synonyms: Vec<_> = synonyms.into_iter().filter_map(|mut array| {
-                            // keep 1 word synonyms only.
-                            match array.pop() {
-                                Some(word) if array.is_empty() => Some(word),
-                                _ => None,
-                            }
-                        }).collect();
+                        let mut synonyms: Vec<_> = synonyms
+                            .into_iter()
+                            .filter_map(|mut array| {
+                                // keep 1 word synonyms only.
+                                match array.pop() {
+                                    Some(word) if array.is_empty() => Some(word),
+                                    _ => None,
+                                }
+                            })
+                            .collect();
                         synonyms.push(word.clone());
                         ExactQueryPart::Synonyms(synonyms)
-                    },
+                    }
                     None => ExactQueryPart::Synonyms(vec![word.clone()]),
                 }
-            },
+            }
             PrimitiveQueryPart::Phrase(phrase) => ExactQueryPart::Phrase(phrase.clone()),
         };
 

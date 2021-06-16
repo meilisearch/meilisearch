@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
-use serde::{Serialize, Deserialize};
+
+use serde::{Deserialize, Serialize};
+
 use crate::FieldId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,11 +13,7 @@ pub struct FieldsIdsMap {
 
 impl FieldsIdsMap {
     pub fn new() -> FieldsIdsMap {
-        FieldsIdsMap {
-            names_ids: BTreeMap::new(),
-            ids_names: BTreeMap::new(),
-            next_id: Some(0),
-        }
+        FieldsIdsMap { names_ids: BTreeMap::new(), ids_names: BTreeMap::new(), next_id: Some(0) }
     }
 
     /// Returns the number of fields ids in the map.
@@ -62,17 +60,17 @@ impl FieldsIdsMap {
     }
 
     /// Iterate over the ids and names in the ids order.
-    pub fn iter(&self) -> impl Iterator<Item=(FieldId, &str)> {
+    pub fn iter(&self) -> impl Iterator<Item = (FieldId, &str)> {
         self.ids_names.iter().map(|(id, name)| (*id, name.as_str()))
     }
 
     /// Iterate over the ids in the order of the ids.
-    pub fn ids<'a>(&'a self) -> impl Iterator<Item=FieldId> + 'a {
+    pub fn ids<'a>(&'a self) -> impl Iterator<Item = FieldId> + 'a {
         self.ids_names.keys().copied()
     }
 
     /// Iterate over the names in the order of the ids.
-    pub fn names(&self) -> impl Iterator<Item=&str> {
+    pub fn names(&self) -> impl Iterator<Item = &str> {
         self.ids_names.values().map(AsRef::as_ref)
     }
 }

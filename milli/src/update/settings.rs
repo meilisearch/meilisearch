@@ -34,17 +34,24 @@ impl<T> Setting<T> {
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
-    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         match self {
             Self::Set(value) => Some(value),
             // Usually not_set isn't serialized by setting skip_serializing_if field attribute
             Self::NotSet | Self::Reset => None,
-        }.serialize(serializer)
+        }
+        .serialize(serializer)
     }
 }
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
-    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         Deserialize::deserialize(deserializer).map(|x| match x {
             Some(x) => Self::Set(x),
             None => Self::Reset, // Reset is forced by sending null value
@@ -141,11 +148,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     pub fn set_stop_words(&mut self, stop_words: BTreeSet<String>) {
-        self.stop_words = if stop_words.is_empty() {
-            Setting::Reset
-        } else {
-            Setting::Set(stop_words)
-        }
+        self.stop_words =
+            if stop_words.is_empty() { Setting::Reset } else { Setting::Set(stop_words) }
     }
 
     pub fn reset_distinct_field(&mut self) {
@@ -161,11 +165,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     pub fn set_synonyms(&mut self, synonyms: HashMap<String, Vec<String>>) {
-        self.synonyms = if synonyms.is_empty() {
-            Setting::Reset
-        } else {
-            Setting::Set(synonyms)
-        }
+        self.synonyms = if synonyms.is_empty() { Setting::Reset } else { Setting::Set(synonyms) }
     }
 
     pub fn reset_primary_key(&mut self) {
@@ -178,7 +178,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep, u64) + Sync
+        F: Fn(UpdateIndexingStep, u64) + Sync,
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let update_id = self.update_id;
@@ -203,7 +203,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         };
 
         // There already has been a document addition, the primary key should be set by now.
-        let primary_key = self.index.primary_key(&self.wtxn)?.ok_or(UserError::MissingPrimaryKey)?;
+        let primary_key =
+            self.index.primary_key(&self.wtxn)?.ok_or(UserError::MissingPrimaryKey)?;
 
         // We remap the documents fields based on the new `FieldsIdsMap`.
         let output = transform.remap_index_documents(
@@ -236,21 +237,17 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             Setting::Set(ref fields) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
-                let names: Vec<_> = fields
-                    .iter()
-                    .unique()
-                    .map(String::as_str)
-                    .collect();
+                let names: Vec<_> = fields.iter().unique().map(String::as_str).collect();
 
                 for name in names.iter() {
-                    fields_ids_map
-                        .insert(name)
-                        .ok_or(UserError::AttributeLimitReached)?;
+                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
                 self.index.put_displayed_fields(self.wtxn, &names)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_displayed_fields(self.wtxn)?; }
+            Setting::Reset => {
+                self.index.delete_displayed_fields(self.wtxn)?;
+            }
             Setting::NotSet => return Ok(false),
         }
         Ok(true)
@@ -260,14 +257,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
                 let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-                fields_ids_map
-                    .insert(attr)
-                    .ok_or(UserError::AttributeLimitReached)?;
+                fields_ids_map.insert(attr).ok_or(UserError::AttributeLimitReached)?;
 
                 self.index.put_distinct_field(self.wtxn, &attr)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_distinct_field(self.wtxn)?; },
+            Setting::Reset => {
+                self.index.delete_distinct_field(self.wtxn)?;
+            }
             Setting::NotSet => return Ok(false),
         }
         Ok(true)
@@ -285,30 +282,24 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
                 let mut new_fields_ids_map = FieldsIdsMap::new();
                 // fields are deduplicated, only the first occurrence is taken into account
-                let names = fields
-                    .iter()
-                    .unique()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>();
+                let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
 
                 // Add all the searchable attributes to the field map, and then add the
                 // remaining fields from the old field map to the new one
                 for name in names.iter() {
-                    new_fields_ids_map
-                        .insert(&name)
-                        .ok_or(UserError::AttributeLimitReached)?;
+                    new_fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 for (_, name) in old_fields_ids_map.iter() {
-                    new_fields_ids_map
-                        .insert(&name)
-                        .ok_or(UserError::AttributeLimitReached)?;
+                    new_fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 self.index.put_searchable_fields(self.wtxn, &names)?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_searchable_fields(self.wtxn)?; }
+            Setting::Reset => {
+                self.index.delete_searchable_fields(self.wtxn)?;
+            }
             Setting::NotSet => return Ok(false),
         }
         Ok(true)
@@ -323,7 +314,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 let fst = fst::Set::from_iter(stop_words)?;
 
                 // Does the new FST differ from the previous one?
-                if current.map_or(true, |current| current.as_fst().as_bytes() != fst.as_fst().as_bytes()) {
+                if current
+                    .map_or(true, |current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
+                {
                     // we want to re-create our FST.
                     self.index.put_stop_words(self.wtxn, &fst)?;
                     Ok(true)
@@ -343,9 +336,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     analyzer
                         .analyze(text)
                         .tokens()
-                        .filter_map(|token|
-                            if token.is_word() { Some(token.text().to_string()) } else { None }
-                        )
+                        .filter_map(|token| {
+                            if token.is_word() {
+                                Some(token.text().to_string())
+                            } else {
+                                None
+                            }
+                        })
                         .collect::<Vec<_>>()
                 }
 
@@ -360,25 +357,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 for (word, synonyms) in synonyms {
                     // Normalize both the word and associated synonyms.
                     let normalized_word = normalize(&analyzer, word);
-                    let normalized_synonyms = synonyms
-                        .iter()
-                        .map(|synonym| normalize(&analyzer, synonym));
+                    let normalized_synonyms =
+                        synonyms.iter().map(|synonym| normalize(&analyzer, synonym));
 
                     // Store the normalized synonyms under the normalized word,
                     // merging the possible duplicate words.
-                    let entry = new_synonyms
-                        .entry(normalized_word)
-                        .or_insert_with(Vec::new);
+                    let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
                     entry.extend(normalized_synonyms);
                 }
 
                 // Make sure that we don't have duplicate synonyms.
-                new_synonyms
-                    .iter_mut()
-                    .for_each(|(_, synonyms)| {
-                        synonyms.sort_unstable();
-                        synonyms.dedup();
-                    });
+                new_synonyms.iter_mut().for_each(|(_, synonyms)| {
+                    synonyms.sort_unstable();
+                    synonyms.dedup();
+                });
 
                 let old_synonyms = self.index.synonyms(self.wtxn)?;
 
@@ -406,7 +398,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_filterable_fields(self.wtxn, &new_facets)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_filterable_fields(self.wtxn)?; }
+            Setting::Reset => {
+                self.index.delete_filterable_fields(self.wtxn)?;
+            }
             Setting::NotSet => (),
         }
         Ok(())
@@ -427,7 +421,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
                 self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
-            Setting::Reset => { self.index.delete_criteria(self.wtxn)?; }
+            Setting::Reset => {
+                self.index.delete_criteria(self.wtxn)?;
+            }
             Setting::NotSet => (),
         }
         Ok(())
@@ -445,7 +441,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 } else {
                     Err(UserError::PrimaryKeyCannotBeChanged.into())
                 }
-            },
+            }
             Setting::Reset => {
                 if self.index.number_of_documents(&self.wtxn)? == 0 {
                     self.index.delete_primary_key(self.wtxn)?;
@@ -453,14 +449,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 } else {
                     Err(UserError::PrimaryKeyCannotBeReset.into())
                 }
-            },
+            }
             Setting::NotSet => Ok(()),
         }
     }
 
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
-        where
-            F: Fn(UpdateIndexingStep, u64) + Sync
+    where
+        F: Fn(UpdateIndexingStep, u64) + Sync,
     {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
 
@@ -493,16 +489,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
 #[cfg(test)]
 mod tests {
-    use heed::EnvOpenOptions;
-    use heed::types::ByteSlice;
-    use maplit::{btreeset, hashmap, hashset};
     use big_s::S;
+    use heed::types::ByteSlice;
+    use heed::EnvOpenOptions;
+    use maplit::{btreeset, hashmap, hashset};
 
+    use super::*;
     use crate::error::Error;
     use crate::update::{IndexDocuments, UpdateFormat};
     use crate::{Criterion, FilterCondition, SearchResult};
-
-    use super::*;
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -674,7 +669,7 @@ mod tests {
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset!{ S("age") });
+        builder.set_filterable_fields(hashset! { S("age") });
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -692,12 +687,15 @@ mod tests {
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset!{ S("age") });
+        assert_eq!(fields_ids, hashset! { S("age") });
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
-        let count = index.facet_id_f64_docids
+        let count = index
+            .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0]).unwrap().count();
+            .prefix_iter(&rtxn, &[0, 0])
+            .unwrap()
+            .count();
         assert_eq!(count, 3);
         drop(rtxn);
 
@@ -718,9 +716,12 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
-        let count = index.facet_id_f64_docids
+        let count = index
+            .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0]).unwrap().count();
+            .prefix_iter(&rtxn, &[0, 0])
+            .unwrap()
+            .count();
         assert_eq!(count, 4);
     }
 
@@ -969,7 +970,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
-        builder.set_filterable_fields(hashset!{ S("age"), S("toto") });
+        builder.set_filterable_fields(hashset! { S("age"), S("toto") });
         builder.set_criteria(vec!["asc(toto)".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();

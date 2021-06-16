@@ -3,10 +3,8 @@ use std::path::Path;
 
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
-use milli::{
-    update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat},
-    FilterCondition, Index,
-};
+use milli::update::{IndexDocumentsMethod, Settings, UpdateBuilder, UpdateFormat};
+use milli::{FilterCondition, Index};
 
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory

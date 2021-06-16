@@ -1,14 +1,15 @@
-#[macro_use] extern crate pest_derive;
+#[macro_use]
+extern crate pest_derive;
 
 mod criterion;
 mod error;
 mod external_documents_ids;
-mod fields_ids_map;
-mod search;
 pub mod facet;
+mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
 pub mod proximity;
+mod search;
 pub mod tree_level;
 pub mod update;
 
@@ -20,15 +21,17 @@ use std::result::Result as StdResult;
 use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
-pub use self::criterion::{Criterion, default_criteria};
+pub use self::criterion::{default_criteria, Criterion};
 pub use self::error::Error;
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
-pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, StrLevelPositionCodec, ObkvCodec, FieldIdWordCountCodec};
-pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
-pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec};
+pub use self::heed_codec::{
+    BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapCodec,
+    CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec, RoaringBitmapCodec,
+    RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
+};
 pub use self::index::Index;
-pub use self::search::{Search, FacetDistribution, FilterCondition, SearchResult, MatchingWords};
+pub use self::search::{FacetDistribution, FilterCondition, MatchingWords, Search, SearchResult};
 pub use self::tree_level::TreeLevel;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
@@ -54,9 +57,9 @@ pub fn obkv_to_json(
     displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
-) -> Result<Map<String, Value>>
-{
-    displayed_fields.iter()
+) -> Result<Map<String, Value>> {
+    displayed_fields
+        .iter()
         .copied()
         .flat_map(|id| obkv.get(id).map(|value| (id, value)))
         .map(|(id, value)| {
@@ -72,7 +75,6 @@ pub fn obkv_to_json(
 
 /// Transform a JSON value into a string that can be indexed.
 pub fn json_to_string(value: &Value) -> Option<String> {
-
     fn inner(value: &Value, output: &mut String) -> bool {
         use std::fmt::Write;
         match value {
@@ -90,7 +92,7 @@ pub fn json_to_string(value: &Value) -> Option<String> {
                 }
                 // check that at least one value was written
                 count != 0
-            },
+            }
             Value::Object(object) => {
                 let mut buffer = String::new();
                 let mut count = 0;
@@ -107,7 +109,7 @@ pub fn json_to_string(value: &Value) -> Option<String> {
                 }
                 // check that at least one value was written
                 count != 0
-            },
+            }
         }
     }
 
@@ -121,8 +123,9 @@ pub fn json_to_string(value: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn json_to_string_object() {

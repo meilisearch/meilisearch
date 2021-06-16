@@ -1,20 +1,19 @@
-use std::ops::Bound::{self, Included, Excluded, Unbounded};
+use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 use either::Either::{self, Left, Right};
-use heed::types::{DecodeIgnore, ByteSlice};
-use heed::{Database, RoRange, RoRevRange, LazyDecode};
+use heed::types::{ByteSlice, DecodeIgnore};
+use heed::{Database, LazyDecode, RoRange, RoRevRange};
 use roaring::RoaringBitmap;
-
-use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::heed_codec::facet::FacetLevelValueF64Codec;
-use crate::{Index, FieldId};
 
 pub use self::facet_distribution::FacetDistribution;
 pub use self::filter_condition::{FilterCondition, Operator};
 pub(crate) use self::parser::Rule as ParserRule;
+use crate::heed_codec::facet::FacetLevelValueF64Codec;
+use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::{FieldId, Index};
 
-mod filter_condition;
 mod facet_distribution;
+mod filter_condition;
 mod parser;
 
 pub struct FacetRange<'t> {
@@ -30,8 +29,7 @@ impl<'t> FacetRange<'t> {
         level: u8,
         left: Bound<f64>,
         right: Bound<f64>,
-    ) -> heed::Result<FacetRange<'t>>
-    {
+    ) -> heed::Result<FacetRange<'t>> {
         let left_bound = match left {
             Included(left) => Included((field_id, level, left, f64::MIN)),
             Excluded(left) => Excluded((field_id, level, left, f64::MIN)),
@@ -62,7 +60,7 @@ impl<'t> Iterator for FacetRange<'t> {
                 } else {
                     None
                 }
-            },
+            }
             Some(Err(e)) => Some(Err(e)),
             None => None,
         }
@@ -82,8 +80,7 @@ impl<'t> FacetRevRange<'t> {
         level: u8,
         left: Bound<f64>,
         right: Bound<f64>,
-    ) -> heed::Result<FacetRevRange<'t>>
-    {
+    ) -> heed::Result<FacetRevRange<'t>> {
         let left_bound = match left {
             Included(left) => Included((field_id, level, left, f64::MIN)),
             Excluded(left) => Excluded((field_id, level, left, f64::MIN)),
@@ -114,7 +111,7 @@ impl<'t> Iterator for FacetRevRange<'t> {
                         }
                     }
                     continue;
-                },
+                }
                 Some(Err(e)) => return Some(Err(e)),
                 None => return None,
             }
@@ -139,11 +136,11 @@ impl<'t> FacetIter<'t> {
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t>>
-    {
+    ) -> heed::Result<FacetIter<'t>> {
         let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
-        let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
+        let highest_iter =
+            FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
         Ok(FacetIter { rtxn, db, field_id, level_iters, must_reduce: true })
     }
@@ -156,11 +153,11 @@ impl<'t> FacetIter<'t> {
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t>>
-    {
+    ) -> heed::Result<FacetIter<'t>> {
         let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
-        let highest_iter = FacetRevRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
+        let highest_iter =
+            FacetRevRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Right(highest_iter))];
         Ok(FacetIter { rtxn, db, field_id, level_iters, must_reduce: true })
     }
@@ -174,11 +171,11 @@ impl<'t> FacetIter<'t> {
         index: &'t Index,
         field_id: FieldId,
         documents_ids: RoaringBitmap,
-    ) -> heed::Result<FacetIter<'t>>
-    {
+    ) -> heed::Result<FacetIter<'t>> {
         let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
-        let highest_iter = FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
+        let highest_iter =
+            FacetRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
         let level_iters = vec![(documents_ids, Left(highest_iter))];
         Ok(FacetIter { rtxn, db, field_id, level_iters, must_reduce: false })
     }
@@ -187,12 +184,13 @@ impl<'t> FacetIter<'t> {
         rtxn: &'t heed::RoTxn,
         db: Database<FacetLevelValueF64Codec, X>,
         fid: FieldId,
-    ) -> heed::Result<Option<u8>>
-    {
-        let level = db.remap_types::<ByteSlice, DecodeIgnore>()
+    ) -> heed::Result<Option<u8>> {
+        let level = db
+            .remap_types::<ByteSlice, DecodeIgnore>()
             .prefix_iter(rtxn, &[fid][..])?
             .remap_key_type::<FacetLevelValueF64Codec>()
-            .last().transpose()?
+            .last()
+            .transpose()?
             .map(|((_, level, _, _), _)| level);
         Ok(level)
     }
@@ -215,7 +213,6 @@ impl<'t> Iterator for FacetIter<'t> {
 
                 match result {
                     Ok(((_fid, level, left, right), mut docids)) => {
-
                         docids.intersect_with(&documents_ids);
                         if !docids.is_empty() {
                             if self.must_reduce {
@@ -242,11 +239,11 @@ impl<'t> Iterator for FacetIter<'t> {
                                 Ok(iter) => {
                                     self.level_iters.push((docids, iter));
                                     continue 'outer;
-                                },
+                                }
                                 Err(e) => return Some(Err(e)),
                             }
                         }
-                    },
+                    }
                     Err(e) => return Some(Err(e)),
                 }
             }

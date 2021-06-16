@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+cargo check --workspace --all-targets &>/dev/null
+result=$?
+
+if [[ ${result} -ne 0 ]] ; then
+	cat <<\EOF
+The project does not compile. You might want to fix your error before commiting.
+
+If you still want to commit you can do it by appending
+--no-verify
+at the end of your previous command.
+
+If you are running a variant of bash you can directly paste this command in your terminal:
+!! --no-verify
+EOF
+    exit 1
+fi
+
+cargo fmt --all -- --check &>/dev/null
+result=$?
+
+if [[ ${result} -ne 0 ]] ; then
+	cat <<\EOF
+The project is badly formatted. Please run:
+cargo fmt --all
+
+If you want to create your commit without propper formatting you can add
+--no-verify
+at the end of your commit.
+
+If you are running a variant of bash you can directly paste this command in your terminal:
+!! --no-verify
+EOF
+    exit 1
+fi
