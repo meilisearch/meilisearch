@@ -146,7 +146,7 @@ impl Index {
             .attributes_to_crop
             .unwrap_or_default();
 
-        let formatted_options = parse_formatted_options(
+        let formatted_options = compute_formatted_options(
             &attr_to_highlight,
             &attr_to_crop,
             query.crop_length,
@@ -176,7 +176,7 @@ impl Index {
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
             let document = make_document(&to_retrieve_ids_sorted, &fields_ids_map, obkv)?;
-            let formatted = compute_formatted(
+            let formatted = format_fields(
                 &fields_ids_map,
                 obkv,
                 &formatter,
@@ -218,7 +218,7 @@ impl Index {
     }
 }
 
-fn parse_formatted_options(
+fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
     query_crop_length: usize,
@@ -308,7 +308,7 @@ fn make_document(
     Ok(document)
 }
 
-fn compute_formatted<A: AsRef<[u8]>>(
+fn format_fields<A: AsRef<[u8]>>(
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
     formatter: &Formatter<A>,
@@ -347,7 +347,7 @@ fn compute_formatted<A: AsRef<[u8]>>(
     Ok(document)
 }
 
-/// trait to allow unit testing of `compute_formatted`
+/// trait to allow unit testing of `format_fields`
 trait Matcher {
     fn matches(&self, w: &str) -> Option<usize>;
 }
@@ -546,7 +546,7 @@ mod test {
 
         let matching_words = MatchingWords::default();
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -581,7 +581,7 @@ mod test {
 
         let matching_words = MatchingWords::default();
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -623,7 +623,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("hobbit", Some(6));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -666,7 +666,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("hobbit", Some(3));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -709,7 +709,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("potter", Some(6));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -752,7 +752,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("potter", Some(6));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -795,7 +795,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("potter", Some(6));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -838,7 +838,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("and", Some(3));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
@@ -881,7 +881,7 @@ mod test {
         let mut matching_words = HashMap::new();
         matching_words.insert("blood", Some(3));
 
-        let value = compute_formatted(
+        let value = format_fields(
             &fields,
             obkv,
             &formatter,
