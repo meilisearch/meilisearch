@@ -129,10 +129,10 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
             eprintln!(
                 "
 Thank you for using MeiliSearch!
+
 We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/reference/features/configuration.html#analytics
 
-Anonymous telemetry:   \"Enabled\"
-"
+Anonymous telemetry:   \"Enabled\""
             );
         }
     }
