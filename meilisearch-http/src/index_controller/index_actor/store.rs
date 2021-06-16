@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use milli::update::UpdateBuilder;
 use tokio::fs;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -57,7 +58,12 @@ impl IndexStore for MapIndexStore {
             let index = Index::open(path, index_size)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
-                index.put_primary_key(&mut txn, &primary_key)?;
+
+                let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
+                builder.set_primary_key(primary_key);
+                builder.execute(|_, _| ())
+                    .map_err(|e| IndexError::Internal(e.to_string()))?;
+
                 txn.commit()?;
             }
             Ok(index)

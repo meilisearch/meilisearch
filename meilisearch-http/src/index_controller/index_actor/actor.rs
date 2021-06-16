@@ -6,6 +6,7 @@ use async_stream::stream;
 use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
+use milli::update::UpdateBuilder;
 use tokio::task::spawn_blocking;
 use tokio::{fs, sync::mpsc};
 use uuid::Uuid;
@@ -258,12 +259,15 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             .ok_or(IndexError::UnexistingIndex)?;
 
         let result = spawn_blocking(move || match index_settings.primary_key {
-            Some(ref primary_key) => {
+            Some(primary_key) => {
                 let mut txn = index.write_txn()?;
                 if index.primary_key(&txn)?.is_some() {
                     return Err(IndexError::ExistingPrimaryKey);
                 }
-                index.put_primary_key(&mut txn, primary_key)?;
+                let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
+                builder.set_primary_key(primary_key);
+                builder.execute(|_, _| ())
+                    .map_err(|e| IndexError::Internal(e.to_string()))?;
                 let meta = IndexMeta::new_txn(&index, &txn)?;
                 txn.commit()?;
                 Ok(meta)
@@ -333,7 +337,8 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
             Ok(IndexStats {
                 size: index.size(),
-                number_of_documents: index.number_of_documents(&rtxn)?,
+                number_of_documents: index.number_of_documents(&rtxn)
+                    .map_err(|e| IndexError::Internal(e.to_string()))?,
                 is_indexing: None,
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })
