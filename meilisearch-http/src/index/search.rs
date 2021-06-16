@@ -220,6 +220,30 @@ fn compute_formatted_options(
 
     let mut formatted_options = HashMap::new();
 
+    formatted_options = add_highlight_to_formatted_options(
+        formatted_options,
+        attr_to_highlight,
+        fields_ids_map,
+        displayed_ids,
+    );
+
+    formatted_options = add_crop_to_formatted_options(
+        formatted_options,
+        attr_to_crop,
+        query_crop_length,
+        fields_ids_map,
+        displayed_ids,
+    );
+
+    formatted_options
+}
+
+fn add_highlight_to_formatted_options(
+    mut formatted_options: HashMap<FieldId, FormatOptions>,
+    attr_to_highlight: &HashSet<String>,
+    fields_ids_map: &FieldsIdsMap,
+    displayed_ids: &BTreeSet<u8>,
+) -> HashMap<FieldId, FormatOptions> {
     for attr in attr_to_highlight {
         let new_format = FormatOptions {
             highlight: true,
@@ -237,15 +261,24 @@ fn compute_formatted_options(
             formatted_options.insert(id, new_format);
         }
     }
+    formatted_options
+}
 
+fn add_crop_to_formatted_options(
+    mut formatted_options: HashMap<FieldId, FormatOptions>,
+    attr_to_crop: &[String],
+    crop_length: usize,
+    fields_ids_map: &FieldsIdsMap,
+    displayed_ids: &BTreeSet<u8>,
+) -> HashMap<FieldId, FormatOptions> {
     for attr in attr_to_crop {
         let mut attr_name = attr.clone();
-        let mut attr_len = query_crop_length;
+        let mut attr_len = crop_length;
 
         let mut split = attr_name.rsplitn(2, ':');
         attr_name = match split.next().zip(split.next()) {
             Some((len, name)) => {
-                attr_len = len.parse().unwrap_or(query_crop_length);
+                attr_len = len.parse().unwrap_or(crop_length);
                 name.to_string()
             },
             None => attr_name,
