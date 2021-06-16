@@ -96,21 +96,6 @@ pub struct Opt {
     #[structopt(long, env = "MEILI_MASTER_KEY")]
     pub master_key: Option<String>,
 
-    /// The Sentry DSN to use for error reporting. This defaults to the MeiliSearch Sentry project.
-    /// You can disable sentry all together using the `--no-sentry` flag or `MEILI_NO_SENTRY` environment variable.
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(
-        long,
-        env = "SENTRY_DSN",
-        default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337"
-    )]
-    pub sentry_dsn: String,
-
-    /// Disable Sentry error reporting.
-    #[structopt(long, env = "MEILI_NO_SENTRY")]
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    pub no_sentry: bool,
-
     /// This environment variable must be set to `production` if you are running in production.
     /// If the server is running in development mode more logs will be displayed,
     /// and the master key can be avoided which implies that there is no security on the updates routes.
@@ -119,6 +104,7 @@ pub struct Opt {
     pub env: String,
 
     /// Do not send analytics to Meili.
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]
     pub no_analytics: bool,
 

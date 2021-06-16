@@ -5,11 +5,15 @@ use main_error::MainError;
 use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
 
-//mod analytics;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+use meilisearch_http::analytics;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+const SENTRY_DSN: &str = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337";
 
 #[actix_web::main]
 async fn main() -> Result<(), MainError> {
@@ -26,16 +30,17 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-            #[cfg(all(not(debug_assertions), feature = "sentry"))]
-            if !opt.no_sentry {
-                let logger = sentry::integrations::log::SentryLogger::with_dest(log_builder.build());
+            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+            if !opt.no_analytics {
+                let logger =
+                    sentry::integrations::log::SentryLogger::with_dest(log_builder.build());
                 log::set_boxed_logger(Box::new(logger))
                     .map(|()| log::set_max_level(log::LevelFilter::Info))
                     .unwrap();
 
                 let sentry = sentry::init(sentry::ClientOptions {
                     release: sentry::release_name!(),
-                    dsn: Some(opt.sentry_dsn.parse()?),
+                    dsn: Some(SENTRY_DSN.parse()?),
                     ..Default::default()
                 });
                 // sentry must stay alive as long as possible
@@ -50,25 +55,14 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
-    //if let Some(path) = &opt.import_snapshot {
-    //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
-    //}
-
     let data = Data::new(opt.clone())?;
 
-    //if !opt.no_analytics {
-    //let analytics_data = data.clone();
-    //let analytics_opt = opt.clone();
-    //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
-    //}
-
-    //if let Some(path) = &opt.import_dump {
-    //dump::import_dump(&data, path, opt.dump_batch_size)?;
-    //}
-
-    //if opt.schedule_snapshot {
-    //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
-    //}
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    if !opt.no_analytics {
+        let analytics_data = data.clone();
+        let analytics_opt = opt.clone();
+        tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
+    }
 
     print_launch_resume(&opt, &data);
 
@@ -127,24 +121,21 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
         env!("CARGO_PKG_VERSION").to_string()
     );
 
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    eprintln!(
-        "Sentry DSN:\t\t{:?}",
-        if !opt.no_sentry {
-            &opt.sentry_dsn
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    {
+        if opt.no_analytics {
+            eprintln!("Anonymous telemetry:\t\"Disabled\"");
         } else {
-            "Disabled"
-        }
-    );
+            eprintln!(
+                "
+Thank you for using MeiliSearch!
 
-    eprintln!(
-        "Anonymous telemetry:\t{:?}",
-        if !opt.no_analytics {
-            "Enabled"
-        } else {
-            "Disabled"
+We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/reference/features/configuration.html#analytics
+
+Anonymous telemetry:   \"Enabled\""
+            );
         }
-    );
+    }
 
     eprintln!();
 
