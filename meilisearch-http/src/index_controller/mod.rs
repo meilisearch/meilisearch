@@ -82,8 +82,8 @@ pub struct Stats {
 
 impl IndexController {
     pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
-        let index_size = options.max_mdb_size.get_bytes() as usize;
-        let update_store_size = options.max_udb_size.get_bytes() as usize;
+        let index_size = options.max_index_size.get_bytes() as usize;
+        let update_store_size = options.max_index_size.get_bytes() as usize;
 
         if let Some(ref path) = options.import_snapshot {
             info!("Loading from snapshot {:?}", path);
@@ -97,7 +97,7 @@ impl IndexController {
             load_dump(
                 &options.db_path,
                 src_path,
-                options.max_mdb_size.get_bytes() as usize,
+                options.max_index_size.get_bytes() as usize,
                 options.max_udb_size.get_bytes() as usize,
                 &options.indexer_options,
             )?;
@@ -116,7 +116,7 @@ impl IndexController {
             &options.dumps_dir,
             uuid_resolver.clone(),
             update_handle.clone(),
-            options.max_mdb_size.get_bytes() as usize,
+            options.max_index_size.get_bytes() as usize,
             options.max_udb_size.get_bytes() as usize,
         )?;
 
