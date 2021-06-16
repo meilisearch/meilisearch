@@ -3,17 +3,18 @@ use std::fs::File;
 use std::num::NonZeroUsize;
 
 use chrono::Utc;
-use grenad::{CompressionType, Reader, Writer, FileFuse};
+use grenad::{CompressionType, FileFuse, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::error::InternalError;
-use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::heed_codec::facet::FacetLevelValueF64Codec;
-use crate::update::index_documents::WriteMethod;
-use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::update::index_documents::{
+    create_writer, write_into_lmdb_database, writer_into_reader, WriteMethod,
+};
 use crate::{Index, Result};
 
 pub struct Facets<'t, 'u, 'i> {
@@ -32,8 +33,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
         update_id: u64,
-    ) -> Facets<'t, 'u, 'i>
-    {
+    ) -> Facets<'t, 'u, 'i> {
         Facets {
             wtxn,
             index,
@@ -72,11 +72,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             )?;
 
             // Clear the facet number levels.
-            clear_field_number_levels(
-                self.wtxn,
-                self.index.facet_id_f64_docids,
-                field_id,
-            )?;
+            clear_field_number_levels(self.wtxn, self.index.facet_id_f64_docids, field_id)?;
 
             // Compute and store the faceted numbers documents ids.
             let number_documents_ids = compute_faceted_documents_ids(
@@ -96,8 +92,16 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 field_id,
             )?;
 
-            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &string_documents_ids)?;
-            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &number_documents_ids)?;
+            self.index.put_string_faceted_documents_ids(
+                self.wtxn,
+                field_id,
+                &string_documents_ids,
+            )?;
+            self.index.put_number_faceted_documents_ids(
+                self.wtxn,
+                field_id,
+                &number_documents_ids,
+            )?;
 
             write_into_lmdb_database(
                 self.wtxn,
@@ -112,12 +116,11 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
     }
 }
 
-fn clear_field_number_levels<'t, >(
+fn clear_field_number_levels<'t>(
     wtxn: &'t mut heed::RwTxn,
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     field_id: u8,
-) -> heed::Result<()>
-{
+) -> heed::Result<()> {
     let left = (field_id, 1, f64::MIN, f64::MIN);
     let right = (field_id, u8::MAX, f64::MAX, f64::MAX);
     let range = left..=right;
@@ -133,8 +136,7 @@ fn compute_facet_number_levels<'t>(
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
     field_id: u8,
-) -> Result<Reader<FileFuse>>
-{
+) -> Result<Reader<FileFuse>> {
     let first_level_size = db
         .remap_key_type::<ByteSlice>()
         .prefix_iter(rtxn, &[field_id])?
@@ -143,9 +145,8 @@ fn compute_facet_number_levels<'t>(
 
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
-    let mut writer = tempfile::tempfile().and_then(|file| {
-        create_writer(compression_type, compression_level, file)
-    })?;
+    let mut writer = tempfile::tempfile()
+        .and_then(|file| create_writer(compression_type, compression_level, file))?;
 
     let level_0_range = {
         let left = (field_id, 0, f64::MIN, f64::MIN);
@@ -196,8 +197,7 @@ fn compute_faceted_documents_ids(
     rtxn: &heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     field_id: u8,
-) -> Result<RoaringBitmap>
-{
+) -> Result<RoaringBitmap> {
     let mut documents_ids = RoaringBitmap::new();
 
     for result in db.prefix_iter(rtxn, &[field_id])? {
@@ -215,8 +215,7 @@ fn write_number_entry(
     left: f64,
     right: f64,
     ids: &RoaringBitmap,
-) -> Result<()>
-{
+) -> Result<()> {
     let key = (field_id, level, left, right);
     let key = FacetLevelValueF64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
     let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;

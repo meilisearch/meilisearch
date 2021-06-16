@@ -71,7 +71,8 @@ impl heed::BytesEncode<'_> for FacetLevelValueF64Codec {
 
 #[cfg(test)]
 mod tests {
-    use heed::{BytesEncode, BytesDecode};
+    use heed::{BytesDecode, BytesEncode};
+
     use super::*;
 
     #[test]

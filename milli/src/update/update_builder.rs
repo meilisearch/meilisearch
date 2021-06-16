@@ -1,8 +1,8 @@
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
+use super::{ClearDocuments, DeleteDocuments, Facets, IndexDocuments, Settings};
 use crate::{Index, Result};
-use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings, Facets};
 
 pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
@@ -67,8 +67,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> ClearDocuments<'t, 'u, 'i>
-    {
+    ) -> ClearDocuments<'t, 'u, 'i> {
         ClearDocuments::new(wtxn, index, self.update_id)
     }
 
@@ -76,8 +75,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> Result<DeleteDocuments<'t, 'u, 'i>>
-    {
+    ) -> Result<DeleteDocuments<'t, 'u, 'i>> {
         DeleteDocuments::new(wtxn, index, self.update_id)
     }
 
@@ -85,8 +83,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> IndexDocuments<'t, 'u, 'i, 'a>
-    {
+    ) -> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut builder = IndexDocuments::new(wtxn, index, self.update_id);
 
         builder.log_every_n = self.log_every_n;
@@ -105,8 +102,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> Settings<'a, 't, 'u, 'i>
-    {
+    ) -> Settings<'a, 't, 'u, 'i> {
         let mut builder = Settings::new(wtxn, index, self.update_id);
 
         builder.log_every_n = self.log_every_n;
@@ -125,8 +121,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> Facets<'t, 'u, 'i>
-    {
+    ) -> Facets<'t, 'u, 'i> {
         let mut builder = Facets::new(wtxn, index, self.update_id);
 
         builder.chunk_compression_type = self.chunk_compression_type;

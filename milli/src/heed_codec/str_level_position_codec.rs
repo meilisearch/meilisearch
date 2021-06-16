@@ -13,7 +13,9 @@ impl<'a> heed::BytesDecode<'a> for StrLevelPositionCodec {
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let footer_len = size_of::<u8>() + size_of::<u32>() * 2;
 
-        if bytes.len() < footer_len { return None }
+        if bytes.len() < footer_len {
+            return None;
+        }
 
         let (word, bytes) = bytes.split_at(bytes.len() - footer_len);
         let word = str::from_utf8(word).ok()?;

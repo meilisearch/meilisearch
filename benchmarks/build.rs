@@ -1,9 +1,7 @@
+use std::fs::File;
+use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
-use std::{
-    fs::File,
-    io::{Cursor, Read, Seek, Write},
-};
 
 use bytes::Bytes;
 use convert_case::{Case, Casing};
@@ -45,7 +43,10 @@ fn main() -> anyhow::Result<()> {
         )?;
 
         if out_file.exists() {
-            eprintln!("The dataset {} already exists on the file system and will not be downloaded again", dataset);
+            eprintln!(
+                "The dataset {} already exists on the file system and will not be downloaded again",
+                dataset
+            );
             continue;
         }
         let url = format!("{}/{}.csv.gz", BASE_URL, dataset);
@@ -60,12 +61,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn download_dataset<U: IntoUrl>(url: U) -> anyhow::Result<Cursor<Bytes>> {
-    let bytes = reqwest::blocking::Client::builder()
-        .timeout(None)
-        .build()?
-        .get(url)
-        .send()?
-        .bytes()?;
+    let bytes =
+        reqwest::blocking::Client::builder().timeout(None).build()?.get(url).send()?.bytes()?;
     Ok(Cursor::new(bytes))
 }
 

@@ -1,10 +1,10 @@
 use log::debug;
 use roaring::RoaringBitmap;
 
-use crate::Result;
+use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
 use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
-use super::{resolve_query_tree, Criterion, CriterionResult, CriterionParameters, Context};
+use crate::Result;
 
 /// The result of a call to the fetcher.
 #[derive(Debug, Clone, PartialEq)]
@@ -26,7 +26,12 @@ pub struct Final<'t> {
 
 impl<'t> Final<'t> {
     pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Final<'t> {
-        Final { ctx, parent, wdcache: WordDerivationsCache::new(), returned_candidates: RoaringBitmap::new() }
+        Final {
+            ctx,
+            parent,
+            wdcache: WordDerivationsCache::new(),
+            returned_candidates: RoaringBitmap::new(),
+        }
     }
 
     #[logging_timer::time("Final::{}")]
@@ -40,10 +45,17 @@ impl<'t> Final<'t> {
         };
 
         match self.parent.next(&mut criterion_parameters)? {
-            Some(CriterionResult { query_tree, candidates, filtered_candidates, bucket_candidates }) => {
+            Some(CriterionResult {
+                query_tree,
+                candidates,
+                filtered_candidates,
+                bucket_candidates,
+            }) => {
                 let mut candidates = match (candidates, query_tree.as_ref()) {
                     (Some(candidates), _) => candidates,
-                    (None, Some(qt)) => resolve_query_tree(self.ctx, qt, &mut self.wdcache)? - excluded_candidates,
+                    (None, Some(qt)) => {
+                        resolve_query_tree(self.ctx, qt, &mut self.wdcache)? - excluded_candidates
+                    }
                     (None, None) => self.ctx.documents_ids()? - excluded_candidates,
                 };
 
@@ -56,7 +68,7 @@ impl<'t> Final<'t> {
                 self.returned_candidates |= &candidates;
 
                 Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }))
-            },
+            }
             None => Ok(None),
         }
     }

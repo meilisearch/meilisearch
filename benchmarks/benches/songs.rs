@@ -6,33 +6,24 @@ use milli::update::Settings;
 use utils::Conf;
 
 fn base_conf(builder: &mut Settings) {
-    let displayed_fields = [
-        "id", "title", "album", "artist", "genre", "country", "released", "duration",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
+    let displayed_fields =
+        ["id", "title", "album", "artist", "genre", "country", "released", "duration"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
     builder.set_displayed_fields(displayed_fields);
 
-    let searchable_fields = ["title", "album", "artist"]
+    let searchable_fields = ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
+    builder.set_searchable_fields(searchable_fields);
+
+    let faceted_fields = ["released-timestamp", "duration-float", "genre", "country", "artist"]
         .iter()
         .map(|s| s.to_string())
         .collect();
-    builder.set_searchable_fields(searchable_fields);
-
-    let faceted_fields = [
-        "released-timestamp",
-        "duration-float",
-        "genre",
-        "country",
-        "artist",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
     builder.set_filterable_fields(faceted_fields);
 }
 
+#[rustfmt::skip]
 const BASE_CONF: Conf = Conf {
     dataset: datasets_paths::SMOL_SONGS,
     queries: &[
@@ -53,34 +44,25 @@ const BASE_CONF: Conf = Conf {
 };
 
 fn bench_songs(c: &mut criterion::Criterion) {
-    let default_criterion: Vec<String> = milli::default_criteria()
-        .iter()
-        .map(|criteria| criteria.to_string())
-        .collect();
+    let default_criterion: Vec<String> =
+        milli::default_criteria().iter().map(|criteria| criteria.to_string()).collect();
     let default_criterion = default_criterion.iter().map(|s| s.as_str());
-    let asc_default: Vec<&str> = std::iter::once("asc(released-timestamp)")
-        .chain(default_criterion.clone())
-        .collect();
-    let desc_default: Vec<&str> = std::iter::once("desc(released-timestamp)")
-        .chain(default_criterion.clone())
-        .collect();
+    let asc_default: Vec<&str> =
+        std::iter::once("asc(released-timestamp)").chain(default_criterion.clone()).collect();
+    let desc_default: Vec<&str> =
+        std::iter::once("desc(released-timestamp)").chain(default_criterion.clone()).collect();
 
     let basic_with_quote: Vec<String> = BASE_CONF
         .queries
         .iter()
         .map(|s| {
-            s.trim()
-                .split(' ')
-                .map(|s| format!(r#""{}""#, s))
-                .collect::<Vec<String>>()
-                .join(" ")
+            s.trim().split(' ').map(|s| format!(r#""{}""#, s)).collect::<Vec<String>>().join(" ")
         })
         .collect();
-    let basic_with_quote: &[&str] = &basic_with_quote
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<&str>>();
+    let basic_with_quote: &[&str] =
+        &basic_with_quote.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
 
+    #[rustfmt::skip]
     let confs = &[
         /* first we bench each criterion alone */
         utils::Conf {

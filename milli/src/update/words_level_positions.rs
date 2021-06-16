@@ -1,25 +1,23 @@
-use std::{cmp, str};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::num::NonZeroU32;
+use std::{cmp, str};
 
 use fst::automaton::{self, Automaton};
-use fst::{Streamer, IntoStreamer};
-use grenad::{CompressionType, Reader, Writer, FileFuse};
+use fst::{IntoStreamer, Streamer};
+use grenad::{CompressionType, FileFuse, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore, Str};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::error::InternalError;
-use crate::heed_codec::{StrLevelPositionCodec, CboRoaringBitmapCodec};
-use crate::Result;
-use crate::update::index_documents::WriteMethod;
+use crate::heed_codec::{CboRoaringBitmapCodec, StrLevelPositionCodec};
 use crate::update::index_documents::{
-    create_writer, create_sorter, writer_into_reader, write_into_lmdb_database,
-    cbo_roaring_bitmap_merge, sorter_into_lmdb_database
+    cbo_roaring_bitmap_merge, create_sorter, create_writer, sorter_into_lmdb_database,
+    write_into_lmdb_database, writer_into_reader, WriteMethod,
 };
-use crate::{Index, TreeLevel};
+use crate::{Index, Result, TreeLevel};
 
 pub struct WordsLevelPositions<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -34,7 +32,10 @@ pub struct WordsLevelPositions<'t, 'u, 'i> {
 }
 
 impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> WordsLevelPositions<'t, 'u, 'i> {
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+    ) -> WordsLevelPositions<'t, 'u, 'i> {
         WordsLevelPositions {
             wtxn,
             index,
@@ -144,7 +145,9 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             entries,
-            |_, _| Err(InternalError::IndexingMergingKeys { process: "word prefix level position" }),
+            |_, _| {
+                Err(InternalError::IndexingMergingKeys { process: "word prefix level position" })
+            },
             WriteMethod::Append,
         )?;
 
@@ -176,13 +179,11 @@ fn compute_positions_levels(
     shrink_size: Option<u64>,
     level_group_size: NonZeroU32,
     min_level_size: NonZeroU32,
-) -> Result<Reader<FileFuse>>
-{
+) -> Result<Reader<FileFuse>> {
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
-    let mut writer = tempfile::tempfile().and_then(|file| {
-        create_writer(compression_type, compression_level, file)
-    })?;
+    let mut writer = tempfile::tempfile()
+        .and_then(|file| create_writer(compression_type, compression_level, file))?;
 
     for result in words_db.iter(rtxn)? {
         let (word, ()) = result?;
@@ -193,7 +194,8 @@ fn compute_positions_levels(
             left..=right
         };
 
-        let first_level_size = words_positions_db.remap_data_type::<DecodeIgnore>()
+        let first_level_size = words_positions_db
+            .remap_data_type::<DecodeIgnore>()
             .range(rtxn, &level_0_range)?
             .fold(Ok(0u32), |count, result| result.and(count).map(|c| c + 1))?;
 
@@ -253,8 +255,7 @@ fn write_level_entry(
     left: u32,
     right: u32,
     ids: &RoaringBitmap,
-) -> Result<()>
-{
+) -> Result<()> {
     let key = (word, level, left, right);
     let key = StrLevelPositionCodec::bytes_encode(&key).ok_or(Error::Encoding)?;
     let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;

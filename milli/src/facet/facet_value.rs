@@ -50,7 +50,7 @@ impl Serialize for FacetValue {
             FacetValue::Number(number) => {
                 let string = number.to_string();
                 serializer.serialize_str(&string)
-            },
+            }
         }
     }
 }

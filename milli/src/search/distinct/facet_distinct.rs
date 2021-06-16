@@ -3,11 +3,11 @@ use std::mem::size_of;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
+use super::{Distinct, DocIter};
 use crate::error::InternalError;
 use crate::heed_codec::facet::*;
 use crate::index::db_name;
 use crate::{DocumentId, FieldId, Index, Result};
-use super::{Distinct, DocIter};
 
 const FID_SIZE: usize = size_of::<FieldId>();
 const DOCID_SIZE: usize = size_of::<DocumentId>();
@@ -28,11 +28,7 @@ pub struct FacetDistinct<'a> {
 
 impl<'a> FacetDistinct<'a> {
     pub fn new(distinct: FieldId, index: &'a Index, txn: &'a heed::RoTxn<'a>) -> Self {
-        Self {
-            distinct,
-            index,
-            txn,
-        }
+        Self { distinct, index, txn }
     }
 }
 
@@ -47,16 +43,12 @@ pub struct FacetDistinctIter<'a> {
 
 impl<'a> FacetDistinctIter<'a> {
     fn facet_string_docids(&self, key: &str) -> heed::Result<Option<RoaringBitmap>> {
-        self.index
-            .facet_id_string_docids
-            .get(self.txn, &(self.distinct, key))
+        self.index.facet_id_string_docids.get(self.txn, &(self.distinct, key))
     }
 
     fn facet_number_docids(&self, key: f64) -> heed::Result<Option<RoaringBitmap>> {
         // get facet docids on level 0
-        self.index
-            .facet_id_f64_docids
-            .get(self.txn, &(self.distinct, 0, key, key))
+        self.index.facet_id_f64_docids.get(self.txn, &(self.distinct, 0, key, key))
     }
 
     fn distinct_string(&mut self, id: DocumentId) -> Result<()> {
@@ -64,9 +56,8 @@ impl<'a> FacetDistinctIter<'a> {
 
         for item in iter {
             let ((_, _, value), _) = item?;
-            let facet_docids = self
-                .facet_string_docids(value)?
-                .ok_or(InternalError::DatabaseMissingEntry {
+            let facet_docids =
+                self.facet_string_docids(value)?.ok_or(InternalError::DatabaseMissingEntry {
                     db_name: db_name::FACET_ID_STRING_DOCIDS,
                     key: None,
                 })?;
@@ -83,9 +74,8 @@ impl<'a> FacetDistinctIter<'a> {
 
         for item in iter {
             let ((_, _, value), _) = item?;
-            let facet_docids = self
-                .facet_number_docids(value)?
-                .ok_or(InternalError::DatabaseMissingEntry {
+            let facet_docids =
+                self.facet_number_docids(value)?.ok_or(InternalError::DatabaseMissingEntry {
                     db_name: db_name::FACET_ID_F64_DOCIDS,
                     key: None,
                 })?;

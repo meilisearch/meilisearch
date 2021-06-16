@@ -1,6 +1,7 @@
 use std::iter::{Chain, FromIterator};
 use std::ops::RangeInclusive;
-use roaring::bitmap::{RoaringBitmap, IntoIter};
+
+use roaring::bitmap::{IntoIter, RoaringBitmap};
 
 pub struct AvailableDocumentsIds {
     iter: Chain<IntoIter, RangeInclusive<u32>>,
@@ -18,16 +19,12 @@ impl AvailableDocumentsIds {
                     None => 1..=0, // empty range iterator
                 };
 
-                AvailableDocumentsIds {
-                    iter: available.into_iter().chain(iter),
-                }
-            },
+                AvailableDocumentsIds { iter: available.into_iter().chain(iter) }
+            }
             None => {
                 let empty = RoaringBitmap::new().into_iter();
-                AvailableDocumentsIds {
-                    iter: empty.chain(0..=u32::max_value()),
-                }
-            },
+                AvailableDocumentsIds { iter: empty.chain(0..=u32::max_value()) }
+            }
         }
     }
 }

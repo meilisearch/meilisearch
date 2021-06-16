@@ -6,9 +6,8 @@ use std::time::Instant;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use log::debug;
+use milli::{obkv_to_json, Index};
 use structopt::StructOpt;
-
-use milli::{Index, obkv_to_json};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -86,7 +85,8 @@ fn main() -> anyhow::Result<()> {
         }
 
         if opt.print_facet_distribution {
-            let facets = index.facets_distribution(&rtxn).candidates(result.candidates).execute()?;
+            let facets =
+                index.facets_distribution(&rtxn).candidates(result.candidates).execute()?;
             serde_json::to_writer(&mut stdout, &facets)?;
             let _ = writeln!(&mut stdout);
         }

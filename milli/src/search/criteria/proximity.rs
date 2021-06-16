@@ -2,22 +2,16 @@ use std::collections::btree_map::{self, BTreeMap};
 use std::collections::hash_map::HashMap;
 use std::mem::take;
 
-use roaring::RoaringBitmap;
 use log::debug;
+use roaring::RoaringBitmap;
 
-use crate::search::query_tree::{maximum_proximity, Operation, Query};
-use crate::search::{build_dfa, WordDerivationsCache};
-use crate::search::{query_tree::QueryKind};
-use crate::{DocumentId, Position, Result};
 use super::{
-    Context,
-    Criterion,
-    CriterionParameters,
-    CriterionResult,
-    query_docids,
-    query_pair_proximity_docids,
-    resolve_query_tree,
+    query_docids, query_pair_proximity_docids, resolve_query_tree, Context, Criterion,
+    CriterionParameters, CriterionResult,
 };
+use crate::search::query_tree::{maximum_proximity, Operation, Query, QueryKind};
+use crate::search::{build_dfa, WordDerivationsCache};
+use crate::{DocumentId, Position, Result};
 
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
 
@@ -63,28 +57,33 @@ impl<'t> Criterion for Proximity<'t> {
         }
 
         loop {
-            debug!("Proximity at iteration {} (max prox {:?}) ({:?})",
+            debug!(
+                "Proximity at iteration {} (max prox {:?}) ({:?})",
                 self.proximity,
                 self.state.as_ref().map(|(mp, _, _)| mp),
                 self.state.as_ref().map(|(_, _, cd)| cd),
             );
 
             match &mut self.state {
-                Some((max_prox, _, allowed_candidates)) if allowed_candidates.is_empty() || self.proximity > *max_prox => {
+                Some((max_prox, _, allowed_candidates))
+                    if allowed_candidates.is_empty() || self.proximity > *max_prox =>
+                {
                     self.state = None; // reset state
-                },
+                }
                 Some((_, query_tree, allowed_candidates)) => {
-                    let mut new_candidates = if allowed_candidates.len() <= CANDIDATES_THRESHOLD && self.proximity > PROXIMITY_THRESHOLD {
+                    let mut new_candidates = if allowed_candidates.len() <= CANDIDATES_THRESHOLD
+                        && self.proximity > PROXIMITY_THRESHOLD
+                    {
                         if let Some(cache) = self.plane_sweep_cache.as_mut() {
                             match cache.next() {
                                 Some((p, candidates)) => {
                                     self.proximity = p;
                                     candidates
-                                },
+                                }
                                 None => {
                                     self.state = None; // reset state
-                                    continue
-                                },
+                                    continue;
+                                }
                             }
                         } else {
                             let cache = resolve_plane_sweep_candidates(
@@ -95,9 +94,10 @@ impl<'t> Criterion for Proximity<'t> {
                             )?;
                             self.plane_sweep_cache = Some(cache.into_iter());
 
-                            continue
+                            continue;
                         }
-                    } else { // use set theory based algorithm
+                    } else {
+                        // use set theory based algorithm
                         resolve_candidates(
                             self.ctx,
                             &query_tree,
@@ -117,39 +117,50 @@ impl<'t> Criterion for Proximity<'t> {
                         filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
-                },
-                None => {
-                    match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
-                            let mut candidates = match candidates {
-                                Some(candidates) => candidates,
-                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
-                            };
-
-                            if let Some(filtered_candidates) = filtered_candidates {
-                                candidates &= filtered_candidates;
+                }
+                None => match self.parent.next(params)? {
+                    Some(CriterionResult {
+                        query_tree: Some(query_tree),
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        let mut candidates = match candidates {
+                            Some(candidates) => candidates,
+                            None => {
+                                resolve_query_tree(self.ctx, &query_tree, params.wdcache)?
+                                    - params.excluded_candidates
                             }
+                        };
 
-                            match bucket_candidates {
-                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                                None => self.bucket_candidates |= &candidates,
-                            }
+                        if let Some(filtered_candidates) = filtered_candidates {
+                            candidates &= filtered_candidates;
+                        }
 
-                            let maximum_proximity = maximum_proximity(&query_tree);
-                            self.state = Some((maximum_proximity as u8, query_tree, candidates));
-                            self.proximity = 0;
-                            self.plane_sweep_cache = None;
-                        },
-                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
-                            return Ok(Some(CriterionResult {
-                                query_tree: None,
-                                candidates,
-                                filtered_candidates,
-                                bucket_candidates,
-                            }));
-                        },
-                        None => return Ok(None),
+                        match bucket_candidates {
+                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                            None => self.bucket_candidates |= &candidates,
+                        }
+
+                        let maximum_proximity = maximum_proximity(&query_tree);
+                        self.state = Some((maximum_proximity as u8, query_tree, candidates));
+                        self.proximity = 0;
+                        self.plane_sweep_cache = None;
                     }
+                    Some(CriterionResult {
+                        query_tree: None,
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        return Ok(Some(CriterionResult {
+                            query_tree: None,
+                            candidates,
+                            filtered_candidates,
+                            bucket_candidates,
+                        }));
+                    }
+                    None => return Ok(None),
                 },
             }
         }
@@ -162,46 +173,48 @@ fn resolve_candidates<'t>(
     proximity: u8,
     cache: &mut Cache,
     wdcache: &mut WordDerivationsCache,
-) -> Result<RoaringBitmap>
-{
+) -> Result<RoaringBitmap> {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
-    {
-        use Operation::{And, Phrase, Or};
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>> {
+        use Operation::{And, Or, Phrase};
 
         let result = match query_tree {
             And(ops) => mdfs(ctx, ops, proximity, cache, wdcache)?,
-            Phrase(words) => if proximity == 0 {
-                let most_left = words.first().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
-                let most_right = words.last().map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
-                let mut candidates = None;
-                for slice in words.windows(2) {
-                    let (left, right) = (&slice[0], &slice[1]);
-                    match ctx.word_pair_proximity_docids(left, right, 1)? {
-                        Some(pair_docids) => {
-                            match candidates.as_mut() {
+            Phrase(words) => {
+                if proximity == 0 {
+                    let most_left = words
+                        .first()
+                        .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
+                    let most_right = words
+                        .last()
+                        .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
+                    let mut candidates = None;
+                    for slice in words.windows(2) {
+                        let (left, right) = (&slice[0], &slice[1]);
+                        match ctx.word_pair_proximity_docids(left, right, 1)? {
+                            Some(pair_docids) => match candidates.as_mut() {
                                 Some(candidates) => *candidates &= pair_docids,
                                 None => candidates = Some(pair_docids),
+                            },
+                            None => {
+                                candidates = None;
+                                break;
                             }
-                        },
-                        None => {
-                            candidates = None;
-                            break;
                         }
                     }
+                    match (most_left, most_right, candidates) {
+                        (Some(l), Some(r), Some(c)) => vec![(l, r, c)],
+                        _otherwise => Default::default(),
+                    }
+                } else {
+                    Default::default()
                 }
-                match (most_left, most_right, candidates) {
-                    (Some(l), Some(r), Some(c)) => vec![(l, r, c)],
-                    _otherwise => Default::default(),
-                }
-            } else {
-                Default::default()
-            },
+            }
             Or(_, ops) => {
                 let mut output = Vec::new();
                 for op in ops {
@@ -209,13 +222,15 @@ fn resolve_candidates<'t>(
                     output.extend(result);
                 }
                 output
-            },
-            Operation::Query(q) => if proximity == 0 {
-                let candidates = query_docids(ctx, q, wdcache)?;
-                vec![(q.clone(), q.clone(), candidates)]
-            } else {
-                Default::default()
-            },
+            }
+            Operation::Query(q) => {
+                if proximity == 0 {
+                    let candidates = query_docids(ctx, q, wdcache)?;
+                    vec![(q.clone(), q.clone(), candidates)]
+                } else {
+                    Default::default()
+                }
+            }
         };
 
         Ok(result)
@@ -228,8 +243,7 @@ fn resolve_candidates<'t>(
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
-    {
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>> {
         fn pair_combinations(mana: u8, left_max: u8) -> impl Iterator<Item = (u8, u8)> {
             (0..=mana.min(left_max)).map(move |m| (m, mana - m))
         }
@@ -257,7 +271,8 @@ fn resolve_candidates<'t>(
 
                 for (ll, lr, lcandidates) in lefts {
                     for (rl, rr, rcandidates) in rights {
-                        let mut candidates = query_pair_proximity_docids(ctx, lr, rl, pair_p + 1, wdcache)?;
+                        let mut candidates =
+                            query_pair_proximity_docids(ctx, lr, rl, pair_p + 1, wdcache)?;
                         if lcandidates.len() < rcandidates.len() {
                             candidates.intersect_with(lcandidates);
                             candidates.intersect_with(rcandidates);
@@ -282,22 +297,26 @@ fn resolve_candidates<'t>(
         proximity: u8,
         cache: &mut Cache,
         wdcache: &mut WordDerivationsCache,
-    ) -> Result<Vec<(Query, Query, RoaringBitmap)>>
-    {
+    ) -> Result<Vec<(Query, Query, RoaringBitmap)>> {
         // Extract the first two elements but gives the tail
         // that is just after the first element.
-        let next = branches.split_first().map(|(h1, t)| {
-            (h1, t.split_first().map(|(h2, _)| (h2, t)))
-        });
+        let next =
+            branches.split_first().map(|(h1, t)| (h1, t.split_first().map(|(h2, _)| (h2, t))));
 
         match next {
-            Some((head1, Some((head2, [_])))) => mdfs_pair(ctx, head1, head2, proximity, cache, wdcache),
+            Some((head1, Some((head2, [_])))) => {
+                mdfs_pair(ctx, head1, head2, proximity, cache, wdcache)
+            }
             Some((head1, Some((head2, tail)))) => {
                 let mut output = Vec::new();
                 for p in 0..=proximity {
-                    for (lhead, _, head_candidates) in mdfs_pair(ctx, head1, head2, p, cache, wdcache)? {
+                    for (lhead, _, head_candidates) in
+                        mdfs_pair(ctx, head1, head2, p, cache, wdcache)?
+                    {
                         if !head_candidates.is_empty() {
-                            for (_, rtail, mut candidates) in mdfs(ctx, tail, proximity - p, cache, wdcache)? {
+                            for (_, rtail, mut candidates) in
+                                mdfs(ctx, tail, proximity - p, cache, wdcache)?
+                            {
                                 candidates.intersect_with(&head_candidates);
                                 if !candidates.is_empty() {
                                     output.push((lhead.clone(), rtail, candidates));
@@ -307,7 +326,7 @@ fn resolve_candidates<'t>(
                     }
                 }
                 Ok(output)
-            },
+            }
             Some((head1, None)) => resolve_operation(ctx, head1, proximity, cache, wdcache),
             None => Ok(Default::default()),
         }
@@ -325,47 +344,48 @@ fn resolve_plane_sweep_candidates(
     query_tree: &Operation,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> Result<BTreeMap<u8, RoaringBitmap>>
-{
+) -> Result<BTreeMap<u8, RoaringBitmap>> {
     /// FIXME may be buggy with query like "new new york"
     fn plane_sweep(
         groups_positions: Vec<Vec<(Position, u8, Position)>>,
         consecutive: bool,
-    ) -> Result<Vec<(Position, u8, Position)>>
-    {
+    ) -> Result<Vec<(Position, u8, Position)>> {
         fn compute_groups_proximity(
             groups: &[(usize, (Position, u8, Position))],
             consecutive: bool,
-        ) -> Option<(Position, u8, Position)>
-        {
+        ) -> Option<(Position, u8, Position)> {
             // take the inner proximity of the first group as initial
             let (_, (_, mut proximity, _)) = groups.first()?;
             let (_, (left_most_pos, _, _)) = groups.first()?;
-            let (_, (_, _, right_most_pos)) = groups.iter().max_by_key(|(_, (_, _, right_most_pos))| right_most_pos)?;
+            let (_, (_, _, right_most_pos)) =
+                groups.iter().max_by_key(|(_, (_, _, right_most_pos))| right_most_pos)?;
 
             for pair in groups.windows(2) {
                 if let [(i1, (lpos1, _, rpos1)), (i2, (lpos2, prox2, rpos2))] = pair {
                     // if two positions are equal, meaning that they share at least a word, we return None
                     if rpos1 == rpos2 || lpos1 == lpos2 || rpos1 == lpos2 || lpos1 == rpos2 {
-                        return None
+                        return None;
                     }
 
                     let pair_proximity = {
                         // if intervals are disjoint [..].(..)
-                        if lpos2 > rpos1 { lpos2 - rpos1 }
+                        if lpos2 > rpos1 {
+                            lpos2 - rpos1
+                        }
                         // if the second interval is a subset of the first [.(..).]
-                        else if rpos2 < rpos1 { (lpos2 - lpos1).min(rpos1 - rpos2) }
+                        else if rpos2 < rpos1 {
+                            (lpos2 - lpos1).min(rpos1 - rpos2)
+                        }
                         // if intervals overlaps [.(..].)
-                        else { (lpos2 - lpos1).min(rpos2 - rpos1) }
+                        else {
+                            (lpos2 - lpos1).min(rpos2 - rpos1)
+                        }
                     };
 
                     // if groups are in the good order (query order) we remove 1 to the proximity
                     // the proximity is clamped to 7
-                    let pair_proximity = if i1 < i2 {
-                        (pair_proximity - 1).min(7)
-                    } else {
-                        pair_proximity.min(7)
-                    };
+                    let pair_proximity =
+                        if i1 < i2 { (pair_proximity - 1).min(7) } else { pair_proximity.min(7) };
 
                     proximity += pair_proximity as u8 + prox2;
                 }
@@ -381,7 +401,8 @@ fn resolve_plane_sweep_candidates(
 
         let groups_len = groups_positions.len();
 
-        let mut groups_positions: Vec<_> = groups_positions.into_iter().map(|pos| pos.into_iter()).collect();
+        let mut groups_positions: Vec<_> =
+            groups_positions.into_iter().map(|pos| pos.into_iter()).collect();
 
         // Pop top elements of each list.
         let mut current = Vec::with_capacity(groups_len);
@@ -452,9 +473,8 @@ fn resolve_plane_sweep_candidates(
         rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
         words_positions: &HashMap<String, RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
-    ) -> Result<Vec<(Position, u8, Position)>>
-    {
-        use Operation::{And, Phrase, Or};
+    ) -> Result<Vec<(Position, u8, Position)>> {
+        use Operation::{And, Or, Phrase};
 
         if let Some(result) = rocache.get(query_tree) {
             return Ok(result.clone());
@@ -462,13 +482,20 @@ fn resolve_plane_sweep_candidates(
 
         let result = match query_tree {
             And(ops) => {
-                 let mut groups_positions = Vec::with_capacity(ops.len());
+                let mut groups_positions = Vec::with_capacity(ops.len());
                 for operation in ops {
-                    let positions = resolve_operation(ctx, operation, docid, rocache, words_positions, wdcache)?;
+                    let positions = resolve_operation(
+                        ctx,
+                        operation,
+                        docid,
+                        rocache,
+                        words_positions,
+                        wdcache,
+                    )?;
                     groups_positions.push(positions);
                 }
                 plane_sweep(groups_positions, false)?
-            },
+            }
             Phrase(words) => {
                 let mut groups_positions = Vec::with_capacity(words.len());
                 for word in words {
@@ -479,16 +506,23 @@ fn resolve_plane_sweep_candidates(
                     groups_positions.push(positions);
                 }
                 plane_sweep(groups_positions, true)?
-            },
+            }
             Or(_, ops) => {
                 let mut result = Vec::new();
                 for op in ops {
-                    result.extend(resolve_operation(ctx, op, docid, rocache, words_positions, wdcache)?)
+                    result.extend(resolve_operation(
+                        ctx,
+                        op,
+                        docid,
+                        rocache,
+                        words_positions,
+                        wdcache,
+                    )?)
                 }
 
                 result.sort_unstable();
                 result
-            },
+            }
             Operation::Query(Query { prefix, kind }) => {
                 let mut result = Vec::new();
                 match kind {
@@ -498,9 +532,9 @@ fn resolve_plane_sweep_candidates(
                                 .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
                             result.extend(iter);
                         } else if let Some(positions) = words_positions.get(word) {
-                                result.extend(positions.iter().map(|p| (p, 0, p)));
+                            result.extend(positions.iter().map(|p| (p, 0, p)));
                         }
-                    },
+                    }
                     QueryKind::Tolerant { typo, word } => {
                         let iter = word_derivations(word, *prefix, *typo, &words_positions)
                             .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
@@ -522,8 +556,7 @@ fn resolve_plane_sweep_candidates(
         is_prefix: bool,
         max_typo: u8,
         words_positions: &'a HashMap<String, RoaringBitmap>,
-    ) -> impl Iterator<Item = &'a RoaringBitmap>
-    {
+    ) -> impl Iterator<Item = &'a RoaringBitmap> {
         let dfa = build_dfa(word, max_typo, is_prefix);
         words_positions.iter().filter_map(move |(document_word, positions)| {
             use levenshtein_automata::Distance;
@@ -539,7 +572,7 @@ fn resolve_plane_sweep_candidates(
     for docid in allowed_candidates {
         let words_positions = ctx.docid_words_positions(docid)?;
         resolve_operation_cache.clear();
-        let positions =  resolve_operation(
+        let positions = resolve_operation(
             ctx,
             query_tree,
             docid,

@@ -1,15 +1,16 @@
-use std::{borrow::Cow, cmp::{self, Ordering}, collections::BinaryHeap};
-use std::collections::{BTreeMap, HashMap, btree_map};
+use std::borrow::Cow;
+use std::cmp::{self, Ordering};
 use std::collections::binary_heap::PeekMut;
+use std::collections::{btree_map, BTreeMap, BinaryHeap, HashMap};
 use std::mem::take;
 
 use roaring::RoaringBitmap;
 
-use crate::{TreeLevel, Result, search::build_dfa};
+use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
 use crate::search::criteria::Query;
 use crate::search::query_tree::{Operation, QueryKind};
-use crate::search::{word_derivations, WordDerivationsCache};
-use super::{Criterion, CriterionParameters, CriterionResult, Context, resolve_query_tree};
+use crate::search::{build_dfa, word_derivations, WordDerivationsCache};
+use crate::{Result, TreeLevel};
 
 /// To be able to divide integers by the number of words in the query
 /// we want to find a multiplier that allow us to divide by any number between 1 and 10.
@@ -63,15 +64,19 @@ impl<'t> Criterion for Attribute<'t> {
                         filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
-                },
+                }
                 Some((query_tree, flattened_query_tree, mut allowed_candidates)) => {
                     let found_candidates = if allowed_candidates.len() < CANDIDATES_THRESHOLD {
                         let current_buckets = match self.current_buckets.as_mut() {
                             Some(current_buckets) => current_buckets,
                             None => {
-                                let new_buckets = linear_compute_candidates(self.ctx, &flattened_query_tree, &allowed_candidates)?;
+                                let new_buckets = linear_compute_candidates(
+                                    self.ctx,
+                                    &flattened_query_tree,
+                                    &allowed_candidates,
+                                )?;
                                 self.current_buckets.get_or_insert(new_buckets.into_iter())
-                            },
+                            }
                         };
 
                         match current_buckets.next() {
@@ -83,10 +88,15 @@ impl<'t> Criterion for Attribute<'t> {
                                     filtered_candidates: None,
                                     bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
-                            },
+                            }
                         }
                     } else {
-                        match set_compute_candidates(self.ctx, &flattened_query_tree, &allowed_candidates, params.wdcache)? {
+                        match set_compute_candidates(
+                            self.ctx,
+                            &flattened_query_tree,
+                            &allowed_candidates,
+                            params.wdcache,
+                        )? {
                             Some(candidates) => candidates,
                             None => {
                                 return Ok(Some(CriterionResult {
@@ -95,13 +105,14 @@ impl<'t> Criterion for Attribute<'t> {
                                     filtered_candidates: None,
                                     bucket_candidates: Some(take(&mut self.bucket_candidates)),
                                 }));
-                            },
+                            }
                         }
                     };
 
                     allowed_candidates -= &found_candidates;
 
-                    self.state = Some((query_tree.clone(), flattened_query_tree, allowed_candidates));
+                    self.state =
+                        Some((query_tree.clone(), flattened_query_tree, allowed_candidates));
 
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree),
@@ -109,39 +120,50 @@ impl<'t> Criterion for Attribute<'t> {
                         filtered_candidates: None,
                         bucket_candidates: Some(take(&mut self.bucket_candidates)),
                     }));
-                },
-                None => {
-                    match self.parent.next(params)? {
-                        Some(CriterionResult { query_tree: Some(query_tree), candidates, filtered_candidates, bucket_candidates }) => {
-                            let mut candidates = match candidates {
-                                Some(candidates) => candidates,
-                                None => resolve_query_tree(self.ctx, &query_tree, params.wdcache)? - params.excluded_candidates,
-                            };
-
-                            if let Some(filtered_candidates) = filtered_candidates {
-                                candidates &= filtered_candidates;
+                }
+                None => match self.parent.next(params)? {
+                    Some(CriterionResult {
+                        query_tree: Some(query_tree),
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        let mut candidates = match candidates {
+                            Some(candidates) => candidates,
+                            None => {
+                                resolve_query_tree(self.ctx, &query_tree, params.wdcache)?
+                                    - params.excluded_candidates
                             }
+                        };
 
-                            let flattened_query_tree = flatten_query_tree(&query_tree);
+                        if let Some(filtered_candidates) = filtered_candidates {
+                            candidates &= filtered_candidates;
+                        }
 
-                            match bucket_candidates {
-                                Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                                None => self.bucket_candidates |= &candidates,
-                            }
+                        let flattened_query_tree = flatten_query_tree(&query_tree);
 
-                            self.state = Some((query_tree, flattened_query_tree, candidates));
-                            self.current_buckets = None;
-                        },
-                        Some(CriterionResult { query_tree: None, candidates, filtered_candidates, bucket_candidates }) => {
-                            return Ok(Some(CriterionResult {
-                                query_tree: None,
-                                candidates,
-                                filtered_candidates,
-                                bucket_candidates,
-                            }));
-                        },
-                        None => return Ok(None),
+                        match bucket_candidates {
+                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                            None => self.bucket_candidates |= &candidates,
+                        }
+
+                        self.state = Some((query_tree, flattened_query_tree, candidates));
+                        self.current_buckets = None;
                     }
+                    Some(CriterionResult {
+                        query_tree: None,
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        return Ok(Some(CriterionResult {
+                            query_tree: None,
+                            candidates,
+                            filtered_candidates,
+                            bucket_candidates,
+                        }));
+                    }
+                    None => return Ok(None),
                 },
             }
         }
@@ -152,7 +174,9 @@ impl<'t> Criterion for Attribute<'t> {
 /// it will begin at the first non-empty interval and will return every interval without
 /// jumping over empty intervals.
 struct WordLevelIterator<'t, 'q> {
-    inner: Box<dyn Iterator<Item =heed::Result<((&'t str, TreeLevel, u32, u32), RoaringBitmap)>> + 't>,
+    inner: Box<
+        dyn Iterator<Item = heed::Result<((&'t str, TreeLevel, u32, u32), RoaringBitmap)>> + 't,
+    >,
     level: TreeLevel,
     interval_size: u32,
     word: Cow<'q, str>,
@@ -162,49 +186,80 @@ struct WordLevelIterator<'t, 'q> {
 }
 
 impl<'t, 'q> WordLevelIterator<'t, 'q> {
-    fn new(ctx: &'t dyn Context<'t>, word: Cow<'q, str>, in_prefix_cache: bool) -> heed::Result<Option<Self>> {
+    fn new(
+        ctx: &'t dyn Context<'t>,
+        word: Cow<'q, str>,
+        in_prefix_cache: bool,
+    ) -> heed::Result<Option<Self>> {
         match ctx.word_position_last_level(&word, in_prefix_cache)? {
-            Some(level) =>  {
+            Some(level) => {
                 let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
-                let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, None, None)?;
-                Ok(Some(Self { inner, level, interval_size, word, in_prefix_cache, inner_next: None, current_interval: None }))
-            },
+                let inner =
+                    ctx.word_position_iterator(&word, level, in_prefix_cache, None, None)?;
+                Ok(Some(Self {
+                    inner,
+                    level,
+                    interval_size,
+                    word,
+                    in_prefix_cache,
+                    inner_next: None,
+                    current_interval: None,
+                }))
+            }
             None => Ok(None),
         }
     }
 
-    fn dig(&self, ctx: &'t dyn Context<'t>, level: &TreeLevel, left_interval: Option<u32>) -> heed::Result<Self> {
+    fn dig(
+        &self,
+        ctx: &'t dyn Context<'t>,
+        level: &TreeLevel,
+        left_interval: Option<u32>,
+    ) -> heed::Result<Self> {
         let level = *level.min(&self.level);
         let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
         let word = self.word.clone();
         let in_prefix_cache = self.in_prefix_cache;
-        let inner = ctx.word_position_iterator(&word, level, in_prefix_cache, left_interval, None)?;
+        let inner =
+            ctx.word_position_iterator(&word, level, in_prefix_cache, left_interval, None)?;
 
-        Ok(Self {inner, level, interval_size, word, in_prefix_cache, inner_next: None, current_interval: None})
+        Ok(Self {
+            inner,
+            level,
+            interval_size,
+            word,
+            in_prefix_cache,
+            inner_next: None,
+            current_interval: None,
+        })
     }
 
     fn next(&mut self) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
-        fn is_next_interval(last_right: u32, next_left: u32) -> bool { last_right + 1 == next_left }
+        fn is_next_interval(last_right: u32, next_left: u32) -> bool {
+            last_right + 1 == next_left
+        }
 
         let inner_next = match self.inner_next.take() {
             Some(inner_next) => Some(inner_next),
-            None => self.inner.next().transpose()?.map(|((_, _, left, right), docids)| (left, right, docids)),
+            None => self
+                .inner
+                .next()
+                .transpose()?
+                .map(|((_, _, left, right), docids)| (left, right, docids)),
         };
 
         match inner_next {
-            Some((left, right, docids)) => {
-                match self.current_interval {
-                    Some((last_left, last_right)) if !is_next_interval(last_right, left) => {
-                        let blank_left = last_left + self.interval_size;
-                        let blank_right = last_right + self.interval_size;
-                        self.current_interval = Some((blank_left, blank_right));
-                        self.inner_next = Some((left, right, docids));
-                        Ok(Some((blank_left, blank_right, RoaringBitmap::new())))
-                    },
-                    _ => {
-                        self.current_interval = Some((left, right));
-                        Ok(Some((left, right, docids)))
-                    }
+            Some((left, right, docids)) => match self.current_interval {
+                Some((last_left, last_right)) if !is_next_interval(last_right, left) => {
+                    let blank_left = last_left + self.interval_size;
+                    let blank_right = last_right + self.interval_size;
+                    self.current_interval = Some((blank_left, blank_right));
+                    self.inner_next = Some((left, right, docids));
+                    Ok(Some((blank_left, blank_right, RoaringBitmap::new())))
+                }
+                _ => {
+                    self.current_interval = Some((left, right));
+                    Ok(Some((left, right, docids)))
                 }
             },
             None => Ok(None),
@@ -228,30 +283,37 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
         ctx: &'t dyn Context<'t>,
         queries: &'q [Query],
         wdcache: &mut WordDerivationsCache,
-    ) -> Result<Option<Self>>
-    {
+    ) -> Result<Option<Self>> {
         let mut inner = Vec::with_capacity(queries.len());
         for query in queries {
             match &query.kind {
                 QueryKind::Exact { word, .. } => {
                     if !query.prefix || ctx.in_prefix_cache(&word) {
                         let word = Cow::Borrowed(query.kind.word());
-                        if let Some(word_level_iterator) = WordLevelIterator::new(ctx, word, query.prefix)? {
+                        if let Some(word_level_iterator) =
+                            WordLevelIterator::new(ctx, word, query.prefix)?
+                        {
                             inner.push(word_level_iterator);
                         }
                     } else {
-                        for (word, _) in word_derivations(&word, true, 0, ctx.words_fst(), wdcache)? {
+                        for (word, _) in word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?
+                        {
                             let word = Cow::Owned(word.to_owned());
-                            if let Some(word_level_iterator) = WordLevelIterator::new(ctx, word, false)? {
+                            if let Some(word_level_iterator) =
+                                WordLevelIterator::new(ctx, word, false)?
+                            {
                                 inner.push(word_level_iterator);
                             }
                         }
                     }
-                },
+                }
                 QueryKind::Tolerant { typo, word } => {
-                    for (word, _) in word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)? {
+                    for (word, _) in
+                        word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)?
+                    {
                         let word = Cow::Owned(word.to_owned());
-                        if let Some(word_level_iterator) = WordLevelIterator::new(ctx, word, false)? {
+                        if let Some(word_level_iterator) = WordLevelIterator::new(ctx, word, false)?
+                        {
                             inner.push(word_level_iterator);
                         }
                     }
@@ -284,17 +346,28 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
             Some(parent) => {
                 let parent = parent.dig(ctx)?;
                 (parent.level.min(self.level), Some(Box::new(parent)))
-            },
+            }
             None => (self.level.saturating_sub(1), None),
         };
 
-        let left_interval = self.accumulator.get(self.interval_to_skip).map(|opt| opt.as_ref().map(|(left, _, _)| *left)).flatten();
+        let left_interval = self
+            .accumulator
+            .get(self.interval_to_skip)
+            .map(|opt| opt.as_ref().map(|(left, _, _)| *left))
+            .flatten();
         let mut inner = Vec::with_capacity(self.inner.len());
         for word_level_iterator in self.inner.iter() {
             inner.push(word_level_iterator.dig(ctx, &level, left_interval)?);
         }
 
-        Ok(Self {parent, inner, level, accumulator: vec![], parent_accumulator: vec![], interval_to_skip: 0})
+        Ok(Self {
+            parent,
+            inner,
+            level,
+            accumulator: vec![],
+            parent_accumulator: vec![],
+            interval_to_skip: 0,
+        })
     }
 
     fn inner_next(&mut self, level: TreeLevel) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
@@ -305,12 +378,12 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
             let wli_u8_level = Into::<u8>::into(wli.level);
             let accumulated_count = LEVEL_EXPONENTIATION_BASE.pow((u8_level - wli_u8_level) as u32);
             for _ in 0..accumulated_count {
-                if let Some((next_left, _, next_docids)) =  wli.next()? {
-                    accumulated = match accumulated.take(){
+                if let Some((next_left, _, next_docids)) = wli.next()? {
+                    accumulated = match accumulated.take() {
                         Some((acc_left, acc_right, mut acc_docids)) => {
                             acc_docids |= next_docids;
                             Some((acc_left, acc_right, acc_docids))
-                        },
+                        }
                         None => Some((next_left, next_left + interval_size, next_docids)),
                     };
                 }
@@ -322,7 +395,11 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
 
     /// return the next meta-interval created from inner WordLevelIterators,
     /// and from eventual chainned QueryLevelIterator.
-    fn next(&mut self, allowed_candidates: &RoaringBitmap, tree_level: TreeLevel) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
+    fn next(
+        &mut self,
+        allowed_candidates: &RoaringBitmap,
+        tree_level: TreeLevel,
+    ) -> heed::Result<Option<(u32, u32, RoaringBitmap)>> {
         let parent_result = match self.parent.as_mut() {
             Some(parent) => Some(parent.next(allowed_candidates, tree_level)?),
             None => None,
@@ -335,22 +412,30 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
                     &self.parent_accumulator,
                     &self.accumulator,
                     self.interval_to_skip,
-                    allowed_candidates
+                    allowed_candidates,
                 );
                 self.accumulator.push(inner_next);
                 self.parent_accumulator.push(parent_next);
                 let mut merged_interval: Option<(u32, u32, RoaringBitmap)> = None;
 
-                for current in self.accumulator.iter().rev().zip(self.parent_accumulator.iter()).skip(self.interval_to_skip) {
+                for current in self
+                    .accumulator
+                    .iter()
+                    .rev()
+                    .zip(self.parent_accumulator.iter())
+                    .skip(self.interval_to_skip)
+                {
                     if let (Some((left_a, right_a, a)), Some((left_b, right_b, b))) = current {
                         match merged_interval.as_mut() {
                             Some((_, _, merged_docids)) => *merged_docids |= a & b,
-                            None => merged_interval = Some((left_a + left_b, right_a + right_b, a & b)),
+                            None => {
+                                merged_interval = Some((left_a + left_b, right_a + right_b, a & b))
+                            }
                         }
                     }
                 }
                 Ok(merged_interval)
-            },
+            }
             None => {
                 let level = self.level;
                 match self.inner_next(level)? {
@@ -358,12 +443,11 @@ impl<'t, 'q> QueryLevelIterator<'t, 'q> {
                         self.accumulator = vec![Some((left, right, RoaringBitmap::new()))];
                         candidates &= allowed_candidates;
                         Ok(Some((left, right, candidates)))
-
-                    },
+                    }
                     None => {
                         self.accumulator = vec![None];
                         Ok(None)
-                    },
+                    }
                 }
             }
         }
@@ -379,16 +463,18 @@ fn interval_to_skip(
     already_skiped: usize,
     allowed_candidates: &RoaringBitmap,
 ) -> usize {
-    parent_accumulator.iter()
+    parent_accumulator
+        .iter()
         .zip(current_accumulator.iter())
         .skip(already_skiped)
         .take_while(|(parent, current)| {
             let skip_parent = parent.as_ref().map_or(true, |(_, _, docids)| docids.is_empty());
-            let skip_current = current.as_ref().map_or(true, |(_, _, docids)| docids.is_disjoint(allowed_candidates));
+            let skip_current = current
+                .as_ref()
+                .map_or(true, |(_, _, docids)| docids.is_disjoint(allowed_candidates));
             skip_parent && skip_current
         })
         .count()
-
 }
 
 /// A Branch is represent a possible alternative of the original query and is build with the Query Tree,
@@ -410,7 +496,7 @@ impl<'t, 'q> Branch<'t, 'q> {
                 self.last_result = last_result;
                 self.tree_level = tree_level;
                 Ok(true)
-            },
+            }
             None => Ok(false),
         }
     }
@@ -429,7 +515,7 @@ impl<'t, 'q> Branch<'t, 'q> {
         let interval_size = LEVEL_EXPONENTIATION_BASE.pow(u8_level as u32);
         let (left, right, _) = self.last_result;
 
-        self.last_result = (left + interval_size,  right + interval_size, RoaringBitmap::new());
+        self.last_result = (left + interval_size, right + interval_size, RoaringBitmap::new());
     }
 
     /// return the score of the current inner interval.
@@ -477,31 +563,31 @@ fn initialize_query_level_iterators<'t, 'q>(
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
 ) -> Result<BinaryHeap<Branch<'t, 'q>>> {
-
     let mut positions = BinaryHeap::with_capacity(branches.len());
     for branch in branches {
         let mut branch_positions = Vec::with_capacity(branch.len());
-        for queries in  branch {
+        for queries in branch {
             match QueryLevelIterator::new(ctx, queries, wdcache)? {
                 Some(qli) => branch_positions.push(qli),
                 None => {
                     // the branch seems to be invalid, so we skip it.
                     branch_positions.clear();
                     break;
-                },
+                }
             }
         }
         // QueryLevelIterator need to be sorted by level and folded in descending order.
         branch_positions.sort_unstable_by_key(|qli| qli.level);
-        let folded_query_level_iterators = branch_positions
-            .into_iter()
-            .fold(None, |fold: Option<QueryLevelIterator>, mut qli| match fold {
-                Some(fold) => {
-                    qli.parent(fold);
-                    Some(qli)
-                },
-                None => Some(qli),
-        });
+        let folded_query_level_iterators =
+            branch_positions.into_iter().fold(None, |fold: Option<QueryLevelIterator>, mut qli| {
+                match fold {
+                    Some(fold) => {
+                        qli.parent(fold);
+                        Some(qli)
+                    }
+                    None => Some(qli),
+                }
+            });
 
         if let Some(mut folded_query_level_iterators) = folded_query_level_iterators {
             let tree_level = folded_query_level_iterators.level;
@@ -526,9 +612,9 @@ fn set_compute_candidates<'t>(
     branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
-) -> Result<Option<RoaringBitmap>>
-{
-    let mut branches_heap = initialize_query_level_iterators(ctx, branches, allowed_candidates, wdcache)?;
+) -> Result<Option<RoaringBitmap>> {
+    let mut branches_heap =
+        initialize_query_level_iterators(ctx, branches, allowed_candidates, wdcache)?;
     let lowest_level = TreeLevel::min_value();
     let mut final_candidates: Option<(u32, RoaringBitmap)> = None;
     let mut allowed_candidates = allowed_candidates.clone();
@@ -539,15 +625,18 @@ fn set_compute_candidates<'t>(
         // if current is worst than best we break to return
         // candidates that correspond to the best rank
         if let Some((best_rank, _)) = final_candidates {
-            if branch_rank > best_rank { break }
+            if branch_rank > best_rank {
+                break;
+            }
         }
         let _left = branch.last_result.0;
         let candidates = take(&mut branch.last_result.2);
         if candidates.is_empty() {
             // we don't have candidates, get next interval.
-            if !branch.next(&allowed_candidates)? { PeekMut::pop(branch); }
-        }
-        else if is_lowest_level {
+            if !branch.next(&allowed_candidates)? {
+                PeekMut::pop(branch);
+            }
+        } else if is_lowest_level {
             // we have candidates, but we can't dig deeper.
             allowed_candidates -= &candidates;
             final_candidates = match final_candidates.take() {
@@ -556,19 +645,20 @@ fn set_compute_candidates<'t>(
                     best_candidates |= candidates;
                     branch.lazy_next();
                     Some((best_rank, best_candidates))
-                },
+                }
                 // we take current candidates as best candidates
                 None => {
                     branch.lazy_next();
                     Some((branch_rank, candidates))
-                },
+                }
             };
         } else {
             // we have candidates, lets dig deeper in levels.
             branch.dig(ctx)?;
-            if !branch.next(&allowed_candidates)? { PeekMut::pop(branch); }
+            if !branch.next(&allowed_candidates)? {
+                PeekMut::pop(branch);
+            }
         }
-
     }
 
     Ok(final_candidates.map(|(_rank, candidates)| candidates))
@@ -578,9 +668,11 @@ fn linear_compute_candidates(
     ctx: &dyn Context,
     branches: &FlattenedQueryTree,
     allowed_candidates: &RoaringBitmap,
-) -> Result<BTreeMap<u64, RoaringBitmap>>
-{
-    fn compute_candidate_rank(branches: &FlattenedQueryTree, words_positions: HashMap<String, RoaringBitmap>) -> u64 {
+) -> Result<BTreeMap<u64, RoaringBitmap>> {
+    fn compute_candidate_rank(
+        branches: &FlattenedQueryTree,
+        words_positions: HashMap<String, RoaringBitmap>,
+    ) -> u64 {
         let mut min_rank = u64::max_value();
         for branch in branches {
             let branch_len = branch.len();
@@ -593,17 +685,20 @@ fn linear_compute_candidates(
                         QueryKind::Exact { word, .. } => {
                             if *prefix {
                                 word_derivations(word, true, 0, &words_positions)
-                                    .flat_map(|positions| positions.iter().next()).min()
+                                    .flat_map(|positions| positions.iter().next())
+                                    .min()
                             } else {
-                                words_positions.get(word)
+                                words_positions
+                                    .get(word)
                                     .map(|positions| positions.iter().next())
                                     .flatten()
                             }
-                        },
+                        }
                         QueryKind::Tolerant { typo, word } => {
                             word_derivations(word, *prefix, *typo, &words_positions)
-                                .flat_map(|positions| positions.iter().next()).min()
-                        },
+                                .flat_map(|positions| positions.iter().next())
+                                .min()
+                        }
                     };
 
                     match (position, current_position) {
@@ -627,9 +722,11 @@ fn linear_compute_candidates(
                 branch_rank.sort_unstable();
                 // because several words in same query can't match all a the position 0,
                 // we substract the word index to the position.
-                let branch_rank: u64 = branch_rank.into_iter().enumerate().map(|(i, r)| r - i as u64).sum();
+                let branch_rank: u64 =
+                    branch_rank.into_iter().enumerate().map(|(i, r)| r - i as u64).sum();
                 // here we do the means of the words of the branch
-                min_rank = min_rank.min(branch_rank * LCM_10_FIRST_NUMBERS as u64 / branch_len as u64);
+                min_rank =
+                    min_rank.min(branch_rank * LCM_10_FIRST_NUMBERS as u64 / branch_len as u64);
             }
         }
 
@@ -641,8 +738,7 @@ fn linear_compute_candidates(
         is_prefix: bool,
         max_typo: u8,
         words_positions: &'a HashMap<String, RoaringBitmap>,
-    ) -> impl Iterator<Item = &'a RoaringBitmap>
-    {
+    ) -> impl Iterator<Item = &'a RoaringBitmap> {
         let dfa = build_dfa(word, max_typo, is_prefix);
         words_positions.iter().filter_map(move |(document_word, positions)| {
             use levenshtein_automata::Distance;
@@ -680,25 +776,26 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
                     }
                 }
                 out
-            },
+            }
             None => recurse(head),
         }
     }
 
     fn recurse(op: &Operation) -> FlattenedQueryTree {
         match op {
-            And(ops) => {
-                ops.split_first().map_or_else(Vec::new, |(h, t)| and_recurse(h, t))
-            },
-            Or(_, ops) => if ops.iter().all(|op| op.query().is_some()) {
-                vec![vec![ops.iter().flat_map(|op| op.query()).cloned().collect()]]
-            } else {
-                ops.iter().map(recurse).flatten().collect()
-            },
+            And(ops) => ops.split_first().map_or_else(Vec::new, |(h, t)| and_recurse(h, t)),
+            Or(_, ops) => {
+                if ops.iter().all(|op| op.query().is_some()) {
+                    vec![vec![ops.iter().flat_map(|op| op.query()).cloned().collect()]]
+                } else {
+                    ops.iter().map(recurse).flatten().collect()
+                }
+            }
             Phrase(words) => {
-                let queries = words.iter().map(|word| {
-                    vec![Query {prefix: false, kind: QueryKind::exact(word.clone())}]
-                }).collect();
+                let queries = words
+                    .iter()
+                    .map(|word| vec![Query { prefix: false, kind: QueryKind::exact(word.clone()) }])
+                    .collect();
                 vec![queries]
             }
             Operation::Query(query) => vec![vec![vec![query.clone()]]],
@@ -712,28 +809,43 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
 mod tests {
     use big_s::S;
 
-    use crate::search::criteria::QueryKind;
     use super::*;
+    use crate::search::criteria::QueryKind;
 
     #[test]
     fn simple_flatten_query_tree() {
-        let query_tree = Operation::Or(false, vec![
-            Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }),
-            Operation::And(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("manythe")) }),
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("fish")) }),
-            ]),
-            Operation::And(vec![
-                Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("many")) }),
-                Operation::Or(false, vec![
-                    Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("thefish")) }),
-                    Operation::And(vec![
-                        Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("the")) }),
-                        Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("fish")) }),
-                    ]),
+        let query_tree = Operation::Or(
+            false,
+            vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }),
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("manythe")) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("fish")) }),
                 ]),
-            ]),
-        ]);
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact(S("many")) }),
+                    Operation::Or(
+                        false,
+                        vec![
+                            Operation::Query(Query {
+                                prefix: false,
+                                kind: QueryKind::exact(S("thefish")),
+                            }),
+                            Operation::And(vec![
+                                Operation::Query(Query {
+                                    prefix: false,
+                                    kind: QueryKind::exact(S("the")),
+                                }),
+                                Operation::Query(Query {
+                                    prefix: false,
+                                    kind: QueryKind::exact(S("fish")),
+                                }),
+                            ]),
+                        ],
+                    ),
+                ]),
+            ],
+        );
 
         let expected = vec![
             vec![vec![Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }]],

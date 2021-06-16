@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
 
-use crate::{FieldId, DocumentId};
 use crate::facet::value_encoding::f64_into_bytes;
+use crate::{DocumentId, FieldId};
 
 pub struct FieldDocIdFacetF64Codec;
 

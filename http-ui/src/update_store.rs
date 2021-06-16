@@ -4,9 +4,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crossbeam_channel::Sender;
-use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
-use heed::{EnvOpenOptions, Env, Database};
-use serde::{Serialize, Deserialize};
+use heed::types::{ByteSlice, DecodeIgnore, OwnedType, SerdeJson};
+use heed::{Database, Env, EnvOpenOptions};
+use serde::{Deserialize, Serialize};
 
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
@@ -25,7 +25,9 @@ pub trait UpdateHandler<M, N> {
 }
 
 impl<M, N, F> UpdateHandler<M, N> for F
-where F: FnMut(u64, M, &[u8]) -> heed::Result<N> + Send + 'static {
+where
+    F: FnMut(u64, M, &[u8]) -> heed::Result<N> + Send + 'static,
+{
     fn handle_update(&mut self, update_id: u64, meta: M, content: &[u8]) -> heed::Result<N> {
         self(update_id, meta, content)
     }
@@ -82,26 +84,17 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
 
     /// Returns the new biggest id to use to store the new update.
     fn new_update_id(&self, txn: &heed::RoTxn) -> heed::Result<u64> {
-        let last_pending = self.pending_meta
-            .remap_data_type::<DecodeIgnore>()
-            .last(txn)?
-            .map(|(k, _)| k.get());
+        let last_pending =
+            self.pending_meta.remap_data_type::<DecodeIgnore>().last(txn)?.map(|(k, _)| k.get());
 
-        let last_processed = self.processed_meta
-            .remap_data_type::<DecodeIgnore>()
-            .last(txn)?
-            .map(|(k, _)| k.get());
+        let last_processed =
+            self.processed_meta.remap_data_type::<DecodeIgnore>().last(txn)?.map(|(k, _)| k.get());
 
-        let last_aborted = self.aborted_meta
-            .remap_data_type::<DecodeIgnore>()
-            .last(txn)?
-            .map(|(k, _)| k.get());
+        let last_aborted =
+            self.aborted_meta.remap_data_type::<DecodeIgnore>().last(txn)?.map(|(k, _)| k.get());
 
-        let last_update_id = [last_pending, last_processed, last_aborted]
-            .iter()
-            .copied()
-            .flatten()
-            .max();
+        let last_update_id =
+            [last_pending, last_processed, last_aborted].iter().copied().flatten().max();
 
         match last_update_id {
             Some(last_id) => Ok(last_id + 1),
@@ -112,7 +105,8 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     /// Registers the update content in the pending store and the meta
     /// into the pending-meta store. Returns the new unique update id.
     pub fn register_update(&self, meta: &M, content: &[u8]) -> heed::Result<u64>
-    where M: Serialize,
+    where
+        M: Serialize,
     {
         let mut wtxn = self.env.write_txn()?;
 
@@ -152,9 +146,8 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         // a reader while processing it, not a writer.
         match first_meta {
             Some((first_id, first_meta)) => {
-                let first_content = self.pending
-                    .get(&rtxn, &first_id)?
-                    .expect("associated update content");
+                let first_content =
+                    self.pending.get(&rtxn, &first_id)?.expect("associated update content");
 
                 // Process the pending update using the provided user function.
                 let new_meta = handler.handle_update(first_id.get(), first_meta, first_content)?;
@@ -170,15 +163,16 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
                 wtxn.commit()?;
 
                 Ok(Some((first_id.get(), new_meta)))
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
 
     /// The id and metadata of the update that is currently being processed,
     /// `None` if no update is being processed.
     pub fn processing_update(&self) -> heed::Result<Option<(u64, M)>>
-    where M: for<'a> Deserialize<'a>,
+    where
+        M: for<'a> Deserialize<'a>,
     {
         let rtxn = self.env.read_txn()?;
         match self.pending_meta.first(&rtxn)? {
@@ -242,7 +236,8 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     /// that as already been processed or which doesn't actually exist, will
     /// return `None`.
     pub fn abort_update(&self, update_id: u64) -> heed::Result<Option<M>>
-    where M: Serialize + for<'a> Deserialize<'a>,
+    where
+        M: Serialize + for<'a> Deserialize<'a>,
     {
         let mut wtxn = self.env.write_txn()?;
         let key = BEU64::new(update_id);
@@ -269,7 +264,8 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     /// Aborts all the pending updates, and not the one being currently processed.
     /// Returns the update metas and ids that were successfully aborted.
     pub fn abort_pendings(&self) -> heed::Result<Vec<(u64, M)>>
-    where M: Serialize + for<'a> Deserialize<'a>,
+    where
+        M: Serialize + for<'a> Deserialize<'a>,
     {
         let mut wtxn = self.env.write_txn()?;
         let mut aborted_updates = Vec::new();
@@ -303,17 +299,19 @@ pub enum UpdateStatusMeta<M, N> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    use super::*;
 
     #[test]
     fn simple() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content:&_| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content: &_| {
             Ok(meta + " processed")
-        }).unwrap();
+        })
+        .unwrap();
 
         let meta = String::from("kiki");
         let update_id = update_store.register_update(&meta, &[]).unwrap();
@@ -329,10 +327,11 @@ mod tests {
     fn long_running_update() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content:&_| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content: &_| {
             thread::sleep(Duration::from_millis(400));
             Ok(meta + " processed")
-        }).unwrap();
+        })
+        .unwrap();
 
         let before_register = Instant::now();
 

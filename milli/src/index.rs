@@ -3,23 +3,22 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
-use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use heed::types::*;
+use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
-use crate::error::{UserError, FieldIdMapMissingEntry, InternalError};
-use crate::{Criterion, default_criteria, FacetDistribution, FieldsDistribution, Search};
-use crate::{BEU32, DocumentId, ExternalDocumentsIds, FieldId, Result};
-use crate::{
-    BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
-    ObkvCodec, RoaringBitmapCodec, RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
-    FieldIdWordCountCodec,
-};
-use crate::heed_codec::facet::{
-    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-    FacetValueStringCodec, FacetLevelValueF64Codec,
-};
+use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
+use crate::heed_codec::facet::{
+    FacetLevelValueF64Codec, FacetValueStringCodec, FieldDocIdFacetF64Codec,
+    FieldDocIdFacetStringCodec,
+};
+use crate::{
+    default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
+    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldId, FieldIdWordCountCodec,
+    FieldsDistribution, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
+    StrLevelPositionCodec, StrStrU8Codec, BEU32,
+};
 
 pub mod main_key {
     pub const CRITERIA_KEY: &str = "criteria";
@@ -114,14 +113,17 @@ impl Index {
         let word_prefix_docids = env.create_database(Some(WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
-        let word_prefix_pair_proximity_docids = env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
+        let word_prefix_pair_proximity_docids =
+            env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
         let word_level_position_docids = env.create_database(Some(WORD_LEVEL_POSITION_DOCIDS))?;
         let field_id_word_count_docids = env.create_database(Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
-        let word_prefix_level_position_docids = env.create_database(Some(WORD_PREFIX_LEVEL_POSITION_DOCIDS))?;
+        let word_prefix_level_position_docids =
+            env.create_database(Some(WORD_PREFIX_LEVEL_POSITION_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
         let field_id_docid_facet_f64s = env.create_database(Some(FIELD_ID_DOCID_FACET_F64S))?;
-        let field_id_docid_facet_strings = env.create_database(Some(FIELD_ID_DOCID_FACET_STRINGS))?;
+        let field_id_docid_facet_strings =
+            env.create_database(Some(FIELD_ID_DOCID_FACET_STRINGS))?;
         let documents = env.create_database(Some(DOCUMENTS))?;
 
         Index::initialize_creation_dates(&env, main)?;
@@ -184,18 +186,26 @@ impl Index {
     /* documents ids */
 
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
-    pub(crate) fn put_documents_ids(&self, wtxn: &mut RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
+    pub(crate) fn put_documents_ids(
+        &self,
+        wtxn: &mut RwTxn,
+        docids: &RoaringBitmap,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, main_key::DOCUMENTS_IDS_KEY, docids)
     }
 
     /// Returns the internal documents ids.
     pub fn documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
-        Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?.unwrap_or_default())
+        Ok(self
+            .main
+            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?
+            .unwrap_or_default())
     }
 
     /// Returns the number of documents indexed in the database.
     pub fn number_of_documents(&self, rtxn: &RoTxn) -> Result<u64> {
-        let count = self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
+        let count =
+            self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
     }
 
@@ -224,21 +234,30 @@ impl Index {
         &self,
         wtxn: &mut RwTxn,
         external_documents_ids: &ExternalDocumentsIds<'a>,
-    ) -> heed::Result<()>
-    {
+    ) -> heed::Result<()> {
         let ExternalDocumentsIds { hard, soft } = external_documents_ids;
         let hard = hard.as_fst().as_bytes();
         let soft = soft.as_fst().as_bytes();
-        self.main.put::<_, Str, ByteSlice>(wtxn, main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY, hard)?;
-        self.main.put::<_, Str, ByteSlice>(wtxn, main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY, soft)?;
+        self.main.put::<_, Str, ByteSlice>(
+            wtxn,
+            main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY,
+            hard,
+        )?;
+        self.main.put::<_, Str, ByteSlice>(
+            wtxn,
+            main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY,
+            soft,
+        )?;
         Ok(())
     }
 
     /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
     pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> Result<ExternalDocumentsIds<'t>> {
-        let hard = self.main.get::<_, Str, ByteSlice>(rtxn, main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        let soft = self.main.get::<_, Str, ByteSlice>(rtxn, main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
+        let hard =
+            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
+        let soft =
+            self.main.get::<_, Str, ByteSlice>(rtxn, main_key::SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
         let hard = match hard {
             Some(hard) => fst::Map::new(hard)?.map_data(Cow::Borrowed)?,
             None => fst::Map::default().map_data(Cow::Owned)?,
@@ -254,42 +273,62 @@ impl Index {
 
     /// Writes the fields ids map which associate the documents keys with an internal field id
     /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
-    pub(crate) fn put_fields_ids_map(&self, wtxn: &mut RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
+    pub(crate) fn put_fields_ids_map(
+        &self,
+        wtxn: &mut RwTxn,
+        map: &FieldsIdsMap,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, main_key::FIELDS_IDS_MAP_KEY, map)
     }
 
     /// Returns the fields ids map which associate the documents keys with an internal field id
     /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
     pub fn fields_ids_map(&self, rtxn: &RoTxn) -> heed::Result<FieldsIdsMap> {
-        Ok(self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(
-            rtxn,
-            main_key::FIELDS_IDS_MAP_KEY,
-        )?.unwrap_or_default())
+        Ok(self
+            .main
+            .get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, main_key::FIELDS_IDS_MAP_KEY)?
+            .unwrap_or_default())
     }
 
     /* fields distribution */
 
     /// Writes the fields distribution which associates every field name with
     /// the number of times it occurs in the documents.
-    pub(crate) fn put_fields_distribution(&self, wtxn: &mut RwTxn, distribution: &FieldsDistribution) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(wtxn, main_key::FIELDS_DISTRIBUTION_KEY, distribution)
+    pub(crate) fn put_fields_distribution(
+        &self,
+        wtxn: &mut RwTxn,
+        distribution: &FieldsDistribution,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(
+            wtxn,
+            main_key::FIELDS_DISTRIBUTION_KEY,
+            distribution,
+        )
     }
 
     /// Returns the fields distribution which associates every field name with
     /// the number of times it occurs in the documents.
     pub fn fields_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
-        Ok(self.main.get::<_, Str, SerdeJson<FieldsDistribution>>(
-            rtxn,
-            main_key::FIELDS_DISTRIBUTION_KEY,
-        )?.unwrap_or_default())
+        Ok(self
+            .main
+            .get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, main_key::FIELDS_DISTRIBUTION_KEY)?
+            .unwrap_or_default())
     }
 
     /* displayed fields */
 
     /// Writes the fields that must be displayed in the defined order.
     /// There must be not be any duplicate field id.
-    pub(crate) fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, main_key::DISPLAYED_FIELDS_KEY, &fields)
+    pub(crate) fn put_displayed_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &[&str],
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(
+            wtxn,
+            main_key::DISPLAYED_FIELDS_KEY,
+            &fields,
+        )
     }
 
     /// Deletes the displayed fields ids, this will make the engine to display
@@ -313,14 +352,17 @@ impl Index {
                 for name in fields.into_iter() {
                     match fields_ids_map.id(name) {
                         Some(field_id) => fields_ids.push(field_id),
-                        None => return Err(FieldIdMapMissingEntry::FieldName {
-                            field_name: name.to_string(),
-                            process: "Index::displayed_fields_ids",
-                        }.into()),
+                        None => {
+                            return Err(FieldIdMapMissingEntry::FieldName {
+                                field_name: name.to_string(),
+                                process: "Index::displayed_fields_ids",
+                            }
+                            .into())
+                        }
                     }
                 }
                 Ok(Some(fields_ids))
-            },
+            }
             None => Ok(None),
         }
     }
@@ -328,8 +370,16 @@ impl Index {
     /* searchable fields */
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
-    pub(crate) fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, main_key::SEARCHABLE_FIELDS_KEY, &fields)
+    pub(crate) fn put_searchable_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &[&str],
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(
+            wtxn,
+            main_key::SEARCHABLE_FIELDS_KEY,
+            &fields,
+        )
     }
 
     /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
@@ -352,14 +402,17 @@ impl Index {
                 for name in fields {
                     match fields_ids_map.id(name) {
                         Some(field_id) => fields_ids.push(field_id),
-                        None => return Err(FieldIdMapMissingEntry::FieldName {
-                            field_name: name.to_string(),
-                            process: "Index::searchable_fields_ids",
-                        }.into()),
+                        None => {
+                            return Err(FieldIdMapMissingEntry::FieldName {
+                                field_name: name.to_string(),
+                                process: "Index::searchable_fields_ids",
+                            }
+                            .into())
+                        }
                     }
                 }
                 Ok(Some(fields_ids))
-            },
+            }
             None => Ok(None),
         }
     }
@@ -367,7 +420,11 @@ impl Index {
     /* filterable fields */
 
     /// Writes the filterable fields names in the database.
-    pub(crate) fn put_filterable_fields(&self, wtxn: &mut RwTxn, fields: &HashSet<String>) -> heed::Result<()> {
+    pub(crate) fn put_filterable_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &HashSet<String>,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::FILTERABLE_FIELDS_KEY, fields)
     }
 
@@ -378,10 +435,10 @@ impl Index {
 
     /// Returns the filterable fields names.
     pub fn filterable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
-        Ok(self.main.get::<_, Str, SerdeJson<_>>(
-            rtxn,
-            main_key::FILTERABLE_FIELDS_KEY,
-        )?.unwrap_or_default())
+        Ok(self
+            .main
+            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::FILTERABLE_FIELDS_KEY)?
+            .unwrap_or_default())
     }
 
     /// Identical to `filterable_fields`, but returns ids instead.
@@ -394,11 +451,14 @@ impl Index {
             match fields_ids_map.id(&name) {
                 Some(field_id) => {
                     fields_ids.insert(field_id);
-                },
-                None => return Err(FieldIdMapMissingEntry::FieldName {
-                    field_name: name,
-                    process: "Index::filterable_fields_ids",
-                }.into()),
+                }
+                None => {
+                    return Err(FieldIdMapMissingEntry::FieldName {
+                        field_name: name,
+                        process: "Index::filterable_fields_ids",
+                    }
+                    .into())
+                }
             }
         }
 
@@ -413,9 +473,8 @@ impl Index {
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> Result<HashSet<String>> {
         let filterable_fields = self.filterable_fields(rtxn)?;
         let distinct_field = self.distinct_field(rtxn)?;
-        let asc_desc_fields = self.criteria(rtxn)?
-            .into_iter()
-            .filter_map(|criterion| match criterion {
+        let asc_desc_fields =
+            self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
                 Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
                 _otherwise => None,
             });
@@ -439,11 +498,14 @@ impl Index {
             match fields_ids_map.id(&name) {
                 Some(field_id) => {
                     fields_ids.insert(field_id);
-                },
-                None => return Err(FieldIdMapMissingEntry::FieldName {
-                    field_name: name,
-                    process: "Index::faceted_fields_ids",
-                }.into()),
+                }
+                None => {
+                    return Err(FieldIdMapMissingEntry::FieldName {
+                        field_name: name,
+                        process: "Index::faceted_fields_ids",
+                    }
+                    .into())
+                }
             }
         }
 
@@ -458,8 +520,7 @@ impl Index {
         wtxn: &mut RwTxn,
         field_id: FieldId,
         docids: &RoaringBitmap,
-    ) -> heed::Result<()>
-    {
+    ) -> heed::Result<()> {
         let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
@@ -472,8 +533,7 @@ impl Index {
         &self,
         rtxn: &RoTxn,
         field_id: FieldId,
-    ) -> heed::Result<RoaringBitmap>
-    {
+    ) -> heed::Result<RoaringBitmap> {
         let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
@@ -490,8 +550,7 @@ impl Index {
         wtxn: &mut RwTxn,
         field_id: FieldId,
         docids: &RoaringBitmap,
-    ) -> heed::Result<()>
-    {
+    ) -> heed::Result<()> {
         let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
@@ -504,8 +563,7 @@ impl Index {
         &self,
         rtxn: &RoTxn,
         field_id: FieldId,
-    ) -> heed::Result<RoaringBitmap>
-    {
+    ) -> heed::Result<RoaringBitmap> {
         let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
@@ -518,7 +576,11 @@ impl Index {
 
     /* distinct field */
 
-    pub(crate) fn put_distinct_field(&self, wtxn: &mut RwTxn, distinct_field: &str) -> heed::Result<()> {
+    pub(crate) fn put_distinct_field(
+        &self,
+        wtxn: &mut RwTxn,
+        distinct_field: &str,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, Str>(wtxn, main_key::DISTINCT_FIELD_KEY, distinct_field)
     }
 
@@ -532,7 +594,11 @@ impl Index {
 
     /* criteria */
 
-    pub(crate) fn put_criteria(&self, wtxn: &mut RwTxn, criteria: &[Criterion]) -> heed::Result<()> {
+    pub(crate) fn put_criteria(
+        &self,
+        wtxn: &mut RwTxn,
+        criteria: &[Criterion],
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
     }
 
@@ -550,7 +616,11 @@ impl Index {
     /* words fst */
 
     /// Writes the FST which is the words dictionary of the engine.
-    pub(crate) fn put_words_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+    pub(crate) fn put_words_fst<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn,
+        fst: &fst::Set<A>,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::WORDS_FST_KEY, fst.as_fst().as_bytes())
     }
 
@@ -564,7 +634,11 @@ impl Index {
 
     /* stop words */
 
-    pub(crate) fn put_stop_words<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+    pub(crate) fn put_stop_words<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn,
+        fst: &fst::Set<A>,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::STOP_WORDS_KEY, fst.as_fst().as_bytes())
     }
 
@@ -585,8 +659,7 @@ impl Index {
         &self,
         wtxn: &mut RwTxn,
         synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
-    ) -> heed::Result<()>
-    {
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SYNONYMS_KEY, synonyms)
     }
 
@@ -595,15 +668,17 @@ impl Index {
     }
 
     pub fn synonyms(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
-        Ok(self.main.get::<_, Str, SerdeBincode<_>>(rtxn, main_key::SYNONYMS_KEY)?.unwrap_or_default())
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<_>>(rtxn, main_key::SYNONYMS_KEY)?
+            .unwrap_or_default())
     }
 
     pub fn words_synonyms<S: AsRef<str>>(
         &self,
         rtxn: &RoTxn,
         words: &[S],
-    ) -> heed::Result<Option<Vec<Vec<String>>>>
-    {
+    ) -> heed::Result<Option<Vec<Vec<String>>>> {
         let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
         Ok(self.synonyms(rtxn)?.remove(&words))
     }
@@ -611,8 +686,16 @@ impl Index {
     /* words prefixes fst */
 
     /// Writes the FST which is the words prefixes dictionnary of the engine.
-    pub(crate) fn put_words_prefixes_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, main_key::WORDS_PREFIXES_FST_KEY, fst.as_fst().as_bytes())
+    pub(crate) fn put_words_prefixes_fst<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn,
+        fst: &fst::Set<A>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(
+            wtxn,
+            main_key::WORDS_PREFIXES_FST_KEY,
+            fst.as_fst().as_bytes(),
+        )
     }
 
     /// Returns the FST which is the words prefixes dictionnary of the engine.
@@ -637,13 +720,14 @@ impl Index {
     pub fn documents<'t>(
         &self,
         rtxn: &'t RoTxn,
-        ids: impl IntoIterator<Item=DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReader<'t>)>>
-    {
+        ids: impl IntoIterator<Item = DocumentId>,
+    ) -> Result<Vec<(DocumentId, obkv::KvReader<'t>)>> {
         let mut documents = Vec::new();
 
         for id in ids {
-            let kv = self.documents.get(rtxn, &BEU32::new(id))?
+            let kv = self
+                .documents
+                .get(rtxn, &BEU32::new(id))?
                 .ok_or_else(|| UserError::UnknownInternalDocumentId { document_id: id })?;
             documents.push((id, kv));
         }
@@ -673,7 +757,8 @@ impl Index {
 
     /// Returns the index creation time.
     pub fn created_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
-        Ok(self.main
+        Ok(self
+            .main
             .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::CREATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
@@ -683,7 +768,8 @@ impl Index {
 
     /// Returns the index last updated time.
     pub fn updated_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
-        Ok(self.main
+        Ok(self
+            .main
             .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::UPDATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
@@ -691,7 +777,11 @@ impl Index {
             })?)
     }
 
-    pub(crate) fn set_updated_at(&self, wtxn: &mut RwTxn, time: &DateTime<Utc>) -> heed::Result<()> {
+    pub(crate) fn set_updated_at(
+        &self,
+        wtxn: &mut RwTxn,
+        time: &DateTime<Utc>,
+    ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<DateTime<Utc>>>(wtxn, main_key::UPDATED_AT_KEY, &time)
     }
 }
@@ -704,8 +794,8 @@ pub(crate) mod tests {
     use maplit::hashmap;
     use tempfile::TempDir;
 
-    use crate::Index;
     use crate::update::{IndexDocuments, UpdateFormat};
+    use crate::Index;
 
     pub(crate) struct TempIndex {
         inner: Index,
@@ -728,10 +818,7 @@ pub(crate) mod tests {
             options.map_size(100 * 4096);
             let _tempdir = TempDir::new_in(".").unwrap();
             let inner = Index::new(options, _tempdir.path()).unwrap();
-            Self {
-                inner,
-                _tempdir
-            }
+            Self { inner, _tempdir }
         }
     }
 
@@ -756,10 +843,13 @@ pub(crate) mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let fields_distribution = index.fields_distribution(&rtxn).unwrap();
-        assert_eq!(fields_distribution, hashmap! {
-            "id".to_string() => 2,
-            "name".to_string() => 2,
-            "age".to_string() => 1,
-        });
+        assert_eq!(
+            fields_distribution,
+            hashmap! {
+                "id".to_string() => 2,
+                "name".to_string() => 2,
+                "age".to_string() => 1,
+            }
+        );
     }
 }

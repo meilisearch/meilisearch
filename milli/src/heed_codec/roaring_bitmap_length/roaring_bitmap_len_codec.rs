@@ -1,7 +1,7 @@
-use std::io::{self, Read, BufRead};
+use std::io::{self, BufRead, Read};
 use std::mem;
 
-use byteorder::{ReadBytesExt, LittleEndian};
+use byteorder::{LittleEndian, ReadBytesExt};
 
 const SERIAL_COOKIE_NO_RUNCONTAINER: u32 = 12346;
 const SERIAL_COOKIE: u16 = 12347;
@@ -16,20 +16,14 @@ impl RoaringBitmapLenCodec {
             if cookie == SERIAL_COOKIE_NO_RUNCONTAINER {
                 (bytes.read_u32::<LittleEndian>()? as usize, true)
             } else if (cookie as u16) == SERIAL_COOKIE {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "run containers are unsupported",
-                ));
+                return Err(io::Error::new(io::ErrorKind::Other, "run containers are unsupported"));
             } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "unknown cookie value"));
             }
         };
 
         if size > u16::max_value() as usize + 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "size is greater than supported",
-            ));
+            return Err(io::Error::new(io::ErrorKind::Other, "size is greater than supported"));
         }
 
         let mut description_bytes = vec![0u8; size * 4];
@@ -67,11 +61,11 @@ impl heed::BytesDecode<'_> for RoaringBitmapLenCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::heed_codec::RoaringBitmapCodec;
     use heed::BytesEncode;
     use roaring::RoaringBitmap;
+
+    use super::*;
+    use crate::heed_codec::RoaringBitmapCodec;
 
     #[test]
     fn deserialize_roaring_bitmap_length() {

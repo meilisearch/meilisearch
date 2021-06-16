@@ -6,6 +6,7 @@ use std::result::Result as StdResult;
 use std::str::Utf8Error;
 use std::time::Instant;
 
+use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::debug;
@@ -13,16 +14,13 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
+pub(crate) use self::facet::ParserRule;
+pub use self::facet::{FacetDistribution, FacetIter, FilterCondition, Operator};
+pub use self::matching_words::MatchingWords;
+use self::query_tree::QueryTreeBuilder;
 use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::r#final::{Final, FinalResult};
-use crate::{Index, DocumentId, Result};
-
-pub use self::facet::{FilterCondition, FacetDistribution, FacetIter, Operator};
-pub use self::matching_words::MatchingWords;
-pub(crate) use self::facet::ParserRule;
-use self::query_tree::QueryTreeBuilder;
-
-use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
+use crate::{DocumentId, Index, Result};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -32,8 +30,8 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 mod criteria;
 mod distinct;
 mod facet;
-mod query_tree;
 mod matching_words;
+mod query_tree;
 
 pub struct Search<'a> {
     query: Option<String>,
@@ -117,7 +115,7 @@ impl<'a> Search<'a> {
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
                 builder.build(tokens)?.map_or((None, None), |(qt, pq)| (Some(qt), Some(pq)))
-            },
+            }
             None => (None, None),
         };
 
@@ -144,10 +142,11 @@ impl<'a> Search<'a> {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
-                let id = field_ids_map.id(name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                    field_name: name.to_string(),
-                    process: "distinct attribute",
-                })?;
+                let id =
+                    field_ids_map.id(name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                        field_name: name.to_string(),
+                        process: "distinct attribute",
+                    })?;
                 let distinct = FacetDistinct::new(id, self.index, self.rtxn);
                 self.perform_sort(distinct, matching_words, criteria)
             }
@@ -159,14 +158,15 @@ impl<'a> Search<'a> {
         mut distinct: D,
         matching_words: MatchingWords,
         mut criteria: Final,
-    ) -> Result<SearchResult>
-    {
+    ) -> Result<SearchResult> {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
         let mut excluded_candidates = RoaringBitmap::new();
         let mut documents_ids = Vec::with_capacity(self.limit);
 
-        while let Some(FinalResult { candidates, bucket_candidates, .. }) = criteria.next(&excluded_candidates)? {
+        while let Some(FinalResult { candidates, bucket_candidates, .. }) =
+            criteria.next(&excluded_candidates)?
+        {
             debug!("Number of candidates found {}", candidates.len());
 
             let excluded = take(&mut excluded_candidates);
@@ -183,7 +183,9 @@ impl<'a> Search<'a> {
             for candidate in candidates.by_ref().take(self.limit - documents_ids.len()) {
                 documents_ids.push(candidate?);
             }
-            if documents_ids.len() == self.limit { break }
+            if documents_ids.len() == self.limit {
+                break;
+            }
             excluded_candidates = candidates.into_excluded();
         }
 
@@ -247,7 +249,7 @@ pub fn word_derivations<'c>(
             }
 
             Ok(entry.insert(derived_words))
-        },
+        }
     }
 }
 

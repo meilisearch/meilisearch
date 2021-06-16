@@ -2,12 +2,17 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::str;
 
-use crate::{FieldId, DocumentId};
+use crate::{DocumentId, FieldId};
 
 pub struct FieldDocIdFacetStringCodec;
 
 impl FieldDocIdFacetStringCodec {
-    pub fn serialize_into(field_id: FieldId, document_id: DocumentId, value: &str, out: &mut Vec<u8>) {
+    pub fn serialize_into(
+        field_id: FieldId,
+        document_id: DocumentId,
+        value: &str,
+        out: &mut Vec<u8>,
+    ) {
         out.reserve(1 + 4 + value.len());
         out.push(field_id);
         out.extend_from_slice(&document_id.to_be_bytes());

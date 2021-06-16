@@ -1,16 +1,16 @@
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 use std::ops::Bound::Unbounded;
 use std::{cmp, fmt};
 
-use heed::{Database, BytesDecode};
 use heed::types::{ByteSlice, Unit};
+use heed::{BytesDecode, Database};
 use roaring::RoaringBitmap;
 
 use crate::error::FieldIdMapMissingEntry;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::search::facet::{FacetIter, FacetRange};
-use crate::{Index, FieldId, DocumentId, Result};
+use crate::{DocumentId, FieldId, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -43,7 +43,7 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
-    pub fn facets<I: IntoIterator<Item=A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
+    pub fn facets<I: IntoIterator<Item = A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
         self.facets = Some(names.into_iter().map(|s| s.as_ref().to_string()).collect());
         self
     }
@@ -66,8 +66,7 @@ impl<'a> FacetDistribution<'a> {
         facet_type: FacetType,
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
-    ) -> heed::Result<()>
-    {
+    ) -> heed::Result<()> {
         fn fetch_facet_values<'t, KC, K: 't>(
             rtxn: &'t heed::RoTxn,
             db: Database<KC, Unit>,
@@ -102,7 +101,7 @@ impl<'a> FacetDistribution<'a> {
             FacetType::Number => {
                 let db = self.index.field_id_docid_facet_f64s;
                 fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
-            },
+            }
             FacetType::String => {
                 let db = self.index.field_id_docid_facet_strings;
                 fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
@@ -117,11 +116,9 @@ impl<'a> FacetDistribution<'a> {
         field_id: FieldId,
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
-    ) -> heed::Result<()>
-    {
-        let iter = FacetIter::new_non_reducing(
-            self.rtxn, self.index, field_id, candidates.clone(),
-        )?;
+    ) -> heed::Result<()> {
+        let iter =
+            FacetIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
 
         for result in iter {
             let (value, mut docids) = result?;
@@ -142,8 +139,7 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values_from_raw_facet_database(
         &self,
         field_id: FieldId,
-    ) -> heed::Result<BTreeMap<String, u64>>
-    {
+    ) -> heed::Result<BTreeMap<String, u64>> {
         let mut distribution = BTreeMap::new();
 
         let db = self.index.facet_id_f64_docids;
@@ -157,7 +153,8 @@ impl<'a> FacetDistribution<'a> {
             }
         }
 
-        let iter = self.index
+        let iter = self
+            .index
             .facet_id_string_docids
             .remap_key_type::<ByteSlice>()
             .prefix_iter(self.rtxn, &[field_id])?
@@ -182,11 +179,30 @@ impl<'a> FacetDistribution<'a> {
             // to those candidates. We also enter here for facet strings for performance reasons.
             let mut distribution = BTreeMap::new();
             if candidates.len() <= CANDIDATES_THRESHOLD {
-                self.facet_distribution_from_documents(field_id, Number, candidates, &mut distribution)?;
-                self.facet_distribution_from_documents(field_id, String, candidates, &mut distribution)?;
+                self.facet_distribution_from_documents(
+                    field_id,
+                    Number,
+                    candidates,
+                    &mut distribution,
+                )?;
+                self.facet_distribution_from_documents(
+                    field_id,
+                    String,
+                    candidates,
+                    &mut distribution,
+                )?;
             } else {
-                self.facet_numbers_distribution_from_facet_levels(field_id, candidates, &mut distribution)?;
-                self.facet_distribution_from_documents(field_id, String, candidates, &mut distribution)?;
+                self.facet_numbers_distribution_from_facet_levels(
+                    field_id,
+                    candidates,
+                    &mut distribution,
+                )?;
+                self.facet_distribution_from_documents(
+                    field_id,
+                    String,
+                    candidates,
+                    &mut distribution,
+                )?;
             }
 
             Ok(distribution)
@@ -201,10 +217,11 @@ impl<'a> FacetDistribution<'a> {
 
         let mut distribution = BTreeMap::new();
         for name in filterable_fields {
-            let fid = fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                field_name: name.clone(),
-                process: "FacetDistribution::execute",
-            })?;
+            let fid =
+                fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                    field_name: name.clone(),
+                    process: "FacetDistribution::execute",
+                })?;
             let values = self.facet_values(fid)?;
             distribution.insert(name, values);
         }
@@ -215,13 +232,7 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution {
-            facets,
-            candidates,
-            max_values_by_facet,
-            rtxn: _,
-            index: _,
-        } = self;
+        let FacetDistribution { facets, candidates, max_values_by_facet, rtxn: _, index: _ } = self;
 
         f.debug_struct("FacetDistribution")
             .field("facets", facets)

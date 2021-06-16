@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use chrono::Utc;
 use fst::IntoStreamer;
@@ -7,11 +7,11 @@ use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use crate::error::{InternalError, FieldIdMapMissingEntry, UserError};
+use super::ClearDocuments;
+use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
-use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds, Result};
-use super::ClearDocuments;
+use crate::{DocumentId, ExternalDocumentsIds, FieldId, Index, Result, SmallString32, BEU32};
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -26,11 +26,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
         update_id: u64,
-    ) -> Result<DeleteDocuments<'t, 'u, 'i>>
-    {
-        let external_documents_ids = index
-            .external_documents_ids(wtxn)?
-            .into_static();
+    ) -> Result<DeleteDocuments<'t, 'u, 'i>> {
+        let external_documents_ids = index.external_documents_ids(wtxn)?.into_static();
 
         Ok(DeleteDocuments {
             wtxn,
@@ -84,12 +81,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 key: Some(main_key::PRIMARY_KEY_KEY),
             }
         })?;
-        let id_field = fields_ids_map.id(primary_key).ok_or_else(|| {
-            FieldIdMapMissingEntry::FieldName {
+        let id_field =
+            fields_ids_map.id(primary_key).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                 field_name: primary_key.to_string(),
                 process: "DeleteDocuments::execute",
-            }
-        })?;
+            })?;
 
         let Index {
             env: _env,
@@ -130,7 +126,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                     let external_id = match serde_json::from_slice(content).unwrap() {
                         Value::String(string) => SmallString32::from(string.as_str()),
                         Value::Number(number) => SmallString32::from(number.to_string()),
-                        document_id => return Err(UserError::InvalidDocumentId { document_id }.into()),
+                        document_id => {
+                            return Err(UserError::InvalidDocumentId { document_id }.into())
+                        }
                     };
                     external_ids.push(external_id);
                 }
@@ -160,7 +158,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if let Entry::Occupied(mut entry) = fields_distribution.entry(field_name.to_string()) {
                 match entry.get().checked_sub(count_diff) {
                     Some(0) | None => entry.remove(),
-                    Some(count) => entry.insert(count)
+                    Some(count) => entry.insert(count),
                 };
             }
         }
@@ -206,9 +204,16 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // We construct an FST set that contains the words to delete from the words FST.
-        let words_to_delete = words.iter().filter_map(|(word, must_remove)| {
-            if *must_remove { Some(word.as_ref()) } else { None }
-        });
+        let words_to_delete =
+            words.iter().filter_map(
+                |(word, must_remove)| {
+                    if *must_remove {
+                        Some(word.as_ref())
+                    } else {
+                        None
+                    }
+                },
+            );
         let words_to_delete = fst::Set::from_iter(words_to_delete)?;
 
         let new_words_fst = {
@@ -285,7 +290,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We delete the documents ids that are under the pairs of words,
         // it is faster and use no memory to iterate over all the words pairs than
         // to compute the cartesian product of every words of the deleted documents.
-        let mut iter = word_pair_proximity_docids.remap_key_type::<ByteSlice>().iter_mut(self.wtxn)?;
+        let mut iter =
+            word_pair_proximity_docids.remap_key_type::<ByteSlice>().iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
@@ -300,7 +306,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         drop(iter);
 
         // We delete the documents ids that are under the word level position docids.
-        let mut iter = word_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
+        let mut iter =
+            word_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
@@ -315,7 +322,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         drop(iter);
 
         // We delete the documents ids that are under the word prefix level position docids.
-        let mut iter = word_prefix_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
+        let mut iter =
+            word_prefix_level_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
@@ -397,12 +405,11 @@ fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F>(
     convert: F,
 ) -> heed::Result<()>
 where
-    C: heed::BytesDecode<'a, DItem=K> + heed::BytesEncode<'a, EItem=K>,
+    C: heed::BytesDecode<'a, DItem = K> + heed::BytesEncode<'a, EItem = K>,
     F: Fn(K) -> DocumentId,
 {
-    let mut iter = db.remap_key_type::<ByteSlice>()
-        .prefix_iter_mut(wtxn, &[field_id])?
-        .remap_key_type::<C>();
+    let mut iter =
+        db.remap_key_type::<ByteSlice>().prefix_iter_mut(wtxn, &[field_id])?.remap_key_type::<C>();
 
     while let Some(result) = iter.next() {
         let (key, ()) = result?;
@@ -441,8 +448,8 @@ where
 mod tests {
     use heed::EnvOpenOptions;
 
-    use crate::update::{IndexDocuments, UpdateFormat};
     use super::*;
+    use crate::update::{IndexDocuments, UpdateFormat};
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {

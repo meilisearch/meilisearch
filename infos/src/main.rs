@@ -1,16 +1,14 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::{str, io, fmt};
+use std::{fmt, io, str};
 
 use anyhow::Context;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
-use structopt::StructOpt;
-
 use milli::facet::FacetType;
 use milli::index::db_name::*;
 use milli::{Index, TreeLevel};
-
+use structopt::StructOpt;
 use Command::*;
 
 #[cfg(target_os = "linux")]
@@ -257,53 +255,55 @@ fn main() -> anyhow::Result<()> {
         WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
         WordsPrefixesDocids { full_display, prefixes } => {
             words_prefixes_docids(&index, &rtxn, !full_display, prefixes)
-        },
+        }
         FacetNumbersDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, FacetType::Number, field_name)
-        },
+        }
         FacetStringsDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, FacetType::String, field_name)
-        },
+        }
         WordsLevelPositionsDocids { full_display, words } => {
             words_level_positions_docids(&index, &rtxn, !full_display, words)
-        },
+        }
         WordPrefixesLevelPositionsDocids { full_display, prefixes } => {
             word_prefixes_level_positions_docids(&index, &rtxn, !full_display, prefixes)
-        },
+        }
         FieldIdWordCountDocids { full_display, field_name } => {
             field_id_word_count_docids(&index, &rtxn, !full_display, field_name)
-        },
+        }
         DocidsWordsPositions { full_display, internal_documents_ids } => {
             docids_words_positions(&index, &rtxn, !full_display, internal_documents_ids)
-        },
+        }
         FacetNumberStats { field_name } => facet_number_stats(&index, &rtxn, field_name),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
-        AverageNumberOfPositionsByWord => {
-            average_number_of_positions_by_word(&index, &rtxn)
-        },
+        AverageNumberOfPositionsByWord => average_number_of_positions_by_word(&index, &rtxn),
         SizeOfDatabase { databases } => size_of_databases(&index, &rtxn, databases),
         DatabaseStats { database } => database_stats(&index, &rtxn, &database),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
-        },
+        }
         ExportWordsFst => export_words_fst(&index, &rtxn),
         ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
         ExportDocuments { internal_documents_ids } => {
             export_documents(&index, &rtxn, internal_documents_ids)
-        },
+        }
     }
 }
 
 fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
-    use std::collections::BinaryHeap;
     use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
 
     let mut heap = BinaryHeap::with_capacity(limit + 1);
     for result in index.word_docids.iter(rtxn)? {
-        if limit == 0 { break }
+        if limit == 0 {
+            break;
+        }
         let (word, docids) = result?;
         heap.push((Reverse(docids.len()), word));
-        if heap.len() > limit { heap.pop(); }
+        if heap.len() > limit {
+            heap.pop();
+        }
     }
 
     let stdout = io::stdout();
@@ -323,7 +323,7 @@ fn facet_values_iter<'txn, KC: 'txn, DC: 'txn>(
     rtxn: &'txn heed::RoTxn,
     db: heed::Database<KC, DC>,
     field_id: u8,
-) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(KC::DItem, DC::DItem)>> + 'txn>>
+) -> heed::Result<Box<dyn Iterator<Item = heed::Result<(KC::DItem, DC::DItem)>> + 'txn>>
 where
     KC: heed::BytesDecode<'txn>,
     DC: heed::BytesDecode<'txn>,
@@ -347,7 +347,8 @@ fn facet_number_value_to_string<T: fmt::Debug>(level: u8, left: T, right: T) -> 
 fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
-    use heed::types::{Str, ByteSlice};
+
+    use heed::types::{ByteSlice, Str};
 
     let Index {
         env: _env,
@@ -387,71 +388,93 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         let words_fst = index.words_fst(rtxn)?;
         let length = words_fst.as_fst().as_bytes().len();
         heap.push(Reverse((length, format!("words-fst"), main_name)));
-        if heap.len() > limit { heap.pop(); }
+        if heap.len() > limit {
+            heap.pop();
+        }
 
         // Fetch the word prefix FST
         let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
         let length = words_prefixes_fst.as_fst().as_bytes().len();
         heap.push(Reverse((length, format!("words-prefixes-fst"), main_name)));
-        if heap.len() > limit { heap.pop(); }
+        if heap.len() > limit {
+            heap.pop();
+        }
 
         if let Some(documents_ids) = main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
             heap.push(Reverse((documents_ids.len(), format!("documents-ids"), main_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_prefix_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_prefix_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in docid_word_positions.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((docid, word), value) = result?;
             let key = format!("{} {}", docid, word);
             heap.push(Reverse((value.len(), key, docid_word_positions_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((word1, word2, prox), value) = result?;
             let key = format!("{} {} {}", word1, word2, prox);
             heap.push(Reverse((value.len(), key, word_pair_proximity_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((word, prefix, prox), value) = result?;
             let key = format!("{} {} {}", word, prefix, prox);
             heap.push(Reverse((value.len(), key, word_prefix_pair_proximity_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_level_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((word, level, left, right), value) = result?;
             let key = format!("{} {} {:?}", word, level, left..=right);
             heap.push(Reverse((value.len(), key, word_level_position_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in word_prefix_level_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((word, level, left, right), value) = result?;
             let key = format!("{} {} {:?}", word, level, left..=right);
             heap.push(Reverse((value.len(), key, word_prefix_level_position_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         for result in field_id_word_count_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((field_id, word_count), docids) = result?;
             let key = format!("{} {}", field_id, word_count);
             heap.push(Reverse((docids.len(), key, field_id_word_count_docids_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
 
         let faceted_fields = index.faceted_fields_ids(rtxn)?;
@@ -468,7 +491,9 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
                 write!(&mut output, " (level {})", level)?;
                 let key = format!("{} {}", facet_name, output);
                 heap.push(Reverse((value.len(), key, facet_id_f64_docids_name)));
-                if heap.len() > limit { heap.pop(); }
+                if heap.len() > limit {
+                    heap.pop();
+                }
             }
 
             // List the facet strings of this facet id.
@@ -477,14 +502,18 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
                 let ((_fid, fvalue), value) = result?;
                 let key = format!("{} {}", facet_name, fvalue);
                 heap.push(Reverse((value.len(), key, facet_id_string_docids_name)));
-                if heap.len() > limit { heap.pop(); }
+                if heap.len() > limit {
+                    heap.pop();
+                }
             }
         }
 
         for result in documents.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (id, value) = result?;
             heap.push(Reverse((value.len(), id.to_string(), documents_name)));
-            if heap.len() > limit { heap.pop(); }
+            if heap.len() > limit {
+                heap.pop();
+            }
         }
     }
 
@@ -499,7 +528,12 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     Ok(wtr.flush()?)
 }
 
-fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<String>) -> anyhow::Result<()> {
+fn words_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    words: Vec<String>,
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["word", "documents_ids"])?;
@@ -523,8 +557,7 @@ fn words_prefixes_docids(
     rtxn: &heed::RoTxn,
     debug: bool,
     prefixes: Vec<String>,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["prefix", "documents_ids"])?;
@@ -561,12 +594,12 @@ fn facet_values_docids(
     debug: bool,
     facet_type: FacetType,
     field_name: String,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
-    let field_id = fields_ids_map.id(&field_name)
+    let field_id = fields_ids_map
+        .id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;
 
     if !faceted_fields.contains(&field_id) {
@@ -590,7 +623,7 @@ fn facet_values_docids(
                 };
                 wtr.write_record(&[value, level.to_string(), count.to_string(), docids])?;
             }
-        },
+        }
         FacetType::String => {
             wtr.write_record(&["facet_string", "documents_count", "documents_ids"])?;
             for result in facet_values_iter(rtxn, index.facet_id_string_docids, field_id)? {
@@ -614,8 +647,7 @@ fn words_level_positions_docids(
     rtxn: &heed::RoTxn,
     debug: bool,
     words: Vec<String>,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["word", "level", "positions", "documents_count", "documents_ids"])?;
@@ -653,8 +685,7 @@ fn word_prefixes_level_positions_docids(
     rtxn: &heed::RoTxn,
     debug: bool,
     prefixes: Vec<String>,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["prefix", "level", "positions", "documents_count", "documents_ids"])?;
@@ -691,21 +722,20 @@ fn field_id_word_count_docids(
     index: &Index,
     rtxn: &heed::RoTxn,
     debug: bool,
-    field_name: String
-) -> anyhow::Result<()>
-{
+    field_name: String,
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["field_name", "word_count", "docids"])?;
 
-    let field_id = index.fields_ids_map(rtxn)?
+    let field_id = index
+        .fields_ids_map(rtxn)?
         .id(&field_name)
         .with_context(|| format!("unknown field name: {}", &field_name))?;
 
     let left = (field_id, 0);
     let right = (field_id, u8::max_value());
-    let iter = index.field_id_word_count_docids
-        .range(rtxn, &(left..=right))?;
+    let iter = index.field_id_word_count_docids.range(rtxn, &(left..=right))?;
 
     for result in iter {
         let ((_, word_count), docids) = result?;
@@ -725,8 +755,7 @@ fn docids_words_positions(
     rtxn: &heed::RoTxn,
     debug: bool,
     internal_ids: Vec<u32>,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["document_id", "word", "positions"])?;
@@ -734,9 +763,10 @@ fn docids_words_positions(
     let iter: Box<dyn Iterator<Item = _>> = if internal_ids.is_empty() {
         Box::new(index.docid_word_positions.iter(rtxn)?)
     } else {
-        let vec: heed::Result<Vec<_>> = internal_ids.into_iter().map(|id| {
-            index.docid_word_positions.prefix_iter(rtxn, &(id, ""))
-        }).collect();
+        let vec: heed::Result<Vec<_>> = internal_ids
+            .into_iter()
+            .map(|id| index.docid_word_positions.prefix_iter(rtxn, &(id, "")))
+            .collect();
         Box::new(vec?.into_iter().flatten())
     };
 
@@ -757,7 +787,8 @@ fn facet_number_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> 
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
-    let field_id = fields_ids_map.id(&field_name)
+    let field_id = fields_ids_map
+        .id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;
 
     if !faceted_fields.contains(&field_id) {
@@ -808,9 +839,14 @@ fn export_words_prefix_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<
     Ok(())
 }
 
-fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -> anyhow::Result<()> {
+fn export_documents(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    internal_ids: Vec<u32>,
+) -> anyhow::Result<()> {
     use std::io::{BufWriter, Write as _};
-    use milli::{BEU32, obkv_to_json};
+
+    use milli::{obkv_to_json, BEU32};
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout);
@@ -819,13 +855,13 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -
     let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
 
     let iter: Box<dyn Iterator<Item = _>> = if internal_ids.is_empty() {
-        Box::new(index.documents.iter(rtxn)?.map(|result| {
-            result.map(|(_id, obkv)| obkv)
-        }))
+        Box::new(index.documents.iter(rtxn)?.map(|result| result.map(|(_id, obkv)| obkv)))
     } else {
-        Box::new(internal_ids.into_iter().flat_map(|id| {
-            index.documents.get(rtxn, &BEU32::new(id)).transpose()
-        }))
+        Box::new(
+            internal_ids
+                .into_iter()
+                .flat_map(|id| index.documents.get(rtxn, &BEU32::new(id)).transpose()),
+        )
     };
 
     for result in iter {
@@ -842,26 +878,27 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -
 
 fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use milli::{DocumentId, BEU32StrCodec};
+    use milli::{BEU32StrCodec, DocumentId};
 
     let mut words_counts = Vec::new();
     let mut count = 0;
     let mut prev = None as Option<(DocumentId, u32)>;
 
-    let iter = index.docid_word_positions.as_polymorph().iter::<_, BEU32StrCodec, DecodeIgnore>(rtxn)?;
+    let iter =
+        index.docid_word_positions.as_polymorph().iter::<_, BEU32StrCodec, DecodeIgnore>(rtxn)?;
     for result in iter {
         let ((docid, _word), ()) = result?;
 
         match prev.as_mut() {
             Some((prev_docid, prev_count)) if docid == *prev_docid => {
                 *prev_count += 1;
-            },
+            }
             Some((prev_docid, prev_count)) => {
                 words_counts.push(*prev_count);
                 *prev_docid = docid;
                 *prev_count = 0;
                 count += 1;
-            },
+            }
             None => prev = Some((docid, 1)),
         }
     }
@@ -970,16 +1007,15 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
 
 fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Result<()> {
     use heed::types::ByteSlice;
-    use heed::{Error, BytesDecode};
-    use roaring::RoaringBitmap;
+    use heed::{BytesDecode, Error};
     use milli::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
+    use roaring::RoaringBitmap;
 
     fn compute_stats<'a, DC: BytesDecode<'a, DItem = RoaringBitmap>>(
         db: heed::PolyDatabase,
         rtxn: &'a heed::RoTxn,
         name: &str,
-    ) -> anyhow::Result<()>
-    {
+    ) -> anyhow::Result<()> {
         let mut key_size = 0u64;
         let mut val_size = 0u64;
         let mut values_length = Vec::new();
@@ -1028,27 +1064,27 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         WORD_DOCIDS => {
             let db = index.word_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         WORD_PREFIX_DOCIDS => {
             let db = index.word_prefix_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         DOCID_WORD_POSITIONS => {
             let db = index.docid_word_positions.as_polymorph();
             compute_stats::<BoRoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         WORD_PAIR_PROXIMITY_DOCIDS => {
             let db = index.word_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         WORD_PREFIX_PAIR_PROXIMITY_DOCIDS => {
             let db = index.word_prefix_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         FIELD_ID_WORD_COUNT_DOCIDS => {
             let db = index.field_id_word_count_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
-        },
+        }
         unknown => anyhow::bail!("unknown database {:?}", unknown),
     }
 }
@@ -1059,8 +1095,7 @@ fn word_pair_proximities_docids(
     debug: bool,
     word1: String,
     word2: String,
-) -> anyhow::Result<()>
-{
+) -> anyhow::Result<()> {
     use heed::types::ByteSlice;
     use milli::RoaringBitmapCodec;
 
@@ -1081,7 +1116,9 @@ fn word_pair_proximities_docids(
 
         // Skip keys that are longer than the requested one,
         // a longer key means that the second word is a prefix of the request word.
-        if key.len() != prefix.len() + 1 { continue; }
+        if key.len() != prefix.len() + 1 {
+            continue;
+        }
 
         let proximity = key.last().unwrap();
         let docids = if debug {

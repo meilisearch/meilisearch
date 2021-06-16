@@ -1,7 +1,7 @@
 use chrono::Utc;
 use roaring::RoaringBitmap;
 
-use crate::{ExternalDocumentsIds, Index, FieldsDistribution, Result};
+use crate::{ExternalDocumentsIds, FieldsDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -13,9 +13,8 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-        update_id: u64
+        update_id: u64,
     ) -> ClearDocuments<'t, 'u, 'i> {
-
         ClearDocuments { wtxn, index, _update_id: update_id }
     }
 
@@ -80,8 +79,8 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 mod tests {
     use heed::EnvOpenOptions;
 
-    use crate::update::{IndexDocuments, UpdateFormat};
     use super::*;
+    use crate::update::{IndexDocuments, UpdateFormat};
 
     #[test]
     fn clear_documents() {
