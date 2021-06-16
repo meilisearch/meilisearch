@@ -6,6 +6,7 @@ use std::time::Duration;
 use actix_web::web::{Bytes, Payload};
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
+use log::error;
 use log::info;
 use milli::FieldsDistribution;
 use serde::{Deserialize, Serialize};
@@ -256,8 +257,20 @@ impl IndexController {
 
     pub async fn delete_index(&self, uid: String) -> Result<()> {
         let uuid = self.uuid_resolver.delete(uid).await?;
-        self.update_handle.delete(uuid).await?;
-        self.index_handle.delete(uuid).await?;
+
+        // We remove the index from the resolver synchronously, and effectively perform the index
+        // deletion as a background task.
+        let update_handle = self.update_handle.clone();
+        let index_handle = self.index_handle.clone();
+        tokio::spawn(async move {
+            if let Err(e) = update_handle.delete(uuid).await {
+                error!("Error while deleting index: {}", e);
+            }
+            if let Err(e) = index_handle.delete(uuid).await {
+                error!("Error while deleting index: {}", e);
+            }
+        });
+
         Ok(())
     }
 

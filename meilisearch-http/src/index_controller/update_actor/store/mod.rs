@@ -428,7 +428,8 @@ impl UpdateStore {
         Ok(None)
     }
 
-    /// Delete all updates for an index from the update store.
+    /// Delete all updates for an index from the update store. If the currently processing update
+    /// is for `index_uuid`, the call will block until the update is terminated.
     pub fn delete_all(&self, index_uuid: Uuid) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
@@ -469,8 +470,14 @@ impl UpdateStore {
                 let _ = remove_file(path);
             });
 
-        // We don't care about the currently processing update, since it will be removed by itself
-        // once its done processing, and we can't abort a running update.
+        // If the currently processing update is from our index, we wait until it is
+        // finished before returning. This ensure that no write to the index occurs after we delete it.
+        if let State::Processing(uuid, _) = *self.state.read() {
+            if uuid == index_uuid {
+                // wait for a write lock, do nothing with it.
+                self.state.write();
+            }
+        }
 
         Ok(())
     }
