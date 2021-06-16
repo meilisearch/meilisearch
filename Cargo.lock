@@ -1707,10 +1707,9 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.3.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.3.1#bc020317935da4ea08061b3d4518cbbd40184856"
+version = "0.4.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.4.0#3bd4cf94cc60733393b94021fca77eb100bfe17a"
 dependencies = [
- "anyhow",
  "bstr",
  "byteorder",
  "chrono",

@@ -41,8 +41,12 @@ impl IndexMeta {
     }
 
     fn new_txn(index: &Index, txn: &heed::RoTxn) -> IndexResult<Self> {
-        let created_at = index.created_at(&txn)?;
-        let updated_at = index.updated_at(&txn)?;
+        let created_at = index
+            .created_at(&txn)
+            .map_err(|e| IndexError::Internal(e.to_string()))?;
+        let updated_at = index
+            .updated_at(&txn)
+            .map_err(|e| IndexError::Internal(e.to_string()))?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
         Ok(Self {
             created_at,

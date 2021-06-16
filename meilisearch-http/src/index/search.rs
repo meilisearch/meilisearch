@@ -369,7 +369,7 @@ fn parse_facets_array(
         }
     }
 
-    FilterCondition::from_array(txn, &index.0, ands)
+    Ok(FilterCondition::from_array(txn, &index.0, ands)?)
 }
 
 #[cfg(test)]

@@ -200,8 +200,11 @@ impl Index {
         info!("performing document addition");
 
         // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(ref primary_key)) = (self.primary_key(txn)?, primary_key) {
-            self.put_primary_key(txn, primary_key)?;
+        if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
+            let mut builder = UpdateBuilder::new(0)
+                .settings(txn, &self);
+            builder.set_primary_key(primary_key.to_string());
+            builder.execute(|_, _| ())?;
         }
 
         let mut builder = update_builder.index_documents(txn, self);
@@ -235,7 +238,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -331,7 +334,7 @@ impl Index {
                 .commit()
                 .and(Ok(UpdateResult::DocumentDeletion { deleted }))
                 .map_err(Into::into),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
 }
