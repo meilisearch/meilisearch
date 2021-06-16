@@ -11,11 +11,13 @@ use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
+use crate::error::InternalError;
 use crate::heed_codec::{StrLevelPositionCodec, CboRoaringBitmapCodec};
+use crate::Result;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{
     create_writer, create_sorter, writer_into_reader, write_into_lmdb_database,
-    word_prefix_level_positions_docids_merge, sorter_into_lmdb_database
+    cbo_roaring_bitmap_merge, sorter_into_lmdb_database
 };
 use crate::{Index, TreeLevel};
 
@@ -56,7 +58,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         self
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub fn execute(self) -> Result<()> {
         debug!("Computing and writing the word levels positions docids into LMDB on disk...");
 
         let entries = compute_positions_levels(
@@ -78,7 +80,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_level_position_docids.as_polymorph(),
             entries,
-            |_, _| anyhow::bail!("invalid word level position merging"),
+            |_, _| Err(InternalError::IndexingMergingKeys { process: "word level position" }),
             WriteMethod::Append,
         )?;
 
@@ -86,7 +88,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         self.index.word_prefix_level_position_docids.clear(self.wtxn)?;
 
         let mut word_prefix_level_positions_docids_sorter = create_sorter(
-            word_prefix_level_positions_docids_merge,
+            cbo_roaring_bitmap_merge,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.chunk_fusing_shrink_size,
@@ -119,7 +121,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             word_prefix_level_positions_docids_sorter,
-            word_prefix_level_positions_docids_merge,
+            cbo_roaring_bitmap_merge,
             WriteMethod::Append,
         )?;
 
@@ -142,7 +144,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             entries,
-            |_, _| anyhow::bail!("invalid word prefix level position merging"),
+            |_, _| Err(InternalError::IndexingMergingKeys { process: "word prefix level position" }),
             WriteMethod::Append,
         )?;
 
@@ -174,7 +176,7 @@ fn compute_positions_levels(
     shrink_size: Option<u64>,
     level_group_size: NonZeroU32,
     min_level_size: NonZeroU32,
-) -> anyhow::Result<Reader<FileFuse>>
+) -> Result<Reader<FileFuse>>
 {
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
@@ -251,7 +253,7 @@ fn write_level_entry(
     left: u32,
     right: u32,
     ids: &RoaringBitmap,
-) -> anyhow::Result<()>
+) -> Result<()>
 {
     let key = (word, level, left, right);
     let key = StrLevelPositionCodec::bytes_encode(&key).ok_or(Error::Encoding)?;

@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use anyhow::{anyhow, Context};
 use chrono::Utc;
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Unit};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
+use crate::error::{InternalError, FieldIdMapMissingEntry, UserError};
 use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds};
+use crate::index::{db_name, main_key};
+use crate::{Index, DocumentId, FieldId, BEU32, SmallString32, ExternalDocumentsIds, Result};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -25,7 +26,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
         update_id: u64,
-    ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
+    ) -> Result<DeleteDocuments<'t, 'u, 'i>>
     {
         let external_documents_ids = index
             .external_documents_ids(wtxn)?
@@ -54,7 +55,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Some(docid)
     }
 
-    pub fn execute(self) -> anyhow::Result<u64> {
+    pub fn execute(self) -> Result<u64> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
@@ -77,8 +78,18 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-        let primary_key = self.index.primary_key(self.wtxn)?.context("missing primary key")?;
-        let id_field = fields_ids_map.id(primary_key).expect(r#"the field "id" to be present"#);
+        let primary_key = self.index.primary_key(self.wtxn)?.ok_or_else(|| {
+            InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::PRIMARY_KEY_KEY),
+            }
+        })?;
+        let id_field = fields_ids_map.id(primary_key).ok_or_else(|| {
+            FieldIdMapMissingEntry::FieldName {
+                field_name: primary_key.to_string(),
+                process: "DeleteDocuments::execute",
+            }
+        })?;
 
         let Index {
             env: _env,
@@ -119,7 +130,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                     let external_id = match serde_json::from_slice(content).unwrap() {
                         Value::String(string) => SmallString32::from(string.as_str()),
                         Value::Number(number) => SmallString32::from(number.to_string()),
-                        _ => return Err(anyhow!("documents ids must be either strings or numbers")),
+                        document_id => return Err(UserError::InvalidDocumentId { document_id }.into()),
                     };
                     external_ids.push(external_id);
                 }

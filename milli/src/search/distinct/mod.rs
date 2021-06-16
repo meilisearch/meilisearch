@@ -3,13 +3,13 @@ mod noop_distinct;
 
 use roaring::RoaringBitmap;
 
-use crate::DocumentId;
+use crate::{DocumentId, Result};
 pub use facet_distinct::FacetDistinct;
 pub use noop_distinct::NoopDistinct;
 
 /// A trait implemented by document interators that are returned by calls to `Distinct::distinct`.
 /// It provides a way to get back the ownership to the excluded set.
-pub trait DocIter: Iterator<Item = anyhow::Result<DocumentId>> {
+pub trait DocIter: Iterator<Item = Result<DocumentId>> {
     /// Returns ownership on the internal exluded set.
     fn into_excluded(self) -> RoaringBitmap;
 }
@@ -106,7 +106,7 @@ mod test {
 
     /// Checks that all the candidates are distinct, and returns the candidates number.
     pub(crate) fn validate_distinct_candidates(
-        candidates: impl Iterator<Item=anyhow::Result<DocumentId>>,
+        candidates: impl Iterator<Item = crate::Result<DocumentId>>,
         distinct: FieldId,
         index: &Index,
         ) -> usize {

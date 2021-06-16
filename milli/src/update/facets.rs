@@ -9,11 +9,12 @@ use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
+use crate::error::InternalError;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::heed_codec::facet::FacetLevelValueF64Codec;
-use crate::Index;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::{Index, Result};
 
 pub struct Facets<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -55,7 +56,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         self
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub fn execute(self) -> Result<()> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We get the faceted fields to be able to create the facet levels.
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
@@ -102,7 +103,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 self.wtxn,
                 *self.index.facet_id_f64_docids.as_polymorph(),
                 content,
-                |_, _| anyhow::bail!("invalid facet number level merging"),
+                |_, _| Err(InternalError::IndexingMergingKeys { process: "facet number level" }),
                 WriteMethod::GetMergePut,
             )?;
         }
@@ -132,7 +133,7 @@ fn compute_facet_number_levels<'t>(
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
     field_id: u8,
-) -> anyhow::Result<Reader<FileFuse>>
+) -> Result<Reader<FileFuse>>
 {
     let first_level_size = db
         .remap_key_type::<ByteSlice>()
@@ -195,7 +196,7 @@ fn compute_faceted_documents_ids(
     rtxn: &heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     field_id: u8,
-) -> anyhow::Result<RoaringBitmap>
+) -> Result<RoaringBitmap>
 {
     let mut documents_ids = RoaringBitmap::new();
 
@@ -214,7 +215,7 @@ fn write_number_entry(
     left: f64,
     right: f64,
     ids: &RoaringBitmap,
-) -> anyhow::Result<()>
+) -> Result<()>
 {
     let key = (field_id, level, left, right);
     let key = FacetLevelValueF64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;

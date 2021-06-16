@@ -1,15 +1,15 @@
 use std::mem::take;
 
-use anyhow::Context;
 use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
+use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::{FieldId, Index};
+use crate::{FieldId, Index, Result};
 use super::{Criterion, CriterionParameters, CriterionResult};
 
 /// Threshold on the number of candidates that will make
@@ -36,7 +36,7 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         Self::new(index, rtxn, parent, field_name, true)
     }
 
@@ -45,7 +45,7 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         Self::new(index, rtxn, parent, field_name, false)
     }
 
@@ -55,11 +55,14 @@ impl<'t> AscDesc<'t> {
         parent: Box<dyn Criterion + 't>,
         field_name: String,
         ascending: bool,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map
             .id(&field_name)
-            .with_context(|| format!("field {:?} isn't registered", field_name))?;
+            .ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                field_name: field_name.clone(),
+                process: "AscDesc::new",
+            })?;
 
         Ok(AscDesc {
             index,
@@ -79,7 +82,7 @@ impl<'t> AscDesc<'t> {
 
 impl<'t> Criterion for AscDesc<'t> {
     #[logging_timer::time("AscDesc::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
         self.allowed_candidates -= params.excluded_candidates;
 
@@ -162,7 +165,7 @@ fn facet_ordered<'t>(
     field_id: FieldId,
     ascending: bool,
     candidates: RoaringBitmap,
-) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
+) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
     if candidates.len() <= CANDIDATES_THRESHOLD {
         let iter = iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
         Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
@@ -186,7 +189,7 @@ fn iterative_facet_ordered_iter<'t>(
     field_id: FieldId,
     ascending: bool,
     candidates: RoaringBitmap,
-) -> anyhow::Result<impl Iterator<Item = RoaringBitmap> + 't> {
+) -> Result<impl Iterator<Item = RoaringBitmap> + 't> {
     let mut docids_values = Vec::with_capacity(candidates.len() as usize);
     for docid in candidates.iter() {
         let left = (field_id, docid, f64::MIN);

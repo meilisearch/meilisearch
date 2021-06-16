@@ -4,6 +4,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
+use crate::Result;
 use super::{Context, Criterion, CriterionParameters, CriterionResult, resolve_query_tree};
 
 pub struct Words<'t> {
@@ -30,7 +31,7 @@ impl<'t> Words<'t> {
 
 impl<'t> Criterion for Words<'t> {
     #[logging_timer::time("Words::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
         if let Some(candidates) = self.candidates.as_mut() {
             *candidates -= params.excluded_candidates;

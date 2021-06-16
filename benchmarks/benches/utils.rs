@@ -55,14 +55,14 @@ pub fn base_setup(conf: &Conf) -> Index {
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(10);
     let index = Index::new(options, conf.database_name).unwrap();
-    if let Some(primary_key) = conf.primary_key {
-        let mut wtxn = index.write_txn().unwrap();
-        index.put_primary_key(&mut wtxn, primary_key).unwrap();
-    }
 
     let update_builder = UpdateBuilder::new(0);
     let mut wtxn = index.write_txn().unwrap();
     let mut builder = update_builder.settings(&mut wtxn, &index);
+
+    if let Some(primary_key) = conf.primary_key {
+        builder.set_primary_key(primary_key.to_string());
+    }
 
     if let Some(criterion) = conf.criterion {
         builder.reset_filterable_fields();

@@ -3,9 +3,11 @@ use std::mem::size_of;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
-use super::{Distinct, DocIter};
+use crate::error::InternalError;
 use crate::heed_codec::facet::*;
-use crate::{DocumentId, FieldId, Index};
+use crate::index::db_name;
+use crate::{DocumentId, FieldId, Index, Result};
+use super::{Distinct, DocIter};
 
 const FID_SIZE: usize = size_of::<FieldId>();
 const DOCID_SIZE: usize = size_of::<DocumentId>();
@@ -57,14 +59,17 @@ impl<'a> FacetDistinctIter<'a> {
             .get(self.txn, &(self.distinct, 0, key, key))
     }
 
-    fn distinct_string(&mut self, id: DocumentId) -> anyhow::Result<()> {
+    fn distinct_string(&mut self, id: DocumentId) -> Result<()> {
         let iter = facet_string_values(id, self.distinct, self.index, self.txn)?;
 
         for item in iter {
             let ((_, _, value), _) = item?;
             let facet_docids = self
                 .facet_string_docids(value)?
-                .expect("Corrupted data: Facet values must exist");
+                .ok_or(InternalError::DatabaseMissingEntry {
+                    db_name: db_name::FACET_ID_STRING_DOCIDS,
+                    key: None,
+                })?;
             self.excluded.union_with(&facet_docids);
         }
 
@@ -73,14 +78,17 @@ impl<'a> FacetDistinctIter<'a> {
         Ok(())
     }
 
-    fn distinct_number(&mut self, id: DocumentId) -> anyhow::Result<()> {
+    fn distinct_number(&mut self, id: DocumentId) -> Result<()> {
         let iter = facet_number_values(id, self.distinct, self.index, self.txn)?;
 
         for item in iter {
             let ((_, _, value), _) = item?;
             let facet_docids = self
                 .facet_number_docids(value)?
-                .expect("Corrupted data: Facet values must exist");
+                .ok_or(InternalError::DatabaseMissingEntry {
+                    db_name: db_name::FACET_ID_F64_DOCIDS,
+                    key: None,
+                })?;
             self.excluded.union_with(&facet_docids);
         }
 
@@ -92,7 +100,7 @@ impl<'a> FacetDistinctIter<'a> {
     /// Performs the next iteration of the facet distinct. This is a convenience method that is
     /// called by the Iterator::next implementation that transposes the result. It makes error
     /// handling easier.
-    fn next_inner(&mut self) -> anyhow::Result<Option<DocumentId>> {
+    fn next_inner(&mut self) -> Result<Option<DocumentId>> {
         // The first step is to remove all the excluded documents from our candidates
         self.candidates.difference_with(&self.excluded);
 
@@ -129,7 +137,7 @@ fn facet_number_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> anyhow::Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, heed::types::Unit>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
@@ -146,7 +154,7 @@ fn facet_string_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> anyhow::Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, heed::types::Unit>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
@@ -159,7 +167,7 @@ fn facet_string_values<'a>(
 }
 
 impl Iterator for FacetDistinctIter<'_> {
-    type Item = anyhow::Result<DocumentId>;
+    type Item = Result<DocumentId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_inner().transpose()

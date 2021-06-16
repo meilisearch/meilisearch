@@ -1,7 +1,7 @@
 use roaring::RoaringBitmap;
 
+use crate::Result;
 use crate::search::query_tree::Operation;
-
 use super::{Criterion, CriterionResult, CriterionParameters};
 
 pub struct Initial {
@@ -22,7 +22,7 @@ impl Initial {
 
 impl Criterion for Initial {
     #[logging_timer::time("Initial::{}")]
-    fn next(&mut self, _: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, _: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         Ok(self.answer.take())
     }
 }

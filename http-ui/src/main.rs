@@ -391,7 +391,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(_) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e)
+                        Err(e) => Err(e.into()),
                     }
                 }
                 UpdateMeta::ClearDocuments => {
@@ -401,7 +401,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match builder.execute() {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e)
+                        Err(e) => Err(e.into()),
                     }
                 }
                 UpdateMeta::Settings(settings) => {
@@ -471,7 +471,7 @@ async fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e)
+                        Err(e) => Err(e.into()),
                     }
                 }
                 UpdateMeta::Facets(levels) => {
@@ -486,7 +486,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     match builder.execute() {
                         Ok(()) => wtxn.commit().map_err(Into::into),
-                        Err(e) => Err(e)
+                        Err(e) => Err(e.into()),
                     }
                 }
             };

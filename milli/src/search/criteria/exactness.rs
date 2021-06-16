@@ -14,7 +14,7 @@ use crate::search::criteria::{
     CriterionResult,
     resolve_query_tree,
 };
-use crate::TreeLevel;
+use crate::{TreeLevel, Result};
 
 pub struct Exactness<'t> {
     ctx: &'t dyn Context<'t>,
@@ -45,7 +45,7 @@ impl<'t> Exactness<'t> {
 
 impl<'t> Criterion for Exactness<'t> {
     #[logging_timer::time("Exactness::{}")]
-    fn next(&mut self, params: &mut CriterionParameters) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // remove excluded candidates when next is called, instead of doing it in the loop.
         if let Some(state) = self.state.as_mut() {
             state.difference_with(params.excluded_candidates);
@@ -158,7 +158,7 @@ fn resolve_state(
     ctx: &dyn Context,
     state: State,
     query: &[ExactQueryPart],
-) -> anyhow::Result<(RoaringBitmap, Option<State>)>
+) -> Result<(RoaringBitmap, Option<State>)>
 {
     use State::*;
     match state {

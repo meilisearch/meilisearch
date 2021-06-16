@@ -7,11 +7,11 @@ use heed::BytesEncode;
 use heed::types::ByteSlice;
 use log::debug;
 
-use crate::Index;
+use crate::{Index, Result};
 use crate::heed_codec::StrStrU8Codec;
 use crate::update::index_documents::{
     WriteMethod, create_sorter, sorter_into_lmdb_database,
-    words_pairs_proximities_docids_merge,
+    cbo_roaring_bitmap_merge,
 };
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
@@ -41,7 +41,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         }
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub fn execute(self) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
         self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;
@@ -50,7 +50,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 
         // Here we create a sorter akin to the previous one.
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
-            words_pairs_proximities_docids_merge,
+            cbo_roaring_bitmap_merge,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.chunk_fusing_shrink_size,
@@ -80,7 +80,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
             word_prefix_pair_proximity_docids_sorter,
-            words_pairs_proximities_docids_merge,
+            cbo_roaring_bitmap_merge,
             WriteMethod::Append,
         )?;
 

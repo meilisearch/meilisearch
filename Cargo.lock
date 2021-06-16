@@ -1377,7 +1377,6 @@ dependencies = [
 name = "milli"
 version = "0.3.1"
 dependencies = [
- "anyhow",
  "big_s",
  "bstr",
  "byteorder",

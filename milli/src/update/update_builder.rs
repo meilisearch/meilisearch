@@ -1,7 +1,7 @@
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
-use crate::Index;
+use crate::{Index, Result};
 use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings, Facets};
 
 pub struct UpdateBuilder<'a> {
@@ -76,7 +76,7 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
+    ) -> Result<DeleteDocuments<'t, 'u, 'i>>
     {
         DeleteDocuments::new(wtxn, index, self.update_id)
     }
