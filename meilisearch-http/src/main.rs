@@ -5,7 +5,7 @@ use main_error::MainError;
 use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
 
-#[cfg(feature = "analytics")]
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
 use meilisearch_http::analytics;
 
 #[cfg(target_os = "linux")]
@@ -57,7 +57,7 @@ async fn main() -> Result<(), MainError> {
 
     let data = Data::new(opt.clone())?;
 
-    #[cfg(feature = "analytics")]
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
         let analytics_data = data.clone();
         let analytics_opt = opt.clone();
@@ -121,7 +121,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
         env!("CARGO_PKG_VERSION").to_string()
     );
 
-    #[cfg(feature = "analytics")]
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
         if opt.no_analytics {
             eprintln!("Anonymous telemetry:\t\"Disabled\"");

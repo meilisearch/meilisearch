@@ -6,7 +6,7 @@ mod index_controller;
 pub mod option;
 pub mod routes;
 
-#[cfg(feature = "analytics")]
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 
 pub use self::data::Data;

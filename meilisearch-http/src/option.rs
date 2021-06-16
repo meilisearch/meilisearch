@@ -104,7 +104,7 @@ pub struct Opt {
     pub env: String,
 
     /// Do not send analytics to Meili.
-    #[cfg(feature = "analytics")]
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]
     pub no_analytics: bool,
 
