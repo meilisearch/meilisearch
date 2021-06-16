@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::time::Instant;
 
 use anyhow::bail;
@@ -120,9 +120,9 @@ impl Index {
         };
 
         // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
-        // but these attributes must be also
-        // - present in the fields_ids_map
-        // - present in the the displayed attributes
+        // but these attributes must be also be present
+        // - in the fields_ids_map
+        // - in the the displayed attributes
         let to_retrieve_ids: BTreeSet<_> = query
             .attributes_to_retrieve
             .as_ref()
@@ -140,28 +140,19 @@ impl Index {
             .attributes_to_crop
             .unwrap_or_default();
 
+        // Attributes in `formatted_options` correspond to the attributes that will be in `_formatted`
+        // These attributes are:
+        // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
+        // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
+        // But these attributes must be present in displayed attributes
         let formatted_options = compute_formatted_options(
             &attr_to_highlight,
             &attr_to_crop,
             query.crop_length,
+            &to_retrieve_ids,
             &fields_ids_map,
             &displayed_ids,
         );
-
-        // All attributes present in `_formatted` are:
-        // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
-        // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
-        // But these attributes must be present in displayed attributes
-        let ids_in_formatted = formatted_options
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .intersection(&displayed_ids)
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .union(&to_retrieve_ids)
-            .cloned()
-            .collect::<Vec<_>>();
 
         let stop_words = fst::Set::default();
         let formatter =
@@ -174,7 +165,6 @@ impl Index {
                 obkv,
                 &formatter,
                 &matching_words,
-                &ids_in_formatted,
                 &formatted_options,
             )?;
             let hit = SearchHit {
@@ -215,11 +205,12 @@ fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
     query_crop_length: usize,
+    to_retrieve_ids: &BTreeSet<u8>,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-    ) -> HashMap<FieldId, FormatOptions> {
+    ) -> BTreeMap<FieldId, FormatOptions> {
 
-    let mut formatted_options = HashMap::new();
+    let mut formatted_options = BTreeMap::new();
 
     formatted_options = add_highlight_to_formatted_options(
         formatted_options,
@@ -236,15 +227,23 @@ fn compute_formatted_options(
         displayed_ids,
     );
 
+    // Should not return `_formatted` if no valid attributes to highlight/crop
+    if !formatted_options.is_empty() {
+        formatted_options = add_non_formatted_ids_to_formatted_options(
+            formatted_options,
+            to_retrieve_ids,
+        );
+    }
+
     formatted_options
 }
 
 fn add_highlight_to_formatted_options(
-    mut formatted_options: HashMap<FieldId, FormatOptions>,
+    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
     attr_to_highlight: &HashSet<String>,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-) -> HashMap<FieldId, FormatOptions> {
+) -> BTreeMap<FieldId, FormatOptions> {
     for attr in attr_to_highlight {
         let new_format = FormatOptions {
             highlight: true,
@@ -259,19 +258,22 @@ fn add_highlight_to_formatted_options(
         }
 
         if let Some(id) = fields_ids_map.id(&attr) {
-            formatted_options.insert(id, new_format);
+            if displayed_ids.contains(&id) {
+                formatted_options.insert(id, new_format);
+            }
         }
     }
+
     formatted_options
 }
 
 fn add_crop_to_formatted_options(
-    mut formatted_options: HashMap<FieldId, FormatOptions>,
+    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
     attr_to_crop: &[String],
     crop_length: usize,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-) -> HashMap<FieldId, FormatOptions> {
+) -> BTreeMap<FieldId, FormatOptions> {
     for attr in attr_to_crop {
         let mut attr_name = attr.clone();
         let mut attr_len = crop_length;
@@ -298,14 +300,32 @@ fn add_crop_to_formatted_options(
         }
 
         if let Some(id) = fields_ids_map.id(&attr_name) {
-            formatted_options
-                .entry(id)
-                .and_modify(|f| f.crop = Some(attr_len))
-                .or_insert(FormatOptions {
-                    highlight: false,
-                    crop: Some(attr_len),
-                });
+            if displayed_ids.contains(&id) {
+                formatted_options
+                    .entry(id)
+                    .and_modify(|f| f.crop = Some(attr_len))
+                    .or_insert(FormatOptions {
+                        highlight: false,
+                        crop: Some(attr_len),
+                    });
+            }
         }
+    }
+
+    formatted_options
+}
+
+fn add_non_formatted_ids_to_formatted_options(
+    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
+    to_retrieve_ids: &BTreeSet<u8>
+) -> BTreeMap<FieldId, FormatOptions> {
+    for id in to_retrieve_ids {
+        formatted_options
+            .entry(*id)
+            .or_insert(FormatOptions {
+                highlight: false,
+                crop: None,
+            });
     }
 
     formatted_options
@@ -339,33 +359,28 @@ fn format_fields<A: AsRef<[u8]>>(
     obkv: obkv::KvReader,
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
-    ids_in_formatted: &[FieldId],
-    formatted_options: &HashMap<FieldId, FormatOptions>,
+    formatted_options: &BTreeMap<FieldId, FormatOptions>,
 ) -> anyhow::Result<Document> {
     let mut document = Document::new();
 
-    if !formatted_options.is_empty() {
-        for field in ids_in_formatted {
-            if let Some(value) = obkv.get(*field) {
-                let mut value: Value = serde_json::from_slice(value)?;
+    for (id, format) in formatted_options {
+        if let Some(value) = obkv.get(*id) {
+            let mut value: Value = serde_json::from_slice(value)?;
 
-                if let Some(format) = formatted_options.get(field) {
-                    value = formatter.format_value(
-                        value,
-                        matching_words,
-                        *format,
-                    );
-                }
+            value = formatter.format_value(
+                value,
+                matching_words,
+                *format,
+            );
 
-                // This unwrap must be safe since we got the ids from the fields_ids_map just
-                // before.
-                let key = field_ids_map
-                    .name(*field)
-                    .expect("Missing field name")
-                    .to_string();
+            // This unwrap must be safe since we got the ids from the fields_ids_map just
+            // before.
+            let key = field_ids_map
+                .name(*id)
+                .expect("Missing field name")
+                .to_string();
 
-                document.insert(key, value);
-            }
+            document.insert(key, value);
         }
     }
 
@@ -378,7 +393,7 @@ trait Matcher {
 }
 
 #[cfg(test)]
-impl Matcher for HashMap<&str, Option<usize>> {
+impl Matcher for BTreeMap<&str, Option<usize>> {
     fn matches(&self, w: &str) -> Option<usize> {
         self.get(w).cloned().flatten()
     }
@@ -564,8 +579,7 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = Vec::new();
-        let formatted_options = HashMap::new();
+        let formatted_options = BTreeMap::new();
 
         let matching_words = MatchingWords::default();
 
@@ -574,90 +588,11 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
 
         assert!(value.is_empty());
-    }
-
-    #[test]
-    fn no_formatted_with_ids() {
-        let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
-
-        let mut fields = FieldsIdsMap::new();
-        let id = fields.insert("test").unwrap();
-
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
-            .unwrap();
-        obkv.finish().unwrap();
-
-        let obkv = obkv::KvReader::new(&buf);
-
-        let ids_in_formatted = vec![id];
-        let formatted_options = HashMap::new();
-
-        let matching_words = MatchingWords::default();
-
-        let value = format_fields(
-            &fields,
-            obkv,
-            &formatter,
-            &matching_words,
-            &ids_in_formatted,
-            &formatted_options,
-        )
-        .unwrap();
-
-        assert!(value.is_empty());
-    }
-
-    #[test]
-    fn formatted_with_highlight() {
-        let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
-
-        let mut fields = FieldsIdsMap::new();
-        let title = fields.insert("title").unwrap();
-        let author = fields.insert("author").unwrap();
-
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("The Hobbit".into()).to_string().as_bytes())
-            .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. R. R. Tolkien".into()).to_string().as_bytes())
-            .unwrap();
-        obkv.finish().unwrap();
-
-        let obkv = obkv::KvReader::new(&buf);
-
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
-
-        let mut matching_words = HashMap::new();
-        matching_words.insert("hobbit", Some(6));
-
-        let value = format_fields(
-            &fields,
-            obkv,
-            &formatter,
-            &matching_words,
-            &ids_in_formatted,
-            &formatted_options,
-        )
-        .unwrap();
-
-        assert_eq!(value["title"], "The <em>Hobbit</em>");
-        assert_eq!(value["author"], "J. R. R. Tolkien");
     }
 
     #[test]
@@ -682,11 +617,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("hobbit", Some(3));
 
         let value = format_fields(
@@ -694,7 +629,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
@@ -725,11 +659,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(2) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
 
         let value = format_fields(
@@ -737,7 +671,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
@@ -768,11 +701,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(10) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
 
         let value = format_fields(
@@ -780,7 +713,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
@@ -811,11 +743,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(0) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
 
         let value = format_fields(
@@ -823,7 +755,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
@@ -854,11 +785,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(1) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("and", Some(3));
 
         let value = format_fields(
@@ -866,7 +797,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
@@ -897,11 +827,11 @@ mod test {
 
         let obkv = obkv::KvReader::new(&buf);
 
-        let ids_in_formatted = vec![title, author];
-        let mut formatted_options = HashMap::new();
+        let mut formatted_options = BTreeMap::new();
         formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(9) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
 
-        let mut matching_words = HashMap::new();
+        let mut matching_words = BTreeMap::new();
         matching_words.insert("blood", Some(3));
 
         let value = format_fields(
@@ -909,7 +839,6 @@ mod test {
             obkv,
             &formatter,
             &matching_words,
-            &ids_in_formatted,
             &formatted_options,
         )
         .unwrap();
