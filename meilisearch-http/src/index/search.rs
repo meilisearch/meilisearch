@@ -461,8 +461,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                         let mut total_len: usize = buffer.iter().map(|(word, _)| word.len()).sum();
                         let before_iter = buffer.into_iter().skip_while(move |(word, _)| {
                             total_len -= word.len();
-                            let take = total_len >= crop_len;
-                            take
+                            total_len >= crop_len
                         });
 
                         let mut taken_after = 0;
