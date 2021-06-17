@@ -11,10 +11,10 @@ const ALLOW_OPTIONAL_WORDS: bool = true;
 const DISALLOW_OPTIONAL_WORDS: bool = false;
 
 macro_rules! test_criterion {
-    ($func:ident, $optional_word:ident, $authorize_typos:ident , $criterion:expr) => {
+    ($func:ident, $optional_word:ident, $authorize_typos:ident, $criteria:expr) => {
         #[test]
         fn $func() {
-            let criteria = $criterion;
+            let criteria = $criteria;
             let index = search::setup_search_index_with_criteria(&criteria);
             let mut rtxn = index.read_txn().unwrap();
 

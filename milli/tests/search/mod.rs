@@ -9,6 +9,7 @@ use milli::{Criterion, DocumentId, Index};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
 
+mod distinct;
 mod filters;
 mod query_criteria;
 
