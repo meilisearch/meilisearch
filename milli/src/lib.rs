@@ -22,7 +22,7 @@ use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
 pub use self::criterion::{default_criteria, Criterion};
-pub use self::error::Error;
+pub use self::error::{Error, InternalError, UserError};
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
