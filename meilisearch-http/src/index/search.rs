@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Instant;
 
 use anyhow::bail;
@@ -273,16 +273,13 @@ fn add_crop_to_formatted_options(
     displayed_ids: &BTreeSet<u8>,
 ) {
     for attr in attr_to_crop {
-        let mut attr_name = attr.clone();
-        let mut attr_len = crop_length;
-
-        let mut split = attr_name.rsplitn(2, ':');
-        attr_name = match split.next().zip(split.next()) {
+        let mut split = attr.rsplitn(2, ':');
+        let (attr_name, attr_len) = match split.next().zip(split.next()) {
             Some((len, name)) => {
-                attr_len = len.parse().unwrap_or(crop_length);
-                name.to_string()
+                let crop_len = len.parse::<usize>().unwrap_or(crop_length);
+                (name, crop_len)
             },
-            None => attr_name,
+            None => (attr.as_str(), crop_length),
         };
 
         if attr_name == "*" {
@@ -452,42 +449,49 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
             Some(crop_len) => {
-                let mut buffer = VecDeque::new();
+                let mut buffer = Vec::new();
                 let mut tokens = analyzed.reconstruct().peekable();
-                let mut taken_before = 0;
+
                 while let Some((word, token)) = tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none()) {
-                    buffer.push_back((word, token));
-                    taken_before += word.chars().count();
-                    while taken_before > crop_len {
-                        // Around to the previous word
-                        if let Some((word, _)) = buffer.front() {
-                            if taken_before - word.chars().count() < crop_len {
-                                break;
-                            }
-                        }
-                        if let Some((word, _)) = buffer.pop_front() {
-                            taken_before -= word.chars().count();
-                        }
+                    buffer.push((word, token));
+                }
+
+                match tokens.next() {
+                    Some(token) => {
+                        let mut total_len: usize = buffer.iter().map(|(word, _)| word.len()).sum();
+                        let before_iter = buffer.into_iter().skip_while(move |(word, _)| {
+                            total_len -= word.len();
+                            let take = total_len >= crop_len;
+                            take
+                        });
+
+                        let mut taken_after = 0;
+                        let after_iter = tokens
+                        .take_while(move |(word, _)| {
+                            let take = taken_after < crop_len;
+                            taken_after += word.chars().count();
+                            take
+                        });
+
+                        let iter = before_iter
+                            .chain(Some(token))
+                            .chain(after_iter);
+
+                        Box::new(iter)
+
+                    },
+                    // If no word matches in the attribute
+                    None => {
+                        let mut count = 0;
+                        let iter = buffer.into_iter().take_while(move |(word, _)| {
+                            let take = count < crop_len;
+                            count += word.len();
+                            take
+                        });
+
+                        Box::new(iter)
                     }
                 }
-
-                if let Some(token) = tokens.next() {
-                    buffer.push_back(token);
-                }
-
-                let mut taken_after = 0;
-                let after_iter = tokens
-                    .take_while(move |(word, _)| {
-                        let take = taken_after < crop_len;
-                        taken_after += word.chars().count();
-                        take
-                    });
-
-                let iter = buffer
-                    .into_iter()
-                    .chain(after_iter);
-
-                Box::new(iter)
             }
             None => Box::new(analyzed.reconstruct()),
         };
@@ -754,6 +758,48 @@ mod test {
         .unwrap();
 
         assert_eq!(value["title"], "Potter");
+        assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn formatted_with_crop_and_no_match() {
+        let stop_words = fst::Set::default();
+        let formatter =
+            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let mut formatted_options = BTreeMap::new();
+        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(6) });
+        formatted_options.insert(author, FormatOptions { highlight: false, crop: Some(20) });
+
+        let mut matching_words = BTreeMap::new();
+        matching_words.insert("rowling", Some(3));
+
+        let value = format_fields(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "Harry ");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
