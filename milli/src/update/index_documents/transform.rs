@@ -25,7 +25,7 @@ const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 pub struct TransformOutput {
     pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
-    pub fields_distribution: FieldsDistribution,
+    pub field_distribution: FieldsDistribution,
     pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
@@ -127,7 +127,7 @@ impl Transform<'_, '_> {
             return Ok(TransformOutput {
                 primary_key,
                 fields_ids_map,
-                fields_distribution: self.index.fields_distribution(self.rtxn)?,
+                field_distribution: self.index.field_distribution(self.rtxn)?,
                 external_documents_ids: ExternalDocumentsIds::default(),
                 new_documents_ids: RoaringBitmap::new(),
                 replaced_documents_ids: RoaringBitmap::new(),
@@ -385,7 +385,7 @@ impl Transform<'_, '_> {
         Error: From<E>,
     {
         let documents_ids = self.index.documents_ids(self.rtxn)?;
-        let mut fields_distribution = self.index.fields_distribution(self.rtxn)?;
+        let mut field_distribution = self.index.field_distribution(self.rtxn)?;
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
 
         // Once we have sort and deduplicated the documents we write them into a final file.
@@ -455,7 +455,7 @@ impl Transform<'_, '_> {
             let reader = obkv::KvReader::new(obkv);
             for (field_id, _) in reader.iter() {
                 let field_name = fields_ids_map.name(field_id).unwrap();
-                *fields_distribution.entry(field_name.to_string()).or_default() += 1;
+                *field_distribution.entry(field_name.to_string()).or_default() += 1;
             }
         }
 
@@ -485,7 +485,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
-            fields_distribution,
+            field_distribution,
             external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids,
             replaced_documents_ids,
@@ -503,7 +503,7 @@ impl Transform<'_, '_> {
         old_fields_ids_map: FieldsIdsMap,
         new_fields_ids_map: FieldsIdsMap,
     ) -> Result<TransformOutput> {
-        let fields_distribution = self.index.fields_distribution(self.rtxn)?;
+        let field_distribution = self.index.field_distribution(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let documents_count = documents_ids.len() as usize;
@@ -540,7 +540,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map: new_fields_ids_map,
-            fields_distribution,
+            field_distribution,
             external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),

@@ -378,7 +378,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let TransformOutput {
             primary_key,
             fields_ids_map,
-            fields_distribution,
+            field_distribution,
             external_documents_ids,
             new_documents_ids,
             replaced_documents_ids,
@@ -594,8 +594,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // We write the fields ids map into the main database
         self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 
-        // We write the fields distribution into the main database
-        self.index.put_fields_distribution(self.wtxn, &fields_distribution)?;
+        // We write the field distribution into the main database
+        self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, &primary_key)?;
