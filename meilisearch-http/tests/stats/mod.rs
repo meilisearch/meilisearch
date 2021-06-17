@@ -37,7 +37,7 @@ async fn stats() {
     assert!(response.get("lastUpdate").is_some());
     assert!(response["indexes"].get("test").is_some());
     assert_eq!(response["indexes"]["test"]["numberOfDocuments"], 0);
-    assert_eq!(response["indexes"]["test"]["isIndexing"], false);
+    assert!(response["indexes"]["test"]["isIndexing"] == false);
 
     let last_update = response["lastUpdate"].as_str().unwrap();
 
@@ -68,7 +68,7 @@ async fn stats() {
     assert!(response["databaseSize"].as_u64().unwrap() > 0);
     assert!(response["lastUpdate"].as_str().unwrap() > last_update);
     assert_eq!(response["indexes"]["test"]["numberOfDocuments"], 2);
-    assert_eq!(response["indexes"]["test"]["isIndexing"], false);
+    assert!(response["indexes"]["test"]["isIndexing"] == false);
     assert_eq!(response["indexes"]["test"]["fieldsDistribution"]["id"], 2);
     assert_eq!(response["indexes"]["test"]["fieldsDistribution"]["name"], 1);
     assert_eq!(response["indexes"]["test"]["fieldsDistribution"]["age"], 1);
