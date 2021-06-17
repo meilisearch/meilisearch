@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::btree_map::Entry;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
@@ -419,18 +420,32 @@ impl Transform<'_, '_> {
                     // we use it and insert it in the list of replaced documents.
                     replaced_documents_ids.insert(docid);
 
+                    let key = BEU32::new(docid);
+                    let base_obkv = self.index.documents.get(&self.rtxn, &key)?.ok_or(
+                        InternalError::DatabaseMissingEntry {
+                            db_name: db_name::DOCUMENTS,
+                            key: None,
+                        },
+                    )?;
+
+                    // we remove all the fields that were already counted
+                    for (field_id, _) in base_obkv.iter() {
+                        let field_name = fields_ids_map.name(field_id).unwrap();
+                        if let Entry::Occupied(mut entry) =
+                            field_distribution.entry(field_name.to_string())
+                        {
+                            match entry.get().checked_sub(1) {
+                                Some(0) | None => entry.remove(),
+                                Some(count) => entry.insert(count),
+                            };
+                        }
+                    }
+
                     // Depending on the update indexing method we will merge
                     // the document update with the current document or not.
                     match self.index_documents_method {
                         IndexDocumentsMethod::ReplaceDocuments => (docid, update_obkv),
                         IndexDocumentsMethod::UpdateDocuments => {
-                            let key = BEU32::new(docid);
-                            let base_obkv = self.index.documents.get(&self.rtxn, &key)?.ok_or(
-                                InternalError::DatabaseMissingEntry {
-                                    db_name: db_name::DOCUMENTS,
-                                    key: None,
-                                },
-                            )?;
                             let update_obkv = obkv::KvReader::new(update_obkv);
                             merge_two_obkvs(base_obkv, update_obkv, &mut obkv_buffer);
                             (docid, obkv_buffer.as_slice())

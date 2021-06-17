@@ -791,7 +791,7 @@ pub(crate) mod tests {
     use std::ops::Deref;
 
     use heed::EnvOpenOptions;
-    use maplit::hashmap;
+    use maplit::btreemap;
     use tempfile::TempDir;
 
     use crate::update::{IndexDocuments, UpdateFormat};
@@ -845,10 +845,53 @@ pub(crate) mod tests {
         let field_distribution = index.field_distribution(&rtxn).unwrap();
         assert_eq!(
             field_distribution,
-            hashmap! {
+            btreemap! {
                 "id".to_string() => 2,
                 "name".to_string() => 2,
                 "age".to_string() => 1,
+            }
+        );
+
+        // we add all the documents a second time. we are supposed to get the same
+        // field_distribution in the end
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let field_distribution = index.field_distribution(&rtxn).unwrap();
+        assert_eq!(
+            field_distribution,
+            btreemap! {
+                "id".to_string() => 2,
+                "name".to_string() => 2,
+                "age".to_string() => 1,
+            }
+        );
+
+        // then we update a document by removing one field and another by adding one field
+        let content = &br#"[
+            { "id": 1, "name": "kevin", "has_dog": true },
+            { "id": 2, "name": "bob" }
+        ]"#[..];
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let field_distribution = index.field_distribution(&rtxn).unwrap();
+        assert_eq!(
+            field_distribution,
+            btreemap! {
+                "id".to_string() => 2,
+                "name".to_string() => 2,
+                "has_dog".to_string() => 1,
             }
         );
     }
