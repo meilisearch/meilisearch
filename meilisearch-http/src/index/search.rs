@@ -477,7 +477,6 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                             .chain(after_iter);
 
                         Box::new(iter)
-
                     },
                     // If no word matches in the attribute
                     None => {
