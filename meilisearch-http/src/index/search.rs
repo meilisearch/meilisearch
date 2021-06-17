@@ -144,7 +144,7 @@ impl Index {
         // These attributes are:
         // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
         // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
-        // But these attributes must be present in displayed attributes
+        // But these attributes must be also present in displayed attributes
         let formatted_options = compute_formatted_options(
             &attr_to_highlight,
             &attr_to_crop,
@@ -212,15 +212,15 @@ fn compute_formatted_options(
 
     let mut formatted_options = BTreeMap::new();
 
-    formatted_options = add_highlight_to_formatted_options(
-        formatted_options,
+    add_highlight_to_formatted_options(
+        &mut formatted_options,
         attr_to_highlight,
         fields_ids_map,
         displayed_ids,
     );
 
-    formatted_options = add_crop_to_formatted_options(
-        formatted_options,
+    add_crop_to_formatted_options(
+        &mut formatted_options,
         attr_to_crop,
         query_crop_length,
         fields_ids_map,
@@ -229,8 +229,8 @@ fn compute_formatted_options(
 
     // Should not return `_formatted` if no valid attributes to highlight/crop
     if !formatted_options.is_empty() {
-        formatted_options = add_non_formatted_ids_to_formatted_options(
-            formatted_options,
+        add_non_formatted_ids_to_formatted_options(
+            &mut formatted_options,
             to_retrieve_ids,
         );
     }
@@ -239,11 +239,11 @@ fn compute_formatted_options(
 }
 
 fn add_highlight_to_formatted_options(
-    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
+    formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
     attr_to_highlight: &HashSet<String>,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-) -> BTreeMap<FieldId, FormatOptions> {
+) {
     for attr in attr_to_highlight {
         let new_format = FormatOptions {
             highlight: true,
@@ -263,17 +263,15 @@ fn add_highlight_to_formatted_options(
             }
         }
     }
-
-    formatted_options
 }
 
 fn add_crop_to_formatted_options(
-    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
+    formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
     attr_to_crop: &[String],
     crop_length: usize,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-) -> BTreeMap<FieldId, FormatOptions> {
+) {
     for attr in attr_to_crop {
         let mut attr_name = attr.clone();
         let mut attr_len = crop_length;
@@ -311,14 +309,12 @@ fn add_crop_to_formatted_options(
             }
         }
     }
-
-    formatted_options
 }
 
 fn add_non_formatted_ids_to_formatted_options(
-    mut formatted_options: BTreeMap<FieldId, FormatOptions>,
+    formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
     to_retrieve_ids: &BTreeSet<u8>
-) -> BTreeMap<FieldId, FormatOptions> {
+) {
     for id in to_retrieve_ids {
         formatted_options
             .entry(*id)
@@ -327,8 +323,6 @@ fn add_non_formatted_ids_to_formatted_options(
                 crop: None,
             });
     }
-
-    formatted_options
 }
 
 fn make_document(
