@@ -11,14 +11,14 @@ const ALLOW_OPTIONAL_WORDS: bool = true;
 const DISALLOW_OPTIONAL_WORDS: bool = false;
 
 macro_rules! test_criterion {
-    ($func:ident, $optional_word:ident, $authorize_typos:ident $(, $criterion:expr)?) => {
+    ($func:ident, $optional_word:ident, $authorize_typos:ident, $criteria:expr) => {
         #[test]
         fn $func() {
-            let criteria = vec![$($criterion)?];
+            let criteria = $criteria;
             let index = search::setup_search_index_with_criteria(&criteria);
-            let mut rtxn = index.read_txn().unwrap();
+            let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&mut rtxn, &index);
+            let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos($authorize_typos);
@@ -26,49 +26,80 @@ macro_rules! test_criterion {
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
-            let expected_external_ids: Vec<_> = search::expected_order(&criteria, $authorize_typos, $optional_word)
-                .into_iter()
-                .map(|d| d.id).collect();
+            let expected_external_ids: Vec<_> =
+                search::expected_order(&criteria, $authorize_typos, $optional_word)
+                    .into_iter()
+                    .map(|d| d.id)
+                    .collect();
             let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
             assert_eq!(documents_ids, expected_external_ids);
         }
-    }
+    };
 }
 
-#[rustfmt::skip]
-test_criterion!(none_allow_typo,                     ALLOW_OPTIONAL_WORDS,      ALLOW_TYPOS);
-#[rustfmt::skip]
-test_criterion!(none_disallow_typo,                  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS);
-#[rustfmt::skip]
-test_criterion!(words_allow_typo,                    ALLOW_OPTIONAL_WORDS,      ALLOW_TYPOS,    Words);
-#[rustfmt::skip]
-test_criterion!(attribute_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Attribute);
-#[rustfmt::skip]
-test_criterion!(attribute_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Attribute);
-#[rustfmt::skip]
-test_criterion!(exactness_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Exactness);
-#[rustfmt::skip]
-test_criterion!(exactness_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Exactness);
-#[rustfmt::skip]
-test_criterion!(proximity_allow_typo,                DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Proximity);
-#[rustfmt::skip]
-test_criterion!(proximity_disallow_typo,             DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Proximity);
-#[rustfmt::skip]
-test_criterion!(asc_allow_typo,                      DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Asc(S("asc_desc_rank")));
-#[rustfmt::skip]
-test_criterion!(asc_disallow_typo,                   DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Asc(S("asc_desc_rank")));
-#[rustfmt::skip]
-test_criterion!(desc_allow_typo,                     DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Desc(S("asc_desc_rank")));
-#[rustfmt::skip]
-test_criterion!(desc_disallow_typo,                  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Desc(S("asc_desc_rank")));
-#[rustfmt::skip]
-test_criterion!(asc_unexisting_field_allow_typo,     DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Asc(S("unexisting_field")));
-#[rustfmt::skip]
-test_criterion!(asc_unexisting_field_disallow_typo,  DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Asc(S("unexisting_field")));
-#[rustfmt::skip]
-test_criterion!(desc_unexisting_field_allow_typo,    DISALLOW_OPTIONAL_WORDS,   ALLOW_TYPOS,    Desc(S("unexisting_field")));
-#[rustfmt::skip]
-test_criterion!(desc_unexisting_field_disallow_typo, DISALLOW_OPTIONAL_WORDS,   DISALLOW_TYPOS, Desc(S("unexisting_field")));
+test_criterion!(none_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![]);
+test_criterion!(none_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![]);
+test_criterion!(words_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Words]);
+test_criterion!(attribute_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Attribute]);
+test_criterion!(attribute_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![Attribute]);
+test_criterion!(exactness_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Exactness]);
+test_criterion!(exactness_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![Exactness]);
+test_criterion!(proximity_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Proximity]);
+test_criterion!(proximity_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![Proximity]);
+test_criterion!(
+    asc_allow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    ALLOW_TYPOS,
+    vec![Asc(S("asc_desc_rank"))]
+);
+test_criterion!(
+    asc_disallow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    DISALLOW_TYPOS,
+    vec![Asc(S("asc_desc_rank"))]
+);
+test_criterion!(
+    desc_allow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    ALLOW_TYPOS,
+    vec![Desc(S("asc_desc_rank"))]
+);
+test_criterion!(
+    desc_disallow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    DISALLOW_TYPOS,
+    vec![Desc(S("asc_desc_rank"))]
+);
+test_criterion!(
+    asc_unexisting_field_allow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    ALLOW_TYPOS,
+    vec![Asc(S("unexisting_field"))]
+);
+test_criterion!(
+    asc_unexisting_field_disallow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    DISALLOW_TYPOS,
+    vec![Asc(S("unexisting_field"))]
+);
+test_criterion!(
+    desc_unexisting_field_allow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    ALLOW_TYPOS,
+    vec![Desc(S("unexisting_field"))]
+);
+test_criterion!(
+    desc_unexisting_field_disallow_typo,
+    DISALLOW_OPTIONAL_WORDS,
+    DISALLOW_TYPOS,
+    vec![Desc(S("unexisting_field"))]
+);
+test_criterion!(
+    default_criteria_order,
+    ALLOW_OPTIONAL_WORDS,
+    ALLOW_TYPOS,
+    vec![Words, Typo, Proximity, Attribute, Exactness]
+);
 
 #[test]
 fn criteria_mixup() {

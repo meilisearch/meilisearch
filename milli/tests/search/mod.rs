@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use big_s::S;
+use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::update::{IndexDocuments, Settings, UpdateFormat};
@@ -6,6 +9,8 @@ use milli::{Criterion, DocumentId, Index};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
 
+mod distinct;
+mod filters;
 mod query_criteria;
 
 pub const TEST_QUERY: &'static str = "hello world america";
@@ -120,7 +125,58 @@ pub fn expected_order(
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
+    let mut id = None;
+    if let Some((field, filter)) = filter.split_once("=") {
+        if field == "tag" && document.tag == filter {
+            id = Some(document.id.clone())
+        } else if field == "asc_desc_rank"
+            && document.asc_desc_rank == filter.parse::<u32>().unwrap()
+        {
+            id = Some(document.id.clone())
+        }
+    } else if let Some(("asc_desc_rank", filter)) = filter.split_once("<") {
+        if document.asc_desc_rank < filter.parse().unwrap() {
+            id = Some(document.id.clone())
+        }
+    } else if let Some(("asc_desc_rank", filter)) = filter.split_once(">") {
+        if document.asc_desc_rank > filter.parse().unwrap() {
+            id = Some(document.id.clone())
+        }
+    }
+    id
+}
+
+pub fn expected_filtered_ids(filters: Vec<Either<Vec<&str>, &str>>) -> HashSet<String> {
+    let dataset: HashSet<TestDocument> =
+        serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect();
+
+    let mut filtered_ids: HashSet<_> = dataset.iter().map(|d| d.id.clone()).collect();
+    for either in filters {
+        let ids = match either {
+            Left(array) => array
+                .into_iter()
+                .map(|f| {
+                    let ids: HashSet<String> =
+                        dataset.iter().filter_map(|d| execute_filter(f, d)).collect();
+                    ids
+                })
+                .reduce(|a, b| a.union(&b).cloned().collect())
+                .unwrap(),
+            Right(filter) => {
+                let ids: HashSet<String> =
+                    dataset.iter().filter_map(|d| execute_filter(filter, d)).collect();
+                ids
+            }
+        };
+
+        filtered_ids = filtered_ids.intersection(&ids).cloned().collect();
+    }
+
+    filtered_ids
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
 pub struct TestDocument {
     pub id: String,
     pub word_rank: u32,
