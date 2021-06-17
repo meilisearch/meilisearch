@@ -21,9 +21,9 @@ macro_rules! test_distinct {
             builder.execute(|_, _| ()).unwrap();
             wtxn.commit().unwrap();
 
-            let mut rtxn = index.read_txn().unwrap();
+            let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&mut rtxn, &index);
+            let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
@@ -50,27 +50,23 @@ macro_rules! test_distinct {
     };
 }
 
-#[rustfmt::skip]
-test_distinct!(distinct_string_default_criteria,          tag,           vec![Words, Typo, Proximity, Attribute, Exactness]);
-#[rustfmt::skip]
-test_distinct!(distinct_number_default_criteria,          asc_desc_rank, vec![Words, Typo, Proximity, Attribute, Exactness]);
-#[rustfmt::skip]
-test_distinct!(distinct_string_criterion_words,           tag,           vec![Words]);
-#[rustfmt::skip]
-test_distinct!(distinct_number_criterion_words,           asc_desc_rank, vec![Words]);
-#[rustfmt::skip]
-test_distinct!(distinct_string_criterion_words_typo,      tag,           vec![Words, Typo]);
-#[rustfmt::skip]
-test_distinct!(distinct_number_criterion_words_typo,      asc_desc_rank, vec![Words, Typo]);
-#[rustfmt::skip]
-test_distinct!(distinct_string_criterion_words_proximity, tag,           vec![Words, Proximity]);
-#[rustfmt::skip]
+test_distinct!(
+    distinct_string_default_criteria,
+    tag,
+    vec![Words, Typo, Proximity, Attribute, Exactness]
+);
+test_distinct!(
+    distinct_number_default_criteria,
+    asc_desc_rank,
+    vec![Words, Typo, Proximity, Attribute, Exactness]
+);
+test_distinct!(distinct_string_criterion_words, tag, vec![Words]);
+test_distinct!(distinct_number_criterion_words, asc_desc_rank, vec![Words]);
+test_distinct!(distinct_string_criterion_words_typo, tag, vec![Words, Typo]);
+test_distinct!(distinct_number_criterion_words_typo, asc_desc_rank, vec![Words, Typo]);
+test_distinct!(distinct_string_criterion_words_proximity, tag, vec![Words, Proximity]);
 test_distinct!(distinct_number_criterion_words_proximity, asc_desc_rank, vec![Words, Proximity]);
-#[rustfmt::skip]
-test_distinct!(distinct_string_criterion_words_attribute, tag,           vec![Words, Attribute]);
-#[rustfmt::skip]
+test_distinct!(distinct_string_criterion_words_attribute, tag, vec![Words, Attribute]);
 test_distinct!(distinct_number_criterion_words_attribute, asc_desc_rank, vec![Words, Attribute]);
-#[rustfmt::skip]
-test_distinct!(distinct_string_criterion_words_exactness, tag,           vec![Words, Exactness]);
-#[rustfmt::skip]
+test_distinct!(distinct_string_criterion_words_exactness, tag, vec![Words, Exactness]);
 test_distinct!(distinct_number_criterion_words_exactness, asc_desc_rank, vec![Words, Exactness]);

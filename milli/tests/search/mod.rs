@@ -128,7 +128,6 @@ pub fn expected_order(
 fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     let mut id = None;
     if let Some((field, filter)) = filter.split_once("=") {
-        println!("eq on field {} with filter {}", field, filter);
         if field == "tag" && document.tag == filter {
             id = Some(document.id.clone())
         } else if field == "asc_desc_rank"
@@ -137,12 +136,10 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             id = Some(document.id.clone())
         }
     } else if let Some(("asc_desc_rank", filter)) = filter.split_once("<") {
-        println!("lower on field asc_desc_rank with filter {}", filter);
         if document.asc_desc_rank < filter.parse().unwrap() {
             id = Some(document.id.clone())
         }
     } else if let Some(("asc_desc_rank", filter)) = filter.split_once(">") {
-        println!("higher on field asc_desc_rank with filter {}", filter);
         if document.asc_desc_rank > filter.parse().unwrap() {
             id = Some(document.id.clone())
         }

@@ -10,7 +10,7 @@ macro_rules! test_filter {
         fn $func() {
             let criteria = vec![Words, Typo, Proximity, Attribute, Exactness];
             let index = search::setup_search_index_with_criteria(&criteria);
-            let mut rtxn = index.read_txn().unwrap();
+            let rtxn = index.read_txn().unwrap();
 
             let filter_conditions =
                 FilterCondition::from_array::<Vec<Either<Vec<&str>, &str>>, _, _, _>(
@@ -19,7 +19,7 @@ macro_rules! test_filter {
                 .unwrap()
                 .unwrap();
 
-            let mut search = Search::new(&mut rtxn, &index);
+            let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
@@ -40,45 +40,39 @@ macro_rules! test_filter {
     };
 }
 
-#[rustfmt::skip]
-test_filter!(eq_simple_string_filter,           vec![Right("tag=red")]);
-#[rustfmt::skip]
-test_filter!(eq_simple_number_filter,           vec![Right("asc_desc_rank=1")]);
-#[rustfmt::skip]
+test_filter!(eq_simple_string_filter, vec![Right("tag=red")]);
+test_filter!(eq_simple_number_filter, vec![Right("asc_desc_rank=1")]);
 test_filter!(eq_string_and_filter_return_empty, vec![Right("tag=red"), Right("tag=green")]);
-#[rustfmt::skip]
-test_filter!(eq_mix_and_filter,                 vec![Right("tag=red"), Right("asc_desc_rank=1")]);
-#[rustfmt::skip]
-test_filter!(eq_string_or_filter,               vec![Left(vec!["tag=red", "tag=green"])]);
-#[rustfmt::skip]
-test_filter!(eq_mix_or_filter,                  vec![Left(vec!["tag=red", "asc_desc_rank=1"])]);
-#[rustfmt::skip]
-test_filter!(eq_number_or_filter,               vec![Left(vec!["asc_desc_rank=3", "asc_desc_rank=1"])]);
-#[rustfmt::skip]
-test_filter!(eq_complex_filter,                 vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank=3")]);
-#[rustfmt::skip]
-test_filter!(eq_complex_filter_2,               vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank=3", "asc_desc_rank=1"])]);
-#[rustfmt::skip]
-test_filter!(greater_simple_number_filter,      vec![Right("asc_desc_rank>1")]);
-#[rustfmt::skip]
-test_filter!(greater_mix_and_filter,            vec![Right("tag=red"), Right("asc_desc_rank>1")]);
-#[rustfmt::skip]
-test_filter!(greater_mix_or_filter,             vec![Left(vec!["tag=red", "asc_desc_rank>1"])]);
-#[rustfmt::skip]
-test_filter!(greater_number_or_filter,          vec![Left(vec!["asc_desc_rank>3", "asc_desc_rank>1"])]);
-#[rustfmt::skip]
-test_filter!(greater_complex_filter,            vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank>3")]);
-#[rustfmt::skip]
-test_filter!(greater_complex_filter_2,          vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank>3", "asc_desc_rank>1"])]);
-#[rustfmt::skip]
-test_filter!(lower_simple_number_filter,        vec![Right("asc_desc_rank<1")]);
-#[rustfmt::skip]
-test_filter!(lower_mix_and_filter,              vec![Right("tag=red"), Right("asc_desc_rank<1")]);
-#[rustfmt::skip]
-test_filter!(lower_mix_or_filter,               vec![Left(vec!["tag=red", "asc_desc_rank<1"])]);
-#[rustfmt::skip]
-test_filter!(lower_number_or_filter,            vec![Left(vec!["asc_desc_rank<3", "asc_desc_rank<1"])]);
-#[rustfmt::skip]
-test_filter!(lower_complex_filter,              vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank<3")]);
-#[rustfmt::skip]
-test_filter!(lower_complex_filter_2,            vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank<3", "asc_desc_rank<1"])]);
+test_filter!(eq_mix_and_filter, vec![Right("tag=red"), Right("asc_desc_rank=1")]);
+test_filter!(eq_string_or_filter, vec![Left(vec!["tag=red", "tag=green"])]);
+test_filter!(eq_mix_or_filter, vec![Left(vec!["tag=red", "asc_desc_rank=1"])]);
+test_filter!(eq_number_or_filter, vec![Left(vec!["asc_desc_rank=3", "asc_desc_rank=1"])]);
+test_filter!(eq_complex_filter, vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank=3")]);
+test_filter!(
+    eq_complex_filter_2,
+    vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank=3", "asc_desc_rank=1"])]
+);
+test_filter!(greater_simple_number_filter, vec![Right("asc_desc_rank>1")]);
+test_filter!(greater_mix_and_filter, vec![Right("tag=red"), Right("asc_desc_rank>1")]);
+test_filter!(greater_mix_or_filter, vec![Left(vec!["tag=red", "asc_desc_rank>1"])]);
+test_filter!(greater_number_or_filter, vec![Left(vec!["asc_desc_rank>3", "asc_desc_rank>1"])]);
+test_filter!(
+    greater_complex_filter,
+    vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank>3")]
+);
+test_filter!(
+    greater_complex_filter_2,
+    vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank>3", "asc_desc_rank>1"])]
+);
+test_filter!(lower_simple_number_filter, vec![Right("asc_desc_rank<1")]);
+test_filter!(lower_mix_and_filter, vec![Right("tag=red"), Right("asc_desc_rank<1")]);
+test_filter!(lower_mix_or_filter, vec![Left(vec!["tag=red", "asc_desc_rank<1"])]);
+test_filter!(lower_number_or_filter, vec![Left(vec!["asc_desc_rank<3", "asc_desc_rank<1"])]);
+test_filter!(
+    lower_complex_filter,
+    vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank<3")]
+);
+test_filter!(
+    lower_complex_filter_2,
+    vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank<3", "asc_desc_rank<1"])]
+);
