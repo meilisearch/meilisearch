@@ -177,7 +177,7 @@ impl ErrorCode for MilliError<'_> {
                     UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                 }
-            },
+            }
         }
     }
 }

@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use actor::UuidResolverActor;
+use error::Result;
 use message::UuidResolveMsg;
 use store::UuidStore;
-use error::Result;
 
 #[cfg(test)]
 use mockall::automock;
@@ -21,7 +21,6 @@ pub use handle_impl::UuidResolverHandleImpl;
 pub use store::HeedUuidStore;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
-
 
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]

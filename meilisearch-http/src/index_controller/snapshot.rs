@@ -141,9 +141,11 @@ mod test {
     use super::*;
     use crate::index_controller::index_actor::MockIndexActorHandle;
     use crate::index_controller::update_actor::{
-        MockUpdateActorHandle, UpdateActorHandleImpl, error::UpdateActorError,
+        error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
     };
-    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, error::UuidResolverError};
+    use crate::index_controller::uuid_resolver::{
+        error::UuidResolverError, MockUuidResolverHandle,
+    };
 
     #[actix_rt::test]
     async fn test_normal() {

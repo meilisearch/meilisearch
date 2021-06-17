@@ -219,7 +219,9 @@ impl Index {
 
         let gzipped = false;
         let addition = match content {
-            Some(content) if gzipped => builder.execute(GzDecoder::new(content), indexing_callback)?,
+            Some(content) if gzipped => {
+                builder.execute(GzDecoder::new(content), indexing_callback)?
+            }
             Some(content) => builder.execute(content, indexing_callback)?,
             None => builder.execute(std::io::empty(), indexing_callback)?,
         };
@@ -297,7 +299,9 @@ impl Index {
             }
         }
 
-        builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step))?;
+        builder.execute(|indexing_step, update_id| {
+            info!("update {}: {:?}", update_id, indexing_step)
+        })?;
 
         Ok(UpdateResult::Other)
     }

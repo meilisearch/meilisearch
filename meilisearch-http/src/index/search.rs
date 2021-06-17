@@ -190,9 +190,7 @@ impl Index {
                 if fields.iter().all(|f| f != "*") {
                     facet_distribution.facets(fields);
                 }
-                let distribution = facet_distribution
-                    .candidates(candidates)
-                    .execute()?;
+                let distribution = facet_distribution.candidates(candidates).execute()?;
 
                 Some(distribution)
             }
@@ -532,7 +530,7 @@ fn parse_filter(facets: &Value, index: &Index, txn: &RoTxn) -> Result<Option<Fil
             Ok(Some(condition))
         }
         Value::Array(arr) => parse_filter_array(txn, index, arr),
-        v => return Err(FacetError::InvalidExpression(&["Array"], v.clone()).into()),
+        v => Err(FacetError::InvalidExpression(&["Array"], v.clone()).into()),
     }
 }
 

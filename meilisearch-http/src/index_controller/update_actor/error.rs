@@ -7,6 +7,7 @@ use crate::index_controller::index_actor::error::IndexActorError;
 pub type Result<T> = std::result::Result<T, UpdateActorError>;
 
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum UpdateActorError {
     #[error("Update {0} doesn't exist.")]
     UnexistingUpdate(u64),
@@ -33,8 +34,7 @@ impl From<tokio::sync::oneshot::error::RecvError> for UpdateActorError {
 }
 
 internal_error!(
-    UpdateActorError:
-    heed::Error,
+    UpdateActorError: heed::Error,
     std::io::Error,
     serde_json::Error,
     actix_http::error::PayloadError,

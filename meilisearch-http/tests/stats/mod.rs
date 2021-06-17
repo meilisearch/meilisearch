@@ -60,7 +60,6 @@ async fn stats() {
 
     index.wait_update_id(0).await;
 
-
     let (response, code) = server.stats().await;
 
     assert_eq!(code, 200);
