@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::index::error::FacetError;
 
-use super::error::{IndexError, Result};
+use super::error::Result;
 use super::Index;
 
 pub type Document = IndexMap<String, Value>;
@@ -97,9 +97,8 @@ impl Index {
             matching_words,
             candidates,
             ..
-        } = search
-            .execute()
-            .map_err(|e| IndexError::Internal(e.into()))?;
+        } = search.execute()?;
+
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
         let displayed_ids = self
@@ -164,6 +163,8 @@ impl Index {
 
         let mut documents = Vec::new();
 
+        let documents_iter = self.documents(&rtxn, documents_ids)?;
+
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
             let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
             let formatted = format_fields(
@@ -191,8 +192,7 @@ impl Index {
                 }
                 let distribution = facet_distribution
                     .candidates(candidates)
-                    .execute()
-                    .map_err(|e| IndexError::Internal(e.into()))?;
+                    .execute()?;
 
                 Some(distribution)
             }
@@ -528,8 +528,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 fn parse_filter(facets: &Value, index: &Index, txn: &RoTxn) -> Result<Option<FilterCondition>> {
     match facets {
         Value::String(expr) => {
-            let condition = FilterCondition::from_str(txn, index, expr)
-                .map_err(|e| IndexError::Internal(e.into()))?;
+            let condition = FilterCondition::from_str(txn, index, expr)?;
             Ok(Some(condition))
         }
         Value::Array(arr) => parse_filter_array(txn, index, arr),
@@ -566,7 +565,7 @@ fn parse_filter_array(
         }
     }
 
-    FilterCondition::from_array(txn, &index.0, ands).map_err(|e| IndexError::Internal(Box::new(e)))
+    Ok(FilterCondition::from_array(txn, &index.0, ands)?)
 }
 
 #[cfg(test)]

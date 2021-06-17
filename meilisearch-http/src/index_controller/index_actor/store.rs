@@ -61,8 +61,7 @@ impl IndexStore for MapIndexStore {
 
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
                 builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())
-                    .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
+                builder.execute(|_, _| ())?;
 
                 txn.commit()?;
             }

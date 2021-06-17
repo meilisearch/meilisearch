@@ -1,6 +1,6 @@
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index::error::IndexError;
+use crate::{error::MilliError, index::error::IndexError};
 
 pub type Result<T> = std::result::Result<T, IndexActorError>;
 
@@ -16,6 +16,8 @@ pub enum IndexActorError {
     ExistingPrimaryKey,
     #[error("Internal Index Error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("{0}")]
+    Milli(#[from] milli::Error),
 }
 
 macro_rules! internal_error {
@@ -40,6 +42,7 @@ impl ErrorCode for IndexActorError {
             IndexActorError::UnexistingIndex => Code::IndexNotFound,
             IndexActorError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,
             IndexActorError::Internal(_) => Code::Internal,
+            IndexActorError::Milli(e) => MilliError(e).error_code(),
         }
     }
 }

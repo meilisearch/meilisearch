@@ -39,8 +39,6 @@ async fn stats() {
     assert_eq!(response["indexes"]["test"]["numberOfDocuments"], 0);
     assert!(response["indexes"]["test"]["isIndexing"] == false);
 
-    let last_update = response["lastUpdate"].as_str().unwrap();
-
     let documents = json!([
         {
             "id": 1,

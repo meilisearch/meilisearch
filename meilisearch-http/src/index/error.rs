@@ -3,6 +3,8 @@ use std::error::Error;
 use meilisearch_error::{Code, ErrorCode};
 use serde_json::Value;
 
+use crate::error::MilliError;
+
 pub type Result<T> = std::result::Result<T, IndexError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -13,6 +15,8 @@ pub enum IndexError {
     DocumentNotFound(String),
     #[error("error with facet: {0}")]
     Facet(#[from] FacetError),
+    #[error("{0}")]
+    Milli(#[from] milli::Error),
 }
 
 internal_error!(
@@ -29,6 +33,7 @@ impl ErrorCode for IndexError {
             IndexError::Internal(_) => Code::Internal,
             IndexError::DocumentNotFound(_) => Code::DocumentNotFound,
             IndexError::Facet(e) => e.error_code(),
+            IndexError::Milli(e) => MilliError(e).error_code(),
         }
     }
 }

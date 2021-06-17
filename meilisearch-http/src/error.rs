@@ -7,6 +7,7 @@ use actix_web::body::Body;
 use actix_web::dev::BaseHttpResponseBuilder;
 use actix_web::http::StatusCode;
 use meilisearch_error::{Code, ErrorCode};
+use milli::UserError;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::index_controller::error::IndexControllerError;
@@ -137,5 +138,46 @@ macro_rules! internal_error {
                 }
             }
         )*
+    }
+}
+
+#[derive(Debug)]
+pub struct MilliError<'a>(pub &'a milli::Error);
+
+impl Error for MilliError<'_> {}
+
+impl fmt::Display for MilliError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl ErrorCode for MilliError<'_> {
+    fn error_code(&self) -> Code {
+        match self.0 {
+            milli::Error::InternalError(_) => Code::Internal,
+            milli::Error::IoError(_) => Code::Internal,
+            milli::Error::UserError(ref error) => {
+                match error {
+                    // TODO: wait for spec for new error codes.
+                    UserError::AttributeLimitReached
+                    | UserError::Csv(_)
+                    | UserError::SerdeJson(_)
+                    | UserError::MaxDatabaseSizeReached
+                    | UserError::InvalidCriterionName { .. }
+                    | UserError::InvalidDocumentId { .. }
+                    | UserError::InvalidStoreFile
+                    | UserError::NoSpaceLeftOnDevice
+                    | UserError::DocumentLimitReached => todo!(),
+                    UserError::InvalidFilter(_) => Code::Filter,
+                    UserError::InvalidFilterAttribute(_) => Code::Filter,
+                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
+                    UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
+                    UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
+                    UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
+                }
+            },
+        }
     }
 }

@@ -268,9 +268,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 }
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
                 builder.set_primary_key(primary_key);
-                builder
-                    .execute(|_, _| ())
-                    .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
+                builder.execute(|_, _| ())?;
                 let meta = IndexMeta::new_txn(&index, &txn)?;
                 txn.commit()?;
                 Ok(meta)
@@ -340,13 +338,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
             Ok(IndexStats {
                 size: index.size(),
-                number_of_documents: index
-                    .number_of_documents(&rtxn)
-                    .map_err(|e| IndexActorError::Internal(Box::new(e)))?,
+                number_of_documents: index.number_of_documents(&rtxn)?,
                 is_indexing: None,
-                fields_distribution: index
-                    .fields_distribution(&rtxn)
-                    .map_err(|e| IndexActorError::Internal(e.into()))?,
+                fields_distribution: index.fields_distribution(&rtxn)?,
             })
         })
         .await?

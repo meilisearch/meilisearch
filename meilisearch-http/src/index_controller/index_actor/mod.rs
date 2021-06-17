@@ -17,8 +17,6 @@ use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 use error::Result;
 
-use self::error::IndexActorError;
-
 use super::IndexSettings;
 
 mod actor;
@@ -42,12 +40,8 @@ impl IndexMeta {
     }
 
     fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
-        let created_at = index
-            .created_at(&txn)
-            .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
-        let updated_at = index
-            .updated_at(&txn)
-            .map_err(|e| IndexActorError::Internal(Box::new(e)))?;
+        let created_at = index.created_at(&txn)?;
+        let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
         Ok(Self {
             created_at,

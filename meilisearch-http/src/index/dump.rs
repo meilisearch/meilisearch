@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::option::IndexerOpts;
 
-use super::error::{IndexError, Result};
+use super::error::Result;
 use super::{update_handler::UpdateHandler, Index, Settings, Unchecked};
 
 #[derive(Serialize, Deserialize)]
@@ -38,9 +38,7 @@ impl Index {
         let document_file_path = path.as_ref().join(DATA_FILE_NAME);
         let mut document_file = File::create(&document_file_path)?;
 
-        let documents = self
-            .all_documents(txn)
-            .map_err(|e| IndexError::Internal(e.into()))?;
+        let documents = self.all_documents(txn)?;
         let fields_ids_map = self.fields_ids_map(txn)?;
 
         // dump documents

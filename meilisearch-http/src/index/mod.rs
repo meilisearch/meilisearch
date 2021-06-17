@@ -51,8 +51,7 @@ impl Index {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
-        let index =
-            milli::Index::new(options, &path).map_err(|e| IndexError::Internal(e.into()))?;
+        let index = milli::Index::new(options, &path)?;
         Ok(Index(Arc::new(index)))
     }
 
@@ -70,11 +69,7 @@ impl Index {
             .searchable_fields(&txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
-        let faceted_attributes = self
-            .faceted_fields(&txn)
-            .map_err(|e| IndexError::Internal(Box::new(e)))?
-            .into_iter()
-            .collect();
+        let faceted_attributes = self.faceted_fields(&txn)?.into_iter().collect();
 
         let criteria = self
             .criteria(&txn)?
@@ -83,8 +78,7 @@ impl Index {
             .collect();
 
         let stop_words = self
-            .stop_words(&txn)
-            .map_err(|e| IndexError::Internal(e.into()))?
+            .stop_words(&txn)?
             .map(|stop_words| -> Result<BTreeSet<_>> {
                 Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
@@ -126,9 +120,8 @@ impl Index {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display = self
-            .fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)
-            .map_err(|e| IndexError::Internal(e.into()))?;
+        let fields_to_display =
+            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -136,8 +129,7 @@ impl Index {
 
         for entry in iter {
             let (_id, obkv) = entry?;
-            let object = obkv_to_json(&fields_to_display, &fields_ids_map, obkv)
-                .map_err(|e| IndexError::Internal(e.into()))?;
+            let object = obkv_to_json(&fields_to_display, &fields_ids_map, obkv)?;
             documents.push(object);
         }
 
@@ -153,31 +145,24 @@ impl Index {
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
 
-        let fields_to_display = self
-            .fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)
-            .map_err(|e| IndexError::Internal(e.into()))?;
+        let fields_to_display =
+            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
 
         let internal_id = self
-            .external_documents_ids(&txn)
-            .map_err(|e| IndexError::Internal(e.into()))?
+            .external_documents_ids(&txn)?
             .get(doc_id.as_bytes())
             .ok_or_else(|| IndexError::DocumentNotFound(doc_id.clone()))?;
 
         let document = self
-            .documents(&txn, std::iter::once(internal_id))
-            .map_err(|e| IndexError::Internal(e.into()))?
+            .documents(&txn, std::iter::once(internal_id))?
             .into_iter()
             .next()
-            .map(|(_, d)| d);
+            .map(|(_, d)| d)
+            .ok_or(IndexError::DocumentNotFound(doc_id))?;
 
-        match document {
-            Some(document) => {
-                let document = obkv_to_json(&fields_to_display, &fields_ids_map, document)
-                    .map_err(|e| IndexError::Internal(e.into()))?;
-                Ok(document)
-            }
-            None => Err(IndexError::DocumentNotFound(doc_id)),
-        }
+        let document = obkv_to_json(&fields_to_display, &fields_ids_map, document)?;
+
+        Ok(document)
     }
 
     pub fn size(&self) -> u64 {
@@ -190,8 +175,7 @@ impl Index {
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> Result<Vec<u8>> {
-        let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)
-            .map_err(|e| IndexError::Internal(Box::new(e)))? {
+        let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)? {
             Some(ids) => ids.into_iter().collect::<Vec<_>>(),
             None => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };
