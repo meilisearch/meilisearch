@@ -8,6 +8,7 @@ use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
 use super::{IndexMeta, IndexResult, IndexSettings};
 
+#[allow(clippy::large_enum_variant)]
 pub enum IndexMsg {
     CreateIndex {
         uuid: Uuid,
