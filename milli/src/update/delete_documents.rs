@@ -1,4 +1,4 @@
-use std::collections::hash_map::Entry;
+use std::collections::btree_map::Entry;
 use std::collections::HashMap;
 
 use chrono::Utc;
@@ -147,7 +147,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
-        let mut fields_distribution = self.index.fields_distribution(self.wtxn)?;
+        let mut field_distribution = self.index.field_distribution(self.wtxn)?;
 
         // We use pre-calculated number of fields occurrences that needs to be deleted
         // to reflect deleted documents.
@@ -155,7 +155,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // Otherwise, insert new number of occurrences (current_count - count_diff).
         for (field_id, count_diff) in fields_ids_distribution_diff {
             let field_name = fields_ids_map.name(field_id).unwrap();
-            if let Entry::Occupied(mut entry) = fields_distribution.entry(field_name.to_string()) {
+            if let Entry::Occupied(mut entry) = field_distribution.entry(field_name.to_string()) {
                 match entry.get().checked_sub(count_diff) {
                     Some(0) | None => entry.remove(),
                     Some(count) => entry.insert(count),
@@ -163,7 +163,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
-        self.index.put_fields_distribution(self.wtxn, &fields_distribution)?;
+        self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 
         // We create the FST map of the external ids that we must delete.
         external_ids.sort_unstable();
@@ -479,7 +479,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        assert!(index.fields_distribution(&rtxn).unwrap().is_empty());
+        assert!(index.field_distribution(&rtxn).unwrap().is_empty());
     }
 
     #[test]

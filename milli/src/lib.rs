@@ -14,7 +14,7 @@ pub mod tree_level;
 pub mod update;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::BuildHasherDefault;
 use std::result::Result as StdResult;
 
@@ -22,7 +22,9 @@ use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
 pub use self::criterion::{default_criteria, Criterion};
-pub use self::error::{Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError};
+pub use self::error::{
+    Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
+};
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
@@ -48,7 +50,7 @@ pub type Attribute = u32;
 pub type DocumentId = u32;
 pub type FieldId = u8;
 pub type Position = u32;
-pub type FieldsDistribution = HashMap<String, u64>;
+pub type FieldsDistribution = BTreeMap<String, u64>;
 
 type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Vec<u8>, E>;
 

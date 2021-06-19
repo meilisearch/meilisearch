@@ -26,7 +26,7 @@ pub mod main_key {
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
-    pub const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
+    pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
@@ -290,28 +290,28 @@ impl Index {
             .unwrap_or_default())
     }
 
-    /* fields distribution */
+    /* field distribution */
 
-    /// Writes the fields distribution which associates every field name with
+    /// Writes the field distribution which associates every field name with
     /// the number of times it occurs in the documents.
-    pub(crate) fn put_fields_distribution(
+    pub(crate) fn put_field_distribution(
         &self,
         wtxn: &mut RwTxn,
         distribution: &FieldsDistribution,
     ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(
             wtxn,
-            main_key::FIELDS_DISTRIBUTION_KEY,
+            main_key::FIELD_DISTRIBUTION_KEY,
             distribution,
         )
     }
 
-    /// Returns the fields distribution which associates every field name with
+    /// Returns the field distribution which associates every field name with
     /// the number of times it occurs in the documents.
-    pub fn fields_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
+    pub fn field_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, main_key::FIELDS_DISTRIBUTION_KEY)?
+            .get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, main_key::FIELD_DISTRIBUTION_KEY)?
             .unwrap_or_default())
     }
 
@@ -791,7 +791,7 @@ pub(crate) mod tests {
     use std::ops::Deref;
 
     use heed::EnvOpenOptions;
-    use maplit::hashmap;
+    use maplit::btreemap;
     use tempfile::TempDir;
 
     use crate::update::{IndexDocuments, UpdateFormat};
@@ -823,7 +823,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn initial_fields_distribution() {
+    fn initial_field_distribution() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
@@ -842,13 +842,56 @@ pub(crate) mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let fields_distribution = index.fields_distribution(&rtxn).unwrap();
+        let field_distribution = index.field_distribution(&rtxn).unwrap();
         assert_eq!(
-            fields_distribution,
-            hashmap! {
+            field_distribution,
+            btreemap! {
                 "id".to_string() => 2,
                 "name".to_string() => 2,
                 "age".to_string() => 1,
+            }
+        );
+
+        // we add all the documents a second time. we are supposed to get the same
+        // field_distribution in the end
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let field_distribution = index.field_distribution(&rtxn).unwrap();
+        assert_eq!(
+            field_distribution,
+            btreemap! {
+                "id".to_string() => 2,
+                "name".to_string() => 2,
+                "age".to_string() => 1,
+            }
+        );
+
+        // then we update a document by removing one field and another by adding one field
+        let content = &br#"[
+            { "id": 1, "name": "kevin", "has_dog": true },
+            { "id": 2, "name": "bob" }
+        ]"#[..];
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let field_distribution = index.field_distribution(&rtxn).unwrap();
+        assert_eq!(
+            field_distribution,
+            btreemap! {
+                "id".to_string() => 2,
+                "name".to_string() => 2,
+                "has_dog".to_string() => 1,
             }
         );
     }

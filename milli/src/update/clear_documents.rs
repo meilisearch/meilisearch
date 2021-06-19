@@ -47,7 +47,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
-        self.index.put_fields_distribution(self.wtxn, &FieldsDistribution::default())?;
+        self.index.put_field_distribution(self.wtxn, &FieldsDistribution::default())?;
 
         // We clean all the faceted documents ids.
         let empty = RoaringBitmap::default();
@@ -113,7 +113,7 @@ mod tests {
         assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
         assert!(index.external_documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.documents_ids(&rtxn).unwrap().is_empty());
-        assert!(index.fields_distribution(&rtxn).unwrap().is_empty());
+        assert!(index.field_distribution(&rtxn).unwrap().is_empty());
 
         assert!(index.word_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
