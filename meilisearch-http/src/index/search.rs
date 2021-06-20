@@ -496,18 +496,19 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         tokens
             .map(|(word, token)| {
-                if format_options.highlight && token.is_word() && matcher.matches(token.text()).is_some() {
-                    let mut new_word = String::new();
-                    new_word.push_str(&self.marks.0);
-                    if let Some(match_len) = matcher.matches(token.text()) {
+                if let Some(match_len) = matcher.matches(token.text()) {
+                    if format_options.highlight && token.is_word() {
+                        let mut new_word = String::new();
+
+                        new_word.push_str(&self.marks.0);
                         new_word.push_str(&word[..match_len]);
                         new_word.push_str(&self.marks.1);
                         new_word.push_str(&word[match_len..]);
+
+                        return Cow::Owned(new_word)
                     }
-                    Cow::Owned(new_word)
-                } else {
-                    Cow::Borrowed(word)
                 }
+                Cow::Borrowed(word)
             })
             .collect::<String>()
     }
