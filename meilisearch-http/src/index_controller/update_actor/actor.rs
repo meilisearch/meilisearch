@@ -173,7 +173,8 @@ where
                 if copy(&mut checker, &mut sink()).is_err() || checker.finish().is_err() {
                     // The json file is invalid, we use Serde to get a nice error message:
                     file.seek(SeekFrom::Start(0))?;
-                    let _: serde_json::Value = serde_json::from_reader(file)?;
+                    let _: serde_json::Value = serde_json::from_reader(file)
+                        .map_err(|e| UpdateActorError::InvalidPayload(Box::new(e)))?;
                 }
                 Some(uuid)
             } else {

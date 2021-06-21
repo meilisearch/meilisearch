@@ -19,6 +19,8 @@ pub enum UpdateActorError {
         "update store was shut down due to a fatal error, please check your logs for more info."
     )]
     FatalUpdateStoreError,
+    #[error("invalid payload: {0}")]
+    InvalidPayload(Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateActorError {
@@ -48,6 +50,7 @@ impl ErrorCode for UpdateActorError {
             UpdateActorError::Internal(_) => Code::Internal,
             UpdateActorError::IndexActor(e) => e.error_code(),
             UpdateActorError::FatalUpdateStoreError => Code::Internal,
+            UpdateActorError::InvalidPayload(_) => Code::BadRequest,
         }
     }
 }
