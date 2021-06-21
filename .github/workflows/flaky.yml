@@ -11,5 +11,5 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install cargo-flaky
       run: cargo install cargo-flaky
-    - name: Run cargo flaky 1000 times
-      run: cargo flaky -i 1000 --release
+    - name: Run cargo flaky 100 times
+      run: cargo flaky -i 100 --release
