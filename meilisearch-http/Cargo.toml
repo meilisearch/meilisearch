@@ -49,7 +49,7 @@ itertools = "0.10.0"
 log = "0.4.8"
 main_error = "0.1.0"
 meilisearch-error = { path = "../meilisearch-error" }
-meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.2.2" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.3" }
 memmap = "0.7.0"
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.5.0" }
 mime = "0.3.16"
