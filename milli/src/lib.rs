@@ -50,7 +50,7 @@ pub type Attribute = u32;
 pub type DocumentId = u32;
 pub type FieldId = u8;
 pub type Position = u32;
-pub type FieldsDistribution = BTreeMap<String, u64>;
+pub type FieldDistribution = BTreeMap<String, u64>;
 
 type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Vec<u8>, E>;
 

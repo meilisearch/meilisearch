@@ -1,7 +1,7 @@
 use chrono::Utc;
 use roaring::RoaringBitmap;
 
-use crate::{ExternalDocumentsIds, FieldsDistribution, Index, Result};
+use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -47,7 +47,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
-        self.index.put_field_distribution(self.wtxn, &FieldsDistribution::default())?;
+        self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
 
         // We clean all the faceted documents ids.
         let empty = RoaringBitmap::default();

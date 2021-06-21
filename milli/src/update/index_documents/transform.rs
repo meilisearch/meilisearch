@@ -18,7 +18,7 @@ use crate::index::db_name;
 use crate::update::index_documents::merge_function::{keep_latest_obkv, merge_obkvs};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{
-    ExternalDocumentsIds, FieldId, FieldsDistribution, FieldsIdsMap, Index, MergeFn, Result, BEU32,
+    ExternalDocumentsIds, FieldId, FieldDistribution, FieldsIdsMap, Index, MergeFn, Result, BEU32,
 };
 
 const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
@@ -26,7 +26,7 @@ const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 pub struct TransformOutput {
     pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
-    pub field_distribution: FieldsDistribution,
+    pub field_distribution: FieldDistribution,
     pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
