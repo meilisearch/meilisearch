@@ -900,7 +900,7 @@ dependencies = [
 
 [[package]]
 name = "helpers"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "byte-unit",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "http-ui"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "askama",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "infos"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "byte-unit",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "big_s",
  "bstr",
@@ -2230,7 +2230,7 @@ dependencies = [
 
 [[package]]
 name = "search"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "byte-unit",
