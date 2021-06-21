@@ -496,8 +496,8 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         tokens
             .map(|(word, token)| {
-                if let Some(match_len) = matcher.matches(token.text()) {
-                    if format_options.highlight && token.is_word() {
+                if format_options.highlight && token.is_word() {
+                    if let Some(match_len) = matcher.matches(token.text()) {
                         let mut new_word = String::new();
 
                         new_word.push_str(&self.marks.0);
