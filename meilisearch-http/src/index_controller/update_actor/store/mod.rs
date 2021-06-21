@@ -565,7 +565,7 @@ fn update_uuid_to_file_path(root: impl AsRef<Path>, uuid: Uuid) -> PathBuf {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::index_controller::{index_actor::MockIndexActorHandle, UpdateResult};
+    use crate::index_controller::{UpdateResult, index_actor::{MockIndexActorHandle, error::IndexActorError}};
 
     use futures::future::ok;
 
@@ -644,7 +644,7 @@ mod test {
                 if processing.id() == 0 {
                     Box::pin(ok(Ok(processing.process(UpdateResult::Other))))
                 } else {
-                    Box::pin(ok(Err(processing.fail(String::from("err")))))
+                    Box::pin(ok(Err(processing.fail(IndexActorError::ExistingPrimaryKey.into()))))
                 }
             });
 

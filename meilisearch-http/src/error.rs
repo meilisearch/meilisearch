@@ -5,9 +5,10 @@ use actix_web as aweb;
 use actix_web::body::Body;
 use actix_web::dev::BaseHttpResponseBuilder;
 use actix_web::http::StatusCode;
+use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
 use milli::UserError;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
@@ -44,7 +45,8 @@ impl fmt::Display for ResponseError {
 }
 
 impl<T> From<T> for ResponseError
-where T: ErrorCode
+where
+    T: ErrorCode,
 {
     fn from(other: T) -> Self {
         Self {
@@ -67,23 +69,6 @@ impl aweb::error::ResponseError for ResponseError {
 
     fn status_code(&self) -> StatusCode {
         self.code
-    }
-}
-
-#[derive(Debug)]
-struct PayloadError<E>(E);
-
-impl<E: Error> fmt::Display for PayloadError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl<E: Error> Error for PayloadError<E> {}
-
-impl<E: Error> ErrorCode for PayloadError<E> {
-    fn error_code(&self) -> Code {
-        Code::Internal
     }
 }
 
@@ -140,10 +125,57 @@ impl ErrorCode for MilliError<'_> {
     }
 }
 
+impl fmt::Display for PayloadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PayloadError::Json(e) => e.fmt(f),
+            PayloadError::Query(e) => e.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum PayloadError {
+    Json(JsonPayloadError),
+    Query(QueryPayloadError),
+}
+
+impl Error for PayloadError {}
+
+impl ErrorCode for PayloadError {
+    fn error_code(&self) -> Code {
+        match self {
+            PayloadError::Json(err) => match err {
+                JsonPayloadError::Deserialize(_) => Code::BadRequest,
+                JsonPayloadError::Overflow => Code::PayloadTooLarge,
+                JsonPayloadError::ContentType => Code::UnsupportedMediaType,
+                JsonPayloadError::Payload(_) => Code::BadRequest,
+                JsonPayloadError::Serialize(_) => Code::Internal,
+                _ => Code::Internal,
+            },
+            PayloadError::Query(err) => match err {
+                QueryPayloadError::Deserialize(_) => Code::BadRequest,
+                _ => Code::Internal,
+            },
+        }
+    }
+}
+
+impl From<JsonPayloadError> for PayloadError {
+    fn from(other: JsonPayloadError) -> Self {
+        Self::Json(other)
+    }
+}
+
+impl From<QueryPayloadError> for PayloadError {
+    fn from(other: QueryPayloadError) -> Self {
+        Self::Query(other)
+    }
+}
+
 pub fn payload_error_handler<E>(err: E) -> ResponseError
 where
-    E: Error + Sync + Send + 'static,
+    E: Into<PayloadError>,
 {
-    let error = PayloadError(err);
-    error.into()
+    err.into().into()
 }
