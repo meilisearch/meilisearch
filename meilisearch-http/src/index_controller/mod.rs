@@ -7,7 +7,7 @@ use actix_web::web::{Bytes, Payload};
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::info;
-use milli::FieldsDistribution;
+use milli::FieldDistribution;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -63,7 +63,7 @@ pub struct IndexStats {
     /// index returns it, since it is the `UpdateStore` that knows what index is currently indexing. It is
     /// later set to either true or false, we we retrieve the information from the `UpdateStore`
     pub is_indexing: Option<bool>,
-    pub fields_distribution: FieldsDistribution,
+    pub field_distribution: FieldDistribution,
 }
 
 #[derive(Clone)]
