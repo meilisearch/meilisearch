@@ -188,7 +188,7 @@ pub struct Opt {
     #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[structopt(skip)]
     pub indexer_options: IndexerOpts,
 }
 
