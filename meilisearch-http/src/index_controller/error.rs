@@ -10,7 +10,7 @@ pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexControllerError {
-    #[error("Missing index uid")]
+    #[error("missing index uid")]
     MissingUid,
     #[error("index resolution error: {0}")]
     Uuid(#[from] UuidResolverError),

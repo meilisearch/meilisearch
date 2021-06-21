@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use anyhow::bail;
 use log::{error, info};
 use tokio::fs;
 use tokio::task::spawn_blocking;
@@ -108,7 +109,7 @@ pub fn load_snapshot(
             }
         }
     } else if db_path.as_ref().exists() && !ignore_snapshot_if_db_exists {
-        todo!(
+        bail!(
             "database already exists at {:?}, try to delete it or rename it",
             db_path
                 .as_ref()
@@ -116,7 +117,7 @@ pub fn load_snapshot(
                 .unwrap_or_else(|_| db_path.as_ref().to_owned())
         )
     } else if !snapshot_path.as_ref().exists() && !ignore_missing_snapshot {
-        todo!(
+        bail!(
             "snapshot doesn't exist at {:?}",
             snapshot_path
                 .as_ref()

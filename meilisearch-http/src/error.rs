@@ -14,9 +14,9 @@ use crate::index_controller::error::IndexControllerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
-    #[error("You must have an authorization token")]
+    #[error("you must have an authorization token")]
     MissingAuthorizationHeader,
-    #[error("Invalid API key")]
+    #[error("invalid API key")]
     InvalidToken(String),
 }
 

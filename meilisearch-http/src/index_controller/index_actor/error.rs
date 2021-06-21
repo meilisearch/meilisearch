@@ -10,11 +10,11 @@ pub enum IndexActorError {
     IndexError(#[from] IndexError),
     #[error("index already exists")]
     IndexAlreadyExists,
-    #[error("Index doesn't exists")]
+    #[error("index doesn't exists")]
     UnexistingIndex,
-    #[error("Existing primary key")]
+    #[error("existing primary key")]
     ExistingPrimaryKey,
-    #[error("Internal Index Error: {0}")]
+    #[error("internal Index Error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
     Milli(#[from] milli::Error),

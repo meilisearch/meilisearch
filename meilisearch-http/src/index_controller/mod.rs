@@ -330,10 +330,10 @@ impl IndexController {
     pub async fn update_index(
         &self,
         uid: String,
-        index_settings: IndexSettings,
+        mut index_settings: IndexSettings,
     ) -> Result<IndexMetadata> {
         if index_settings.uid.is_some() {
-            todo!("Can't change the index uid.")
+            index_settings.uid.take();
         }
 
         let uuid = self.uuid_resolver.get(uid.clone()).await?;

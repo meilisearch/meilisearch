@@ -11,7 +11,7 @@ pub enum DumpActorError {
     DumpAlreadyRunning,
     #[error("dump `{0}` does not exist")]
     DumpDoesNotExist(String),
-    #[error("Internal error: {0}")]
+    #[error("internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("error while dumping uuids: {0}")]
     UuidResolver(#[from] UuidResolverError),

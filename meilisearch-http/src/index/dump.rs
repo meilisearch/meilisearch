@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
@@ -126,7 +126,7 @@ impl Index {
 
         match Arc::try_unwrap(index.0) {
             Ok(inner) => inner.prepare_for_closing().wait(),
-            Err(_) => todo!("Could not close index properly."),
+            Err(_) => bail!("Could not close index properly."),
         }
 
         Ok(())
