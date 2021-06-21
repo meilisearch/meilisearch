@@ -103,7 +103,6 @@ impl Index {
 
         let displayed_ids = self
             .displayed_fields_ids(&rtxn)?
-            .map_err(|e| IndexError::Internal(Box::new(e)))?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
             .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
@@ -165,7 +164,7 @@ impl Index {
 
         let documents_iter = self.documents(&rtxn, documents_ids)?;
 
-        for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
+        for (_id, obkv) in documents_iter {
             let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
             let formatted = format_fields(
                 &fields_ids_map,
