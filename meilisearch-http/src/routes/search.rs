@@ -66,7 +66,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_length: other.crop_length,
             attributes_to_highlight,
             filter,
-            matches: Some(other.matches),
+            matches: other.matches.unwrap_or_default(),
             facet_distributions,
         }
     }
