@@ -332,7 +332,7 @@ impl UpdateStore {
         let result =
             match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
                 Ok(result) => result,
-                Err(e) => Err(processing.fail(e.to_string())),
+                Err(e) => Err(processing.fail(e.into())),
             };
 
         // Once the pending update have been successfully processed

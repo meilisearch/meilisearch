@@ -4,6 +4,7 @@ use actix_web::{get, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::error::ResponseError;
 use crate::index::{Settings, Unchecked};
 use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
 
@@ -89,10 +90,8 @@ pub struct FailedUpdateResult {
     pub update_id: u64,
     #[serde(rename = "type")]
     pub update_type: UpdateType,
-    pub error: String,
-    pub error_type: String,
-    pub error_code: String,
-    pub error_link: String,
+    #[serde(flatten)]
+    pub response: ResponseError,
     pub duration: f64, // in seconds
     pub enqueued_at: DateTime<Utc>,
     pub processed_at: DateTime<Utc>,
@@ -181,13 +180,13 @@ impl From<UpdateStatus> for UpdateStatusResponse {
                 // necessary since chrono::duration don't expose a f64 secs method.
                 let duration = Duration::from_millis(duration as u64).as_secs_f64();
 
+                let update_id = failed.id();
+                let response = failed.error;
+
                 let content = FailedUpdateResult {
-                    update_id: failed.id(),
+                    update_id,
                     update_type,
-                    error: failed.error,
-                    error_type: String::from("todo"),
-                    error_code: String::from("todo"),
-                    error_link: String::from("todo"),
+                    response,
                     duration,
                     enqueued_at: failed.from.from.enqueued_at,
                     processed_at: failed.failed_at,

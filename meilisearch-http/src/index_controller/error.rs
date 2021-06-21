@@ -1,6 +1,8 @@
 use meilisearch_error::Code;
 use meilisearch_error::ErrorCode;
 
+use crate::index::error::IndexError;
+
 use super::dump_actor::error::DumpActorError;
 use super::index_actor::error::IndexActorError;
 use super::update_actor::error::UpdateActorError;
@@ -20,6 +22,8 @@ pub enum IndexControllerError {
     UpdateActor(#[from] UpdateActorError),
     #[error("error with dump: {0}")]
     DumpActor(#[from] DumpActorError),
+    #[error("error with index: {0}")]
+    IndexError(#[from] IndexError),
 }
 
 impl ErrorCode for IndexControllerError {
@@ -30,6 +34,7 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::IndexActor(e) => e.error_code(),
             IndexControllerError::UpdateActor(e) => e.error_code(),
             IndexControllerError::DumpActor(e) => e.error_code(),
+            IndexControllerError::IndexError(e) => e.error_code(),
         }
     }
 }

@@ -1,4 +1,3 @@
-use std::error;
 use std::error::Error;
 use std::fmt;
 
@@ -8,9 +7,7 @@ use actix_web::dev::BaseHttpResponseBuilder;
 use actix_web::http::StatusCode;
 use meilisearch_error::{Code, ErrorCode};
 use milli::UserError;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
-
-use crate::index_controller::error::IndexControllerError;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
@@ -29,56 +26,34 @@ impl ErrorCode for AuthenticationError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ResponseError {
-    inner: Box<dyn ErrorCode>,
-}
-
-impl error::Error for ResponseError {}
-
-impl ErrorCode for ResponseError {
-    fn error_code(&self) -> Code {
-        self.inner.error_code()
-    }
+    #[serde(skip)]
+    code: StatusCode,
+    message: String,
+    error_code: String,
+    error_type: String,
+    error_link: String,
 }
 
 impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f)
+        self.message.fmt(f)
     }
 }
 
-macro_rules! response_error {
-    ($($other:path), *) => {
-        $(
-            impl From<$other> for ResponseError {
-                fn from(error: $other) -> ResponseError {
-                    ResponseError {
-                        inner: Box::new(error),
-                    }
-                }
-            }
-
-        )*
-    };
-}
-
-response_error!(IndexControllerError, AuthenticationError);
-
-impl Serialize for ResponseError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let struct_name = "ResponseError";
-        let field_count = 4;
-
-        let mut state = serializer.serialize_struct(struct_name, field_count)?;
-        state.serialize_field("message", &self.to_string())?;
-        state.serialize_field("errorCode", &self.error_name())?;
-        state.serialize_field("errorType", &self.error_type())?;
-        state.serialize_field("errorLink", &self.error_url())?;
-        state.end()
+impl<T> From<T> for ResponseError
+where T: ErrorCode
+{
+    fn from(other: T) -> Self {
+        Self {
+            code: other.http_status(),
+            message: other.to_string(),
+            error_code: other.error_name(),
+            error_type: other.error_type(),
+            error_link: other.error_url(),
+        }
     }
 }
 
@@ -89,7 +64,7 @@ impl aweb::error::ResponseError for ResponseError {
     }
 
     fn status_code(&self) -> StatusCode {
-        self.http_status()
+        self.code
     }
 }
 
@@ -108,25 +83,6 @@ impl<E: Error> ErrorCode for PayloadError<E> {
     fn error_code(&self) -> Code {
         Code::Internal
     }
-}
-
-impl<E> From<PayloadError<E>> for ResponseError
-where
-    E: Error + Sync + Send + 'static,
-{
-    fn from(other: PayloadError<E>) -> Self {
-        ResponseError {
-            inner: Box::new(other),
-        }
-    }
-}
-
-pub fn payload_error_handler<E>(err: E) -> ResponseError
-where
-    E: Error + Sync + Send + 'static,
-{
-    let error = PayloadError(err);
-    error.into()
 }
 
 macro_rules! internal_error {
@@ -168,7 +124,7 @@ impl ErrorCode for MilliError<'_> {
                     | UserError::InvalidDocumentId { .. }
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
-                    | UserError::DocumentLimitReached => todo!(),
+                    | UserError::DocumentLimitReached => Code::Internal,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::InvalidFilterAttribute(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
@@ -180,4 +136,12 @@ impl ErrorCode for MilliError<'_> {
             }
         }
     }
+}
+
+pub fn payload_error_handler<E>(err: E) -> ResponseError
+where
+    E: Error + Sync + Send + 'static,
+{
+    let error = PayloadError(err);
+    error.into()
 }

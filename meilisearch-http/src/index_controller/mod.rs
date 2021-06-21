@@ -30,7 +30,7 @@ use self::error::IndexControllerError;
 
 mod dump_actor;
 pub mod error;
-mod index_actor;
+pub mod index_actor;
 mod snapshot;
 mod update_actor;
 mod updates;

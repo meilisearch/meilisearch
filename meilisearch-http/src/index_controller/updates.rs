@@ -3,9 +3,7 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::index::{Settings, Unchecked};
-
-pub type UpdateError = String;
+use crate::{error::ResponseError, index::{Settings, Unchecked}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
@@ -116,7 +114,7 @@ impl Processing {
         }
     }
 
-    pub fn fail(self, error: UpdateError) -> Failed {
+    pub fn fail(self, error: ResponseError) -> Failed {
         Failed {
             from: self,
             error,
@@ -143,12 +141,12 @@ impl Aborted {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Failed {
     #[serde(flatten)]
     pub from: Processing,
-    pub error: UpdateError,
+    pub error: ResponseError,
     pub failed_at: DateTime<Utc>,
 }
 
@@ -162,7 +160,7 @@ impl Failed {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus {
     Processing(Processing),
