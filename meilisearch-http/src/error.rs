@@ -60,7 +60,9 @@ where T: ErrorCode
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::BaseHttpResponse<Body> {
         let json = serde_json::to_vec(self).unwrap();
-        BaseHttpResponseBuilder::new(self.status_code()).body(json)
+        BaseHttpResponseBuilder::new(self.status_code())
+            .content_type("application/json")
+            .body(json)
     }
 
     fn status_code(&self) -> StatusCode {
