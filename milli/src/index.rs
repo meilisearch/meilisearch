@@ -16,7 +16,7 @@ use crate::heed_codec::facet::{
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldId, FieldIdWordCountCodec,
-    FieldsDistribution, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
+    FieldDistribution, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
     StrLevelPositionCodec, StrStrU8Codec, BEU32,
 };
 
@@ -297,9 +297,9 @@ impl Index {
     pub(crate) fn put_field_distribution(
         &self,
         wtxn: &mut RwTxn,
-        distribution: &FieldsDistribution,
+        distribution: &FieldDistribution,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldsDistribution>>(
+        self.main.put::<_, Str, SerdeJson<FieldDistribution>>(
             wtxn,
             main_key::FIELD_DISTRIBUTION_KEY,
             distribution,
@@ -308,10 +308,10 @@ impl Index {
 
     /// Returns the field distribution which associates every field name with
     /// the number of times it occurs in the documents.
-    pub fn field_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldsDistribution> {
+    pub fn field_distribution(&self, rtxn: &RoTxn) -> heed::Result<FieldDistribution> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<FieldsDistribution>>(rtxn, main_key::FIELD_DISTRIBUTION_KEY)?
+            .get::<_, Str, SerdeJson<FieldDistribution>>(rtxn, main_key::FIELD_DISTRIBUTION_KEY)?
             .unwrap_or_default())
     }
 
