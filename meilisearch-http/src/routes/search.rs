@@ -28,7 +28,7 @@ pub struct SearchQueryGet {
     filter: Option<String>,
     #[serde(default = "Default::default")]
     matches: bool,
-    facet_distributions: Option<String>,
+    facets_distribution: Option<String>,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -45,8 +45,8 @@ impl From<SearchQueryGet> for SearchQuery {
             .attributes_to_highlight
             .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
 
-        let facet_distributions = other
-            .facet_distributions
+        let facets_distribution = other
+            .facets_distribution
             .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let filter = match other.filter {
@@ -67,7 +67,7 @@ impl From<SearchQueryGet> for SearchQuery {
             attributes_to_highlight,
             filter,
             matches: other.matches,
-            facet_distributions,
+            facets_distribution,
         }
     }
 }
