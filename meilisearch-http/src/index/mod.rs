@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 use crate::helpers::EnvSizer;
 use error::Result;
 
-pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
+pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT, default_crop_length};
 pub use updates::{Checked, Facets, Settings, Unchecked};
 
 use self::error::IndexError;
