@@ -1,18 +1,129 @@
-use std::collections::{BTreeSet, HashSet};
+use std::any::{Any, TypeId};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::marker::PhantomData;
+use std::ops::Deref;
 
-use actix_web::{get, post, web, HttpResponse};
 use log::debug;
+use actix_web::{web, FromRequest, HttpResponse};
+use futures::future::{err, ok, Ready};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::ResponseError;
-use crate::helpers::Authentication;
+use crate::error::{AuthenticationError, ResponseError};
 use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
+struct Public;
+
+impl Policy for Public {
+    fn authenticate(&self, _token: &[u8]) -> bool {
+        true
+    }
+}
+
+struct GuardedData<T, D> {
+    data: D,
+    _marker: PhantomData<T>,
+}
+
+trait Policy {
+    fn authenticate(&self, token: &[u8]) -> bool;
+}
+
+struct Policies {
+    inner: HashMap<TypeId, Box<dyn Any>>,
+}
+
+impl Policies {
+    fn new() -> Self {
+        Self { inner: HashMap::new() }
+    }
+
+    fn insert<S: Policy + 'static>(&mut self, policy: S) {
+        self.inner.insert(TypeId::of::<S>(), Box::new(policy));
+    }
+
+    fn get<S: Policy + 'static>(&self) -> Option<&S> {
+        self.inner
+            .get(&TypeId::of::<S>())
+            .and_then(|p| p.downcast_ref::<S>())
+    }
+}
+
+enum AuthConfig {
+    NoAuth,
+    Auth(Policies),
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self::NoAuth
+    }
+}
+
+impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> {
+    type Config = AuthConfig;
+
+    type Error = ResponseError;
+
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(
+        req: &actix_web::HttpRequest,
+        _payload: &mut actix_http::Payload,
+    ) -> Self::Future {
+        match req.app_data::<Self::Config>() {
+            Some(config) => match config {
+                AuthConfig::NoAuth => match req.app_data::<D>().cloned() {
+                    Some(data) => ok(Self {
+                        data,
+                        _marker: PhantomData,
+                    }),
+                    None => todo!("Data not configured"),
+                },
+                AuthConfig::Auth(policies) => match policies.get::<P>() {
+                    Some(policy) => match req.headers().get("x-meili-api-key") {
+                        Some(token) => {
+                            if policy.authenticate(token.as_bytes()) {
+                                match req.app_data::<D>().cloned() {
+                                    Some(data) => ok(Self {
+                                        data,
+                                        _marker: PhantomData,
+                                    }),
+                                    None => todo!("Data not configured"),
+                                }
+                            } else {
+                                err(AuthenticationError::InvalidToken(String::from("hello")).into())
+                            }
+                        }
+                        None => err(AuthenticationError::MissingAuthorizationHeader.into()),
+                    },
+                    None => todo!("no policy found"),
+                },
+            },
+            None => todo!(),
+        }
+    }
+}
+
+impl<T, D> Deref for GuardedData<T, D> {
+    type Target = D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(search_with_post).service(search_with_url_query);
+    let mut policies = Policies::new();
+    policies.insert(Public);
+    cfg.service(
+        web::resource("/indexes/{index_uid}/search")
+            .app_data(AuthConfig::Auth(policies))
+            .route(web::get().to(search_with_url_query))
+            .route(web::post().to(search_with_post)),
+    );
 }
 
 #[derive(Deserialize, Debug)]
@@ -73,9 +184,8 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
-#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_url_query(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -86,9 +196,8 @@ async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-#[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_post(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
