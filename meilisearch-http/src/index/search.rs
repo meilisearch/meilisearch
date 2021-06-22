@@ -23,7 +23,7 @@ const fn default_search_limit() -> usize {
 }
 
 pub const DEFAULT_CROP_LENGTH: usize = 200;
-const fn default_crop_length() -> usize {
+pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 

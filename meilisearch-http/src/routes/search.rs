@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use crate::index::{SearchQuery, DEFAULT_SEARCH_LIMIT};
+use crate::index::{SearchQuery, default_crop_length, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -22,10 +22,12 @@ pub struct SearchQueryGet {
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
     attributes_to_crop: Option<String>,
+    #[serde(default = "default_crop_length")]
     crop_length: usize,
     attributes_to_highlight: Option<String>,
     filter: Option<String>,
-    matches: Option<bool>,
+    #[serde(default = "Default::default")]
+    matches: bool,
     facet_distributions: Option<String>,
 }
 
@@ -64,7 +66,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_length: other.crop_length,
             attributes_to_highlight,
             filter,
-            matches: other.matches,
+            matches: Some(other.matches),
             facet_distributions,
         }
     }
