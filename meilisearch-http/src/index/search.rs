@@ -572,26 +572,23 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             None => Box::new(analyzed.reconstruct()),
         };
 
-        tokens
-            .map(|(word, token)| {
-                // Check if we need to do highlighting or computed matches before calling
-                // Matcher::match since the call is expensive.
-                if format_options.highlight && token.is_word() {
-                    if let Some(length) = matcher.matches(token.text()) {
-                        if format_options.highlight {
-                            let mut new_word = String::new();
-                            new_word.push_str(&self.marks.0);
-                            new_word.push_str(&word[..length]);
-                            new_word.push_str(&self.marks.1);
-                            new_word.push_str(&word[length..]);
-
-                            return Cow::Owned(new_word);
-                        }
+        tokens.fold(String::new(), |mut out, (word, token)| {
+            // Check if we need to do highlighting or computed matches before calling
+            // Matcher::match since the call is expensive.
+            if format_options.highlight && token.is_word() {
+                if let Some(length) = matcher.matches(token.text()) {
+                    if format_options.highlight {
+                        out.push_str(&self.marks.0);
+                        out.push_str(&word[..length]);
+                        out.push_str(&self.marks.1);
+                        out.push_str(&word[length..]);
+                        return out;
                     }
                 }
-                Cow::Borrowed(word)
-            })
-            .collect::<String>()
+            }
+            out.push_str(word);
+            out
+        })
     }
 }
 
