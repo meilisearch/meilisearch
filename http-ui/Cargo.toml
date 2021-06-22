@@ -42,3 +42,6 @@ funty = "=1.1"
 [dev-dependencies]
 maplit = "1.0.2"
 serde_test = "1.0.125"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemallocator = "0.3.2"
