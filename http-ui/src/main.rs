@@ -683,6 +683,7 @@ async fn main() -> anyhow::Result<()> {
         filters: Option<String>,
         facet_filters: Option<Vec<UntaggedEither<Vec<String>, String>>>,
         facet_distribution: Option<bool>,
+        limit: Option<usize>,
     }
 
     #[derive(Debug, Serialize)]
@@ -733,6 +734,10 @@ async fn main() -> anyhow::Result<()> {
 
             if let Some(condition) = condition {
                 search.filter(condition);
+            }
+
+            if let Some(limit) = query.limit {
+                search.limit(limit);
             }
 
             let SearchResult { matching_words, candidates, documents_ids } =
