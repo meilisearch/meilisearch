@@ -11,7 +11,7 @@ use fst::Set;
 use grenad::{CompressionType, FileFuse, Reader, Sorter, Writer};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
-use log::{debug, info};
+use log::{debug, info, warn};
 use meilisearch_tokenizer::token::SeparatorKind;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind};
 use ordered_float::OrderedFloat;
@@ -426,6 +426,11 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
+            } else {
+                warn!(
+                    "words pairs proximity ({:?} - {:?}, {:?}) is too large to be saved",
+                    w1, w2, min_prox
+                );
             }
         }
 
@@ -457,6 +462,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 writer.insert(&key, &buffer)?;
+            } else {
+                warn!("word {:?} is too large to be saved", word);
             }
         }
 
@@ -493,6 +500,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                 // that we write under the generated key into MTBL
                 if lmdb_key_valid_size(&key_buffer) {
                     writer.insert(&key_buffer, &data_buffer)?;
+                } else {
+                    warn!("word {:?} is too large to be saved", word);
                 }
             }
         }
@@ -517,6 +526,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
             if lmdb_key_valid_size(&key_buffer) {
                 sorter.insert(&key_buffer, &data_buffer)?;
+            } else {
+                warn!("facet value {:?} is too large to be saved", value);
             }
         }
 
@@ -582,6 +593,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         if lmdb_key_valid_size(&buffer) {
             sorter.insert(&buffer, &[])?;
+        } else {
+            warn!("facet value {:?} is too large to be saved", value);
         }
 
         Ok(())
@@ -606,6 +619,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
+            } else {
+                warn!("word {:?} is too large to be saved", word);
             }
         }
 
