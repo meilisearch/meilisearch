@@ -426,6 +426,11 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
+            } else {
+                warn!(
+                    "words pairs proximity ({:?} - {:?}, {:?}) is too large to be saved",
+                    w1, w2, min_prox
+                );
             }
         }
 
@@ -457,6 +462,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 writer.insert(&key, &buffer)?;
+            } else {
+                warn!("word {:?} is too large to be saved", word);
             }
         }
 
@@ -493,6 +500,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                 // that we write under the generated key into MTBL
                 if lmdb_key_valid_size(&key_buffer) {
                     writer.insert(&key_buffer, &data_buffer)?;
+                } else {
+                    warn!("word {:?} is too large to be saved", word);
                 }
             }
         }
@@ -610,6 +619,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
+            } else {
+                warn!("word {:?} is too large to be saved", word);
             }
         }
 
