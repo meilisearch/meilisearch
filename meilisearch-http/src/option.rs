@@ -109,15 +109,15 @@ pub struct Opt {
     pub no_analytics: bool,
 
     /// The maximum size, in bytes, of the main lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", default_value = "100 GiB")]
-    pub max_mdb_size: Byte,
+    #[structopt(long, env = "MEILI_MAX_INDEX_SIZE", default_value = "100 GiB")]
+    pub max_index_size: Byte,
 
     /// The maximum size, in bytes, of the update lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "10 GiB")]
+    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "100 GiB")]
     pub max_udb_size: Byte,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10 MiB")]
+    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "100 MB")]
     pub http_payload_size_limit: Byte,
 
     /// Read server certificates from CERTFILE.
@@ -184,11 +184,11 @@ pub struct Opt {
     #[structopt(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]
     pub dumps_dir: PathBuf,
 
-    /// Import a dump from the specified path, must be a `.tar.gz` file.
+    /// Import a dump from the specified path, must be a `.dump` file.
     #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[structopt(skip)]
     pub indexer_options: IndexerOpts,
 }
 
