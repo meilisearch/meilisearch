@@ -15,8 +15,8 @@ use crate::heed_codec::facet::{
 };
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
-    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldId, FieldIdWordCountCodec,
-    FieldDistribution, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
+    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
+    FieldIdWordCountCodec, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
     StrLevelPositionCodec, StrStrU8Codec, BEU32,
 };
 
