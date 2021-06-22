@@ -18,7 +18,7 @@ use crate::index::db_name;
 use crate::update::index_documents::merge_function::{keep_latest_obkv, merge_obkvs};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{
-    ExternalDocumentsIds, FieldId, FieldDistribution, FieldsIdsMap, Index, MergeFn, Result, BEU32,
+    ExternalDocumentsIds, FieldDistribution, FieldId, FieldsIdsMap, Index, MergeFn, Result, BEU32,
 };
 
 const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
@@ -190,7 +190,7 @@ impl Transform<'_, '_> {
                 },
                 None => {
                     if !self.autogenerate_docids {
-                        return Err(UserError::MissingPrimaryKey.into());
+                        return Err(UserError::MissingDocumentId { document }.into());
                     }
                     let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
                     Cow::Borrowed(uuid)
