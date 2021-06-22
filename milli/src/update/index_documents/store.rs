@@ -11,7 +11,7 @@ use fst::Set;
 use grenad::{CompressionType, FileFuse, Reader, Sorter, Writer};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
-use log::{debug, info};
+use log::{debug, info, warn};
 use meilisearch_tokenizer::token::SeparatorKind;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind};
 use ordered_float::OrderedFloat;
@@ -517,6 +517,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
             if lmdb_key_valid_size(&key_buffer) {
                 sorter.insert(&key_buffer, &data_buffer)?;
+            } else {
+                warn!("facet value {:?} is too large to be saved", value);
             }
         }
 
@@ -582,6 +584,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         if lmdb_key_valid_size(&buffer) {
             sorter.insert(&buffer, &[])?;
+        } else {
+            warn!("facet value {:?} is too large to be saved", value);
         }
 
         Ok(())
