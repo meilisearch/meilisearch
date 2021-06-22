@@ -162,7 +162,7 @@ impl<'a> Search<'a> {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
         let mut excluded_candidates = RoaringBitmap::new();
-        let mut documents_ids = Vec::with_capacity(self.limit);
+        let mut documents_ids = Vec::new();
 
         while let Some(FinalResult { candidates, bucket_candidates, .. }) =
             criteria.next(&excluded_candidates)?
