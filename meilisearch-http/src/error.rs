@@ -103,7 +103,6 @@ impl ErrorCode for MilliError<'_> {
             milli::Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
-                    UserError::AttributeLimitReached
                     | UserError::Csv(_)
                     | UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
@@ -112,6 +111,7 @@ impl ErrorCode for MilliError<'_> {
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
                     | UserError::DocumentLimitReached => Code::Internal,
+                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::InvalidFilterAttribute(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
@@ -146,10 +146,11 @@ impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
             PayloadError::Json(err) => match err {
-                JsonPayloadError::Deserialize(_) => Code::BadRequest,
                 JsonPayloadError::Overflow => Code::PayloadTooLarge,
                 JsonPayloadError::ContentType => Code::UnsupportedMediaType,
-                JsonPayloadError::Payload(_) => Code::BadRequest,
+                JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => Code::PayloadTooLarge,
+                JsonPayloadError::Deserialize(_)
+                | JsonPayloadError::Payload(_) => Code::BadRequest,
                 JsonPayloadError::Serialize(_) => Code::Internal,
                 _ => Code::Internal,
             },
