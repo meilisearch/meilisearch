@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Instant;
 
@@ -59,7 +58,7 @@ pub struct SearchHit {
     pub document: Document,
     #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     pub formatted: Document,
-    #[serde(rename = "_MatchesInfo", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "_matchesInfo", skip_serializing_if = "Option::is_none")]
     pub matches_info: Option<MatchesInfo>,
 }
 
@@ -223,8 +222,8 @@ impl Index {
 }
 
 fn compute_matches(matcher: &impl Matcher, document: &Document) -> MatchesInfo {
-    let stop_words = fst::Set::default();
     let mut matches = BTreeMap::new();
+    let stop_words = fst::Set::default();
     let mut config = AnalyzerConfig::default();
     config.stop_words(&stop_words);
     let analyzer = Analyzer::new(config);
@@ -1096,5 +1095,52 @@ mod test {
 
         assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn test_compute_value_matches() {
+        let text = "Call me Ishmael. Some years ago—never mind how long precisely—having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.";
+        let value = serde_json::json!(text);
+
+        let mut matcher = BTreeMap::new();
+        matcher.insert("ishmael", Some(3));
+        matcher.insert("little", Some(6));
+        matcher.insert("particular", Some(1));
+
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let mut infos = Vec::new();
+
+        compute_value_matches(&mut infos, &value, &matcher, &analyzer);
+
+        let mut infos = infos.into_iter();
+        let crop = |info: MatchInfo| &text[info.start..info.start + info.length];
+
+        assert_eq!(crop(infos.next().unwrap()), "Ish");
+        assert_eq!(crop(infos.next().unwrap()), "little");
+        assert_eq!(crop(infos.next().unwrap()), "p");
+        assert_eq!(crop(infos.next().unwrap()), "little");
+        assert!(infos.next().is_none());
+    }
+
+    #[test]
+    fn test_compute_match() {
+        let value = serde_json::from_str(r#"{
+            "color": "Green",
+            "name": "Lucas Hess",
+            "gender": "male",
+            "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+            "about": "Mollit ad in exercitation quis Laboris . Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n"
+  }"#).unwrap();
+        let mut matcher = BTreeMap::new();
+        matcher.insert("green", Some(3));
+        matcher.insert("mollit", Some(6));
+        matcher.insert("laboris", Some(7));
+
+        let matches = compute_matches(&matcher, &value);
+        assert_eq!(format!("{:?}", matches), r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##);
     }
 }
