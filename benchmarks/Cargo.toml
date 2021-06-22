@@ -8,6 +8,9 @@ publish = false
 [dependencies]
 milli = { path = "../milli" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+jemallocator = "0.3.2"
+
 [dev-dependencies]
 heed = "*" # we want to use the version milli uses
 criterion = { version = "0.3.4", features = ["html_reports"] }

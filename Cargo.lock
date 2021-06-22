@@ -132,6 +132,7 @@ dependencies = [
  "criterion",
  "flate2",
  "heed",
+ "jemallocator",
  "milli",
  "reqwest",
 ]
@@ -969,6 +970,7 @@ dependencies = [
  "futures",
  "grenad",
  "heed",
+ "jemallocator",
  "log",
  "maplit",
  "meilisearch-tokenizer 0.2.3",

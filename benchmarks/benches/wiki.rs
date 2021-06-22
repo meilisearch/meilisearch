@@ -5,6 +5,10 @@ use criterion::{criterion_group, criterion_main};
 use milli::update::Settings;
 use utils::Conf;
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 fn base_conf(builder: &mut Settings) {
     let displayed_fields = ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
     builder.set_displayed_fields(displayed_fields);

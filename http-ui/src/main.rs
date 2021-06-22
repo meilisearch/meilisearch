@@ -36,6 +36,10 @@ use warp::Filter;
 
 use self::update_store::UpdateStore;
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 #[derive(Debug, StructOpt)]
