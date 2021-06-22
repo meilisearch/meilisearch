@@ -15,7 +15,7 @@ async fn stats() {
     assert_eq!(code, 200);
     assert_eq!(response["numberOfDocuments"], 0);
     assert!(response["isIndexing"] == false);
-    assert!(response["fieldsDistribution"]
+    assert!(response["fieldDistribution"]
         .as_object()
         .unwrap()
         .is_empty());
@@ -42,7 +42,7 @@ async fn stats() {
     assert_eq!(code, 200);
     assert_eq!(response["numberOfDocuments"], 2);
     assert!(response["isIndexing"] == false);
-    assert_eq!(response["fieldsDistribution"]["id"], 2);
-    assert_eq!(response["fieldsDistribution"]["name"], 1);
-    assert_eq!(response["fieldsDistribution"]["age"], 1);
+    assert_eq!(response["fieldDistribution"]["id"], 2);
+    assert_eq!(response["fieldDistribution"]["name"], 1);
+    assert_eq!(response["fieldDistribution"]["age"], 1);
 }

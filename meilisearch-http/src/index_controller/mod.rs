@@ -6,8 +6,9 @@ use std::time::Duration;
 use actix_web::web::{Bytes, Payload};
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
+use log::error;
 use log::info;
-use milli::FieldsDistribution;
+use milli::FieldDistribution;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -63,7 +64,7 @@ pub struct IndexStats {
     /// index returns it, since it is the `UpdateStore` that knows what index is currently indexing. It is
     /// later set to either true or false, we we retrieve the information from the `UpdateStore`
     pub is_indexing: Option<bool>,
-    pub fields_distribution: FieldsDistribution,
+    pub field_distribution: FieldDistribution,
 }
 
 #[derive(Clone)]
@@ -256,8 +257,20 @@ impl IndexController {
 
     pub async fn delete_index(&self, uid: String) -> Result<()> {
         let uuid = self.uuid_resolver.delete(uid).await?;
-        self.update_handle.delete(uuid).await?;
-        self.index_handle.delete(uuid).await?;
+
+        // We remove the index from the resolver synchronously, and effectively perform the index
+        // deletion as a background task.
+        let update_handle = self.update_handle.clone();
+        let index_handle = self.index_handle.clone();
+        tokio::spawn(async move {
+            if let Err(e) = update_handle.delete(uuid).await {
+                error!("Error while deleting index: {}", e);
+            }
+            if let Err(e) = index_handle.delete(uuid).await {
+                error!("Error while deleting index: {}", e);
+            }
+        });
+
         Ok(())
     }
 

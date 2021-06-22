@@ -340,7 +340,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 size: index.size(),
                 number_of_documents: index.number_of_documents(&rtxn)?,
                 is_indexing: None,
-                fields_distribution: index.fields_distribution(&rtxn)?,
+                field_distribution: index.field_distribution(&rtxn)?,
             })
         })
         .await?
