@@ -23,9 +23,10 @@ use uuid::Uuid;
 
 use codec::*;
 
+use super::error::Result;
 use super::UpdateMeta;
+use crate::helpers::EnvSizer;
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
-use crate::{helpers::EnvSizer, index_controller::index_actor::IndexResult};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -269,11 +270,8 @@ impl UpdateStore {
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.put(
-                    wtxn,
-                    &(index_uuid, update.id()),
-                    &update,
-                )?;
+                self.updates
+                    .put(wtxn, &(index_uuid, update.id()), &update)?;
             }
         }
         Ok(())
@@ -282,10 +280,7 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(
-        &self,
-        index_handle: impl IndexActorHandle,
-    ) -> anyhow::Result<Option<()>> {
+    fn process_pending_update(&self, index_handle: impl IndexActorHandle) -> Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -320,7 +315,7 @@ impl UpdateStore {
         index_handle: impl IndexActorHandle,
         index_uuid: Uuid,
         global_id: u64,
-    ) -> anyhow::Result<Option<()>> {
+    ) -> Result<Option<()>> {
         let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
         let update_id = processing.id();
 
@@ -337,7 +332,7 @@ impl UpdateStore {
         let result =
             match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
                 Ok(result) => result,
-                Err(e) => Err(processing.fail(e.to_string())),
+                Err(e) => Err(processing.fail(e.into())),
             };
 
         // Once the pending update have been successfully processed
@@ -352,11 +347,8 @@ impl UpdateStore {
             Err(res) => res.into(),
         };
 
-        self.updates.put(
-            &mut wtxn,
-            &(index_uuid, update_id),
-            &result,
-        )?;
+        self.updates
+            .put(&mut wtxn, &(index_uuid, update_id), &result)?;
 
         wtxn.commit()?;
 
@@ -368,7 +360,7 @@ impl UpdateStore {
     }
 
     /// List the updates for `index_uuid`.
-    pub fn list(&self, index_uuid: Uuid) -> anyhow::Result<Vec<UpdateStatus>> {
+    pub fn list(&self, index_uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let mut update_list = BTreeMap::<u64, UpdateStatus>::new();
 
         let txn = self.env.read_txn()?;
@@ -437,7 +429,7 @@ impl UpdateStore {
     }
 
     /// Delete all updates for an index from the update store.
-    pub fn delete_all(&self, index_uuid: Uuid) -> anyhow::Result<()> {
+    pub fn delete_all(&self, index_uuid: Uuid) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
         let mut uuids_to_remove = Vec::new();
@@ -488,7 +480,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
         handle: impl IndexActorHandle + Clone,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
 
@@ -535,13 +527,13 @@ impl UpdateStore {
             while let Some(res) = stream.next().await {
                 res?;
             }
-            Ok(()) as IndexResult<()>
+            Ok(()) as Result<()>
         })?;
 
         Ok(())
     }
 
-    pub fn get_info(&self) -> anyhow::Result<UpdateStoreInfo> {
+    pub fn get_info(&self) -> Result<UpdateStoreInfo> {
         let mut size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
@@ -573,7 +565,7 @@ fn update_uuid_to_file_path(root: impl AsRef<Path>, uuid: Uuid) -> PathBuf {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::index_controller::{index_actor::MockIndexActorHandle, UpdateResult};
+    use crate::index_controller::{UpdateResult, index_actor::{MockIndexActorHandle, error::IndexActorError}};
 
     use futures::future::ok;
 
@@ -652,7 +644,7 @@ mod test {
                 if processing.id() == 0 {
                     Box::pin(ok(Ok(processing.process(UpdateResult::Other))))
                 } else {
-                    Box::pin(ok(Err(processing.fail(String::from("err")))))
+                    Box::pin(ok(Err(processing.fail(IndexActorError::ExistingPrimaryKey.into()))))
                 }
             });
 
@@ -703,18 +695,10 @@ mod test {
         let txn = store.env.read_txn().unwrap();
 
         assert!(store.pending_queue.first(&txn).unwrap().is_none());
-        let update = store
-            .updates
-            .get(&txn, &(uuid, 0))
-            .unwrap()
-            .unwrap();
+        let update = store.updates.get(&txn, &(uuid, 0)).unwrap().unwrap();
 
         assert!(matches!(update, UpdateStatus::Processed(_)));
-        let update = store
-            .updates
-            .get(&txn, &(uuid, 1))
-            .unwrap()
-            .unwrap();
+        let update = store.updates.get(&txn, &(uuid, 1)).unwrap().unwrap();
 
         assert!(matches!(update, UpdateStatus::Failed(_)));
     }

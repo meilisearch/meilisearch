@@ -60,5 +60,5 @@ async fn update_existing_primary_key() {
 async fn test_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").update(None).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }

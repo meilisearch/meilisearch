@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use log::{error, info, warn};
+use log::{info, warn};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tokio::fs::create_dir_all;
 
 use loaders::v1::MetadataV1;
@@ -18,39 +17,28 @@ pub use handle_impl::*;
 pub use message::DumpMsg;
 
 use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
+use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::{helpers::compression, option::IndexerOpts};
+use error::Result;
 
 mod actor;
+pub mod error;
 mod handle_impl;
 mod loaders;
 mod message;
 
 const META_FILE_NAME: &str = "metadata.json";
 
-pub type DumpResult<T> = std::result::Result<T, DumpError>;
-
-#[derive(Error, Debug)]
-pub enum DumpError {
-    #[error("error with index: {0}")]
-    Error(#[from] anyhow::Error),
-    #[error("Heed error: {0}")]
-    HeedError(#[from] heed::Error),
-    #[error("dump already running")]
-    DumpAlreadyRunning,
-    #[error("dump `{0}` does not exist")]
-    DumpDoesNotExist(String),
-}
-
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait DumpActorHandle {
     /// Start the creation of a dump
     /// Implementation: [handle_impl::DumpActorHandleImpl::create_dump]
-    async fn create_dump(&self) -> DumpResult<DumpInfo>;
+    async fn create_dump(&self) -> Result<DumpInfo>;
 
     /// Return the status of an already created dump
     /// Implementation: [handle_impl::DumpActorHandleImpl::dump_status]
-    async fn dump_info(&self, uid: String) -> DumpResult<DumpInfo>;
+    async fn dump_info(&self, uid: String) -> Result<DumpInfo>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -175,7 +163,7 @@ where
     U: UuidResolverHandle + Send + Sync + Clone + 'static,
     P: UpdateActorHandle + Send + Sync + Clone + 'static,
 {
-    async fn run(self) -> anyhow::Result<()> {
+    async fn run(self) -> Result<()> {
         info!("Performing dump.");
 
         create_dir_all(&self.path).await?;
@@ -196,9 +184,10 @@ where
             .dump(uuids, temp_dump_path.clone())
             .await?;
 
-        let dump_path = tokio::task::spawn_blocking(move || -> anyhow::Result<PathBuf> {
+        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
-            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())?;
+            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())
+                .map_err(|e| DumpActorError::Internal(e.into()))?;
 
             let dump_path = self.path.join(self.uid).with_extension("dump");
             temp_dump_file.persist(&dump_path)?;

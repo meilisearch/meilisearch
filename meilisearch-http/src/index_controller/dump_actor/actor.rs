@@ -10,7 +10,8 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
 
-use super::{DumpError, DumpInfo, DumpMsg, DumpResult, DumpStatus, DumpTask};
+use super::error::{DumpActorError, Result};
+use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
 use crate::index_controller::{update_actor, uuid_resolver};
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
@@ -95,14 +96,14 @@ where
         }
     }
 
-    async fn handle_create_dump(&self, ret: oneshot::Sender<DumpResult<DumpInfo>>) {
+    async fn handle_create_dump(&self, ret: oneshot::Sender<Result<DumpInfo>>) {
         let uid = generate_uid();
         let info = DumpInfo::new(uid.clone(), DumpStatus::InProgress);
 
         let _lock = match self.lock.try_lock() {
             Some(lock) => lock,
             None => {
-                ret.send(Err(DumpError::DumpAlreadyRunning))
+                ret.send(Err(DumpActorError::DumpAlreadyRunning))
                     .expect("Dump actor is dead");
                 return;
             }
@@ -147,10 +148,10 @@ where
         };
     }
 
-    async fn handle_dump_info(&self, uid: String) -> DumpResult<DumpInfo> {
+    async fn handle_dump_info(&self, uid: String) -> Result<DumpInfo> {
         match self.dump_infos.read().await.get(&uid) {
             Some(info) => Ok(info.clone()),
-            _ => Err(DumpError::DumpDoesNotExist(uid)),
+            _ => Err(DumpActorError::DumpDoesNotExist(uid)),
         }
     }
 }

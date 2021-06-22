@@ -3,7 +3,8 @@ use std::path::Path;
 use actix_web::web::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg, DumpResult};
+use super::error::Result;
+use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
 
 #[derive(Clone)]
 pub struct DumpActorHandleImpl {
@@ -12,14 +13,14 @@ pub struct DumpActorHandleImpl {
 
 #[async_trait::async_trait]
 impl DumpActorHandle for DumpActorHandleImpl {
-    async fn create_dump(&self) -> DumpResult<DumpInfo> {
+    async fn create_dump(&self) -> Result<DumpInfo> {
         let (ret, receiver) = oneshot::channel();
         let msg = DumpMsg::CreateDump { ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
     }
 
-    async fn dump_info(&self, uid: String) -> DumpResult<DumpInfo> {
+    async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
         let (ret, receiver) = oneshot::channel();
         let msg = DumpMsg::DumpInfo { ret, uid };
         let _ = self.sender.send(msg).await;

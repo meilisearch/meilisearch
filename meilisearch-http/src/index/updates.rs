@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -10,9 +10,13 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::index_controller::UpdateResult;
 
+use super::error::Result;
 use super::{deserialize_some, Index};
 
-fn serialize_with_wildcard<S>(field: &Option<Option<Vec<String>>>, s: S) -> Result<S::Ok, S::Error>
+fn serialize_with_wildcard<S>(
+    field: &Option<Option<Vec<String>>>,
+    s: S,
+) -> std::result::Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -174,7 +178,7 @@ impl Index {
         content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
         let result = self.update_documents_txn(
             &mut txn,
@@ -196,13 +200,12 @@ impl Index {
         content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         info!("performing document addition");
 
         // Set the primary key if not set already, ignore if already set.
         if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = UpdateBuilder::new(0)
-                .settings(txn, &self);
+            let mut builder = UpdateBuilder::new(0).settings(txn, &self);
             builder.set_primary_key(primary_key.to_string());
             builder.execute(|_, _| ())?;
         }
@@ -228,18 +231,16 @@ impl Index {
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
+    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.write_txn()?;
         let builder = update_builder.clear_documents(&mut wtxn, self);
 
-        match builder.execute() {
-            Ok(_count) => wtxn
-                .commit()
-                .and(Ok(UpdateResult::Other))
-                .map_err(Into::into),
-            Err(e) => Err(e.into()),
-        }
+        let _count = builder.execute()?;
+
+        wtxn.commit()
+            .and(Ok(UpdateResult::Other))
+            .map_err(Into::into)
     }
 
     pub fn update_settings_txn<'a, 'b>(
@@ -247,7 +248,7 @@ impl Index {
         txn: &mut heed::RwTxn<'a, 'b>,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut builder = update_builder.settings(txn, self);
 
@@ -309,7 +310,7 @@ impl Index {
         &self,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
         let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
         txn.commit()?;
@@ -320,7 +321,7 @@ impl Index {
         &self,
         document_ids: &[String],
         update_builder: UpdateBuilder,
-    ) -> anyhow::Result<UpdateResult> {
+    ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
         let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
@@ -329,13 +330,10 @@ impl Index {
             builder.delete_external_id(id);
         });
 
-        match builder.execute() {
-            Ok(deleted) => txn
-                .commit()
-                .and(Ok(UpdateResult::DocumentDeletion { deleted }))
-                .map_err(Into::into),
-            Err(e) => Err(e.into()),
-        }
+        let deleted = builder.execute()?;
+        txn.commit()
+            .and(Ok(UpdateResult::DocumentDeletion { deleted }))
+            .map_err(Into::into)
     }
 }
 

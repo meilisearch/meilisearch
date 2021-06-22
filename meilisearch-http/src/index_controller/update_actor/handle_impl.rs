@@ -6,10 +6,8 @@ use uuid::Uuid;
 
 use crate::index_controller::{IndexActorHandle, UpdateStatus};
 
-use super::{
-    PayloadData, Result, UpdateActor, UpdateActorHandle, UpdateError, UpdateMeta, UpdateMsg,
-    UpdateStoreInfo,
-};
+use super::error::Result;
+use super::{PayloadData, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStoreInfo};
 
 #[derive(Clone)]
 pub struct UpdateActorHandleImpl<D> {
@@ -48,72 +46,42 @@ where
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::ListUpdates { uuid, ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::GetUpdate { uuid, id, ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 
     async fn delete(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Delete { uuid, ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 
     async fn snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Snapshot { uuids, path, ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 
     async fn dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Dump { uuids, path, ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 
     async fn get_info(&self) -> Result<UpdateStoreInfo> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::GetInfo { ret };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 
     async fn update(
@@ -129,12 +97,7 @@ where
             meta,
             ret,
         };
-        self.sender
-            .send(msg)
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?;
-        receiver
-            .await
-            .map_err(|_| UpdateError::FatalUpdateStoreError)?
+        self.sender.send(msg).await?;
+        receiver.await?
     }
 }

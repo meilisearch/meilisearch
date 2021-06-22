@@ -1,7 +1,6 @@
 use std::fs::File;
 
 use crate::index::Index;
-use anyhow::Result;
 use grenad::CompressionType;
 use milli::update::UpdateBuilder;
 use rayon::ThreadPool;
@@ -87,7 +86,7 @@ impl UpdateHandler {
 
         match result {
             Ok(result) => Ok(meta.process(result)),
-            Err(e) => Err(meta.fail(e.to_string())),
+            Err(e) => Err(meta.fail(e.into())),
         }
     }
 }

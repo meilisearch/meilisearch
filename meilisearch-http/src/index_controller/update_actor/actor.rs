@@ -13,7 +13,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::{PayloadData, Result, UpdateError, UpdateMsg, UpdateStore, UpdateStoreInfo};
+use super::error::{Result, UpdateActorError};
+use super::{PayloadData, UpdateMsg, UpdateStore, UpdateStoreInfo};
 use crate::index_controller::index_actor::IndexActorHandle;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
 
@@ -172,7 +173,8 @@ where
                 if copy(&mut checker, &mut sink()).is_err() || checker.finish().is_err() {
                     // The json file is invalid, we use Serde to get a nice error message:
                     file.seek(SeekFrom::Start(0))?;
-                    let _: serde_json::Value = serde_json::from_reader(file)?;
+                    let _: serde_json::Value = serde_json::from_reader(file)
+                        .map_err(|e| UpdateActorError::InvalidPayload(Box::new(e)))?;
                 }
                 Some(uuid)
             } else {
@@ -200,9 +202,9 @@ where
     async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let store = self.store.clone();
         tokio::task::spawn_blocking(move || {
-        let result = store
-            .meta(uuid, id)?
-            .ok_or(UpdateError::UnexistingUpdate(id))?;
+            let result = store
+                .meta(uuid, id)?
+                .ok_or(UpdateActorError::UnexistingUpdate(id))?;
             Ok(result)
         })
         .await?
@@ -230,7 +232,7 @@ where
         let index_handle = self.index_handle.clone();
         let update_store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        tokio::task::spawn_blocking(move || -> Result<()> {
             update_store.dump(&uuids, path.to_path_buf(), index_handle)?;
             Ok(())
         })
@@ -241,7 +243,7 @@ where
 
     async fn handle_get_info(&self) -> Result<UpdateStoreInfo> {
         let update_store = self.store.clone();
-        let info = tokio::task::spawn_blocking(move || -> anyhow::Result<UpdateStoreInfo> {
+        let info = tokio::task::spawn_blocking(move || -> Result<UpdateStoreInfo> {
             let info = update_store.get_info()?;
             Ok(info)
         })

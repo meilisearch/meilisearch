@@ -19,7 +19,8 @@ use crate::index_controller::{
 };
 use crate::option::IndexerOpts;
 
-use super::{IndexError, IndexMeta, IndexMsg, IndexResult, IndexSettings, IndexStore};
+use super::error::{IndexActorError, Result};
+use super::{IndexMeta, IndexMsg, IndexSettings, IndexStore};
 
 pub const CONCURRENT_INDEX_MSG: usize = 10;
 
@@ -30,7 +31,7 @@ pub struct IndexActor<S> {
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> IndexResult<Self> {
+    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> anyhow::Result<Self> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options)?;
         let update_handler = Arc::new(update_handler);
@@ -137,20 +138,21 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         }
     }
 
-    async fn handle_search(&self, uuid: Uuid, query: SearchQuery) -> anyhow::Result<SearchResult> {
+    async fn handle_search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
-        spawn_blocking(move || index.perform_search(query)).await?
+            .ok_or(IndexActorError::UnexistingIndex)?;
+        let result = spawn_blocking(move || index.perform_search(query)).await??;
+        Ok(result)
     }
 
     async fn handle_create_index(
         &self,
         uuid: Uuid,
         primary_key: Option<String>,
-    ) -> IndexResult<IndexMeta> {
+    ) -> Result<IndexMeta> {
         let index = self.store.create(uuid, primary_key).await?;
         let meta = spawn_blocking(move || IndexMeta::new(&index)).await??;
         Ok(meta)
@@ -161,7 +163,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         uuid: Uuid,
         meta: Processing,
         data: Option<File>,
-    ) -> IndexResult<Result<Processed, Failed>> {
+    ) -> Result<std::result::Result<Processed, Failed>> {
         debug!("Processing update {}", meta.id());
         let update_handler = self.update_handler.clone();
         let index = match self.store.get(uuid).await? {
@@ -172,12 +174,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?)
     }
 
-    async fn handle_settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
+    async fn handle_settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
         let result = spawn_blocking(move || index.settings()).await??;
         Ok(result)
     }
@@ -188,12 +190,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Vec<Document>> {
+    ) -> Result<Vec<Document>> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
         let result =
             spawn_blocking(move || index.retrieve_documents(offset, limit, attributes_to_retrieve))
                 .await??;
@@ -206,12 +208,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         uuid: Uuid,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Document> {
+    ) -> Result<Document> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
 
         let result =
             spawn_blocking(move || index.retrieve_document(doc_id, attributes_to_retrieve))
@@ -220,7 +222,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(result)
     }
 
-    async fn handle_delete(&self, uuid: Uuid) -> IndexResult<()> {
+    async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
         let index = self.store.delete(uuid).await?;
 
         if let Some(index) = index {
@@ -237,13 +239,13 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta> {
+    async fn handle_get_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
         match self.store.get(uuid).await? {
             Some(index) => {
                 let meta = spawn_blocking(move || IndexMeta::new(&index)).await??;
                 Ok(meta)
             }
-            None => Err(IndexError::UnexistingIndex),
+            None => Err(IndexActorError::UnexistingIndex),
         }
     }
 
@@ -251,23 +253,22 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         &self,
         uuid: Uuid,
         index_settings: IndexSettings,
-    ) -> IndexResult<IndexMeta> {
+    ) -> Result<IndexMeta> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
 
         let result = spawn_blocking(move || match index_settings.primary_key {
             Some(primary_key) => {
                 let mut txn = index.write_txn()?;
                 if index.primary_key(&txn)?.is_some() {
-                    return Err(IndexError::ExistingPrimaryKey);
+                    return Err(IndexActorError::ExistingPrimaryKey);
                 }
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
                 builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())
-                    .map_err(|e| IndexError::Internal(e.to_string()))?;
+                builder.execute(|_, _| ())?;
                 let meta = IndexMeta::new_txn(&index, &txn)?;
                 txn.commit()?;
                 Ok(meta)
@@ -282,7 +283,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(result)
     }
 
-    async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> IndexResult<()> {
+    async fn handle_snapshot(&self, uuid: Uuid, mut path: PathBuf) -> Result<()> {
         use tokio::fs::create_dir_all;
 
         path.push("indexes");
@@ -294,7 +295,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             create_dir_all(&index_path).await?;
 
             index_path.push("data.mdb");
-            spawn_blocking(move || -> anyhow::Result<()> {
+            spawn_blocking(move || -> Result<()> {
                 // Get write txn to wait for ongoing write transaction before snapshot.
                 let _txn = index.write_txn()?;
                 index
@@ -310,12 +311,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
     /// Create a `documents.jsonl` and a `settings.json` in `path/uid/` with a dump of all the
     /// documents and all the settings.
-    async fn handle_dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+    async fn handle_dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
 
         let path = path.join(format!("indexes/index-{}/", uuid));
         fs::create_dir_all(&path).await?;
@@ -325,20 +326,19 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         Ok(())
     }
 
-    async fn handle_get_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
+    async fn handle_get_stats(&self, uuid: Uuid) -> Result<IndexStats> {
         let index = self
             .store
             .get(uuid)
             .await?
-            .ok_or(IndexError::UnexistingIndex)?;
+            .ok_or(IndexActorError::UnexistingIndex)?;
 
         spawn_blocking(move || {
             let rtxn = index.read_txn()?;
 
             Ok(IndexStats {
                 size: index.size(),
-                number_of_documents: index.number_of_documents(&rtxn)
-                    .map_err(|e| IndexError::Internal(e.to_string()))?,
+                number_of_documents: index.number_of_documents(&rtxn)?,
                 is_indexing: None,
                 fields_distribution: index.fields_distribution(&rtxn)?,
             })

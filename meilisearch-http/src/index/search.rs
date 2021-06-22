@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Instant;
 
-use anyhow::bail;
 use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
@@ -11,6 +10,9 @@ use milli::{FilterCondition, FieldId, FieldsIdsMap, MatchingWords};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::index::error::FacetError;
+
+use super::error::Result;
 use super::Index;
 
 pub type Document = IndexMap<String, Value>;
@@ -71,7 +73,7 @@ struct FormatOptions {
 }
 
 impl Index {
-    pub fn perform_search(&self, query: SearchQuery) -> anyhow::Result<SearchResult> {
+    pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
         let before_search = Instant::now();
         let rtxn = self.read_txn()?;
 
@@ -96,7 +98,7 @@ impl Index {
             candidates,
             ..
         } = search.execute()?;
-        let mut documents = Vec::new();
+
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
         let displayed_ids = self
@@ -158,7 +160,11 @@ impl Index {
         let formatter =
             Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
 
-        for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
+        let mut documents = Vec::new();
+
+        let documents_iter = self.documents(&rtxn, documents_ids)?;
+
+        for (_id, obkv) in documents_iter {
             let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
             let formatted = format_fields(
                 &fields_ids_map,
@@ -167,6 +173,7 @@ impl Index {
                 &matching_words,
                 &formatted_options,
             )?;
+
             let hit = SearchHit {
                 document,
                 formatted,
@@ -182,7 +189,9 @@ impl Index {
                 if fields.iter().all(|f| f != "*") {
                     facet_distribution.facets(fields);
                 }
-                Some(facet_distribution.candidates(candidates).execute()?)
+                let distribution = facet_distribution.candidates(candidates).execute()?;
+
+                Some(distribution)
             }
             None => None,
         };
@@ -326,7 +335,7 @@ fn make_document(
     attributes_to_retrieve: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
-) -> anyhow::Result<Document> {
+) -> Result<Document> {
     let mut document = Document::new();
     for attr in attributes_to_retrieve {
         if let Some(value) = obkv.get(*attr) {
@@ -351,7 +360,7 @@ fn format_fields<A: AsRef<[u8]>>(
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
-) -> anyhow::Result<Document> {
+) -> Result<Document> {
     let mut document = Document::new();
 
     for (id, format) in formatted_options {
@@ -514,15 +523,14 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     }
 }
 
-fn parse_filter(
-    facets: &Value,
-    index: &Index,
-    txn: &RoTxn,
-) -> anyhow::Result<Option<FilterCondition>> {
+fn parse_filter(facets: &Value, index: &Index, txn: &RoTxn) -> Result<Option<FilterCondition>> {
     match facets {
-        Value::String(expr) => Ok(Some(FilterCondition::from_str(txn, index, expr)?)),
+        Value::String(expr) => {
+            let condition = FilterCondition::from_str(txn, index, expr)?;
+            Ok(Some(condition))
+        }
         Value::Array(arr) => parse_filter_array(txn, index, arr),
-        v => bail!("Invalid facet expression, expected Array, found: {:?}", v),
+        v => Err(FacetError::InvalidExpression(&["Array"], v.clone()).into()),
     }
 }
 
@@ -530,7 +538,7 @@ fn parse_filter_array(
     txn: &RoTxn,
     index: &Index,
     arr: &[Value],
-) -> anyhow::Result<Option<FilterCondition>> {
+) -> Result<Option<FilterCondition>> {
     let mut ands = Vec::new();
     for value in arr {
         match value {
@@ -540,15 +548,18 @@ fn parse_filter_array(
                 for value in arr {
                     match value {
                         Value::String(s) => ors.push(s.clone()),
-                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
+                        v => {
+                            return Err(FacetError::InvalidExpression(&["String"], v.clone()).into())
+                        }
                     }
                 }
                 ands.push(Either::Left(ors));
             }
-            v => bail!(
-                "Invalid facet expression, expected String or [String], found: {:?}",
-                v
-            ),
+            v => {
+                return Err(
+                    FacetError::InvalidExpression(&["String", "[String]"], v.clone()).into(),
+                )
+            }
         }
     }
 

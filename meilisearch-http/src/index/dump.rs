@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::option::IndexerOpts;
 
+use super::error::Result;
 use super::{update_handler::UpdateHandler, Index, Settings, Unchecked};
 
 #[derive(Serialize, Deserialize)]
@@ -23,7 +24,7 @@ const META_FILE_NAME: &str = "meta.json";
 const DATA_FILE_NAME: &str = "documents.jsonl";
 
 impl Index {
-    pub fn dump(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
         // acquire write txn make sure any ongoing write is finished before we start.
         let txn = self.env.write_txn()?;
 
@@ -33,7 +34,7 @@ impl Index {
         Ok(())
     }
 
-    fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    fn dump_documents(&self, txn: &RoTxn, path: impl AsRef<Path>) -> Result<()> {
         let document_file_path = path.as_ref().join(DATA_FILE_NAME);
         let mut document_file = File::create(&document_file_path)?;
 
@@ -60,7 +61,7 @@ impl Index {
         Ok(())
     }
 
-    fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    fn dump_meta(&self, txn: &RoTxn, path: impl AsRef<Path>) -> Result<()> {
         let meta_file_path = path.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_file_path)?;
 
@@ -86,6 +87,7 @@ impl Index {
             .as_ref()
             .file_name()
             .with_context(|| format!("invalid dump index: {}", src.as_ref().display()))?;
+
         let dst_dir_path = dst.as_ref().join("indexes").join(dir_name);
         create_dir_all(&dst_dir_path)?;
 

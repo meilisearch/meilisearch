@@ -12,7 +12,7 @@ pub struct UuidResolverHandleImpl {
 }
 
 impl UuidResolverHandleImpl {
-    pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let (sender, reveiver) = mpsc::channel(100);
         let store = HeedUuidStore::new(path)?;
         let actor = UuidResolverActor::new(reveiver, store);
@@ -32,7 +32,7 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .expect("Uuid resolver actor has been killed")?)
     }
 
-    async fn delete(&self, name: String) -> anyhow::Result<Uuid> {
+    async fn delete(&self, name: String) -> Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Delete { uid: name, ret };
         let _ = self.sender.send(msg).await;
@@ -41,7 +41,7 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .expect("Uuid resolver actor has been killed")?)
     }
 
-    async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>> {
+    async fn list(&self) -> Result<Vec<(String, Uuid)>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::List { ret };
         let _ = self.sender.send(msg).await;
@@ -50,7 +50,7 @@ impl UuidResolverHandle for UuidResolverHandleImpl {
             .expect("Uuid resolver actor has been killed")?)
     }
 
-    async fn insert(&self, name: String, uuid: Uuid) -> anyhow::Result<()> {
+    async fn insert(&self, name: String, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Insert { ret, name, uuid };
         let _ = self.sender.send(msg).await;

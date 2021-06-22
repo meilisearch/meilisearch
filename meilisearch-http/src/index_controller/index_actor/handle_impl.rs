@@ -12,7 +12,8 @@ use crate::{
     index_controller::{Failed, Processed},
 };
 
-use super::{IndexActor, IndexActorHandle, IndexMeta, IndexMsg, IndexResult, MapIndexStore};
+use super::error::Result;
+use super::{IndexActor, IndexActorHandle, IndexMeta, IndexMsg, MapIndexStore};
 
 #[derive(Clone)]
 pub struct IndexActorHandleImpl {
@@ -21,11 +22,7 @@ pub struct IndexActorHandleImpl {
 
 #[async_trait::async_trait]
 impl IndexActorHandle for IndexActorHandleImpl {
-    async fn create_index(
-        &self,
-        uuid: Uuid,
-        primary_key: Option<String>,
-    ) -> IndexResult<IndexMeta> {
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::CreateIndex {
             ret,
@@ -41,7 +38,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
         uuid: Uuid,
         meta: Processing,
         data: Option<std::fs::File>,
-    ) -> anyhow::Result<Result<Processed, Failed>> {
+    ) -> Result<std::result::Result<Processed, Failed>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update {
             ret,
@@ -53,14 +50,14 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn search(&self, uuid: Uuid, query: SearchQuery) -> IndexResult<SearchResult> {
+    async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Search { uuid, query, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
+    async fn settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Settings { uuid, ret };
         let _ = self.sender.send(msg).await;
@@ -73,7 +70,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Vec<Document>> {
+    ) -> Result<Vec<Document>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Documents {
             uuid,
@@ -91,7 +88,7 @@ impl IndexActorHandle for IndexActorHandleImpl {
         uuid: Uuid,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Document> {
+    ) -> Result<Document> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Document {
             uuid,
@@ -103,25 +100,21 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn delete(&self, uuid: Uuid) -> IndexResult<()> {
+    async fn delete(&self, uuid: Uuid) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Delete { uuid, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn get_index_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta> {
+    async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetMeta { uuid, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> IndexResult<IndexMeta> {
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::UpdateIndex {
             uuid,
@@ -132,21 +125,21 @@ impl IndexActorHandle for IndexActorHandleImpl {
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Snapshot { uuid, path, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Dump { uuid, path, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
-    async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetStats { uuid, ret };
         let _ = self.sender.send(msg).await;

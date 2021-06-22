@@ -6,7 +6,7 @@ use crate::common::{GetAllDocumentsOptions, Server};
 async fn delete_one_document_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").delete_document(0).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -33,14 +33,14 @@ async fn delete_one_document() {
     index.wait_update_id(1).await;
 
     let (_response, code) = index.get_document(0, None).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
 async fn clear_all_documents_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").clear_all_documents().await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]
@@ -86,7 +86,7 @@ async fn clear_all_documents_empty_index() {
 async fn delete_batch_unexisting_index() {
     let server = Server::new().await;
     let (_response, code) = server.index("test").delete_batch(vec![]).await;
-    assert_eq!(code, 400);
+    assert_eq!(code, 404);
 }
 
 #[actix_rt::test]

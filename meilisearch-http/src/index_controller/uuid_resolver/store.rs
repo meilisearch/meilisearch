@@ -8,7 +8,7 @@ use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{Result, UuidResolverError, UUID_STORE_SIZE};
+use super::{error::UuidResolverError, Result, UUID_STORE_SIZE};
 use crate::helpers::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub struct HeedUuidStore {
 }
 
 impl HeedUuidStore {
-    pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().join(UUIDS_DB_PATH);
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
@@ -153,7 +153,7 @@ impl HeedUuidStore {
         Ok(uuids)
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
         let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
         std::fs::create_dir_all(&uuid_resolver_path)?;
 

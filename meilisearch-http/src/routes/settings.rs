@@ -26,14 +26,8 @@ macro_rules! make_setting_route {
                     $attr: Some(None),
                     ..Default::default()
                 };
-                match data.update_settings(index_uid.into_inner(), settings, false).await {
-                    Ok(update_status) => {
-                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
-                    }
-                    Err(e) => {
-                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-                    }
-                }
+                let update_status = data.update_settings(index_uid.into_inner(), settings, false).await?;
+                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
             #[actix_web::post($route, wrap = "Authentication::Private")]
@@ -47,14 +41,8 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                match data.update_settings(index_uid.into_inner(), settings, true).await {
-                    Ok(update_status) => {
-                        Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
-                    }
-                    Err(e) => {
-                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-                    }
-                }
+                let update_status = data.update_settings(index_uid.into_inner(), settings, true).await?;
+                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
             #[actix_web::get($route, wrap = "Authentication::Private")]
@@ -62,12 +50,8 @@ macro_rules! make_setting_route {
                 data: actix_web::web::Data<data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                match data.settings(index_uid.into_inner()).await {
-                    Ok(settings) => Ok(HttpResponse::Ok().json(settings.$attr)),
-                    Err(e) => {
-                        Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-                    }
-                }
+                let settings = data.settings(index_uid.into_inner()).await?;
+                Ok(HttpResponse::Ok().json(settings.$attr))
             }
         }
     };
@@ -148,17 +132,11 @@ async fn update_all(
     body: web::Json<Settings<Unchecked>>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = body.into_inner().check();
-    match data
+    let update_result = data
         .update_settings(index_uid.into_inner(), settings, true)
-        .await
-    {
-        Ok(update_result) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_result.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    let json = serde_json::json!({ "updateId": update_result.id() });
+    Ok(HttpResponse::Accepted().json(json))
 }
 
 #[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -166,12 +144,8 @@ async fn get_all(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.settings(index_uid.into_inner()).await {
-        Ok(settings) => Ok(HttpResponse::Ok().json(settings)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let settings = data.settings(index_uid.into_inner()).await?;
+    Ok(HttpResponse::Ok().json(settings))
 }
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -180,15 +154,9 @@ async fn delete_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
-    match data
+    let update_result = data
         .update_settings(index_uid.into_inner(), settings, false)
-        .await
-    {
-        Ok(update_result) => Ok(
-            HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_result.id() }))
-        ),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    let json = serde_json::json!({ "updateId": update_result.id() });
+    Ok(HttpResponse::Accepted().json(json))
 }

@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+use super::error::Result as IndexResult;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
-use super::{IndexMeta, IndexResult, IndexSettings};
+use super::{IndexMeta, IndexSettings};
 
 #[allow(clippy::large_enum_variant)]
 pub enum IndexMsg {
@@ -24,7 +25,7 @@ pub enum IndexMsg {
     Search {
         uuid: Uuid,
         query: SearchQuery,
-        ret: oneshot::Sender<anyhow::Result<SearchResult>>,
+        ret: oneshot::Sender<IndexResult<SearchResult>>,
     },
     Settings {
         uuid: Uuid,

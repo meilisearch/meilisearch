@@ -1,13 +1,14 @@
 use tokio::sync::oneshot;
 
-use super::{DumpInfo, DumpResult};
+use super::error::Result;
+use super::DumpInfo;
 
 pub enum DumpMsg {
     CreateDump {
-        ret: oneshot::Sender<DumpResult<DumpInfo>>,
+        ret: oneshot::Sender<Result<DumpInfo>>,
     },
     DumpInfo {
         uid: String,
-        ret: oneshot::Sender<DumpResult<DumpInfo>>,
+        ret: oneshot::Sender<Result<DumpInfo>>,
     },
 }

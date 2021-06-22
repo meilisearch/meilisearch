@@ -142,9 +142,11 @@ mod test {
     use super::*;
     use crate::index_controller::index_actor::MockIndexActorHandle;
     use crate::index_controller::update_actor::{
-        MockUpdateActorHandle, UpdateActorHandleImpl, UpdateError,
+        error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
     };
-    use crate::index_controller::uuid_resolver::{MockUuidResolverHandle, UuidResolverError};
+    use crate::index_controller::uuid_resolver::{
+        error::UuidResolverError, MockUuidResolverHandle,
+    };
 
     #[actix_rt::test]
     async fn test_normal() {
@@ -224,7 +226,7 @@ mod test {
         update_handle
             .expect_snapshot()
             // abitrary error
-            .returning(|_, _| Box::pin(err(UpdateError::UnexistingUpdate(0))));
+            .returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
 
         let snapshot_path = tempfile::tempdir_in(".").unwrap();
         let snapshot_service = SnapshotService::new(

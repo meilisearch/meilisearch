@@ -1,9 +1,8 @@
 use std::collections::{BTreeSet, HashSet};
-use std::convert::{TryFrom, TryInto};
 
 use actix_web::{get, post, web, HttpResponse};
-use serde_json::Value;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
@@ -30,10 +29,8 @@ pub struct SearchQueryGet {
     facet_distributions: Option<String>,
 }
 
-impl TryFrom<SearchQueryGet> for SearchQuery {
-    type Error = anyhow::Error;
-
-    fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
+impl From<SearchQueryGet> for SearchQuery {
+    fn from(other: SearchQueryGet) -> Self {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
             .map(|attrs| attrs.split(',').map(String::from).collect::<BTreeSet<_>>());
@@ -51,16 +48,14 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let filter = match other.filter {
-            Some(f) => {
-                match serde_json::from_str(&f) {
-                    Ok(v) => Some(v),
-                    _ => Some(Value::String(f)),
-                }
+            Some(f) => match serde_json::from_str(&f) {
+                Ok(v) => Some(v),
+                _ => Some(Value::String(f)),
             },
             None => None,
         };
 
-        Ok(Self {
+        Self {
             q: other.q,
             offset: other.offset,
             limit: other.limit.unwrap_or(DEFAULT_SEARCH_LIMIT),
@@ -71,7 +66,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             filter,
             matches: other.matches,
             facet_distributions,
-        })
+        }
     }
 }
 
@@ -81,21 +76,9 @@ async fn search_with_url_query(
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
-    let query: SearchQuery = match params.into_inner().try_into() {
-        Ok(q) => q,
-        Err(e) => {
-            return Ok(
-                HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() }))
-            )
-        }
-    };
-    let search_result = data.search(path.into_inner().index_uid, query).await;
-    match search_result {
-        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    let query = params.into_inner().into();
+    let search_result = data.search(path.into_inner().index_uid, query).await?;
+    Ok(HttpResponse::Ok().json(search_result))
 }
 
 #[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -106,11 +89,6 @@ async fn search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     let search_result = data
         .search(path.into_inner().index_uid, params.into_inner())
-        .await;
-    match search_result {
-        Ok(docs) => Ok(HttpResponse::Ok().json(docs)),
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+        .await?;
+    Ok(HttpResponse::Ok().json(search_result))
 }

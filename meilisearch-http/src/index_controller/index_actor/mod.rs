@@ -5,7 +5,6 @@ use chrono::{DateTime, Utc};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use uuid::Uuid;
 
 use actor::IndexActor;
@@ -16,15 +15,15 @@ use store::{IndexStore, MapIndexStore};
 
 use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
+use error::Result;
 
 use super::IndexSettings;
 
 mod actor;
+pub mod error;
 mod handle_impl;
 mod message;
 mod store;
-
-pub type IndexResult<T> = std::result::Result<T, IndexError>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -35,18 +34,14 @@ pub struct IndexMeta {
 }
 
 impl IndexMeta {
-    fn new(index: &Index) -> IndexResult<Self> {
+    fn new(index: &Index) -> Result<Self> {
         let txn = index.read_txn()?;
         Self::new_txn(index, &txn)
     }
 
-    fn new_txn(index: &Index, txn: &heed::RoTxn) -> IndexResult<Self> {
-        let created_at = index
-            .created_at(&txn)
-            .map_err(|e| IndexError::Internal(e.to_string()))?;
-        let updated_at = index
-            .updated_at(&txn)
-            .map_err(|e| IndexError::Internal(e.to_string()))?;
+    fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
+        let created_at = index.created_at(&txn)?;
+        let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
         Ok(Self {
             created_at,
@@ -56,50 +51,18 @@ impl IndexMeta {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum IndexError {
-    #[error("index already exists")]
-    IndexAlreadyExists,
-    #[error("Index doesn't exists")]
-    UnexistingIndex,
-    #[error("Existing primary key")]
-    ExistingPrimaryKey,
-    #[error("Internal Index Error: {0}")]
-    Internal(String),
-}
-
-macro_rules! internal_error {
-    ($($other:path), *) => {
-        $(
-            impl From<$other> for IndexError {
-                fn from(other: $other) -> Self {
-                    Self::Internal(other.to_string())
-                }
-            }
-        )*
-    }
-}
-
-internal_error!(
-    anyhow::Error,
-    heed::Error,
-    tokio::task::JoinError,
-    std::io::Error
-);
-
 #[async_trait::async_trait]
 #[cfg_attr(test, automock)]
 pub trait IndexActorHandle {
-    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>)
-        -> IndexResult<IndexMeta>;
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn update(
         &self,
         uuid: Uuid,
         meta: Processing,
         data: Option<File>,
-    ) -> anyhow::Result<Result<Processed, Failed>>;
-    async fn search(&self, uuid: Uuid, query: SearchQuery) -> IndexResult<SearchResult>;
-    async fn settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>>;
+    ) -> Result<std::result::Result<Processed, Failed>>;
+    async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult>;
+    async fn settings(&self, uuid: Uuid) -> Result<Settings<Checked>>;
 
     async fn documents(
         &self,
@@ -107,23 +70,19 @@ pub trait IndexActorHandle {
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Vec<Document>>;
+    ) -> Result<Vec<Document>>;
     async fn document(
         &self,
         uuid: Uuid,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> IndexResult<Document>;
-    async fn delete(&self, uuid: Uuid) -> IndexResult<()>;
-    async fn get_index_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta>;
-    async fn update_index(
-        &self,
-        uuid: Uuid,
-        index_settings: IndexSettings,
-    ) -> IndexResult<IndexMeta>;
-    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
-    async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()>;
-    async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats>;
+    ) -> Result<Document>;
+    async fn delete(&self, uuid: Uuid) -> Result<()>;
+    async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta>;
+    async fn update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta>;
+    async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
+    async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()>;
+    async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats>;
 }
 
 #[cfg(test)]
@@ -135,11 +94,7 @@ mod test {
     #[async_trait::async_trait]
     /// Useful for passing around an `Arc<MockIndexActorHandle>` in tests.
     impl IndexActorHandle for Arc<MockIndexActorHandle> {
-        async fn create_index(
-            &self,
-            uuid: Uuid,
-            primary_key: Option<String>,
-        ) -> IndexResult<IndexMeta> {
+        async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
             self.as_ref().create_index(uuid, primary_key).await
         }
 
@@ -148,15 +103,15 @@ mod test {
             uuid: Uuid,
             meta: Processing,
             data: Option<std::fs::File>,
-        ) -> anyhow::Result<Result<Processed, Failed>> {
+        ) -> Result<std::result::Result<Processed, Failed>> {
             self.as_ref().update(uuid, meta, data).await
         }
 
-        async fn search(&self, uuid: Uuid, query: SearchQuery) -> IndexResult<SearchResult> {
+        async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
             self.as_ref().search(uuid, query).await
         }
 
-        async fn settings(&self, uuid: Uuid) -> IndexResult<Settings<Checked>> {
+        async fn settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {
             self.as_ref().settings(uuid).await
         }
 
@@ -166,7 +121,7 @@ mod test {
             offset: usize,
             limit: usize,
             attributes_to_retrieve: Option<Vec<String>>,
-        ) -> IndexResult<Vec<Document>> {
+        ) -> Result<Vec<Document>> {
             self.as_ref()
                 .documents(uuid, offset, limit, attributes_to_retrieve)
                 .await
@@ -177,17 +132,17 @@ mod test {
             uuid: Uuid,
             doc_id: String,
             attributes_to_retrieve: Option<Vec<String>>,
-        ) -> IndexResult<Document> {
+        ) -> Result<Document> {
             self.as_ref()
                 .document(uuid, doc_id, attributes_to_retrieve)
                 .await
         }
 
-        async fn delete(&self, uuid: Uuid) -> IndexResult<()> {
+        async fn delete(&self, uuid: Uuid) -> Result<()> {
             self.as_ref().delete(uuid).await
         }
 
-        async fn get_index_meta(&self, uuid: Uuid) -> IndexResult<IndexMeta> {
+        async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
             self.as_ref().get_index_meta(uuid).await
         }
 
@@ -195,19 +150,19 @@ mod test {
             &self,
             uuid: Uuid,
             index_settings: IndexSettings,
-        ) -> IndexResult<IndexMeta> {
+        ) -> Result<IndexMeta> {
             self.as_ref().update_index(uuid, index_settings).await
         }
 
-        async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+        async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
             self.as_ref().snapshot(uuid, path).await
         }
 
-        async fn dump(&self, uuid: Uuid, path: PathBuf) -> IndexResult<()> {
+        async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
             self.as_ref().dump(uuid, path).await
         }
 
-        async fn get_index_stats(&self, uuid: Uuid) -> IndexResult<IndexStats> {
+        async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
             self.as_ref().get_index_stats(uuid).await
         }
     }
