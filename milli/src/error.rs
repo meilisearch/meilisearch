@@ -206,7 +206,13 @@ impl fmt::Display for UserError {
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
-                write!(f, "document identifier is invalid {}", json)
+                write!(
+                    f,
+                    "document identifier is invalid {}, \
+a document id can be of type integer or string \
+only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)",
+                    json
+                )
             }
             Self::InvalidFilterAttribute(error) => error.fmt(f),
             Self::MissingDocumentId { document } => {
