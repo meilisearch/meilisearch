@@ -163,7 +163,11 @@ impl Index {
         );
 
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut documents = Vec::new();
 
@@ -174,7 +178,7 @@ impl Index {
 
             let matches_info = query
                 .matches
-                .then(|| compute_matches(&matching_words, &document));
+                .then(|| compute_matches(&matching_words, &document, &analyzer));
 
             let formatted = format_fields(
                 &fields_ids_map,
@@ -221,12 +225,12 @@ impl Index {
     }
 }
 
-fn compute_matches(matcher: &impl Matcher, document: &Document) -> MatchesInfo {
+fn compute_matches<A: AsRef<[u8]>>(
+    matcher: &impl Matcher,
+    document: &Document,
+    analyzer: &Analyzer<A>
+    ) -> MatchesInfo {
     let mut matches = BTreeMap::new();
-    let stop_words = fst::Set::default();
-    let mut config = AnalyzerConfig::default();
-    config.stop_words(&stop_words);
-    let analyzer = Analyzer::new(config);
 
     for (key, value) in document {
         let mut infos = Vec::new();
@@ -455,17 +459,12 @@ impl Matcher for MatchingWords {
 }
 
 struct Formatter<'a, A> {
-    analyzer: Analyzer<'a, A>,
+    analyzer: &'a Analyzer<'a, A>,
     marks: (String, String),
 }
 
 impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
-    pub fn new(stop_words: &'a fst::Set<A>, marks: (String, String)) -> Self {
-        let mut config = AnalyzerConfig::default();
-        config.stop_words(stop_words);
-
-        let analyzer = Analyzer::new(config);
-
+    pub fn new(analyzer: &'a Analyzer<'a, A>, marks: (String, String)) -> Self {
         Self { analyzer, marks }
     }
 
@@ -641,7 +640,10 @@ mod test {
     #[test]
     fn no_ids_no_formatted() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
@@ -673,7 +675,10 @@ mod test {
     #[test]
     fn formatted_with_highlight_in_word() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -734,7 +739,10 @@ mod test {
     #[test]
     fn formatted_with_crop_2() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -795,7 +803,10 @@ mod test {
     #[test]
     fn formatted_with_crop_10() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -856,7 +867,10 @@ mod test {
     #[test]
     fn formatted_with_crop_0() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -917,7 +931,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_no_match() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -978,7 +995,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_highlight() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1039,7 +1059,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_highlight_in_word() {
         let stop_words = fst::Set::default();
-        let formatter = Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1140,7 +1163,12 @@ mod test {
         matcher.insert("mollit", Some(6));
         matcher.insert("laboris", Some(7));
 
-        let matches = compute_matches(&matcher, &value);
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let matches = compute_matches(&matcher, &value, &analyzer);
         assert_eq!(format!("{:?}", matches), r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##);
     }
 }
