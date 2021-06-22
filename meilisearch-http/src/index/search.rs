@@ -173,7 +173,9 @@ impl Index {
         for (_id, obkv) in documents_iter {
             let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
 
-            let matches_info = query.matches.then(|| compute_matches(&matching_words, &document));
+            let matches_info = query
+                .matches
+                .then(|| compute_matches(&matching_words, &document));
 
             let formatted = format_fields(
                 &fields_ids_map,
