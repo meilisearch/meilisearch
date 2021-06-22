@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::Instant;
 
@@ -6,7 +5,7 @@ use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{FilterCondition, FieldId, FieldsIdsMap, MatchingWords};
+use milli::{FieldId, FieldsIdsMap, FilterCondition, MatchingWords};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,6 +15,13 @@ use super::error::Result;
 use super::Index;
 
 pub type Document = IndexMap<String, Value>;
+type MatchesInfo = BTreeMap<String, Vec<MatchInfo>>;
+
+#[derive(Serialize, Debug, Clone)]
+pub struct MatchInfo {
+    start: usize,
+    length: usize,
+}
 
 pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 const fn default_search_limit() -> usize {
@@ -39,7 +45,9 @@ pub struct SearchQuery {
     #[serde(default = "default_crop_length")]
     pub crop_length: usize,
     pub attributes_to_highlight: Option<HashSet<String>>,
-    pub matches: Option<bool>,
+    // Default to false
+    #[serde(default = "Default::default")]
+    pub matches: bool,
     pub filter: Option<Value>,
     pub facet_distributions: Option<Vec<String>>,
 }
@@ -50,6 +58,8 @@ pub struct SearchHit {
     pub document: Document,
     #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     pub formatted: Document,
+    #[serde(rename = "_matchesInfo", skip_serializing_if = "Option::is_none")]
+    pub matches_info: Option<MatchesInfo>,
 }
 
 #[derive(Serialize)]
@@ -134,13 +144,9 @@ impl Index {
             .cloned()
             .collect();
 
-        let attr_to_highlight = query
-            .attributes_to_highlight
-            .unwrap_or_default();
+        let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
 
-        let attr_to_crop = query
-            .attributes_to_crop
-            .unwrap_or_default();
+        let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
 
         // Attributes in `formatted_options` correspond to the attributes that will be in `_formatted`
         // These attributes are:
@@ -157,8 +163,11 @@ impl Index {
         );
 
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut documents = Vec::new();
 
@@ -166,6 +175,11 @@ impl Index {
 
         for (_id, obkv) in documents_iter {
             let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
+
+            let matches_info = query
+                .matches
+                .then(|| compute_matches(&matching_words, &document, &analyzer));
+
             let formatted = format_fields(
                 &fields_ids_map,
                 obkv,
@@ -177,6 +191,7 @@ impl Index {
             let hit = SearchHit {
                 document,
                 formatted,
+                matches_info,
             };
             documents.push(hit);
         }
@@ -210,6 +225,53 @@ impl Index {
     }
 }
 
+fn compute_matches<A: AsRef<[u8]>>(
+    matcher: &impl Matcher,
+    document: &Document,
+    analyzer: &Analyzer<A>
+    ) -> MatchesInfo {
+    let mut matches = BTreeMap::new();
+
+    for (key, value) in document {
+        let mut infos = Vec::new();
+        compute_value_matches(&mut infos, value, matcher, &analyzer);
+        if !infos.is_empty() {
+            matches.insert(key.clone(), infos);
+        }
+    }
+    matches
+}
+
+fn compute_value_matches<'a, A: AsRef<[u8]>>(
+    infos: &mut Vec<MatchInfo>,
+    value: &Value,
+    matcher: &impl Matcher,
+    analyzer: &Analyzer<'a, A>,
+) {
+    match value {
+        Value::String(s) => {
+            let analyzed = analyzer.analyze(s);
+            let mut start = 0;
+            for (word, token) in analyzed.reconstruct() {
+                if token.is_word() {
+                    if let Some(length) = matcher.matches(token.text()) {
+                        infos.push(MatchInfo { start, length });
+                    }
+                }
+
+                start += word.len();
+            }
+        }
+        Value::Array(vals) => vals
+            .iter()
+            .for_each(|val| compute_value_matches(infos, val, matcher, analyzer)),
+        Value::Object(vals) => vals
+            .values()
+            .for_each(|val| compute_value_matches(infos, val, matcher, analyzer)),
+        _ => (),
+    }
+}
+
 fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
@@ -217,8 +279,7 @@ fn compute_formatted_options(
     to_retrieve_ids: &BTreeSet<u8>,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<u8>,
-    ) -> BTreeMap<FieldId, FormatOptions> {
-
+) -> BTreeMap<FieldId, FormatOptions> {
     let mut formatted_options = BTreeMap::new();
 
     add_highlight_to_formatted_options(
@@ -238,10 +299,7 @@ fn compute_formatted_options(
 
     // Should not return `_formatted` if no valid attributes to highlight/crop
     if !formatted_options.is_empty() {
-        add_non_formatted_ids_to_formatted_options(
-            &mut formatted_options,
-            to_retrieve_ids,
-        );
+        add_non_formatted_ids_to_formatted_options(&mut formatted_options, to_retrieve_ids);
     }
 
     formatted_options
@@ -287,7 +345,7 @@ fn add_crop_to_formatted_options(
             Some((len, name)) => {
                 let crop_len = len.parse::<usize>().unwrap_or(crop_length);
                 (name, crop_len)
-            },
+            }
             None => (attr.as_str(), crop_length),
         };
 
@@ -319,15 +377,13 @@ fn add_crop_to_formatted_options(
 
 fn add_non_formatted_ids_to_formatted_options(
     formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
-    to_retrieve_ids: &BTreeSet<u8>
+    to_retrieve_ids: &BTreeSet<u8>,
 ) {
     for id in to_retrieve_ids {
-        formatted_options
-            .entry(*id)
-            .or_insert(FormatOptions {
-                highlight: false,
-                crop: None,
-            });
+        formatted_options.entry(*id).or_insert(FormatOptions {
+            highlight: false,
+            crop: None,
+        });
     }
 }
 
@@ -337,6 +393,7 @@ fn make_document(
     obkv: obkv::KvReader,
 ) -> Result<Document> {
     let mut document = Document::new();
+
     for attr in attributes_to_retrieve {
         if let Some(value) = obkv.get(*attr) {
             let value = serde_json::from_slice(value)?;
@@ -367,11 +424,7 @@ fn format_fields<A: AsRef<[u8]>>(
         if let Some(value) = obkv.get(*id) {
             let mut value: Value = serde_json::from_slice(value)?;
 
-            value = formatter.format_value(
-                value,
-                matching_words,
-                *format,
-            );
+            value = formatter.format_value(value, matching_words, *format);
 
             // This unwrap must be safe since we got the ids from the fields_ids_map just
             // before.
@@ -406,17 +459,12 @@ impl Matcher for MatchingWords {
 }
 
 struct Formatter<'a, A> {
-    analyzer: Analyzer<'a, A>,
+    analyzer: &'a Analyzer<'a, A>,
     marks: (String, String),
 }
 
 impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
-    pub fn new(stop_words: &'a fst::Set<A>, marks: (String, String)) -> Self {
-        let mut config = AnalyzerConfig::default();
-        config.stop_words(stop_words);
-
-        let analyzer = Analyzer::new(config);
-
+    pub fn new(analyzer: &'a Analyzer<'a, A>, marks: (String, String)) -> Self {
         Self { analyzer, marks }
     }
 
@@ -428,20 +476,40 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     ) -> Value {
         match value {
             Value::String(old_string) => {
-                let value =
-                    self.format_string(old_string, matcher, format_options);
+                let value = self.format_string(old_string, matcher, format_options);
                 Value::String(value)
             }
             Value::Array(values) => Value::Array(
                 values
                     .into_iter()
-                    .map(|v| self.format_value(v, matcher, FormatOptions { highlight: format_options.highlight, crop: None }))
+                    .map(|v| {
+                        self.format_value(
+                            v,
+                            matcher,
+                            FormatOptions {
+                                highlight: format_options.highlight,
+                                crop: None,
+                            },
+                        )
+                    })
                     .collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.format_value(v, matcher, FormatOptions { highlight: format_options.highlight, crop: None })))
+                    .map(|(k, v)| {
+                        (
+                            k,
+                            self.format_value(
+                                v,
+                                matcher,
+                                FormatOptions {
+                                    highlight: format_options.highlight,
+                                    crop: None,
+                                },
+                            ),
+                        )
+                    })
                     .collect(),
             ),
             value => value,
@@ -461,7 +529,9 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 let mut buffer = Vec::new();
                 let mut tokens = analyzed.reconstruct().peekable();
 
-                while let Some((word, token)) = tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none()) {
+                while let Some((word, token)) =
+                    tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none())
+                {
                     buffer.push((word, token));
                 }
 
@@ -474,19 +544,16 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                         });
 
                         let mut taken_after = 0;
-                        let after_iter = tokens
-                        .take_while(move |(word, _)| {
+                        let after_iter = tokens.take_while(move |(word, _)| {
                             let take = taken_after < crop_len;
                             taken_after += word.chars().count();
                             take
                         });
 
-                        let iter = before_iter
-                            .chain(Some(token))
-                            .chain(after_iter);
+                        let iter = before_iter.chain(Some(token)).chain(after_iter);
 
                         Box::new(iter)
-                    },
+                    }
                     // If no word matches in the attribute
                     None => {
                         let mut count = 0;
@@ -503,23 +570,23 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             None => Box::new(analyzed.reconstruct()),
         };
 
-        tokens
-            .map(|(word, token)| {
-                if format_options.highlight && token.is_word() {
-                    if let Some(match_len) = matcher.matches(token.text()) {
-                        let mut new_word = String::new();
-
-                        new_word.push_str(&self.marks.0);
-                        new_word.push_str(&word[..match_len]);
-                        new_word.push_str(&self.marks.1);
-                        new_word.push_str(&word[match_len..]);
-
-                        return Cow::Owned(new_word)
+        tokens.fold(String::new(), |mut out, (word, token)| {
+            // Check if we need to do highlighting or computed matches before calling
+            // Matcher::match since the call is expensive.
+            if format_options.highlight && token.is_word() {
+                if let Some(length) = matcher.matches(token.text()) {
+                    if format_options.highlight {
+                        out.push_str(&self.marks.0);
+                        out.push_str(&word[..length]);
+                        out.push_str(&self.marks.1);
+                        out.push_str(&word[length..]);
+                        return out;
                     }
                 }
-                Cow::Borrowed(word)
-            })
-            .collect::<String>()
+            }
+            out.push_str(word);
+            out
+        })
     }
 }
 
@@ -573,8 +640,10 @@ mod test {
     #[test]
     fn no_ids_no_formatted() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
@@ -606,8 +675,10 @@ mod test {
     #[test]
     fn formatted_with_highlight_in_word() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -615,19 +686,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("The Hobbit".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("The Hobbit".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. R. R. Tolkien".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. R. R. Tolkien".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: true, crop: None });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: None,
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("hobbit", Some(3));
@@ -648,8 +739,10 @@ mod test {
     #[test]
     fn formatted_with_crop_2() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -657,19 +750,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(2) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: false,
+                crop: Some(2),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
@@ -690,8 +803,10 @@ mod test {
     #[test]
     fn formatted_with_crop_10() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -699,19 +814,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(10) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: false,
+                crop: Some(10),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
@@ -732,8 +867,10 @@ mod test {
     #[test]
     fn formatted_with_crop_0() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -741,19 +878,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(0) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: false,
+                crop: Some(0),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("potter", Some(6));
@@ -774,8 +931,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_no_match() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -783,19 +942,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: false, crop: Some(6) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: Some(20) });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: false,
+                crop: Some(6),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: Some(20),
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("rowling", Some(3));
@@ -816,8 +995,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_highlight() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -825,19 +1006,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(1) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: Some(1),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("and", Some(3));
@@ -858,8 +1059,10 @@ mod test {
     #[test]
     fn formatted_with_crop_and_highlight_in_word() {
         let stop_words = fst::Set::default();
-        let formatter =
-            Formatter::new(&stop_words, (String::from("<em>"), String::from("</em>")));
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -867,19 +1070,39 @@ mod test {
 
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("Harry Potter and the Half-Blood Prince".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            title,
+            Value::String("Harry Potter and the Half-Blood Prince".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
         obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(author, Value::String("J. K. Rowling".into()).to_string().as_bytes())
-            .unwrap();
+        obkv.insert(
+            author,
+            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
+        )
+        .unwrap();
         obkv.finish().unwrap();
 
         let obkv = obkv::KvReader::new(&buf);
 
         let mut formatted_options = BTreeMap::new();
-        formatted_options.insert(title, FormatOptions { highlight: true, crop: Some(9) });
-        formatted_options.insert(author, FormatOptions { highlight: false, crop: None });
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: Some(9),
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
 
         let mut matching_words = BTreeMap::new();
         matching_words.insert("blood", Some(3));
@@ -895,5 +1118,57 @@ mod test {
 
         assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
+    }
+
+    #[test]
+    fn test_compute_value_matches() {
+        let text = "Call me Ishmael. Some years ago—never mind how long precisely—having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.";
+        let value = serde_json::json!(text);
+
+        let mut matcher = BTreeMap::new();
+        matcher.insert("ishmael", Some(3));
+        matcher.insert("little", Some(6));
+        matcher.insert("particular", Some(1));
+
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let mut infos = Vec::new();
+
+        compute_value_matches(&mut infos, &value, &matcher, &analyzer);
+
+        let mut infos = infos.into_iter();
+        let crop = |info: MatchInfo| &text[info.start..info.start + info.length];
+
+        assert_eq!(crop(infos.next().unwrap()), "Ish");
+        assert_eq!(crop(infos.next().unwrap()), "little");
+        assert_eq!(crop(infos.next().unwrap()), "p");
+        assert_eq!(crop(infos.next().unwrap()), "little");
+        assert!(infos.next().is_none());
+    }
+
+    #[test]
+    fn test_compute_match() {
+        let value = serde_json::from_str(r#"{
+            "color": "Green",
+            "name": "Lucas Hess",
+            "gender": "male",
+            "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+            "about": "Mollit ad in exercitation quis Laboris . Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n"
+  }"#).unwrap();
+        let mut matcher = BTreeMap::new();
+        matcher.insert("green", Some(3));
+        matcher.insert("mollit", Some(6));
+        matcher.insert("laboris", Some(7));
+
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+
+        let matches = compute_matches(&matcher, &value, &analyzer);
+        assert_eq!(format!("{:?}", matches), r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##);
     }
 }
