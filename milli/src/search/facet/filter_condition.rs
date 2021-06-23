@@ -17,7 +17,7 @@ use self::Operator::*;
 use super::parser::{FilterParser, Rule, PREC_CLIMBER};
 use super::FacetNumberRange;
 use crate::error::UserError;
-use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetValueStringCodec};
+use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetStringLevelZeroCodec};
 use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -363,7 +363,7 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-        strings_db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
+        strings_db: heed::Database<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
         field_id: FieldId,
         operator: &Operator,
     ) -> Result<RoaringBitmap> {

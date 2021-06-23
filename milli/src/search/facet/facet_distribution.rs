@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Bound::Unbounded;
-use std::{cmp, fmt};
+use std::{cmp, fmt, mem};
 
 use heed::types::{ByteSlice, Unit};
 use heed::{BytesDecode, Database};
@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 
 use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::FacetValueStringCodec;
+use crate::heed_codec::facet::FacetStringLevelZeroCodec;
 use crate::search::facet::{FacetNumberIter, FacetNumberRange};
 use crate::{DocumentId, FieldId, Index, Result};
 
@@ -81,7 +81,7 @@ impl<'a> FacetDistribution<'a> {
             let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
             for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
-                key_buffer.truncate(1);
+                key_buffer.truncate(mem::size_of::<FieldId>());
                 key_buffer.extend_from_slice(&docid.to_be_bytes());
                 let iter = db
                     .remap_key_type::<ByteSlice>()
@@ -158,7 +158,7 @@ impl<'a> FacetDistribution<'a> {
             .facet_id_string_docids
             .remap_key_type::<ByteSlice>()
             .prefix_iter(self.rtxn, &field_id.to_be_bytes())?
-            .remap_key_type::<FacetValueStringCodec>();
+            .remap_key_type::<FacetStringLevelZeroCodec>();
 
         for result in iter {
             let ((_, value), docids) = result?;

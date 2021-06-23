@@ -130,7 +130,7 @@ use std::ops::Bound;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 
 use either::{Either, Left, Right};
-use heed::types::{ByteSlice, DecodeIgnore, Str};
+use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{Database, LazyDecode, RoRange};
 use roaring::RoaringBitmap;
 
@@ -298,10 +298,10 @@ impl<'t> FacetStringIter<'t> {
     ) -> heed::Result<Option<u8>> {
         Ok(db
             .remap_types::<ByteSlice, DecodeIgnore>()
-            .prefix_iter(rtxn, &[fid][..])? // the field id is the first bit
+            .prefix_iter(rtxn, &fid.to_be_bytes())? // the field id is the first two bits
             .last()
             .transpose()?
-            .map(|(key_bytes, _)| key_bytes[1])) // the level is the second bit
+            .map(|(key_bytes, _)| key_bytes[2])) // the level is the third bit
     }
 }
 

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::num::NonZeroU8;
 
-use crate::FieldId;
+use crate::{try_split_array_at, FieldId};
 
 /// A codec that stores the field id, level 1 and higher and the groups ids.
 ///
@@ -13,12 +13,13 @@ impl<'a> heed::BytesDecode<'a> for FacetLevelValueU32Codec {
     type DItem = (FieldId, NonZeroU8, u32, u32);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (field_id, bytes) = bytes.split_first()?;
+        let (field_id_bytes, bytes) = try_split_array_at(bytes)?;
+        let field_id = u16::from_be_bytes(field_id_bytes);
         let (level, bytes) = bytes.split_first()?;
         let level = NonZeroU8::new(*level)?;
-        let left = bytes[16..20].try_into().ok().map(u32::from_be_bytes)?;
-        let right = bytes[20..].try_into().ok().map(u32::from_be_bytes)?;
-        Some((*field_id, level, left, right))
+        let left = bytes[8..12].try_into().ok().map(u32::from_be_bytes)?;
+        let right = bytes[12..].try_into().ok().map(u32::from_be_bytes)?;
+        Some((field_id, level, left, right))
     }
 }
 
@@ -42,8 +43,8 @@ impl heed::BytesEncode<'_> for FacetLevelValueU32Codec {
         let bytes = right.to_be_bytes();
         buffer[12..].copy_from_slice(&bytes[..]);
 
-        let mut bytes = Vec::with_capacity(buffer.len() + 2);
-        bytes.push(*field_id);
+        let mut bytes = Vec::with_capacity(buffer.len() + 2 + 1);
+        bytes.extend_from_slice(&field_id.to_be_bytes());
         bytes.push(level.get());
         bytes.extend_from_slice(&buffer);
 

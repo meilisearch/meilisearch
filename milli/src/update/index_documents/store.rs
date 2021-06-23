@@ -26,7 +26,7 @@ use super::merge_function::{
 use super::{create_sorter, create_writer, writer_into_reader, MergeFn};
 use crate::error::{Error, InternalError, SerializationError};
 use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetValueStringCodec, FieldDocIdFacetF64Codec,
+    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec,
     FieldDocIdFacetStringCodec,
 };
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
@@ -522,7 +522,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             key_buffer.clear();
             data_buffer.clear();
 
-            FacetValueStringCodec::serialize_into(field_id, &value, &mut key_buffer);
+            FacetStringLevelZeroCodec::serialize_into(field_id, &value, &mut key_buffer);
             CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
 
             if lmdb_key_valid_size(&key_buffer) {

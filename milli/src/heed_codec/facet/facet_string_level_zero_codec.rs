@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::str;
 
-use crate::FieldId;
+use crate::{try_split_array_at, FieldId};
 
 /// A codec that stores the field id, level 0, and facet string.
 ///
@@ -16,7 +16,7 @@ pub struct FacetStringLevelZeroCodec;
 impl FacetStringLevelZeroCodec {
     pub fn serialize_into(field_id: FieldId, value: &str, out: &mut Vec<u8>) {
         out.reserve(value.len() + 2);
-        out.push(field_id);
+        out.extend_from_slice(&field_id.to_be_bytes());
         out.push(0); // the level zero (for LMDB ordering only)
         out.extend_from_slice(value.as_bytes());
     }
@@ -26,7 +26,8 @@ impl<'a> heed::BytesDecode<'a> for FacetStringLevelZeroCodec {
     type DItem = (FieldId, &'a str);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (field_id, bytes) = bytes.split_first()?;
+        let (field_id_bytes, bytes) = try_split_array_at(bytes)?;
+        let field_id = u16::from_be_bytes(field_id_bytes);
         let (level, bytes) = bytes.split_first()?;
 
         if *level != 0 {
@@ -34,7 +35,7 @@ impl<'a> heed::BytesDecode<'a> for FacetStringLevelZeroCodec {
         }
 
         let value = str::from_utf8(bytes).ok()?;
-        Some((*field_id, value))
+        Some((field_id, value))
     }
 }
 
