@@ -55,7 +55,7 @@ pub struct Readers {
 pub struct Store<'s, A> {
     // Indexing parameters
     searchable_fields: HashSet<FieldId>,
-    faceted_fields: HashSet<FieldId>,
+    filterable_fields: HashSet<FieldId>,
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
@@ -90,7 +90,7 @@ pub struct Store<'s, A> {
 impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     pub fn new(
         searchable_fields: HashSet<FieldId>,
-        faceted_fields: HashSet<FieldId>,
+        filterable_fields: HashSet<FieldId>,
         linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
@@ -190,7 +190,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Ok(Store {
             // Indexing parameters.
             searchable_fields,
-            faceted_fields,
+            filterable_fields,
             // Caches
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             field_id_word_count_docids: HashMap::new(),
@@ -668,20 +668,23 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                 }
 
                 for (attr, content) in document.iter() {
-                    if self.faceted_fields.contains(&attr) || self.searchable_fields.contains(&attr)
+                    if self.filterable_fields.contains(&attr)
+                        || self.searchable_fields.contains(&attr)
                     {
                         let value =
                             serde_json::from_slice(content).map_err(InternalError::SerdeJson)?;
 
-                        let (facet_numbers, facet_strings) = extract_facet_values(&value);
-                        facet_numbers_values
-                            .entry(attr)
-                            .or_insert_with(Vec::new)
-                            .extend(facet_numbers);
-                        facet_strings_values
-                            .entry(attr)
-                            .or_insert_with(Vec::new)
-                            .extend(facet_strings);
+                        if self.filterable_fields.contains(&attr) {
+                            let (facet_numbers, facet_strings) = extract_facet_values(&value);
+                            facet_numbers_values
+                                .entry(attr)
+                                .or_insert_with(Vec::new)
+                                .extend(facet_numbers);
+                            facet_strings_values
+                                .entry(attr)
+                                .or_insert_with(Vec::new)
+                                .extend(facet_strings);
+                        }
 
                         if self.searchable_fields.contains(&attr) {
                             let content = match json_to_string(&value) {
