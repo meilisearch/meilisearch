@@ -5,5 +5,6 @@ pub(crate) use self::parser::Rule as ParserRule;
 
 mod facet_distribution;
 mod facet_number;
+mod facet_string;
 mod filter_condition;
 mod parser;
