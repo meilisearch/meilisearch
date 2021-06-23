@@ -67,9 +67,9 @@ jobs:
           override: true
           components: rustfmt
       - name: Run cargo fmt
+        # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
+        # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
+        # we are going to create an empty file where rustfmt expects it.
         run: |
-          # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
-          # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
-          # we are going to create an empty file where rustfmt expect it.
           echo -ne "\n" > benchmarks/benches/datasets_paths.rs
           cargo fmt --all -- --check

@@ -1,5 +1,12 @@
 status = [
-    'ci (stable)'
+    'Tests on ubuntu-18.04 with stable',
+    'Tests on ubuntu-18.04 with beta',
+    'Tests on ubuntu-18.04 with nightly',
+    'Tests on macos-latest with stable',
+    'Tests on macos-latest with beta',
+    'Tests on macos-latest with nightly',
+    'Cargo check on Windows',
+    'Run Rustfmt',
 ]
 # 3 hours timeout
 timeout-sec = 10800
