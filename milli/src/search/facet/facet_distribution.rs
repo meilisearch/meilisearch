@@ -6,7 +6,7 @@ use heed::types::{ByteSlice, Unit};
 use heed::{BytesDecode, Database};
 use roaring::RoaringBitmap;
 
-use crate::error::FieldIdMapMissingEntry;
+use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::search::facet::{FacetIter, FacetRange};
@@ -219,7 +219,10 @@ impl<'a> FacetDistribution<'a> {
             Some(ref facets) => {
                 let invalid_fields: HashSet<_> = facets.difference(&filterable_fields).collect();
                 if !invalid_fields.is_empty() {
-                    todo!("return an error specifying that these fields are not filterable");
+                    return Err(UserError::InvalidFacetsDistribution {
+                        invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
+                    }
+                    .into());
                 } else {
                     facets.clone()
                 }

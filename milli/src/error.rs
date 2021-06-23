@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::{fmt, io, str};
@@ -51,13 +52,14 @@ pub enum FieldIdMapMissingEntry {
 pub enum UserError {
     AttributeLimitReached,
     Csv(csv::Error),
-    MaxDatabaseSizeReached,
     DocumentLimitReached,
-    InvalidFilter(pest::error::Error<ParserRule>),
     InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
+    InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
+    InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidStoreFile,
+    MaxDatabaseSizeReached,
     MissingDocumentId { document: Object },
     MissingPrimaryKey,
     NoSpaceLeftOnDevice,
@@ -202,6 +204,15 @@ impl fmt::Display for UserError {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::Csv(error) => error.fmt(f),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
+            Self::InvalidFacetsDistribution { invalid_facets_name } => {
+                let name_list =
+                    invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
+                write!(
+                    f,
+                    "invalid facet distribution, the fields {} are not set as filterable",
+                    name_list
+                )
+            }
             Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
