@@ -28,7 +28,7 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
                 .content_type(|_mime| true) // Accept all mime types
                 .error_handler(|err, _req| error::payload_error_handler(err).into()),
         )
-        .app_data(web::PayloadConfig::new(http_payload_size_limit))
+        .app_data(PayloadConfig::new(http_payload_size_limit))
         .app_data(
             web::QueryConfig::default()
                 .error_handler(|err, _req| error::payload_error_handler(err).into()),
@@ -114,6 +114,10 @@ pub struct Payload {
 
 pub struct PayloadConfig {
     limit: usize,
+}
+
+impl PayloadConfig {
+    pub fn new(limit: usize) -> Self { Self { limit } }
 }
 
 impl Default for PayloadConfig {
