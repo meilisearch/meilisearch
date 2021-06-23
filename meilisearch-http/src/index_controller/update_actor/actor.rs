@@ -145,11 +145,15 @@ where
                     D: AsRef<[u8]> + Sized + 'static,
                 {
                     let mut file_len = 0;
+
                     while let Some(bytes) = payload.recv().await {
                         let bytes = bytes?;
                         file_len += bytes.as_ref().len();
                         file.write_all(bytes.as_ref()).await?;
                     }
+
+                    file.flush().await?;
+
                     Ok(file_len)
                 }
 
@@ -157,7 +161,6 @@ where
 
                 match file_len {
                     Ok(len) if len > 0 => {
-                        file.flush().await?;
                         let file = file.into_std().await;
                         Some((file, update_file_id))
                     }
