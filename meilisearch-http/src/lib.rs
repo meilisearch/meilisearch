@@ -35,6 +35,10 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
         );
 }
 
+pub fn configure_auth(config: &mut web::ServiceConfig, opt: &Options) {
+    todo!()
+}
+
 #[cfg(feature = "mini-dashboard")]
 pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
     use actix_web_static_files::Resource;

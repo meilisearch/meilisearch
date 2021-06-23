@@ -13,7 +13,7 @@ use crate::extractors::authentication::{Policies, AuthConfig, Public, GuardedDat
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     let mut policies = Policies::new();
-    policies.insert(Public);
+    policies.insert(Public::new());
     cfg.service(
         web::resource("/indexes/{index_uid}/search")
             .app_data(AuthConfig::Auth(policies))

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::any::{Any, TypeId};
@@ -9,12 +9,59 @@ use futures::future::{Ready, ok};
 
 use crate::error::{AuthenticationError, ResponseError};
 
-pub struct Public;
+macro_rules! create_policies {
+    ($($name:ident), *) => {
+        $(
+            pub struct $name {
+                inner: HashSet<Vec<u8>>
+            }
 
-impl Policy for Public {
-    fn authenticate(&self, _token: &[u8]) -> bool {
-        true
-    }
+            impl $name {
+                pub fn new() -> Self {
+                    Self { inner: HashSet::new() }
+                }
+
+                pub fn add(&mut self, token: Vec<u8>) {
+                    self.inner.insert(token);
+                }
+            }
+
+            impl Policy for $name {
+                fn authenticate(&self, token: &[u8]) -> bool {
+                    self.inner.contains(token)
+                }
+            }
+        )*
+    };
+}
+
+create_policies!(Public, Private, Admin);
+
+/// Instanciate a `Policies`, filled with the given policies.
+macro_rules! init_policies {
+    ($($name:ident), *) => {
+        {
+            let mut policies = Policies::new();
+            $(
+                let policy = $name::new();
+                policies.insert(policy);
+            )*
+            policies
+        }
+    };
+}
+
+/// Adds user to all specified policies.
+macro_rules! create_users {
+    ($policies:ident, $($user:literal => { $($policy:ty), * }), *) => {
+        {
+            $(
+                $(
+                    $policies.get_mut::<$policy>().map(|p| p.add($user.to_owned()))
+                )*
+            )*
+        }
+    };
 }
 
 pub struct GuardedData<T, D> {
@@ -51,6 +98,11 @@ impl Policies {
         self.inner
             .get(&TypeId::of::<S>())
             .and_then(|p| p.downcast_ref::<S>())
+    }
+
+    pub fn get_mut<S: Policy + 'static>(&mut self) -> Option<&mut S> {
+        self.inner.get_mut(&TypeId::of::<S>())
+            .and_then(|p| p.downcast_mut::<S>())
     }
 }
 
