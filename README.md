@@ -33,12 +33,12 @@ For more information about features go to [our documentation](https://docs.meili
 </p>
 
 ## ✨ Features
-* Search as-you-type experience (answers < 50 milliseconds)
+* Search-as-you-type experience (answers < 50 milliseconds)
 * Full-text search
-* Typo tolerant (understands typos and miss-spelling)
+* Typo tolerant (understands typos and misspelling)
 * Faceted search and filters
-* Supports Kanji characters
-* Supports Synonym
+* Supports hanzi (Chinese characters)
+* Supports synonyms
 * Easy to install, deploy, and maintain
 * Whole documents are returned
 * Highly customizable
