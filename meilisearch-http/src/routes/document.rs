@@ -7,9 +7,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
+use crate::extractors::payload::Payload;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
-use crate::{Data, Payload};
+use crate::Data;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;

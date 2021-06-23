@@ -22,9 +22,9 @@ use update_actor::UpdateActorHandle;
 pub use updates::*;
 use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
 
+use crate::extractors::payload::Payload;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
-use crate::Payload;
 use error::Result;
 
 use self::dump_actor::load_dump;

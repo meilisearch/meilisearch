@@ -1,8 +1,9 @@
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
+use crate::extractors::payload::Payload;
 use crate::index::{Checked, Settings};
 use crate::index_controller::{error::Result, IndexMetadata, IndexSettings, UpdateStatus};
-use crate::{Data, Payload};
+use crate::Data;
 
 impl Data {
     pub async fn add_documents(
