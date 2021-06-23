@@ -215,9 +215,20 @@ impl<'a> FacetDistribution<'a> {
     pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
+        let fields = match self.facets {
+            Some(ref facets) => {
+                let invalid_fields: HashSet<_> = facets.difference(&filterable_fields).collect();
+                if !invalid_fields.is_empty() {
+                    todo!("return an error specifying that these fields are not filterable");
+                } else {
+                    facets.clone()
+                }
+            }
+            None => filterable_fields,
+        };
 
         let mut distribution = BTreeMap::new();
-        for name in filterable_fields {
+        for name in fields {
             let fid =
                 fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                     field_name: name.clone(),
