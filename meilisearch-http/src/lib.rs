@@ -24,7 +24,7 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
         .data(data)
         .app_data(
             web::JsonConfig::default()
-                .limit(dbg!(http_payload_size_limit))
+                .limit(http_payload_size_limit)
                 .content_type(|_mime| true) // Accept all mime types
                 .error_handler(|err, _req| error::payload_error_handler(err).into()),
         )
