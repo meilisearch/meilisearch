@@ -2,7 +2,7 @@ use std::env;
 
 use actix_web::HttpServer;
 use main_error::MainError;
-use meilisearch_http::{create_app, Data, Opt};
+use meilisearch_http::{Data, Opt, create_app};
 use structopt::StructOpt;
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
@@ -74,7 +74,7 @@ async fn main() -> Result<(), MainError> {
 
 async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let _enable_dashboard = &opt.env == "development";
-    let http_server = HttpServer::new(move || create_app!(&data, _enable_dashboard))
+    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C
         .disable_signals();
 
@@ -83,8 +83,8 @@ async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>
             .bind_rustls(opt.http_addr, config)?
             .run()
             .await?;
-    } else {
-        http_server.bind(opt.http_addr)?.run().await?;
+        } else {
+            http_server.bind(opt.http_addr)?.run().await?;
     }
     Ok(())
 }

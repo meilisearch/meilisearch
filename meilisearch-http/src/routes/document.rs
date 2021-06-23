@@ -1,4 +1,3 @@
-use actix_web::web::Payload;
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
@@ -130,7 +129,7 @@ async fn add_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: Payload,
+    body: web::Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let update_status = data
         .add_documents(
