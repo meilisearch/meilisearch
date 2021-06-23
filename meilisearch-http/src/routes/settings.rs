@@ -1,4 +1,5 @@
 use actix_web::{delete, get, post, web, HttpResponse};
+use log::debug;
 
 use crate::helpers::Authentication;
 use crate::index::Settings;
@@ -9,6 +10,7 @@ use crate::{error::ResponseError, index::Unchecked};
 macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
         mod $attr {
+            use log::debug;
             use actix_web::{web, HttpResponse};
 
             use crate::data;
@@ -27,6 +29,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 let update_status = data.update_settings(index_uid.into_inner(), settings, false).await?;
+                debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
@@ -42,6 +45,7 @@ macro_rules! make_setting_route {
                 };
 
                 let update_status = data.update_settings(index_uid.into_inner(), settings, true).await?;
+                debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
@@ -51,6 +55,7 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let settings = data.settings(index_uid.into_inner()).await?;
+                debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
                 Ok(HttpResponse::Ok().json(val))
@@ -145,6 +150,7 @@ async fn update_all(
         .update_settings(index_uid.into_inner(), settings, true)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
+    debug!("returns: {:?}", json);
     Ok(HttpResponse::Accepted().json(json))
 }
 
@@ -154,6 +160,7 @@ async fn get_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = data.settings(index_uid.into_inner()).await?;
+    debug!("returns: {:?}", settings);
     Ok(HttpResponse::Ok().json(settings))
 }
 
@@ -167,5 +174,6 @@ async fn delete_all(
         .update_settings(index_uid.into_inner(), settings, false)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
+    debug!("returns: {:?}", json);
     Ok(HttpResponse::Accepted().json(json))
 }

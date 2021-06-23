@@ -1,7 +1,7 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
-use log::error;
+use log::{debug, error};
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
 use serde_json::Value;
@@ -64,6 +64,7 @@ async fn get_document(
     let document = data
         .retrieve_document(index, id, None as Option<Vec<String>>)
         .await?;
+    debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
 
@@ -78,10 +79,11 @@ async fn delete_document(
     let update_status = data
         .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
         .await?;
+    debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BrowseQuery {
     offset: Option<usize>,
@@ -95,6 +97,7 @@ async fn get_all_documents(
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     let attributes_to_retrieve = params.attributes_to_retrieve.as_ref().and_then(|attrs| {
         let mut names = Vec::new();
         for name in attrs.split(',').map(String::from) {
@@ -114,10 +117,11 @@ async fn get_all_documents(
             attributes_to_retrieve,
         )
         .await?;
+    debug!("returns: {:?}", documents);
     Ok(HttpResponse::Ok().json(documents))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
     primary_key: Option<String>,
@@ -132,6 +136,7 @@ async fn add_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     let update_status = data
         .add_documents(
             path.into_inner().index_uid,
@@ -142,6 +147,7 @@ async fn add_documents(
         )
         .await?;
 
+    debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
@@ -176,6 +182,7 @@ async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     let update = data
         .add_documents(
             path.into_inner().index_uid,
@@ -186,6 +193,7 @@ async fn update_documents(
         )
         .await?;
 
+    debug!("returns: {:?}", update);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
 }
 
@@ -198,6 +206,7 @@ async fn delete_documents(
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", body);
     let ids = body
         .iter()
         .map(|v| {
@@ -208,6 +217,7 @@ async fn delete_documents(
         .collect();
 
     let update_status = data.delete_documents(path.index_uid.clone(), ids).await?;
+    debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
@@ -218,5 +228,6 @@ async fn clear_all_documents(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update_status = data.clear_documents(path.index_uid.clone()).await?;
+    debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }

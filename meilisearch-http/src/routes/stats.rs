@@ -1,6 +1,7 @@
 use actix_web::get;
 use actix_web::web;
 use actix_web::HttpResponse;
+use log::debug;
 use serde::Serialize;
 
 use crate::error::ResponseError;
@@ -21,6 +22,7 @@ async fn get_index_stats(
 ) -> Result<HttpResponse, ResponseError> {
     let response = data.get_index_stats(path.index_uid.clone()).await?;
 
+    debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -28,6 +30,7 @@ async fn get_index_stats(
 async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let response = data.get_all_stats().await?;
 
+    debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
 }
 

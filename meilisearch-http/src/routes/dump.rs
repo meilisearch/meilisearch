@@ -1,5 +1,6 @@
 use actix_web::HttpResponse;
 use actix_web::{get, post, web};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
@@ -14,6 +15,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn create_dump(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let res = data.create_dump().await?;
 
+    debug!("returns: {:?}", res);
     Ok(HttpResponse::Accepted().json(res))
 }
 
@@ -35,5 +37,6 @@ async fn get_dump_status(
 ) -> Result<HttpResponse, ResponseError> {
     let res = data.dump_status(path.dump_uid.clone()).await?;
 
+    debug!("returns: {:?}", res);
     Ok(HttpResponse::Ok().json(res))
 }
