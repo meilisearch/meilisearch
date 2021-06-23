@@ -19,8 +19,12 @@ const SENTRY_DSN: &str = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/306
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
-    let mut log_builder =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    let mut log_builder = env_logger::Builder::new();
+    log_builder.parse_filters(&opt.log_level);
+    if opt.log_level == "info"  {
+        // if we are in info we only allow the warn log_level for milli
+        log_builder.filter_module("milli", log::LevelFilter::Warn);
+    }
 
     match opt.env.as_ref() {
         "production" => {
