@@ -43,7 +43,7 @@ impl ErrorCode for DumpActorError {
     fn error_code(&self) -> Code {
         match self {
             DumpActorError::DumpAlreadyRunning => Code::DumpAlreadyInProgress,
-            DumpActorError::DumpDoesNotExist(_) => Code::DocumentNotFound,
+            DumpActorError::DumpDoesNotExist(_) => Code::NotFound,
             DumpActorError::Internal(_) => Code::Internal,
             DumpActorError::UuidResolver(e) => e.error_code(),
             DumpActorError::UpdateActor(e) => e.error_code(),
