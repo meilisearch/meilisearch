@@ -31,7 +31,7 @@
 //!
 //! ### Example of what a facet number LMDB database contain
 //!
-//! | level | left-bound | right-bound | docs             |
+//! | level | left-bound | right-bound | documents ids    |
 //! |-------|------------|-------------|------------------|
 //! | 0     | 0          | _skipped_   | 1, 2             |
 //! | 0     | 1          | _skipped_   | 6, 7             |
@@ -48,7 +48,7 @@
 //! The next levels have two different bounds and the associated documents ids are simply the result
 //! of an union of all the documents ids associated with the aggregated groups above.
 //!
-//! ## The complexity of defining groups of facet strings
+//! ## The complexity of defining groups for facet strings
 //!
 //! As explained above, defining groups of facet numbers is easy, LMDB stores the keys in
 //! lexicographical order, it means that whatever the key represent the bytes are read in their raw
@@ -77,22 +77,25 @@
 //!
 //! #### Example of facet strings with numbered groups
 //!
-//! | level | left-bound | right-bound | left-string | right-string | docs             |
+//! | level | left-bound | right-bound | left-string | right-string | documents ids    |
 //! |-------|------------|-------------|-------------|--------------|------------------|
 //! | 0     | alpha      | _skipped_   | _skipped_   | _skipped_    | 1, 2             |
 //! | 0     | beta       | _skipped_   | _skipped_   | _skipped_    | 6, 7             |
 //! | 0     | gamma      | _skipped_   | _skipped_   | _skipped_    | 4, 7             |
 //! | 0     | omega      | _skipped_   | _skipped_   | _skipped_    | 2, 3, 4          |
 //! | 1     | 0          | 1           | alpha       | beta         | 1, 2, 6, 7       |
-//! | 1     | 3          | 5           | gamma       | omega        | 2, 3, 4, 7       |
-//! | 2     | 0          | 5           | _skipped_   | _skipped_    | 1, 2, 3, 4, 6, 7 |
+//! | 1     | 2          | 3           | gamma       | omega        | 2, 3, 4, 7       |
+//! | 2     | 0          | 3           | _skipped_   | _skipped_    | 1, 2, 3, 4, 6, 7 |
 //!
 //! As you can see the level 0 doesn't actually change much, we skip nearly everything, we do not
 //! need to store the facet string value two times.
 //!
-//! In the value, not in the key, you can see that we added two new values:
-//! the left-string and the right-string, which defines the original facet strings associated with
-//! the given group.
+//! The number in the left-bound and right-bound columns are incremental numbers representing the
+//! level 0 strings, .i.e. alpha is 0, beta is 1. Those numbers are just here to keep the ordering
+//! of the LMDB keys.
+//!
+//! In the value, not in the key, you can see that we added two new values: the left-string and the
+//! right-string, which defines the original facet strings associated with the given group.
 //!
 //! We put those two strings inside of the value, this way we do not limit the maximum size of the
 //! facet string values, and the impact on performances is not important as, IIRC, LMDB put big
@@ -121,3 +124,124 @@
 //! If the group doesn't contain one of our documents ids, we continue to the next group at this
 //! same level.
 //!
+
+use std::num::NonZeroU8;
+use std::ops::Bound;
+use std::ops::Bound::{Excluded, Included};
+
+use heed::types::{ByteSlice, Str};
+use heed::{Database, LazyDecode, RoRange};
+use roaring::RoaringBitmap;
+
+use crate::heed_codec::facet::{
+    FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringZeroBoundsValueCodec,
+};
+use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::FieldId;
+
+/// An iterator that is used to explore the facets level strings
+/// from the level 1 to infinity.
+///
+/// It yields the level, group id that an entry covers, the optional group strings
+/// that it covers of the level 0 only if it is an entry from the level 1 and
+/// the roaring bitmap associated.
+pub struct FacetStringGroupRange<'t> {
+    iter: RoRange<
+        't,
+        FacetLevelValueU32Codec,
+        LazyDecode<FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>>,
+    >,
+    end: Bound<u32>,
+}
+
+impl<'t> FacetStringGroupRange<'t> {
+    pub fn new(
+        rtxn: &'t heed::RoTxn,
+        db: Database<
+            FacetLevelValueU32Codec,
+            FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>,
+        >,
+        field_id: FieldId,
+        level: NonZeroU8,
+        left: Bound<u32>,
+        right: Bound<u32>,
+    ) -> heed::Result<FacetStringGroupRange<'t>> {
+        let left_bound = match left {
+            Included(left) => Included((field_id, level, left, u32::MIN)),
+            Excluded(left) => Excluded((field_id, level, left, u32::MIN)),
+            Unbounded => Included((field_id, level, u32::MIN, u32::MIN)),
+        };
+        let right_bound = Included((field_id, level, u32::MAX, u32::MAX));
+        let iter = db.lazily_decode_data().range(rtxn, &(left_bound, right_bound))?;
+        Ok(FacetStringGroupRange { iter, end: right })
+    }
+}
+
+impl<'t> Iterator for FacetStringGroupRange<'t> {
+    type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, level, left, right), docids))) => {
+                let must_be_returned = match self.end {
+                    Included(end) => right <= end,
+                    Excluded(end) => right < end,
+                    Unbounded => true,
+                };
+                if must_be_returned {
+                    match docids.decode() {
+                        Ok(docids) => Some(Ok(((level, left, right), docids))),
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
+                }
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
+/// An iterator that is used to explore the level 0 of the facets string database.
+///
+/// It yields the facet string and the roaring bitmap associated with it.
+pub struct FacetStringLevelZeroRange<'t> {
+    iter: RoRange<'t, FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+}
+
+impl<'t> FacetStringLevelZeroRange<'t> {
+    pub fn new(
+        rtxn: &'t heed::RoTxn,
+        db: Database<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+        field_id: FieldId,
+        left: Bound<&str>,
+        right: Bound<&str>,
+    ) -> heed::Result<FacetStringLevelZeroRange<'t>> {
+        let left_bound = match left {
+            Included(left) => Included((field_id, left)),
+            Excluded(left) => Excluded((field_id, left)),
+            Unbounded => Included((field_id, "")),
+        };
+
+        let right_bound = match right {
+            Included(right) => Included((field_id, right)),
+            Excluded(right) => Excluded((field_id, right)),
+            Unbounded => Excluded((field_id + 1, "")),
+        };
+
+        db.range(rtxn, &(left_bound, right_bound)).map(|iter| FacetStringLevelZeroRange { iter })
+    }
+}
+
+impl<'t> Iterator for FacetStringLevelZeroRange<'t> {
+    type Item = heed::Result<(&'t str, RoaringBitmap)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, value), docids))) => Some(Ok((value, docids))),
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
