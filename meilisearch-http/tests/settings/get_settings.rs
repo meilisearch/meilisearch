@@ -1,5 +1,21 @@
+use std::collections::HashMap;
+
+use once_cell::sync::Lazy;
+use serde_json::{Value, json};
+
 use crate::common::Server;
-use serde_json::json;
+
+static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+    map.insert("displayed_attributes", json!(["*"]));
+    map.insert("searchable_attributes", json!(["*"]));
+    map.insert("filterable_attributes", json!([]));
+    map.insert("distinct_attribute", json!(Value::Null));
+    map.insert("ranking_rules", json!(["words", "typo", "proximity", "attribute", "exactness"]));
+    map.insert("stop_words", json!([]));
+    map.insert("synonyms", json!({}));
+    map
+});
 
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {
@@ -142,6 +158,7 @@ macro_rules! test_setting_routes {
         $(
             mod $setting {
                 use crate::common::Server;
+                use super::DEFAULT_SETTINGS_VALUES;
 
                 #[actix_rt::test]
                 async fn get_unexisting_index() {
@@ -177,8 +194,25 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (_response, code) = server.service.delete(url).await;
-                    assert_eq!(code, 404);
+                    let (response, code) = server.service.delete(url).await;
+                    assert_eq!(code, 404, "{}", response);
+                }
+
+                #[actix_rt::test]
+                async fn get_default() {
+                    let server = Server::new().await;
+                    let index = server.index("test");
+                    let (response, code) = index.create(None).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (response, code) = server.service.get(url).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let expected = DEFAULT_SETTINGS_VALUES.get(stringify!($setting)).unwrap();
+                    assert_eq!(expected, &response);
                 }
             }
         )*
@@ -189,6 +223,8 @@ test_setting_routes!(
     filterable_attributes,
     displayed_attributes,
     searchable_attributes,
+    distinct_attribute,
     stop_words,
+    ranking_rules,
     synonyms
 );

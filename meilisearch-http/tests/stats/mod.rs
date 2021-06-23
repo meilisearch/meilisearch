@@ -54,11 +54,8 @@ async fn stats() {
     assert_eq!(code, 202, "{}", response);
     assert_eq!(response["updateId"], 0);
 
-    let (response, code) = server.stats().await;
-
-    assert_eq!(code, 200, "{}", response);
-
-    index.wait_update_id(0).await;
+    let response = index.wait_update_id(0).await;
+    println!("response: {}", response);
 
     let (response, code) = server.stats().await;
 
