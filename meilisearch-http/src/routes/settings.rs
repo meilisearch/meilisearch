@@ -7,7 +7,7 @@ use crate::{error::ResponseError, index::Unchecked};
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $type:ty, $attr:ident) => {
+    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
         mod $attr {
             use actix_web::{web, HttpResponse};
 
@@ -51,7 +51,9 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let settings = data.settings(index_uid.into_inner()).await?;
-                Ok(HttpResponse::Ok().json(settings.$attr))
+                let mut json = serde_json::json!(&settings);
+                let val = json[$camelcase_attr].take();
+                Ok(HttpResponse::Ok().json(val))
             }
         }
     };
@@ -60,43 +62,50 @@ macro_rules! make_setting_route {
 make_setting_route!(
     "/indexes/{index_uid}/settings/filterable-attributes",
     std::collections::HashSet<String>,
-    filterable_attributes
+    filterable_attributes,
+    "filterableAttributes"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/displayed-attributes",
     Vec<String>,
-    displayed_attributes
+    displayed_attributes,
+    "displayedAttributes"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/searchable-attributes",
     Vec<String>,
-    searchable_attributes
+    searchable_attributes,
+    "searchableAttributes"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/stop-words",
     std::collections::BTreeSet<String>,
-    stop_words
+    stop_words,
+    "stopWords"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/synonyms",
     std::collections::BTreeMap<String, Vec<String>>,
-    synonyms
+    synonyms,
+    "synonyms"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/distinct-attribute",
     String,
-    distinct_attribute
+    distinct_attribute,
+    "distinctAttribute"
 );
 
 make_setting_route!(
     "/indexes/{index_uid}/settings/ranking-rules",
     Vec<String>,
-    ranking_rules
+    ranking_rules,
+    "rankingRules"
 );
 
 macro_rules! create_services {
