@@ -210,7 +210,6 @@ impl<'t> Iterator for FacetStringGroupRange<'t> {
 /// It yields the facet string and the roaring bitmap associated with it.
 pub struct FacetStringLevelZeroRange<'t> {
     iter: RoRange<'t, FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
-    field_id: FieldId,
 }
 
 impl<'t> FacetStringLevelZeroRange<'t> {
@@ -228,19 +227,19 @@ impl<'t> FacetStringLevelZeroRange<'t> {
         ) -> Bound<&'a [u8]> {
             match bound {
                 Included(value) => {
-                    buffer.push(field_id);
+                    buffer.extend_from_slice(&field_id.to_be_bytes());
                     buffer.push(0);
                     buffer.extend_from_slice(value.as_bytes());
                     Included(&buffer[..])
                 }
                 Excluded(value) => {
-                    buffer.push(field_id);
+                    buffer.extend_from_slice(&field_id.to_be_bytes());
                     buffer.push(0);
                     buffer.extend_from_slice(value.as_bytes());
                     Excluded(&buffer[..])
                 }
                 Unbounded => {
-                    buffer.push(field_id);
+                    buffer.extend_from_slice(&field_id.to_be_bytes());
                     buffer.push(1); // we must only get the level 0
                     Excluded(&buffer[..])
                 }
@@ -257,7 +256,7 @@ impl<'t> FacetStringLevelZeroRange<'t> {
             .range(rtxn, &(left_bound, right_bound))?
             .remap_types::<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>();
 
-        Ok(FacetStringLevelZeroRange { iter, field_id })
+        Ok(FacetStringLevelZeroRange { iter })
     }
 }
 
