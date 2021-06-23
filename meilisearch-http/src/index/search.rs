@@ -49,7 +49,7 @@ pub struct SearchQuery {
     #[serde(default = "Default::default")]
     pub matches: bool,
     pub filter: Option<Value>,
-    pub facet_distributions: Option<Vec<String>>,
+    pub facets_distribution: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -73,7 +73,7 @@ pub struct SearchResult {
     pub offset: usize,
     pub processing_time_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facet_distributions: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    pub facets_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
 #[derive(Copy, Clone)]
@@ -198,13 +198,13 @@ impl Index {
 
         let nb_hits = candidates.len();
 
-        let facet_distributions = match query.facet_distributions {
+        let facets_distribution = match query.facets_distribution {
             Some(ref fields) => {
-                let mut facet_distribution = self.facets_distribution(&rtxn);
+                let mut facets_distribution = self.facets_distribution(&rtxn);
                 if fields.iter().all(|f| f != "*") {
-                    facet_distribution.facets(fields);
+                    facets_distribution.facets(fields);
                 }
-                let distribution = facet_distribution.candidates(candidates).execute()?;
+                let distribution = facets_distribution.candidates(candidates).execute()?;
 
                 Some(distribution)
             }
@@ -219,7 +219,7 @@ impl Index {
             limit: query.limit,
             offset: query.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
-            facet_distributions,
+            facets_distribution,
         };
         Ok(result)
     }
