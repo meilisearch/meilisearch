@@ -74,6 +74,8 @@ pub struct SearchResult {
     pub processing_time_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facets_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exhaustive_facets_count: Option<bool>,
 }
 
 #[derive(Copy, Clone)]
@@ -211,6 +213,8 @@ impl Index {
             None => None,
         };
 
+        let exhaustive_facets_count = facets_distribution.as_ref().map(|_| false); // not implemented yet
+
         let result = SearchResult {
             exhaustive_nb_hits: false, // not implemented yet
             hits: documents,
@@ -220,6 +224,7 @@ impl Index {
             offset: query.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
             facets_distribution,
+            exhaustive_facets_count,
         };
         Ok(result)
     }
