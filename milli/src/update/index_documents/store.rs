@@ -673,15 +673,17 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                         let value =
                             serde_json::from_slice(content).map_err(InternalError::SerdeJson)?;
 
-                        let (facet_numbers, facet_strings) = extract_facet_values(&value);
-                        facet_numbers_values
-                            .entry(attr)
-                            .or_insert_with(Vec::new)
-                            .extend(facet_numbers);
-                        facet_strings_values
-                            .entry(attr)
-                            .or_insert_with(Vec::new)
-                            .extend(facet_strings);
+                        if self.faceted_fields.contains(&attr) {
+                            let (facet_numbers, facet_strings) = extract_facet_values(&value);
+                            facet_numbers_values
+                                .entry(attr)
+                                .or_insert_with(Vec::new)
+                                .extend(facet_numbers);
+                            facet_strings_values
+                                .entry(attr)
+                                .or_insert_with(Vec::new)
+                                .extend(facet_strings);
+                        }
 
                         if self.searchable_fields.contains(&attr) {
                             let content = match json_to_string(&value) {
