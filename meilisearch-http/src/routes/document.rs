@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
-use crate::Data;
+use crate::{Data, Payload};
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
@@ -129,7 +129,7 @@ async fn add_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Payload,
+    body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let update_status = data
         .add_documents(
@@ -173,7 +173,7 @@ async fn update_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Payload,
+    body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let update = data
         .add_documents(

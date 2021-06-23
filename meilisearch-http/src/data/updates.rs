@@ -1,7 +1,6 @@
-use actix_web::web::Payload;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
-use super::Data;
+use crate::{Data, Payload};
 use crate::index::{Checked, Settings};
 use crate::index_controller::{error::Result, IndexMetadata, IndexSettings, UpdateStatus};
 
