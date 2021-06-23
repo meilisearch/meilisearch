@@ -210,6 +210,7 @@ impl<'t> Iterator for FacetStringGroupRange<'t> {
 /// It yields the facet string and the roaring bitmap associated with it.
 pub struct FacetStringLevelZeroRange<'t> {
     iter: RoRange<'t, FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+    field_id: FieldId,
 }
 
 impl<'t> FacetStringLevelZeroRange<'t> {
@@ -220,20 +221,43 @@ impl<'t> FacetStringLevelZeroRange<'t> {
         left: Bound<&str>,
         right: Bound<&str>,
     ) -> heed::Result<FacetStringLevelZeroRange<'t>> {
-        let db = db.remap_types::<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>();
-        let left_bound = match left {
-            Included(left) => Included((field_id, left)),
-            Excluded(left) => Excluded((field_id, left)),
-            Unbounded => Included((field_id, "")),
-        };
+        fn encode_bound<'a>(
+            buffer: &'a mut Vec<u8>,
+            field_id: FieldId,
+            bound: Bound<&str>,
+        ) -> Bound<&'a [u8]> {
+            match bound {
+                Included(value) => {
+                    buffer.push(field_id);
+                    buffer.push(0);
+                    buffer.extend_from_slice(value.as_bytes());
+                    Included(&buffer[..])
+                }
+                Excluded(value) => {
+                    buffer.push(field_id);
+                    buffer.push(0);
+                    buffer.extend_from_slice(value.as_bytes());
+                    Excluded(&buffer[..])
+                }
+                Unbounded => {
+                    buffer.push(field_id);
+                    buffer.push(1); // we must only get the level 0
+                    Excluded(&buffer[..])
+                }
+            }
+        }
 
-        let right_bound = match right {
-            Included(right) => Included((field_id, right)),
-            Excluded(right) => Excluded((field_id, right)),
-            Unbounded => Excluded((field_id + 1, "")),
-        };
+        let mut left_buffer = Vec::new();
+        let mut right_buffer = Vec::new();
+        let left_bound = encode_bound(&mut left_buffer, field_id, left);
+        let right_bound = encode_bound(&mut right_buffer, field_id, right);
 
-        db.range(rtxn, &(left_bound, right_bound)).map(|iter| FacetStringLevelZeroRange { iter })
+        let iter = db
+            .remap_key_type::<ByteSlice>()
+            .range(rtxn, &(left_bound, right_bound))?
+            .remap_types::<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>();
+
+        Ok(FacetStringLevelZeroRange { iter, field_id })
     }
 }
 
