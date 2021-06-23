@@ -174,40 +174,41 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
         use FacetType::{Number, String};
 
-        if let Some(candidates) = self.candidates.as_ref() {
-            // Classic search, candidates were specified, we must return facet values only related
-            // to those candidates. We also enter here for facet strings for performance reasons.
-            let mut distribution = BTreeMap::new();
-            if candidates.len() <= CANDIDATES_THRESHOLD {
-                self.facet_distribution_from_documents(
-                    field_id,
-                    Number,
-                    candidates,
-                    &mut distribution,
-                )?;
-                self.facet_distribution_from_documents(
-                    field_id,
-                    String,
-                    candidates,
-                    &mut distribution,
-                )?;
-            } else {
-                self.facet_numbers_distribution_from_facet_levels(
-                    field_id,
-                    candidates,
-                    &mut distribution,
-                )?;
-                self.facet_distribution_from_documents(
-                    field_id,
-                    String,
-                    candidates,
-                    &mut distribution,
-                )?;
-            }
+        match self.candidates {
+            Some(ref candidates) => {
+                // Classic search, candidates were specified, we must return facet values only related
+                // to those candidates. We also enter here for facet strings for performance reasons.
+                let mut distribution = BTreeMap::new();
+                if candidates.len() <= CANDIDATES_THRESHOLD {
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        Number,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        String,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                } else {
+                    self.facet_numbers_distribution_from_facet_levels(
+                        field_id,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        String,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                }
 
-            Ok(distribution)
-        } else {
-            self.facet_values_from_raw_facet_database(field_id)
+                Ok(distribution)
+            }
+            None => self.facet_values_from_raw_facet_database(field_id),
         }
     }
 
