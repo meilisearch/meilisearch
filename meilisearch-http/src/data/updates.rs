@@ -1,9 +1,9 @@
-use actix_web::web::Payload;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 
-use super::Data;
+use crate::extractors::payload::Payload;
 use crate::index::{Checked, Settings};
 use crate::index_controller::{error::Result, IndexMetadata, IndexSettings, UpdateStatus};
+use crate::Data;
 
 impl Data {
     pub async fn add_documents(

@@ -74,7 +74,7 @@ async fn main() -> Result<(), MainError> {
 
 async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let _enable_dashboard = &opt.env == "development";
-    let http_server = HttpServer::new(move || create_app!(&data, _enable_dashboard))
+    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C
         .disable_signals();
 

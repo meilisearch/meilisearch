@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix_web::web::{Bytes, Payload};
+use actix_web::web::Bytes;
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use log::error;
@@ -22,6 +22,7 @@ use update_actor::UpdateActorHandle;
 pub use updates::*;
 use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
 
+use crate::extractors::payload::Payload;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
 use error::Result;

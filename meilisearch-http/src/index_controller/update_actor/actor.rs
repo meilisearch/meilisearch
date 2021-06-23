@@ -122,7 +122,7 @@ where
         &self,
         uuid: Uuid,
         meta: UpdateMeta,
-        mut payload: mpsc::Receiver<PayloadData<D>>,
+        payload: mpsc::Receiver<PayloadData<D>>,
     ) -> Result<UpdateStatus> {
         let file_path = match meta {
             UpdateMeta::DocumentsAddition { .. } => {
@@ -137,21 +137,41 @@ where
                     .open(&path)
                     .await?;
 
-                let mut file_len = 0;
-                while let Some(bytes) = payload.recv().await {
-                    let bytes = bytes?;
-                    file_len += bytes.as_ref().len();
-                    file.write_all(bytes.as_ref()).await?;
+                async fn write_to_file<D>(
+                    file: &mut fs::File,
+                    mut payload: mpsc::Receiver<PayloadData<D>>,
+                ) -> Result<usize>
+                where
+                    D: AsRef<[u8]> + Sized + 'static,
+                {
+                    let mut file_len = 0;
+
+                    while let Some(bytes) = payload.recv().await {
+                        let bytes = bytes?;
+                        file_len += bytes.as_ref().len();
+                        file.write_all(bytes.as_ref()).await?;
+                    }
+
+                    file.flush().await?;
+
+                    Ok(file_len)
                 }
 
-                if file_len != 0 {
-                    file.flush().await?;
-                    let file = file.into_std().await;
-                    Some((file, update_file_id))
-                } else {
-                    // empty update, delete the empty file.
-                    fs::remove_file(&path).await?;
-                    None
+                let file_len = write_to_file(&mut file, payload).await;
+
+                match file_len {
+                    Ok(len) if len > 0 => {
+                        let file = file.into_std().await;
+                        Some((file, update_file_id))
+                    }
+                    Err(e) => {
+                        fs::remove_file(&path).await?;
+                        return Err(e);
+                    }
+                    _ => {
+                        fs::remove_file(&path).await?;
+                        None
+                    }
                 }
             }
             _ => None,

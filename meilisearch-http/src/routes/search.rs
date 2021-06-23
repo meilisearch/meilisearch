@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use crate::index::{SearchQuery, default_crop_length, DEFAULT_SEARCH_LIMIT};
+use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 

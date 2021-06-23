@@ -1,4 +1,3 @@
-use actix_web::web::Payload;
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
@@ -8,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
+use crate::extractors::payload::Payload;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -174,7 +174,7 @@ async fn update_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Payload,
+    body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let update = data
         .add_documents(

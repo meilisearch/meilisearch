@@ -103,7 +103,7 @@ impl ErrorCode for MilliError<'_> {
             milli::Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
-                    | UserError::Csv(_)
+                    UserError::Csv(_)
                     | UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
                     | UserError::InvalidCriterionName { .. }
@@ -148,9 +148,10 @@ impl ErrorCode for PayloadError {
             PayloadError::Json(err) => match err {
                 JsonPayloadError::Overflow => Code::PayloadTooLarge,
                 JsonPayloadError::ContentType => Code::UnsupportedMediaType,
-                JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => Code::PayloadTooLarge,
-                JsonPayloadError::Deserialize(_)
-                | JsonPayloadError::Payload(_) => Code::BadRequest,
+                JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => {
+                    Code::PayloadTooLarge
+                }
+                JsonPayloadError::Deserialize(_) | JsonPayloadError::Payload(_) => Code::BadRequest,
                 JsonPayloadError::Serialize(_) => Code::Internal,
                 _ => Code::Internal,
             },
