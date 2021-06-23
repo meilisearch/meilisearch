@@ -1,0 +1,75 @@
+name: Rust
+
+on:
+  push:
+    branches: [ staging, trying ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tests:
+    name: Tests on ${{ matrix.os }} with ${{ matrix.rust }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04, macos-latest]
+        rust:
+          - stable
+          - beta
+          - nightly
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust }}
+        override: true
+    - name: Run cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --all --locked
+    - name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --locked --release
+
+  # We don't run test on Windows since we get the following error: There is not enough space on the disk.
+  check-on-windows:
+    name: Cargo check on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run cargo check without any default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --all --locked
+    - name: Run cargo check with all default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+
+  fmt:
+    name: Run Rustfmt
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
+      - name: Run cargo fmt
+        # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
+        # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
+        # we are going to create an empty file where rustfmt expects it.
+        run: |
+          echo -ne "\n" > benchmarks/benches/datasets_paths.rs
+          cargo fmt --all -- --check
