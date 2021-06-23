@@ -21,6 +21,8 @@ pub enum UpdateActorError {
     FatalUpdateStoreError,
     #[error("invalid payload: {0}")]
     InvalidPayload(Box<dyn Error + Send + Sync + 'static>),
+    #[error("payload error: {0}")]
+    PayloadError(#[from] actix_web::error::PayloadError),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateActorError {
@@ -39,7 +41,6 @@ internal_error!(
     UpdateActorError: heed::Error,
     std::io::Error,
     serde_json::Error,
-    actix_http::error::PayloadError,
     tokio::task::JoinError
 );
 
@@ -51,6 +52,12 @@ impl ErrorCode for UpdateActorError {
             UpdateActorError::IndexActor(e) => e.error_code(),
             UpdateActorError::FatalUpdateStoreError => Code::Internal,
             UpdateActorError::InvalidPayload(_) => Code::BadRequest,
+            UpdateActorError::PayloadError(error) => {
+                match error {
+                    actix_http::error::PayloadError::Overflow => Code::PayloadTooLarge,
+                    _ => Code::Internal,
+                }
+            },
         }
     }
 }
