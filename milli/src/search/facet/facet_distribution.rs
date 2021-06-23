@@ -6,7 +6,7 @@ use heed::types::{ByteSlice, Unit};
 use heed::{BytesDecode, Database};
 use roaring::RoaringBitmap;
 
-use crate::error::FieldIdMapMissingEntry;
+use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::search::facet::{FacetIter, FacetRange};
@@ -174,49 +174,64 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
         use FacetType::{Number, String};
 
-        if let Some(candidates) = self.candidates.as_ref() {
-            // Classic search, candidates were specified, we must return facet values only related
-            // to those candidates. We also enter here for facet strings for performance reasons.
-            let mut distribution = BTreeMap::new();
-            if candidates.len() <= CANDIDATES_THRESHOLD {
-                self.facet_distribution_from_documents(
-                    field_id,
-                    Number,
-                    candidates,
-                    &mut distribution,
-                )?;
-                self.facet_distribution_from_documents(
-                    field_id,
-                    String,
-                    candidates,
-                    &mut distribution,
-                )?;
-            } else {
-                self.facet_numbers_distribution_from_facet_levels(
-                    field_id,
-                    candidates,
-                    &mut distribution,
-                )?;
-                self.facet_distribution_from_documents(
-                    field_id,
-                    String,
-                    candidates,
-                    &mut distribution,
-                )?;
-            }
+        match self.candidates {
+            Some(ref candidates) => {
+                // Classic search, candidates were specified, we must return facet values only related
+                // to those candidates. We also enter here for facet strings for performance reasons.
+                let mut distribution = BTreeMap::new();
+                if candidates.len() <= CANDIDATES_THRESHOLD {
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        Number,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        String,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                } else {
+                    self.facet_numbers_distribution_from_facet_levels(
+                        field_id,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                    self.facet_distribution_from_documents(
+                        field_id,
+                        String,
+                        candidates,
+                        &mut distribution,
+                    )?;
+                }
 
-            Ok(distribution)
-        } else {
-            self.facet_values_from_raw_facet_database(field_id)
+                Ok(distribution)
+            }
+            None => self.facet_values_from_raw_facet_database(field_id),
         }
     }
 
     pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
+        let fields = match self.facets {
+            Some(ref facets) => {
+                let invalid_fields: HashSet<_> = facets.difference(&filterable_fields).collect();
+                if !invalid_fields.is_empty() {
+                    return Err(UserError::InvalidFacetsDistribution {
+                        invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
+                    }
+                    .into());
+                } else {
+                    facets.clone()
+                }
+            }
+            None => filterable_fields,
+        };
 
         let mut distribution = BTreeMap::new();
-        for name in filterable_fields {
+        for name in fields {
             let fid =
                 fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
                     field_name: name.clone(),
