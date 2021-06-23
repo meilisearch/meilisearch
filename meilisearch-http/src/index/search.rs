@@ -213,10 +213,7 @@ impl Index {
             None => None,
         };
 
-        let exhaustive_facets_count = match facets_distribution {
-            Some(_) => Some(false), // not implemented yet
-            None => None
-        };
+        let exhaustive_facets_count = facets_distribution.as_ref().map(|_| false); // not implemented yet
 
         let result = SearchResult {
             exhaustive_nb_hits: false, // not implemented yet
