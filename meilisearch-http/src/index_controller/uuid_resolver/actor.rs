@@ -1,6 +1,6 @@
 use std::{collections::HashSet, path::PathBuf};
 
-use log::{info, warn};
+use log::{trace, warn};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -19,7 +19,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
     pub async fn run(mut self) {
         use UuidResolveMsg::*;
 
-        info!("uuid resolver started");
+        trace!("uuid resolver started");
 
         loop {
             match self.inbox.recv().await {

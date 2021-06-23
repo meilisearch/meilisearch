@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::bail;
-use log::{error, info};
+use log::{error, info, trace};
 use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
@@ -47,14 +47,14 @@ where
         );
         loop {
             if let Err(e) = self.perform_snapshot().await {
-                error!("{}", e);
+                error!("Error while performing snapshot: {}", e);
             }
             sleep(self.snapshot_period).await;
         }
     }
 
     async fn perform_snapshot(&self) -> anyhow::Result<()> {
-        info!("Performing snapshot.");
+        trace!("Performing snapshot.");
 
         let snapshot_dir = self.snapshot_path.clone();
         fs::create_dir_all(&snapshot_dir).await?;
@@ -87,7 +87,7 @@ where
         })
         .await??;
 
-        info!("Created snapshot in {:?}.", snapshot_path);
+        trace!("Created snapshot in {:?}.", snapshot_path);
 
         Ok(())
     }

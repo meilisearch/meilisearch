@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
-use log::info;
+use log::{debug, info, trace};
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -201,7 +201,7 @@ impl Index {
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
-        info!("performing document addition");
+        trace!("performing document addition");
 
         // Set the primary key if not set already, ignore if already set.
         if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
@@ -215,7 +215,7 @@ impl Index {
         builder.index_documents_method(method);
 
         let indexing_callback =
-            |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step);
+            |indexing_step, update_id| debug!("update {}: {:?}", update_id, indexing_step);
 
         let gzipped = false;
         let addition = match content {
@@ -300,7 +300,7 @@ impl Index {
         }
 
         builder.execute(|indexing_step, update_id| {
-            info!("update {}: {:?}", update_id, indexing_step)
+            debug!("update {}: {:?}", update_id, indexing_step)
         })?;
 
         Ok(UpdateResult::Other)
