@@ -147,7 +147,7 @@ impl<'t> FacetNumberIter<'t> {
         field_id: FieldId,
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetNumberIter<'t>> {
-        let db = index.facet_id_f64_docids.remap_key_type::<FacetLevelValueF64Codec>();
+        let db = index.facet_id_f64_docids;
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter =
             FacetNumberRevRange::new(rtxn, db, field_id, highest_level, Unbounded, Unbounded)?;
