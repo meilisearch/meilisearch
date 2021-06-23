@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};

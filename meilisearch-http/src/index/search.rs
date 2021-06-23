@@ -233,8 +233,8 @@ impl Index {
 fn compute_matches<A: AsRef<[u8]>>(
     matcher: &impl Matcher,
     document: &Document,
-    analyzer: &Analyzer<A>
-    ) -> MatchesInfo {
+    analyzer: &Analyzer<A>,
+) -> MatchesInfo {
     let mut matches = BTreeMap::new();
 
     for (key, value) in document {
@@ -1174,6 +1174,9 @@ mod test {
         let analyzer = Analyzer::new(config);
 
         let matches = compute_matches(&matcher, &value, &analyzer);
-        assert_eq!(format!("{:?}", matches), r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##);
+        assert_eq!(
+            format!("{:?}", matches),
+            r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##
+        );
     }
 }

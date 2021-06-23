@@ -24,8 +24,8 @@ use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
 
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::option::Opt;
-use error::Result;
 use crate::Payload;
+use error::Result;
 
 use self::dump_actor::load_dump;
 use self::error::IndexControllerError;

@@ -137,7 +137,10 @@ where
                     .open(&path)
                     .await?;
 
-                async fn write_to_file<D>(file: &mut fs::File, mut payload: mpsc::Receiver<PayloadData<D>>) -> Result<usize>
+                async fn write_to_file<D>(
+                    file: &mut fs::File,
+                    mut payload: mpsc::Receiver<PayloadData<D>>,
+                ) -> Result<usize>
                 where
                     D: AsRef<[u8]> + Sized + 'static,
                 {
@@ -160,7 +163,7 @@ where
                     }
                     Err(e) => {
                         fs::remove_file(&path).await?;
-                        return Err(e)
+                        return Err(e);
                     }
                     _ => {
                         fs::remove_file(&path).await?;

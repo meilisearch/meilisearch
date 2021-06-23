@@ -10,13 +10,19 @@ pub mod routes;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 
-use std::{pin::Pin, task::{Context, Poll}};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 pub use self::data::Data;
-use futures::{Stream, future::{Ready, ready}};
+use futures::{
+    future::{ready, Ready},
+    Stream,
+};
 pub use option::Opt;
 
-use actix_web::{FromRequest, HttpRequest, dev, error::PayloadError, web};
+use actix_web::{dev, error::PayloadError, web, FromRequest, HttpRequest};
 
 pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
     let http_payload_size_limit = data.http_payload_size_limit();
@@ -40,12 +46,12 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
     use actix_web_static_files::Resource;
     use actix_web::HttpResponse;
 
-    mod dashboard {
+    mod generated {
         include!(concat!(env!("OUT_DIR"), "/generated.rs"));
     }
 
     if enable_frontend {
-        let generated = dashboard::generate();
+        let generated = generated::generate();
             let mut scope = web::scope("/");
             // Generate routes for mini-dashboard assets
             for (path, resource) in generated.into_iter() {
@@ -80,7 +86,7 @@ macro_rules! create_app {
         use actix_web::App;
         use actix_web::{middleware, web};
         use meilisearch_http::routes::*;
-        use meilisearch_http::{dashboard, configure_data};
+        use meilisearch_http::{configure_data, dashboard};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone()))
@@ -95,15 +101,17 @@ macro_rules! create_app {
             .configure(|s| dashboard(s, $enable_frontend))
             .wrap(
                 Cors::default()
-                .send_wildcard()
-                .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                .allow_any_origin()
-                .allow_any_method()
-                .max_age(86_400), // 24h
+                    .send_wildcard()
+                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .max_age(86_400), // 24h
             )
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
-            .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim))
+            .wrap(middleware::NormalizePath::new(
+                middleware::TrailingSlash::Trim,
+            ))
     }};
 }
 
@@ -117,12 +125,14 @@ pub struct PayloadConfig {
 }
 
 impl PayloadConfig {
-    pub fn new(limit: usize) -> Self { Self { limit } }
+    pub fn new(limit: usize) -> Self {
+        Self { limit }
+    }
 }
 
 impl Default for PayloadConfig {
     fn default() -> Self {
-        Self { limit: 256 * 1024  }
+        Self { limit: 256 * 1024 }
     }
 }
 
@@ -135,8 +145,14 @@ impl FromRequest for Payload {
 
     #[inline]
     fn from_request(req: &HttpRequest, payload: &mut dev::Payload) -> Self::Future {
-        let limit = req.app_data::<PayloadConfig>().map(|c| c.limit).unwrap_or(Self::Config::default().limit);
-        ready(Ok(Payload { payload: payload.take(), limit }))
+        let limit = req
+            .app_data::<PayloadConfig>()
+            .map(|c| c.limit)
+            .unwrap_or(Self::Config::default().limit);
+        ready(Ok(Payload {
+            payload: payload.take(),
+            limit,
+        }))
     }
 }
 
@@ -146,19 +162,15 @@ impl Stream for Payload {
     #[inline]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.payload).poll_next(cx) {
-            Poll::Ready(Some(result)) => {
-                match result {
-                    Ok(bytes) => {
-                        match self.limit.checked_sub(bytes.len()) {
-                            Some(new_limit) => {
-                                self.limit = new_limit;
-                                Poll::Ready(Some(Ok(bytes)))
-                            }
-                            None => Poll::Ready(Some(Err(PayloadError::Overflow))),
-                        }
+            Poll::Ready(Some(result)) => match result {
+                Ok(bytes) => match self.limit.checked_sub(bytes.len()) {
+                    Some(new_limit) => {
+                        self.limit = new_limit;
+                        Poll::Ready(Some(Ok(bytes)))
                     }
-                    x => Poll::Ready(Some(x)),
-                }
+                    None => Poll::Ready(Some(Err(PayloadError::Overflow))),
+                },
+                x => Poll::Ready(Some(x)),
             },
             otherwise => otherwise,
         }

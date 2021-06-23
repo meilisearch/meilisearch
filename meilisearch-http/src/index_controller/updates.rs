@@ -3,7 +3,10 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::ResponseError, index::{Settings, Unchecked}};
+use crate::{
+    error::ResponseError,
+    index::{Settings, Unchecked},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {

@@ -52,11 +52,9 @@ impl ErrorCode for UpdateActorError {
             UpdateActorError::IndexActor(e) => e.error_code(),
             UpdateActorError::FatalUpdateStoreError => Code::Internal,
             UpdateActorError::InvalidPayload(_) => Code::BadRequest,
-            UpdateActorError::PayloadError(error) => {
-                match error {
-                    actix_http::error::PayloadError::Overflow => Code::PayloadTooLarge,
-                    _ => Code::Internal,
-                }
+            UpdateActorError::PayloadError(error) => match error {
+                actix_http::error::PayloadError::Overflow => Code::PayloadTooLarge,
+                _ => Code::Internal,
             },
         }
     }
