@@ -836,6 +836,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use heed::EnvOpenOptions;
 
     use super::*;
@@ -1257,5 +1259,44 @@ mod tests {
         assert_eq!(result.documents_ids, vec![2]);
 
         drop(rtxn);
+    }
+
+    #[test]
+    fn simple_documents_replace() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with an id for only one of them.
+        let mut wtxn = index.write_txn().unwrap();
+        let documents = &r#"[
+          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5 },
+          { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
+          { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
+          { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
+          { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
+          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
+        builder.execute(Cursor::new(documents), |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
+        let documents = &r#"[
+          {
+            "id": 2,
+            "author": "J. Austen",
+            "date": "1813"
+          }
+        ]"#[..];
+
+        builder.execute(Cursor::new(documents), |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
     }
 }
