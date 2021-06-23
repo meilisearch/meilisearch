@@ -9,7 +9,7 @@ use roaring::RoaringBitmap;
 use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
-use crate::search::facet::{FacetIter, FacetRange};
+use crate::search::facet::{FacetNumberIter, FacetNumberRange};
 use crate::{DocumentId, FieldId, Index, Result};
 
 /// The default number of values by facets that will
@@ -118,7 +118,7 @@ impl<'a> FacetDistribution<'a> {
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
         let iter =
-            FacetIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
+            FacetNumberIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
 
         for result in iter {
             let (value, mut docids) = result?;
@@ -143,7 +143,7 @@ impl<'a> FacetDistribution<'a> {
         let mut distribution = BTreeMap::new();
 
         let db = self.index.facet_id_f64_docids;
-        let range = FacetRange::new(self.rtxn, db, field_id, 0, Unbounded, Unbounded)?;
+        let range = FacetNumberRange::new(self.rtxn, db, field_id, 0, Unbounded, Unbounded)?;
 
         for result in range {
             let ((_, _, value, _), docids) = result?;

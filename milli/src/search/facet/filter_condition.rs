@@ -15,7 +15,7 @@ use roaring::RoaringBitmap;
 use self::FilterCondition::*;
 use self::Operator::*;
 use super::parser::{FilterParser, Rule, PREC_CLIMBER};
-use super::FacetRange;
+use super::FacetNumberRange;
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetValueStringCodec};
 use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
@@ -282,7 +282,7 @@ impl FilterCondition {
 
         // We must create a custom iterator to be able to iterate over the
         // requested range as the range iterator cannot express some conditions.
-        let iter = FacetRange::new(rtxn, db, field_id, level, left, right)?;
+        let iter = FacetNumberRange::new(rtxn, db, field_id, level, left, right)?;
 
         debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
 

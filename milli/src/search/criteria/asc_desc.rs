@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
-use crate::search::facet::FacetIter;
+use crate::search::facet::FacetNumberIter;
 use crate::search::query_tree::Operation;
 use crate::{FieldId, Index, Result};
 
@@ -172,8 +172,11 @@ fn facet_ordered<'t>(
         let iter = iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
         Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
     } else {
-        let facet_fn =
-            if ascending { FacetIter::new_reducing } else { FacetIter::new_reverse_reducing };
+        let facet_fn = if ascending {
+            FacetNumberIter::new_reducing
+        } else {
+            FacetNumberIter::new_reverse_reducing
+        };
         let iter = facet_fn(rtxn, index, field_id, candidates)?;
         Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
     }
