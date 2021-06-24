@@ -9,14 +9,11 @@ use crate::error::ResponseError;
 use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
-use crate::extractors::authentication::{Policies, AuthConfig, Public, GuardedData};
+use crate::extractors::authentication::{GuardedData, policies::*};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    let mut policies = Policies::new();
-    policies.insert(Public::new());
     cfg.service(
         web::resource("/indexes/{index_uid}/search")
-            .app_data(AuthConfig::Auth(policies))
             .route(web::get().to(search_with_url_query))
             .route(web::post().to(search_with_post)),
     );
@@ -81,7 +78,7 @@ impl From<SearchQueryGet> for SearchQuery {
 }
 
 async fn search_with_url_query(
-    data: GuardedData<Public, Data>,
+    data: GuardedData<Admin, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {

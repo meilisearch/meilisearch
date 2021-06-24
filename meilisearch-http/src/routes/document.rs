@@ -1,14 +1,12 @@
-use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
-use indexmap::IndexMap;
-use log::{debug, error};
+use log::debug;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
-use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -17,7 +15,6 @@ const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
 
 macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
-        #[allow(dead_code)]
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
             if let Some(content_type) = head.headers.get("Content-Type") {
                 content_type
@@ -33,8 +30,6 @@ macro_rules! guard_content_type {
 
 guard_content_type!(guard_json, "application/json");
 
-type Document = IndexMap<String, Value>;
-
 #[derive(Deserialize)]
 struct DocumentParam {
     index_uid: String,
@@ -42,21 +37,26 @@ struct DocumentParam {
 }
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_document)
-        .service(delete_document)
-        .service(get_all_documents)
-        .service(add_documents)
-        .service(update_documents)
-        .service(delete_documents)
-        .service(clear_all_documents);
+    cfg.service(
+        web::resource("/indexes/{index_uid}/documents")
+            .route(web::get().to(get_all_documents))
+            .route(web::post().guard(guard_json).to(add_documents))
+            .route(web::put().guard(guard_json).to(update_documents))
+            .route(web::delete().to(clear_all_documents)),
+    )
+    .service(
+        web::scope("/indexes/{index_uid}/documents/")
+            .service(
+                web::resource("{document_id}")
+                    .route(web::get().to(get_document))
+                    .route(web::delete().to(delete_document)),
+            )
+            .route("/delete-batch", web::post().to(delete_documents)),
+    );
 }
 
-#[get(
-    "/indexes/{index_uid}/documents/{document_id}",
-    wrap = "Authentication::Public"
-)]
 async fn get_document(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
@@ -68,12 +68,8 @@ async fn get_document(
     Ok(HttpResponse::Ok().json(document))
 }
 
-#[delete(
-    "/indexes/{index_uid}/documents/{document_id}",
-    wrap = "Authentication::Private"
-)]
 async fn delete_document(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update_status = data
@@ -91,9 +87,8 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
-#[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
 async fn get_all_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -129,9 +124,8 @@ struct UpdateDocumentsQuery {
 
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
-#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -151,33 +145,8 @@ async fn add_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-/// Default route for adding documents, this should return an error and redirect to the documentation
-#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
-async fn add_documents_default(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _params: web::Query<UpdateDocumentsQuery>,
-    _body: web::Json<Vec<Document>>,
-) -> Result<HttpResponse, ResponseError> {
-    error!("Unknown document type");
-    todo!()
-}
-
-/// Default route for adding documents, this should return an error and redirect to the documentation
-#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
-async fn update_documents_default(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _params: web::Query<UpdateDocumentsQuery>,
-    _body: web::Json<Vec<Document>>,
-) -> Result<HttpResponse, ResponseError> {
-    error!("Unknown document type");
-    todo!()
-}
-
-#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn update_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -197,12 +166,8 @@ async fn update_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
 }
 
-#[post(
-    "/indexes/{index_uid}/documents/delete-batch",
-    wrap = "Authentication::Private"
-)]
 async fn delete_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -221,10 +186,8 @@ async fn delete_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-/// delete all documents
-#[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update_status = data.clear_documents(path.index_uid.clone()).await?;
