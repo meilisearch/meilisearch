@@ -7,15 +7,15 @@ pub type Result<T> = std::result::Result<T, DumpActorError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DumpActorError {
-    #[error("dump already running")]
+    #[error("Another dump is already in progress")]
     DumpAlreadyRunning,
-    #[error("dump `{0}` does not exist")]
+    #[error("Dump `{0}` not found")]
     DumpDoesNotExist(String),
-    #[error("internal error: {0}")]
+    #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("error while dumping uuids: {0}")]
+    #[error("{0}")]
     UuidResolver(#[from] UuidResolverError),
-    #[error("error while dumping updates: {0}")]
+    #[error("{0}")]
     UpdateActor(#[from] UpdateActorError),
 }
 

@@ -9,11 +9,11 @@ pub type Result<T> = std::result::Result<T, IndexError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
-    #[error("internal error: {0}")]
+    #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
-    #[error("document with id {0} not found.")]
+    #[error("Document with id {0} not found.")]
     DocumentNotFound(String),
-    #[error("error with facet: {0}")]
+    #[error("{0}")]
     Facet(#[from] FacetError),
     #[error("{0}")]
     Milli(#[from] milli::Error),
@@ -39,7 +39,7 @@ impl ErrorCode for IndexError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum FacetError {
-    #[error("invalid facet expression, expected {}, found: {1}", .0.join(", "))]
+    #[error("Invalid facet expression, expected {}, found: {1}", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
 }
 
