@@ -5,7 +5,7 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.route("/keys", web::get().to(list));
+    cfg.service(web::resource("/keys").route(web::get().to(list)));
 }
 
 #[derive(Serialize)]

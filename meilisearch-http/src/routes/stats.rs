@@ -8,9 +8,9 @@ use crate::routes::IndexParam;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.route("/indexes/{index_uid}/stats", web::get().to(get_index_stats))
-        .route("/stats", web::get().to(get_stats))
-        .route("/version", web::get().to(get_version));
+    cfg.service(web::resource("/indexes/{index_uid}/stats").route(web::get().to(get_index_stats)))
+        .service(web::resource("/stats").route(web::get().to(get_stats)))
+        .service(web::resource("/version").route(web::get().to(get_version)));
 }
 
 async fn get_index_stats(
