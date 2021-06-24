@@ -1,7 +1,7 @@
-use actix_web::{delete, get, post, web, HttpResponse};
 use log::debug;
+use actix_web::{web, HttpResponse};
 
-use crate::helpers::Authentication;
+use crate::extractors::authentication::{GuardedData, policies::*};
 use crate::index::Settings;
 use crate::Data;
 use crate::{error::ResponseError, index::Unchecked};
@@ -11,16 +11,15 @@ macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
         mod $attr {
             use log::debug;
-            use actix_web::{web, HttpResponse};
+            use actix_web::{web, HttpResponse, Resource};
 
             use crate::data;
             use crate::error::ResponseError;
-            use crate::helpers::Authentication;
             use crate::index::Settings;
+            use crate::extractors::authentication::{GuardedData, policies::*};
 
-            #[actix_web::delete($route, wrap = "Authentication::Private")]
-            pub async fn delete(
-                data: web::Data<data::Data>,
+            async fn delete(
+                data: GuardedData<Private, data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
                 use crate::index::Settings;
@@ -33,9 +32,8 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            #[actix_web::post($route, wrap = "Authentication::Private")]
-            pub async fn update(
-                data: actix_web::web::Data<data::Data>,
+            async fn update(
+                data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -49,9 +47,8 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            #[actix_web::get($route, wrap = "Authentication::Private")]
-            pub async fn get(
-                data: actix_web::web::Data<data::Data>,
+            async fn get(
+                data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let settings = data.settings(index_uid.into_inner()).await?;
@@ -59,6 +56,13 @@ macro_rules! make_setting_route {
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
                 Ok(HttpResponse::Ok().json(val))
+            }
+
+            pub fn resources() -> Resource {
+                Resource::new($route)
+                    .route(web::get().to(get))
+                    .route(web::post().to(update))
+                    .route(web::delete().to(delete))
             }
         }
     };
@@ -117,14 +121,11 @@ macro_rules! create_services {
     ($($mod:ident),*) => {
         pub fn services(cfg: &mut web::ServiceConfig) {
             cfg
-                .service(update_all)
-                .service(get_all)
-                .service(delete_all)
-                $(
-                    .service($mod::get)
-                    .service($mod::update)
-                    .service($mod::delete)
-                )*;
+                .service(web::resource("/indexes/{index_uid}/settings")
+                    .route(web::post().to(update_all))
+                    .route(web::get().to(get_all))
+                    .route(web::delete().to(delete_all)))
+                $(.service($mod::resources()))*;
         }
     };
 }
@@ -139,9 +140,8 @@ create_services!(
     ranking_rules
 );
 
-#[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn update_all(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -154,9 +154,8 @@ async fn update_all(
     Ok(HttpResponse::Accepted().json(json))
 }
 
-#[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn get_all(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = data.settings(index_uid.into_inner()).await?;
@@ -164,9 +163,8 @@ async fn get_all(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-#[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
