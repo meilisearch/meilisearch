@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use async_stream::stream;
 use futures::StreamExt;
-use log::info;
+use log::{trace};
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -61,7 +61,7 @@ where
     pub async fn run(mut self) {
         use UpdateMsg::*;
 
-        info!("Started update actor.");
+        trace!("Started update actor.");
 
         let mut inbox = self
             .inbox

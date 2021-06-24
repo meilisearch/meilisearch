@@ -91,5 +91,6 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         snapshot_interval_sec: 0,
         import_dump: None,
         indexer_options: IndexerOpts::default(),
+        log_level: "off".into(),
     }
 }

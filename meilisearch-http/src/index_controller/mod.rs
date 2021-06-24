@@ -55,7 +55,7 @@ pub struct IndexSettings {
     pub primary_key: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexStats {
     #[serde(skip)]
@@ -76,7 +76,7 @@ pub struct IndexController {
     dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub database_size: u64,

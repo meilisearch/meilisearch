@@ -33,7 +33,7 @@ pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQuery {
     pub q: Option<String>,
@@ -62,7 +62,7 @@ pub struct SearchHit {
     pub matches_info: Option<MatchesInfo>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,

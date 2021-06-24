@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use actix_web::{get, post, web, HttpResponse};
+use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -78,8 +79,10 @@ async fn search_with_url_query(
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     let query = params.into_inner().into();
     let search_result = data.search(path.into_inner().index_uid, query).await?;
+    debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -89,8 +92,10 @@ async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("search called with params: {:?}", params);
     let search_result = data
         .search(path.into_inner().index_uid, params.into_inner())
         .await?;
+    debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }

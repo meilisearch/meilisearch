@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use log::{info, warn};
+use log::{info, trace, warn};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
@@ -164,7 +164,7 @@ where
     P: UpdateActorHandle + Send + Sync + Clone + 'static,
 {
     async fn run(self) -> Result<()> {
-        info!("Performing dump.");
+        trace!("Performing dump.");
 
         create_dir_all(&self.path).await?;
 

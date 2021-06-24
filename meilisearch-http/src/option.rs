@@ -188,6 +188,10 @@ pub struct Opt {
     #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
+    /// Set the log level
+    #[structopt(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
+    pub log_level: String,
+
     #[structopt(skip)]
     pub indexer_options: IndexerOpts,
 }

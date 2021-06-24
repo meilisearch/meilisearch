@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_stream::stream;
 use chrono::Utc;
 use futures::{lock::Mutex, stream::StreamExt};
-use log::{error, info};
+use log::{error, trace};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use update_actor::UpdateActorHandle;
 use uuid_resolver::UuidResolverHandle;
@@ -60,7 +60,7 @@ where
     }
 
     pub async fn run(mut self) {
-        info!("Started dump actor.");
+        trace!("Started dump actor.");
 
         let mut inbox = self
             .inbox
@@ -135,7 +135,7 @@ where
         match task_result {
             Ok(Ok(())) => {
                 dump_infos.done();
-                info!("Dump succeed");
+                trace!("Dump succeed");
             }
             Ok(Err(e)) => {
                 dump_infos.with_error(e.to_string());

@@ -1,6 +1,7 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use super::{IndexParam, UpdateStatusResponse};
@@ -21,6 +22,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let indexes = data.list_indexes().await?;
+    debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))
 }
 
@@ -30,6 +32,7 @@ async fn get_index(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let meta = data.index(path.index_uid.clone()).await?;
+    debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
@@ -45,8 +48,10 @@ async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", body);
     let body = body.into_inner();
     let meta = data.create_index(body.uid, body.primary_key).await?;
+    debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
@@ -73,10 +78,12 @@ async fn update_index(
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", body);
     let body = body.into_inner();
     let meta = data
         .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
         .await?;
+    debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
@@ -108,6 +115,7 @@ async fn get_update_status(
         .get_update_status(params.index_uid, params.update_id)
         .await?;
     let meta = UpdateStatusResponse::from(meta);
+    debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
@@ -122,5 +130,6 @@ async fn get_all_updates_status(
         .map(UpdateStatusResponse::from)
         .collect::<Vec<_>>();
 
+    debug!("returns: {:?}", metas);
     Ok(HttpResponse::Ok().json(metas))
 }
