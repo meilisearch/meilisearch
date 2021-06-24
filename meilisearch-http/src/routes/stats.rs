@@ -3,7 +3,7 @@ use actix_web::{web, HttpResponse};
 use serde::Serialize;
 
 use crate::error::ResponseError;
-use crate::extractors::authentication::{GuardedData, policies::*};
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
 use crate::Data;
 

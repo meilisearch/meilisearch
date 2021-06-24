@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse};
 use serde::Serialize;
 
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::Data;
-use crate::extractors::authentication::{GuardedData, policies::*};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.route("/keys", web::get().to(list));

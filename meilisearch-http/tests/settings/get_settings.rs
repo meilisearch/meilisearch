@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::common::Server;
 
@@ -11,7 +11,10 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     map.insert("searchable_attributes", json!(["*"]));
     map.insert("filterable_attributes", json!([]));
     map.insert("distinct_attribute", json!(Value::Null));
-    map.insert("ranking_rules", json!(["words", "typo", "proximity", "attribute", "exactness"]));
+    map.insert(
+        "ranking_rules",
+        json!(["words", "typo", "proximity", "attribute", "exactness"]),
+    );
     map.insert("stop_words", json!([]));
     map.insert("synonyms", json!({}));
     map

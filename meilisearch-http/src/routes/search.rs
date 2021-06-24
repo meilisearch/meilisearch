@@ -6,10 +6,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
-use crate::extractors::authentication::{GuardedData, policies::*};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(

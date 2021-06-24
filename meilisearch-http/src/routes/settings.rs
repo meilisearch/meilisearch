@@ -1,7 +1,7 @@
 use log::debug;
 use actix_web::{web, HttpResponse};
 
-use crate::extractors::authentication::{GuardedData, policies::*};
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::Settings;
 use crate::Data;
 use crate::{error::ResponseError, index::Unchecked};
