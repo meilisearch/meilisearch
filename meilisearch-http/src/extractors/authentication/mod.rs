@@ -1,3 +1,5 @@
+mod error;
+
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -7,7 +9,8 @@ use actix_web::FromRequest;
 use futures::future::err;
 use futures::future::{ok, Ready};
 
-use crate::error::{AuthenticationError, ResponseError};
+use crate::error::ResponseError;
+use error::AuthenticationError;
 
 macro_rules! create_policies {
     ($($name:ident), *) => {
@@ -151,7 +154,7 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                         data,
                         _marker: PhantomData,
                     }),
-                    None => todo!("Data not configured"),
+                    None => err(AuthenticationError::IrretrievableState.into()),
                 },
                 AuthConfig::Auth(policies) => match policies.get::<P>() {
                     Some(policy) => match req.headers().get("x-meili-api-key") {
@@ -162,7 +165,7 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                                         data,
                                         _marker: PhantomData,
                                     }),
-                                    None => todo!("Data not configured"),
+                                    None => err(AuthenticationError::IrretrievableState.into()),
                                 }
                             } else {
                                 err(AuthenticationError::InvalidToken(String::from("hello")).into())
@@ -170,10 +173,10 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                         }
                         None => err(AuthenticationError::MissingAuthorizationHeader.into()),
                     },
-                    None => todo!("no policy found"),
+                    None => err(AuthenticationError::UnknownPolicy.into()),
                 },
             },
-            None => todo!(),
+            None => err(AuthenticationError::IrretrievableState.into()),
         }
     }
 }
