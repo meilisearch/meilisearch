@@ -16,7 +16,7 @@ macro_rules! create_policies {
             use crate::extractors::authentication::Policy;
 
             $(
-                #[derive(Debug)]
+                #[derive(Debug, Default)]
                 pub struct $name {
                     inner: HashSet<Vec<u8>>
                 }
