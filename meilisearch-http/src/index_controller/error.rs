@@ -12,24 +12,24 @@ pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexControllerError {
-    #[error("missing index uid")]
+    #[error("Index creation must have an uid")]
     MissingUid,
-    #[error("index resolution error: {0}")]
+    #[error("{0}")]
     Uuid(#[from] UuidResolverError),
-    #[error("error with index: {0}")]
+    #[error("{0}")]
     IndexActor(#[from] IndexActorError),
-    #[error("error with update: {0}")]
+    #[error("{0}")]
     UpdateActor(#[from] UpdateActorError),
-    #[error("error with dump: {0}")]
+    #[error("{0}")]
     DumpActor(#[from] DumpActorError),
-    #[error("error with index: {0}")]
+    #[error("{0}")]
     IndexError(#[from] IndexError),
 }
 
 impl ErrorCode for IndexControllerError {
     fn error_code(&self) -> Code {
         match self {
-            IndexControllerError::MissingUid => Code::InvalidIndexUid,
+            IndexControllerError::MissingUid => Code::BadRequest,
             IndexControllerError::Uuid(e) => e.error_code(),
             IndexControllerError::IndexActor(e) => e.error_code(),
             IndexControllerError::UpdateActor(e) => e.error_code(),

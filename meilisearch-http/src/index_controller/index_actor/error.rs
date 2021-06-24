@@ -6,15 +6,15 @@ pub type Result<T> = std::result::Result<T, IndexActorError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum IndexActorError {
-    #[error("index error: {0}")]
+    #[error("{0}")]
     IndexError(#[from] IndexError),
-    #[error("index already exists")]
+    #[error("Index already exists")]
     IndexAlreadyExists,
-    #[error("index doesn't exists")]
+    #[error("Index not found")]
     UnexistingIndex,
-    #[error("existing primary key")]
+    #[error("A primary key is already present. It's impossible to update it")]
     ExistingPrimaryKey,
-    #[error("internal Index Error: {0}")]
+    #[error("Internal Error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
     Milli(#[from] milli::Error),

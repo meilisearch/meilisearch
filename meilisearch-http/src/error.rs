@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
-    #[error("you must have an authorization token")]
+    #[error("You must have an authorization token")]
     MissingAuthorizationHeader,
-    #[error("invalid API key")]
+    #[error("Invalid API key")]
     InvalidToken(String),
 }
 

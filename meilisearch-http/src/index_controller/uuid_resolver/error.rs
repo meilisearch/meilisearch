@@ -4,13 +4,13 @@ pub type Result<T> = std::result::Result<T, UuidResolverError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum UuidResolverError {
-    #[error("name already exist.")]
+    #[error("Index already exists.")]
     NameAlreadyExist,
-    #[error("index \"{0}\" doesn't exist.")]
+    #[error("Index \"{0}\" not found.")]
     UnexistingIndex(String),
-    #[error("badly formatted index uid: {0}")]
+    #[error("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")]
     BadlyFormatted(String),
-    #[error("internal error resolving index uid: {0}")]
+    #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Sync + Send + 'static>),
 }
 

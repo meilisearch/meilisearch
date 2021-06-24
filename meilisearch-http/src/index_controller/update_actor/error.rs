@@ -9,19 +9,19 @@ pub type Result<T> = std::result::Result<T, UpdateActorError>;
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::large_enum_variant)]
 pub enum UpdateActorError {
-    #[error("update {0} doesn't exist.")]
+    #[error("Update {0} not found.")]
     UnexistingUpdate(u64),
-    #[error("internal error processing update: {0}")]
+    #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
-    #[error("error with index: {0}")]
+    #[error("{0}")]
     IndexActor(#[from] IndexActorError),
     #[error(
         "update store was shut down due to a fatal error, please check your logs for more info."
     )]
     FatalUpdateStoreError,
-    #[error("invalid payload: {0}")]
+    #[error("{0}")]
     InvalidPayload(Box<dyn Error + Send + Sync + 'static>),
-    #[error("payload error: {0}")]
+    #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
 }
 
