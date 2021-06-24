@@ -119,6 +119,7 @@ impl ErrorCode for MilliError<'_> {
                     UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
                     UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
+                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                 }
             }
         }

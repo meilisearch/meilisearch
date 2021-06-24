@@ -51,7 +51,7 @@ main_error = "0.1.0"
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.3" }
 memmap = "0.7.0"
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.5.0" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.6.0" }
 mime = "0.3.16"
 once_cell = "1.5.2"
 oxidized-json-checker = "0.3.2"
