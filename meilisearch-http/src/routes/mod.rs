@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use actix_web::{get, HttpResponse};
+use actix_web::HttpResponse;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -220,7 +220,6 @@ impl IndexUpdateResponse {
 ///     "status": "Meilisearch is running"
 /// }
 /// ```
-#[get("/")]
 pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }

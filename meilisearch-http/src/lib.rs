@@ -88,13 +88,13 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
             }
             config.service(scope);
     } else {
-        config.service(routes::running);
+        config.route("/", web::get().to(routes::running));
     }
 }
 
 #[cfg(not(feature = "mini-dashboard"))]
 pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
-    config.service(routes::running);
+    config.route("/", web::get().to(routes::running));
 }
 
 #[macro_export]
