@@ -44,14 +44,15 @@ pub fn services(cfg: &mut web::ServiceConfig) {
             .route(web::put().guard(guard_json).to(update_documents))
             .route(web::delete().to(clear_all_documents)),
     )
+    // this route needs to be before the /documents/{document_id} to match properly
+    .route(
+        "/indexes/{index_uid}/documents/delete-batch",
+        web::post().to(delete_documents),
+    )
     .service(
-        web::scope("/indexes/{index_uid}/documents/")
-            .service(
-                web::resource("{document_id}")
-                    .route(web::get().to(get_document))
-                    .route(web::delete().to(delete_document)),
-            )
-            .route("/delete-batch", web::post().to(delete_documents)),
+        web::resource("/indexes/{index_uid}/documents/{document_id}")
+            .route(web::get().to(get_document))
+            .route(web::delete().to(delete_document)),
     );
 }
 

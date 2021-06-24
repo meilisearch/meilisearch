@@ -14,8 +14,8 @@ async fn delete_one_unexisting_document() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
-    let (_response, code) = index.delete_document(0).await;
-    assert_eq!(code, 202);
+    let (response, code) = index.delete_document(0).await;
+    assert_eq!(code, 202, "{}", response);
     let update = index.wait_update_id(0).await;
     assert_eq!(update["status"], "processed");
 }
@@ -85,8 +85,8 @@ async fn clear_all_documents_empty_index() {
 #[actix_rt::test]
 async fn delete_batch_unexisting_index() {
     let server = Server::new().await;
-    let (_response, code) = server.index("test").delete_batch(vec![]).await;
-    assert_eq!(code, 404);
+    let (response, code) = server.index("test").delete_batch(vec![]).await;
+    assert_eq!(code, 404, "{}", response);
 }
 
 #[actix_rt::test]
