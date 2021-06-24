@@ -1,37 +1,43 @@
-use std::collections::{HashMap, HashSet};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::any::{Any, TypeId};
 
 use actix_web::FromRequest;
 use futures::future::err;
-use futures::future::{Ready, ok};
+use futures::future::{ok, Ready};
 
 use crate::error::{AuthenticationError, ResponseError};
 
 macro_rules! create_policies {
     ($($name:ident), *) => {
-        $(
-            pub struct $name {
-                inner: HashSet<Vec<u8>>
-            }
+        pub mod policies {
+            use std::collections::HashSet;
+            use crate::extractors::authentication::Policy;
 
-            impl $name {
-                pub fn new() -> Self {
-                    Self { inner: HashSet::new() }
+            $(
+                #[derive(Debug)]
+                pub struct $name {
+                    inner: HashSet<Vec<u8>>
                 }
 
-                pub fn add(&mut self, token: Vec<u8>) {
-                    self.inner.insert(token);
-                }
-            }
+                impl $name {
+                    pub fn new() -> Self {
+                        Self { inner: HashSet::new() }
+                    }
 
-            impl Policy for $name {
-                fn authenticate(&self, token: &[u8]) -> bool {
-                    self.inner.contains(token)
+                    pub fn add(&mut self, token: Vec<u8>) {
+                        &mut self.inner.insert(token);
+                    }
                 }
-            }
-        )*
+
+                impl Policy for $name {
+                    fn authenticate(&self, token: &[u8]) -> bool {
+                        self.inner.contains(token)
+                    }
+                }
+            )*
+        }
     };
 }
 
@@ -41,7 +47,7 @@ create_policies!(Public, Private, Admin);
 macro_rules! init_policies {
     ($($name:ident), *) => {
         {
-            let mut policies = Policies::new();
+            let mut policies = crate::extractors::authentication::Policies::new();
             $(
                 let policy = $name::new();
                 policies.insert(policy);
@@ -53,11 +59,11 @@ macro_rules! init_policies {
 
 /// Adds user to all specified policies.
 macro_rules! create_users {
-    ($policies:ident, $($user:literal => { $($policy:ty), * }), *) => {
+    ($policies:ident, $($user:expr => { $($policy:ty), * }), *) => {
         {
             $(
                 $(
-                    $policies.get_mut::<$policy>().map(|p| p.add($user.to_owned()))
+                    $policies.get_mut::<$policy>().map(|p| p.add($user.to_owned()));
                 )*
             )*
         }
@@ -81,13 +87,16 @@ pub trait Policy {
     fn authenticate(&self, token: &[u8]) -> bool;
 }
 
+#[derive(Debug)]
 pub struct Policies {
     inner: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl Policies {
     pub fn new() -> Self {
-        Self { inner: HashMap::new() }
+        Self {
+            inner: HashMap::new(),
+        }
     }
 
     pub fn insert<S: Policy + 'static>(&mut self, policy: S) {
@@ -101,7 +110,8 @@ impl Policies {
     }
 
     pub fn get_mut<S: Policy + 'static>(&mut self) -> Option<&mut S> {
-        self.inner.get_mut(&TypeId::of::<S>())
+        self.inner
+            .get_mut(&TypeId::of::<S>())
             .and_then(|p| p.downcast_mut::<S>())
     }
 }

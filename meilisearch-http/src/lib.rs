@@ -1,6 +1,7 @@
 pub mod data;
 #[macro_use]
 pub mod error;
+#[macro_use]
 pub mod extractors;
 pub mod helpers;
 mod index;
@@ -11,17 +12,21 @@ pub mod routes;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 
+use crate::extractors::authentication::AuthConfig;
+
 pub use self::data::Data;
 pub use option::Opt;
 
 use actix_web::web;
 
 use extractors::payload::PayloadConfig;
+use extractors::authentication::policies::*;
 
 pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
     let http_payload_size_limit = data.http_payload_size_limit();
     config
-        .data(data)
+        .data(data.clone())
+        .app_data(data)
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)
@@ -35,8 +40,24 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
         );
 }
 
-pub fn configure_auth(config: &mut web::ServiceConfig, opt: &Options) {
-    todo!()
+pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
+    let keys = data.api_keys();
+    let auth_config = if let Some(ref master_key) =  keys.master {
+        let private_key = keys.private.as_ref().unwrap();
+        let public_key = keys.public.as_ref().unwrap();
+        let mut policies = init_policies!(Public, Private, Admin);
+        create_users!(
+            policies,
+            master_key.as_bytes() => { Admin, Private, Public },
+            private_key.as_bytes() => { Private, Public },
+            public_key.as_bytes() => { Public }
+        );
+        AuthConfig::Auth(policies)
+    } else {
+        AuthConfig::NoAuth
+    };
+
+    config.app_data(auth_config);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -84,10 +105,11 @@ macro_rules! create_app {
         use actix_web::App;
         use actix_web::{middleware, web};
         use meilisearch_http::routes::*;
-        use meilisearch_http::{configure_data, dashboard};
+        use meilisearch_http::{configure_data, dashboard, configure_auth};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone()))
+            .configure(|s| configure_auth(s, &$data))
             .configure(document::services)
             .configure(index::services)
             .configure(search::services)
