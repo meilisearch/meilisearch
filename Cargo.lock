@@ -1631,6 +1631,7 @@ dependencies = [
  "milli",
  "mime",
  "mockall",
+ "num_cpus",
  "obkv",
  "once_cell",
  "oxidized-json-checker",

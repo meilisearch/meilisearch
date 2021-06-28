@@ -23,7 +23,7 @@ pub struct UpdateHandler {
 impl UpdateHandler {
     pub fn new(opt: &IndexerOpts) -> anyhow::Result<Self> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(opt.indexing_jobs.unwrap_or(0))
+            .num_threads(opt.indexing_jobs.unwrap_or(num_cpus::get() / 2))
             .build()?;
         Ok(Self {
             max_nb_chunks: opt.max_nb_chunks,
