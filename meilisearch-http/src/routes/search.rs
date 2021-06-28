@@ -1,18 +1,22 @@
 use std::collections::{BTreeSet, HashSet};
 
-use actix_web::{get, post, web, HttpResponse};
 use log::debug;
+use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
-use crate::helpers::Authentication;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(search_with_post).service(search_with_url_query);
+    cfg.service(
+        web::resource("/indexes/{index_uid}/search")
+            .route(web::get().to(search_with_url_query))
+            .route(web::post().to(search_with_post)),
+    );
 }
 
 #[derive(Deserialize, Debug)]
@@ -73,9 +77,8 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
-#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_url_query(
-    data: web::Data<Data>,
+    data: GuardedData<Admin, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -86,9 +89,8 @@ async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-#[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_post(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {

@@ -1,23 +1,20 @@
-use actix_web::get;
-use actix_web::web;
-use actix_web::HttpResponse;
 use log::debug;
+use actix_web::{web, HttpResponse};
 use serde::Serialize;
 
 use crate::error::ResponseError;
-use crate::helpers::Authentication;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_index_stats)
-        .service(get_stats)
-        .service(get_version);
+    cfg.service(web::resource("/indexes/{index_uid}/stats").route(web::get().to(get_index_stats)))
+        .service(web::resource("/stats").route(web::get().to(get_stats)))
+        .service(web::resource("/version").route(web::get().to(get_version)));
 }
 
-#[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
 async fn get_index_stats(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let response = data.get_index_stats(path.index_uid.clone()).await?;
@@ -26,8 +23,7 @@ async fn get_index_stats(
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[get("/stats", wrap = "Authentication::Private")]
-async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn get_stats(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
     let response = data.get_all_stats().await?;
 
     debug!("returns: {:?}", response);
@@ -42,8 +38,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-#[get("/version", wrap = "Authentication::Private")]
-async fn get_version() -> HttpResponse {
+async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
     let commit_sha = match option_env!("COMMIT_SHA") {
         Some("") | None => env!("VERGEN_SHA"),
         Some(commit_sha) => commit_sha,

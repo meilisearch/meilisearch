@@ -1,4 +1,3 @@
-use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
@@ -6,34 +5,29 @@ use serde::{Deserialize, Serialize};
 
 use super::{IndexParam, UpdateStatusResponse};
 use crate::error::ResponseError;
-use crate::helpers::Authentication;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(list_indexes)
-        .service(get_index)
-        .service(create_index)
-        .service(update_index)
-        .service(delete_index)
-        .service(get_update_status)
-        .service(get_all_updates_status);
-}
-
-#[get("/indexes", wrap = "Authentication::Private")]
-async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    let indexes = data.list_indexes().await?;
-    debug!("returns: {:?}", indexes);
-    Ok(HttpResponse::Ok().json(indexes))
-}
-
-#[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
-async fn get_index(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
-    let meta = data.index(path.index_uid.clone()).await?;
-    debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
+    cfg.service(
+        web::resource("indexes")
+            .route(web::get().to(list_indexes))
+            .route(web::post().to(create_index)),
+    )
+    .service(
+        web::resource("/indexes/{index_uid}")
+            .route(web::get().to(get_index))
+            .route(web::put().to(update_index))
+            .route(web::delete().to(delete_index)),
+    )
+    .service(
+        web::resource("/indexes/{index_uid}/updates")
+        .route(web::get().to(get_all_updates_status))
+    )
+    .service(
+        web::resource("/indexes/{index_uid}/updates/{update_id}")
+        .route(web::get().to(get_update_status))
+    );
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,18 +35,6 @@ async fn get_index(
 struct IndexCreateRequest {
     uid: String,
     primary_key: Option<String>,
-}
-
-#[post("/indexes", wrap = "Authentication::Private")]
-async fn create_index(
-    data: web::Data<Data>,
-    body: web::Json<IndexCreateRequest>,
-) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", body);
-    let body = body.into_inner();
-    let meta = data.create_index(body.uid, body.primary_key).await?;
-    debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,9 +54,32 @@ pub struct UpdateIndexResponse {
     primary_key: Option<String>,
 }
 
-#[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+    let indexes = data.list_indexes().await?;
+    debug!("returns: {:?}", indexes);
+    Ok(HttpResponse::Ok().json(indexes))
+}
+
+async fn create_index(
+    data: GuardedData<Private, Data>,
+    body: web::Json<IndexCreateRequest>,
+) -> Result<HttpResponse, ResponseError> {
+    let body = body.into_inner();
+    let meta = data.create_index(body.uid, body.primary_key).await?;
+    Ok(HttpResponse::Ok().json(meta))
+}
+
+async fn get_index(
+    data: GuardedData<Private, Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let meta = data.index(path.index_uid.clone()).await?;
+    debug!("returns: {:?}", meta);
+    Ok(HttpResponse::Ok().json(meta))
+}
+
 async fn update_index(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -87,9 +92,8 @@ async fn update_index(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-#[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn delete_index(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     data.delete_index(path.index_uid.clone()).await?;
@@ -102,12 +106,8 @@ struct UpdateParam {
     update_id: u64,
 }
 
-#[get(
-    "/indexes/{index_uid}/updates/{update_id}",
-    wrap = "Authentication::Private"
-)]
 async fn get_update_status(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = path.into_inner();
@@ -119,9 +119,8 @@ async fn get_update_status(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-#[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
 async fn get_all_updates_status(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let metas = data.get_updates_status(path.into_inner().index_uid).await?;

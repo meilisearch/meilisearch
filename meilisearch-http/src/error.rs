@@ -10,23 +10,6 @@ use meilisearch_error::{Code, ErrorCode};
 use milli::UserError;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, thiserror::Error)]
-pub enum AuthenticationError {
-    #[error("You must have an authorization token")]
-    MissingAuthorizationHeader,
-    #[error("Invalid API key")]
-    InvalidToken(String),
-}
-
-impl ErrorCode for AuthenticationError {
-    fn error_code(&self) -> Code {
-        match self {
-            AuthenticationError::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
-            AuthenticationError::InvalidToken(_) => Code::InvalidToken,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {

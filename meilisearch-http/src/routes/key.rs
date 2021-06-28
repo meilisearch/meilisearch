@@ -1,13 +1,11 @@
-use actix_web::get;
-use actix_web::web;
-use actix_web::HttpResponse;
+use actix_web::{web, HttpResponse};
 use serde::Serialize;
 
-use crate::helpers::Authentication;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(list);
+    cfg.service(web::resource("/keys").route(web::get().to(list)));
 }
 
 #[derive(Serialize)]
@@ -16,8 +14,7 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-#[get("/keys", wrap = "Authentication::Admin")]
-async fn list(data: web::Data<Data>) -> HttpResponse {
+async fn list(data: GuardedData<Admin, Data>) -> HttpResponse {
     let api_keys = data.api_keys.clone();
     HttpResponse::Ok().json(&KeysResponse {
         private: api_keys.private,
