@@ -8,7 +8,7 @@ edition = "2018"
 anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 csv = "1.1.5"
-heed = "0.10.6"
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0" }
 milli = { path = "../milli" }
 roaring = "0.6.6"
 serde_json = "1.0.62"
