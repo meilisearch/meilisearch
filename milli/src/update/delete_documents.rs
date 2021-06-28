@@ -132,7 +132,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                     };
                     external_ids.push(external_id);
                 }
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             }
             drop(iter);
 
@@ -143,7 +144,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 let ((_docid, word), _positions) = result?;
                 // This boolean will indicate if we must remove this word from the words FST.
                 words.push((SmallString32::from(word), false));
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             }
         }
 
@@ -194,11 +196,13 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                     let previous_len = docids.len();
                     docids.difference_with(&self.documents_ids);
                     if docids.is_empty() {
-                        iter.del_current()?;
+                        // safety: we don't keep references from inside the LMDB database.
+                        unsafe { iter.del_current()? };
                         *must_remove = true;
                     } else if docids.len() != previous_len {
                         let key = key.to_owned();
-                        iter.put_current(&key, &docids)?;
+                        // safety: we don't keep references from inside the LMDB database.
+                        unsafe { iter.put_current(&key, &docids)? };
                     }
                 }
             }
@@ -243,10 +247,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
                 prefixes_to_delete.insert(prefix)?;
             } else if docids.len() != previous_len {
-                iter.put_current(&prefix, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&prefix, &docids)? };
             }
         }
 
@@ -281,10 +287,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
                 let key = key.to_owned();
-                iter.put_current(&key, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&key, &docids)? };
             }
         }
 
@@ -300,10 +308,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
                 let bytes = bytes.to_owned();
-                iter.put_current(&bytes, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&bytes, &docids)? };
             }
         }
 
@@ -317,10 +327,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
                 let bytes = bytes.to_owned();
-                iter.put_current(&bytes, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&bytes, &docids)? };
             }
         }
 
@@ -334,10 +346,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
                 let bytes = bytes.to_owned();
-                iter.put_current(&bytes, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&bytes, &docids)? };
             }
         }
 
@@ -349,9 +363,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
-                iter.del_current()?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
-                iter.put_current(&key, &docids)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&key, &docids)? };
             }
         }
 
@@ -420,7 +436,8 @@ where
     while let Some(result) = iter.next() {
         let (key, ()) = result?;
         if to_remove.contains(convert(key)) {
-            iter.del_current()?;
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.del_current()? };
         }
     }
 
@@ -441,10 +458,12 @@ where
         let previous_len = docids.len();
         docids.difference_with(to_remove);
         if docids.is_empty() {
-            iter.del_current()?;
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.del_current()? };
         } else if docids.len() != previous_len {
             let bytes = bytes.to_owned();
-            iter.put_current(&bytes, &docids)?;
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.put_current(&bytes, &docids)? };
         }
     }
 

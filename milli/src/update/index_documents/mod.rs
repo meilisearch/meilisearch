@@ -144,7 +144,8 @@ where
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = reader.next()? {
-                out_iter.append(k, v)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { out_iter.append(k, v)? };
             }
         }
         WriteMethod::GetMergePut => {
@@ -154,7 +155,8 @@ where
                     Some((key, old_val)) if key == k => {
                         let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
                         let val = merge(k, &vals)?;
-                        iter.put_current(k, &val)?;
+                        // safety: we don't keep references from inside the LMDB database.
+                        unsafe { iter.put_current(k, &val)? };
                     }
                     _ => {
                         drop(iter);
@@ -203,7 +205,8 @@ where
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = sorter.next()? {
-                out_iter.append(k, v)?;
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { out_iter.append(k, v)? };
             }
         }
         WriteMethod::GetMergePut => {
@@ -216,7 +219,8 @@ where
                             // TODO just wrap this error?
                             InternalError::IndexingMergingKeys { process: "get-put-merge" }
                         })?;
-                        iter.put_current(k, &val)?;
+                        // safety: we don't keep references from inside the LMDB database.
+                        unsafe { iter.put_current(k, &val)? };
                     }
                     _ => {
                         drop(iter);
