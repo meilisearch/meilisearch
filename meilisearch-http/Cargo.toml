@@ -118,5 +118,5 @@ default = ["analytics", "mini-dashboard"]
 jemallocator = "0.3.2"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.2/build.zip"
-sha1 = "881949457a710a22b5cefcb0418038ceb8b0eb26"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.3/build.zip"
+sha1 = "fea1780e13d8e570e35a1921e7a45cabcd501d5e"
