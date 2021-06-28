@@ -35,7 +35,7 @@ RUN     $HOME/.cargo/bin/cargo build --release
 # Run
 FROM    alpine:3.10
 
-RUN     apk add -q --no-cache libgcc tini
+RUN     apk add -q --no-cache libgcc tini libressl-dev
 
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
