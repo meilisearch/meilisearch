@@ -30,7 +30,7 @@ macro_rules! create_policies {
                     }
 
                     pub fn add(&mut self, token: Vec<u8>) {
-                        &mut self.inner.insert(token);
+                        self.inner.insert(token);
                     }
                 }
 
