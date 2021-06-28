@@ -197,7 +197,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                         iter.del_current()?;
                         *must_remove = true;
                     } else if docids.len() != previous_len {
-                        iter.put_current(key, &docids)?;
+                        let key = key.to_owned();
+                        iter.put_current(&key, &docids)?;
                     }
                 }
             }
@@ -238,13 +239,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         let mut iter = word_prefix_docids.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (prefix, mut docids) = result?;
+            let prefix = prefix.to_owned();
             let previous_len = docids.len();
             docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
                 iter.del_current()?;
                 prefixes_to_delete.insert(prefix)?;
             } else if docids.len() != previous_len {
-                iter.put_current(prefix, &docids)?;
+                iter.put_current(&prefix, &docids)?;
             }
         }
 
@@ -281,7 +283,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if docids.is_empty() {
                 iter.del_current()?;
             } else if docids.len() != previous_len {
-                iter.put_current(key, &docids)?;
+                let key = key.to_owned();
+                iter.put_current(&key, &docids)?;
             }
         }
 
@@ -299,7 +302,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if docids.is_empty() {
                 iter.del_current()?;
             } else if docids.len() != previous_len {
-                iter.put_current(bytes, &docids)?;
+                let bytes = bytes.to_owned();
+                iter.put_current(&bytes, &docids)?;
             }
         }
 
@@ -315,7 +319,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if docids.is_empty() {
                 iter.del_current()?;
             } else if docids.len() != previous_len {
-                iter.put_current(bytes, &docids)?;
+                let bytes = bytes.to_owned();
+                iter.put_current(&bytes, &docids)?;
             }
         }
 
@@ -331,7 +336,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if docids.is_empty() {
                 iter.del_current()?;
             } else if docids.len() != previous_len {
-                iter.put_current(bytes, &docids)?;
+                let bytes = bytes.to_owned();
+                iter.put_current(&bytes, &docids)?;
             }
         }
 
@@ -437,7 +443,8 @@ where
         if docids.is_empty() {
             iter.del_current()?;
         } else if docids.len() != previous_len {
-            iter.put_current(bytes, &docids)?;
+            let bytes = bytes.to_owned();
+            iter.put_current(&bytes, &docids)?;
         }
     }
 
