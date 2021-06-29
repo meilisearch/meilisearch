@@ -1,7 +1,83 @@
+use crate::common::{GetAllDocumentsOptions, Server};
+use actix_web::test;
 use chrono::DateTime;
+use meilisearch_http::create_app;
 use serde_json::{json, Value};
 
-use crate::common::{GetAllDocumentsOptions, Server};
+/// This is the basic usage of our API and every other tests uses the content-type application/json
+#[actix_rt::test]
+async fn add_documents_test_json_content_types() {
+    let document = json!([
+        {
+            "id": 1,
+            "content": "Bouvier Bernois",
+        }
+    ]);
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response, json!({ "updateId": 0 }));
+}
+
+/// no content type is still supposed to be accepted as json
+#[actix_rt::test]
+async fn add_documents_test_no_content_types() {
+    let document = json!([
+        {
+            "id": 1,
+            "content": "Montagne des Pyrénées",
+        }
+    ]);
+
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response, json!({ "updateId": 0 }));
+}
+
+/// any other content-type is must be refused
+#[actix_rt::test]
+async fn add_documents_test_bad_content_types() {
+    let document = json!([
+        {
+            "id": 1,
+            "content": "Leonberg",
+        }
+    ]);
+
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "text/plain"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    assert_eq!(status_code, 405);
+    assert!(body.is_empty());
+}
 
 #[actix_rt::test]
 async fn add_documents_no_index_creation() {

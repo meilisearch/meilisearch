@@ -13,6 +13,7 @@ use crate::Data;
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
 
+/*
 macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
@@ -29,6 +30,19 @@ macro_rules! guard_content_type {
 }
 
 guard_content_type!(guard_json, "application/json");
+*/
+
+fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
+            if let Some(content_type) = head.headers.get("Content-Type") {
+                content_type
+                    .to_str()
+                    .map(|v| v.contains("application/json"))
+                    // if no content-type is specified we still accept the data as json!
+                    .unwrap_or(true)
+            } else {
+                false
+            }
+        }
 
 #[derive(Deserialize)]
 struct DocumentParam {
@@ -146,6 +160,8 @@ async fn add_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
+/// Route used when the payload type is "application/json"
+/// Used to add or replace documents
 async fn update_documents(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
