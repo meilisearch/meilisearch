@@ -1,5 +1,5 @@
 # Compile
-FROM    alpine:3.10 AS compiler
+FROM    alpine:3.14 AS compiler
 
 RUN     apk update --quiet
 RUN     apk add curl
@@ -32,7 +32,7 @@ COPY    . .
 RUN     $HOME/.cargo/bin/cargo build --release
 
 # Run
-FROM    alpine:3.10
+FROM    alpine:3.14
 
 RUN     apk add -q --no-cache libgcc tini
 
