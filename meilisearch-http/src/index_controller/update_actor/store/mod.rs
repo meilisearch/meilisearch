@@ -439,7 +439,9 @@ impl UpdateStore {
 
         while let Some(Ok(((_, uuid, _), pending))) = pendings.next() {
             if uuid == index_uuid {
-                pendings.del_current()?;
+                unsafe {
+                    pendings.del_current()?;
+                }
                 let mut pending = pending.decode()?;
                 if let Some(update_uuid) = pending.content.take() {
                     uuids_to_remove.push(update_uuid);
@@ -456,7 +458,9 @@ impl UpdateStore {
             .lazily_decode_data();
 
         while let Some(_) = updates.next() {
-            updates.del_current()?;
+            unsafe {
+                updates.del_current()?;
+            }
         }
 
         drop(updates);

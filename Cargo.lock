@@ -1176,9 +1176,8 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afcc6c911acaadad3ebe9f1ef1707d80bd71c92037566f47b6238a03b60adf1a"
+version = "0.12.0"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1196,14 +1195,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b328f6260a7e51bdb0ca6b68e6ea27ee3d11fba5dee930896ee7ff6ad5fc072c"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e628efb08beaee58355f80dc4adba79d644940ea9eef60175ea17dc218aab405"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1492,9 +1489,8 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lmdb-rkv-sys"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b27470ac25167b3afdfb6af8fcd3bc1be67de50ffbdaf4073378cfded6ae24a5"
+version = "0.15.0"
+source = "git+https://github.com/meilisearch/lmdb-rs#d0b50d02938ee84e4e4372697ea991fe2a4cae3b"
 dependencies = [
  "cc",
  "libc",
@@ -1724,8 +1720,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.6.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.6.0#c38b0b883d602a7efe9ba87f36157f4fc35f6ec7"
+version = "0.7.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.7.0#9dbc8b2dd06e12f0ee551d877261223fa4968110"
 dependencies = [
  "bstr",
  "byteorder",
