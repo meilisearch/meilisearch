@@ -165,7 +165,6 @@ fn bytes_to_highlight(source: &str, target: &str) -> usize {
 
     let mut minimum = 2;
     for x in 0..=n {
-        // let dist = matrix[(x + 1, m + 1)];
         let min_dist = (0..=m).map(|y| matrix[(x + 1, y + 1)]).min().unwrap();
         if min_dist <= 2 {
             minimum = x;
