@@ -222,6 +222,22 @@ mod tests {
             TestBytesToHighlight { query: "Båve", text: "Chiøt", length: "Bå".len() },
             TestBytesToHighlight { query: "💪🙂🍤", text: "plouf", length: "💪🙂".len() },
             TestBytesToHighlight { query: "clôu¿i", text: "bloubi", length: "clôu".len() },
+            TestBytesToHighlight {
+                query: "Альфа", text: "Альфой", length: "Альфа".len()
+            },
+            TestBytesToHighlight {
+                query: "Go💼", text: "Go💼od luck.", length: "Go💼".len()
+            },
+            TestBytesToHighlight {
+                query: "Go💼od", text: "Go💼od luck.", length: "Go💼od".len()
+            },
+            TestBytesToHighlight {
+                query: "chäräcters",
+                text: "chäräcters",
+                length: "chäräcters".len(),
+            },
+            TestBytesToHighlight { query: "ch", text: "chäräcters", length: "ch".len() },
+            TestBytesToHighlight { query: "chär", text: "chäräcters", length: "chär".len() },
         ];
 
         for test in &tests {
