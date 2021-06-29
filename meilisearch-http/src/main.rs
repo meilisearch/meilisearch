@@ -7,6 +7,8 @@ use structopt::StructOpt;
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 use meilisearch_http::analytics;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -21,7 +23,7 @@ async fn main() -> Result<(), MainError> {
 
     let mut log_builder = env_logger::Builder::new();
     log_builder.parse_filters(&opt.log_level);
-    if opt.log_level == "info"  {
+    if opt.log_level == "info" {
         // if we are in info we only allow the warn log_level for milli
         log_builder.filter_module("milli", log::LevelFilter::Warn);
     }
@@ -46,6 +48,14 @@ async fn main() -> Result<(), MainError> {
                 let sentry = sentry::init(sentry::ClientOptions {
                     release: sentry::release_name!(),
                     dsn: Some(SENTRY_DSN.parse()?),
+                    before_send: Some(Arc::new(|event| {
+                        event
+                            .message
+                            .as_ref()
+                            .map(|msg| msg.to_lowercase().contains("no space left on device"))
+                            .unwrap_or(false)
+                            .then(|| event)
+                    })),
                     ..Default::default()
                 });
                 // sentry must stay alive as long as possible
