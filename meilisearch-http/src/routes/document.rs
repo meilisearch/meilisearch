@@ -37,10 +37,10 @@ fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
                 content_type
                     .to_str()
                     .map(|v| v.contains("application/json"))
-                    // if no content-type is specified we still accept the data as json!
-                    .unwrap_or(true)
+                    .unwrap_or(false)
             } else {
-                false
+                // if no content-type is specified we still accept the data as json!
+                true
             }
         }
 
