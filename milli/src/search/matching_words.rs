@@ -33,18 +33,19 @@ impl MatchingWords {
     }
 
     /// Returns the number of matching bytes if the word matches one of the query words.
-    pub fn matching_bytes(&self, word: &str) -> Option<usize> {
-        self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| match dfa.eval(word) {
-            Distance::Exact(t) if t <= *typo => {
-                if *is_prefix {
-                    let (_dist, len) =
-                        prefix_damerau_levenshtein(query_word.as_bytes(), word.as_bytes());
-                    Some(len)
-                } else {
-                    Some(word.len())
+    pub fn matching_bytes(&self, word_to_highlight: &str) -> Option<usize> {
+        self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| {
+            match dfa.eval(word_to_highlight) {
+                Distance::Exact(t) if t <= *typo => {
+                    if *is_prefix {
+                        let len = bytes_to_highlight(word_to_highlight, query_word);
+                        Some(len)
+                    } else {
+                        Some(word_to_highlight.len())
+                    }
                 }
+                _otherwise => None,
             }
-            _otherwise => None,
         })
     }
 }
@@ -101,20 +102,23 @@ impl<T> IndexMut<(usize, usize)> for N2Array<T> {
     }
 }
 
-/// Returns the distance between the source word and the target word,
-/// and the number of byte matching in the target word.
-fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
-    let (n, m) = (source.len(), target.len());
+/// Returns the number of **bytes** we want to highlight in the `source` word.
+/// Basically we want to highlight as much characters as possible in the source until it has too much
+/// typos (= 2)
+/// The algorithm is a modified
+/// [Damerau-Levenshtein](https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance)
+fn bytes_to_highlight(source: &str, target: &str) -> usize {
+    let (n, m) = (source.chars().count(), target.chars().count());
 
     if n == 0 {
-        return (m as u32, 0);
+        return 0;
     }
-    if m == 0 {
-        return (n as u32, 0);
+    // since we allow two typos we can send two characters even if it's completely wrong
+    if m < 3 {
+        return source.chars().take(m).map(|c| c.len_utf8()).sum();
     }
-
     if n == m && source == target {
-        return (0, m);
+        return source.len();
     }
 
     let inf = n + m;
@@ -132,11 +136,11 @@ fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
 
     let mut last_row = BTreeMap::new();
 
-    for (row, char_s) in source.iter().enumerate() {
+    for (row, char_s) in source.chars().enumerate() {
         let mut last_match_col = 0;
         let row = row + 1;
 
-        for (col, char_t) in target.iter().enumerate() {
+        for (col, char_t) in target.chars().enumerate() {
             let col = col + 1;
             let last_match_row = *last_row.get(&char_t).unwrap_or(&0);
             let cost = if char_s == char_t { 0 } else { 1 };
@@ -148,9 +152,7 @@ fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
                 + (row - last_match_row - 1)
                 + 1
                 + (col - last_match_col - 1);
-
             let dist = min(min(dist_add, dist_del), min(dist_sub, dist_trans));
-
             matrix[(row + 1, col + 1)] = dist;
 
             if cost == 0 {
@@ -161,32 +163,77 @@ fn prefix_damerau_levenshtein(source: &[u8], target: &[u8]) -> (u32, usize) {
         last_row.insert(char_s, row);
     }
 
-    let mut minimum = (u32::max_value(), 0);
-
-    for x in 0..=m {
-        let dist = matrix[(n + 1, x + 1)] as u32;
-        if dist < minimum.0 {
-            minimum = (dist, x)
+    let mut minimum = 2;
+    for x in 0..=n {
+        // let dist = matrix[(x + 1, m + 1)];
+        let min_dist = (0..=m).map(|y| matrix[(x + 1, y + 1)]).min().unwrap();
+        if min_dist <= 2 {
+            minimum = x;
         }
     }
 
-    minimum
+    // everything was done characters wise and now we want to returns a number of bytes
+    source.chars().take(minimum).map(|c| c.len_utf8()).sum()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::from_utf8;
+
     use super::*;
     use crate::search::query_tree::{Operation, Query, QueryKind};
     use crate::MatchingWords;
 
     #[test]
-    fn matched_length() {
-        let query = "Levenste";
-        let text = "Levenshtein";
+    fn test_bytes_to_highlight() {
+        struct TestBytesToHighlight {
+            query: &'static str,
+            text: &'static str,
+            length: usize,
+        }
+        let tests = [
+            TestBytesToHighlight { query: "bip", text: "bip", length: "bip".len() },
+            TestBytesToHighlight { query: "bip", text: "boup", length: "bip".len() },
+            TestBytesToHighlight {
+                query: "Levenshtein",
+                text: "Levenshtein",
+                length: "Levenshtein".len(),
+            },
+            // we get to the end of our word with only one typo
+            TestBytesToHighlight {
+                query: "Levenste",
+                text: "Levenshtein",
+                length: "Levenste".len(),
+            },
+            // we get our third and last authorized typo right on the last character
+            TestBytesToHighlight {
+                query: "Levenstein",
+                text: "Levenshte",
+                length: "Levenstei".len(),
+            },
+            // we get to the end of our word with only two typos at the beginning
+            TestBytesToHighlight {
+                query: "Bavenshtein",
+                text: "Levenshtein",
+                length: "Bavenshtein".len(),
+            },
+            // Since we calculate a distance char by char we are supposed to have only two mistakes
+            // here. That would've not be the case if we were computing the distance bytes per bytes
+            TestBytesToHighlight { query: "Båve", text: "Chiøt", length: "Bå".len() },
+            TestBytesToHighlight { query: "💪🙂🍤", text: "plouf", length: "💪🙂".len() },
+            TestBytesToHighlight { query: "clôu¿i", text: "bloubi", length: "clôu".len() },
+        ];
 
-        let (dist, length) = prefix_damerau_levenshtein(query.as_bytes(), text.as_bytes());
-        assert_eq!(dist, 1);
-        assert_eq!(&text[..length], "Levenshte");
+        for test in &tests {
+            let length = bytes_to_highlight(test.query, test.text);
+            assert_eq!(length, test.length, r#"lenght between: "{}" "{}""#, test.query, test.text);
+            assert!(
+                from_utf8(&test.query.as_bytes()[..length]).is_ok(),
+                r#"converting {}[..{}] to an utf8 str failed"#,
+                test.query,
+                length
+            );
+        }
     }
 
     #[test]
@@ -214,9 +261,9 @@ mod tests {
         assert_eq!(matching_words.matching_bytes("word"), Some(4));
         assert_eq!(matching_words.matching_bytes("nyc"), None);
         assert_eq!(matching_words.matching_bytes("world"), Some(5));
-        assert_eq!(matching_words.matching_bytes("splitted"), Some(5));
+        assert_eq!(matching_words.matching_bytes("splitted"), Some(7));
         assert_eq!(matching_words.matching_bytes("thisnew"), None);
         assert_eq!(matching_words.matching_bytes("borld"), Some(5));
-        assert_eq!(matching_words.matching_bytes("wordsplit"), Some(4));
+        assert_eq!(matching_words.matching_bytes("wordsplit"), Some(5));
     }
 }
