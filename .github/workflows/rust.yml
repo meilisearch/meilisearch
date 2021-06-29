@@ -65,3 +65,17 @@ jobs:
         with:
           command: clippy
           args: --all-targets -- --deny warnings
+
+  fmt:
+    name: Run Rustfmt
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check

@@ -23,4 +23,3 @@ impl ErrorCode for AuthenticationError {
         }
     }
 }
-

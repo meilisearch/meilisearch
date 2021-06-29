@@ -21,12 +21,11 @@ pub fn services(cfg: &mut web::ServiceConfig) {
             .route(web::delete().to(delete_index)),
     )
     .service(
-        web::resource("/indexes/{index_uid}/updates")
-        .route(web::get().to(get_all_updates_status))
+        web::resource("/indexes/{index_uid}/updates").route(web::get().to(get_all_updates_status)),
     )
     .service(
         web::resource("/indexes/{index_uid}/updates/{update_id}")
-        .route(web::get().to(get_update_status))
+            .route(web::get().to(get_update_status)),
     );
 }
 

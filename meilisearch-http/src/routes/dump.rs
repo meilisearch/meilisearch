@@ -1,5 +1,5 @@
-use log::debug;
 use actix_web::{web, HttpResponse};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;

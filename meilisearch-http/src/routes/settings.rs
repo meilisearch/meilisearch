@@ -1,5 +1,5 @@
-use log::debug;
 use actix_web::{web, HttpResponse};
+use log::debug;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::Settings;

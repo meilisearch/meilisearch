@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
-use log::debug;
 use actix_web::{web, HttpResponse};
+use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 
