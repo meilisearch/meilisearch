@@ -845,6 +845,7 @@ mod tests {
     use heed::EnvOpenOptions;
 
     use super::*;
+    use crate::update::DeleteDocuments;
 
     #[test]
     fn simple_document_replacement() {
@@ -1301,6 +1302,54 @@ mod tests {
         ]"#[..];
 
         builder.execute(Cursor::new(documents), |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn delete_documents_then_insert() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
+            { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
+            { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
+            { "objectId": 30,  "title": "Hamlet" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("objectId"));
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index, 1).unwrap();
+        builder.delete_external_id("30");
+        builder.execute().unwrap();
+
+        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
+        assert!(external_documents_ids.get("30").is_none());
+
+        let content = &br#"[
+            { "objectId": 30, "title": "Hamlet" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
+        assert!(external_documents_ids.get("30").is_some());
+
+        let content = &br#"[
+            { "objectId": 30, "title": "Hamlet" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
         wtxn.commit().unwrap();
     }
 }
