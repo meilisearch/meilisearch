@@ -4,6 +4,7 @@ use std::time::Instant;
 use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
+
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{FieldId, FieldsIdsMap, FilterCondition, MatchingWords};
 use serde::{Deserialize, Serialize};
@@ -579,7 +580,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             // Check if we need to do highlighting or computed matches before calling
             // Matcher::match since the call is expensive.
             if format_options.highlight && token.is_word() {
-                if let Some(length) = matcher.matches(token.text()) {
+                if let Some(length) = matcher.matches(word) {
                     if format_options.highlight {
                         out.push_str(&self.marks.0);
                         out.push_str(&word[..length]);
