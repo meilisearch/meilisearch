@@ -33,16 +33,16 @@ guard_content_type!(guard_json, "application/json");
 */
 
 fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
-            if let Some(content_type) = head.headers.get("Content-Type") {
-                content_type
-                    .to_str()
-                    .map(|v| v.contains("application/json"))
-                    .unwrap_or(false)
-            } else {
-                // if no content-type is specified we still accept the data as json!
-                true
-            }
-        }
+    if let Some(content_type) = head.headers.get("Content-Type") {
+        content_type
+            .to_str()
+            .map(|v| v.contains("application/json"))
+            .unwrap_or(false)
+    } else {
+        // if no content-type is specified we still accept the data as json!
+        true
+    }
+}
 
 #[derive(Deserialize)]
 struct DocumentParam {

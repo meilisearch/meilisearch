@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use async_stream::stream;
 use futures::StreamExt;
-use log::{trace};
+use log::trace;
 use oxidized_json_checker::JsonChecker;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
