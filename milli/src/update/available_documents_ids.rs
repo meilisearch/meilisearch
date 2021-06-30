@@ -12,7 +12,7 @@ impl AvailableDocumentsIds {
         match docids.max() {
             Some(last_id) => {
                 let mut available = RoaringBitmap::from_iter(0..last_id);
-                available.difference_with(&docids);
+                available -= docids;
 
                 let iter = match last_id.checked_add(1) {
                     Some(id) => id..=u32::max_value(),

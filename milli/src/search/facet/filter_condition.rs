@@ -289,7 +289,7 @@ impl FilterCondition {
         for (i, result) in iter.enumerate() {
             let ((_fid, level, l, r), docids) = result?;
             debug!("{:?} to {:?} (level {}) found {} documents", l, r, level, docids.len());
-            output.union_with(&docids);
+            *output |= docids;
             // We save the leftest and rightest bounds we actually found at this level.
             if i == 0 {
                 left_found = Some(l);

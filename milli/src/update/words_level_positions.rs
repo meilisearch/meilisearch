@@ -236,7 +236,7 @@ fn compute_positions_levels(
                 }
 
                 // The right bound is always the bound we run through.
-                group_docids.union_with(&docids);
+                group_docids |= docids;
             }
 
             if !group_docids.is_empty() {

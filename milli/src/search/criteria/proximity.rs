@@ -274,11 +274,11 @@ fn resolve_candidates<'t>(
                         let mut candidates =
                             query_pair_proximity_docids(ctx, lr, rl, pair_p + 1, wdcache)?;
                         if lcandidates.len() < rcandidates.len() {
-                            candidates.intersect_with(lcandidates);
-                            candidates.intersect_with(rcandidates);
+                            candidates &= lcandidates;
+                            candidates &= rcandidates;
                         } else {
-                            candidates.intersect_with(rcandidates);
-                            candidates.intersect_with(lcandidates);
+                            candidates &= rcandidates;
+                            candidates &= lcandidates;
                         }
                         if !candidates.is_empty() {
                             output.push((ll.clone(), rr.clone(), candidates));
@@ -317,7 +317,7 @@ fn resolve_candidates<'t>(
                             for (_, rtail, mut candidates) in
                                 mdfs(ctx, tail, proximity - p, cache, wdcache)?
                             {
-                                candidates.intersect_with(&head_candidates);
+                                candidates &= &head_candidates;
                                 if !candidates.is_empty() {
                                     output.push((lhead.clone(), rtail, candidates));
                                 }
@@ -334,7 +334,7 @@ fn resolve_candidates<'t>(
 
     let mut candidates = RoaringBitmap::new();
     for (_, _, cds) in resolve_operation(ctx, query_tree, proximity, cache, wdcache)? {
-        candidates.union_with(&cds);
+        candidates |= cds;
     }
     Ok(candidates)
 }

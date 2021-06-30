@@ -213,10 +213,10 @@ impl<'t> Iterator for FacetIter<'t> {
 
                 match result {
                     Ok(((_fid, level, left, right), mut docids)) => {
-                        docids.intersect_with(&documents_ids);
+                        docids &= &*documents_ids;
                         if !docids.is_empty() {
                             if self.must_reduce {
-                                documents_ids.difference_with(&docids);
+                                *documents_ids -= &docids;
                             }
 
                             if level == 0 {

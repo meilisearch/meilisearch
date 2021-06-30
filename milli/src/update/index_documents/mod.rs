@@ -608,8 +608,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
         // We merge the new documents ids with the existing ones.
-        documents_ids.union_with(&new_documents_ids);
-        documents_ids.union_with(&replaced_documents_ids);
+        documents_ids |= new_documents_ids;
+        documents_ids |= replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
