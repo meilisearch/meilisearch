@@ -1590,7 +1590,7 @@ dependencies = [
  "parking_lot",
  "paste",
  "pin-project",
- "rand 0.7.3",
+ "rand 0.8.4",
  "rayon",
  "regex",
  "reqwest",
