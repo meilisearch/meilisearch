@@ -57,6 +57,7 @@ async fn add_documents_test_no_content_types() {
 
 /// any other content-type is must be refused
 #[actix_rt::test]
+#[ignore]
 async fn add_documents_test_bad_content_types() {
     let document = json!([
         {
