@@ -1,0 +1,59 @@
+{
+    "rankingRules": [
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
+        "exactness"
+    ],
+    "distinctAttribute": "email",
+    "searchableAttributes": [
+        "balance",
+        "picture",
+        "age",
+        "color",
+        "name",
+        "gender",
+        "email",
+        "phone",
+        "address",
+        "about",
+        "registered",
+        "latitude",
+        "longitude",
+        "tags"
+    ],
+    "displayedAttributes": [
+        "id",
+        "isActive",
+        "balance",
+        "picture",
+        "age",
+        "color",
+        "name",
+        "gender",
+        "email",
+        "phone",
+        "address",
+        "about",
+        "registered",
+        "latitude",
+        "longitude",
+        "tags"
+    ],
+    "stopWords": [
+        "in",
+        "ad"
+    ],
+    "synonyms": {
+        "wolverine": ["xmen", "logan"],
+        "logan": ["wolverine", "xmen"]
+    },
+    "filterableAttributes": [
+        "gender",
+        "color",
+        "tags",
+        "isActive"
+    ]
+}

@@ -1,0 +1,81 @@
+name: Rust
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    # trying and staging branches are for Bors config
+    branches:
+      - trying
+      - staging
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tests:
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04, macos-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run cargo check without any default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --locked --release --no-default-features
+    - name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --locked --release
+
+  # We don't run test on Windows since we get the following error: There is not enough space on the disk.
+  check-on-windows:
+    name: Cargo check on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run cargo check without any default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --no-default-features
+    - name: Run cargo check with all default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+
+  clippy:
+    name: Run Clippy
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets -- --deny warnings
+
+  fmt:
+    name: Run Rustfmt
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check

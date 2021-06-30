@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "meilisearch-http",
+    "meilisearch-error",
+]
+
+[profile.release]
+debug = true
