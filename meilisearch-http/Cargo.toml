@@ -32,7 +32,7 @@ async-stream = "0.3.0"
 async-trait = "0.1.42"
 arc-swap = "1.2.0"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
-bytes = "0.6.0"
+bytes = "1.0.1"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
 either = "1.6.1"
