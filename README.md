@@ -108,14 +108,7 @@ Let's create an index! If you need a sample dataset, use [this movie database](h
 curl -L 'https://bit.ly/2PAcw9l' -o movies.json
 ```
 
-MeiliSearch can serve multiple indexes, with different kinds of documents.
-It is required to create an index before sending documents to it.
-
-```bash
-curl -i -X POST 'http://127.0.0.1:7700/indexes' --data '{ "name": "Movies", "uid": "movies" }'
-```
-
-Now that the server knows about your brand new index, you're ready to send it some data.
+Now, you're ready to index some data. 
 
 ```bash
 curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
@@ -142,27 +135,29 @@ curl 'http://127.0.0.1:7700/indexes/movies/search?q=botman+robin&limit=2' | jq
       "id": "415",
       "title": "Batman & Robin",
       "poster": "https://image.tmdb.org/t/p/w1280/79AYCcxw3kSKbhGpx1LiqaCAbwo.jpg",
-      "overview": "Along with crime-fighting partner Robin and new recruit Batgirl...",
-      "release_date": "1997-06-20",
+      "overview": "Along with crime-fighting partner Robin and new recruit Batgirl, Batman battles the dual threat of frosty genius Mr. Freeze and homicidal horticulturalist Poison Ivy. Freeze plans to put Gotham City on ice, while Ivy tries to drive a wedge between the dynamic duo.",
+      "release_date": 866768400
     },
     {
       "id": "411736",
       "title": "Batman: Return of the Caped Crusaders",
       "poster": "https://image.tmdb.org/t/p/w1280/GW3IyMW5Xgl0cgCN8wu96IlNpD.jpg",
-      "overview": "Adam West and Burt Ward returns to their iconic roles of Batman and Robin...",
-      "release_date": "2016-10-08",
+      "overview": "Adam West and Burt Ward returns to their iconic roles of Batman and Robin. Featuring the voices of Adam West, Burt Ward, and Julie Newmar, the film sees the superheroes going up against classic villains like The Joker, The Riddler, The Penguin and Catwoman, both in Gotham City… and in space.",
+      "release_date": 1475888400
     }
   ],
-  "offset": 0,
+  "nbHits": 8,
+  "exhaustiveNbHits": false,
+  "query": "botman robin",
   "limit": 2,
-  "processingTimeMs": 1,
-  "query": "botman robin"
+  "offset": 0,
+  "processingTimeMs": 2
 }
 ```
 
 #### Use the Web Interface
 
-We also deliver an **out-of-the-box web interface** in which you can test MeiliSearch interactively.
+We also deliver an **out-of-the-box [web interface](https://github.com/meilisearch/mini-dashboard)** in which you can test MeiliSearch interactively.
 
 You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter MeiliSearch’s address to visit it. This will lead you to a web page with a search bar that will allow you to search in the selected index.
 
