@@ -13,6 +13,9 @@ jobs:
       - name: Check if current release is latest
         run: echo "##[set-output name=is_latest;]$(sh .github/is-latest-release.sh)"
         id: release
+      - name: Set COMMIT_DATE env variable
+        run: |
+          echo "COMMIT_DATE=$( git log --pretty=format:'%ad' -n1 --date=short )" >> $GITHUB_ENV
       - name: Publish to Registry
         if: steps.release.outputs.is_latest == 'true'
         uses: elgohr/Publish-Docker-Github-Action@master
@@ -20,3 +23,5 @@ jobs:
           name: getmeili/meilisearch
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+          tag_names: true
+          buildargs: COMMIT_SHA,COMMIT_DATE
