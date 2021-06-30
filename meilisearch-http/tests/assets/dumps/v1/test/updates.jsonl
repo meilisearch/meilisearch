@@ -1,3 +1,0 @@
-{"status":"processed","updateId":0,"type":{"name":"Settings","settings":{"ranking_rules":{"Update":["Typo","Words","Proximity","Attribute","WordsPosition","Exactness"]},"distinct_attribute":"Nothing","primary_key":"Nothing","searchable_attributes":"Nothing","displayed_attributes":"Nothing","stop_words":"Nothing","synonyms":"Nothing","attributes_for_faceting":"Nothing"}}}
-{"status":"processed","updateId":1,"type":{"name":"DocumentsAddition","number":77}}
-
