@@ -218,7 +218,7 @@ impl Index {
     }
 
     /// Deletes the primary key of the documents, this can be done to reset indexes settings.
-    pub fn delete_primary_key(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_primary_key(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::PRIMARY_KEY_KEY)
     }
 
@@ -333,7 +333,7 @@ impl Index {
 
     /// Deletes the displayed fields ids, this will make the engine to display
     /// all the documents attributes in the order of the `FieldsIdsMap`.
-    pub fn delete_displayed_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_displayed_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::DISPLAYED_FIELDS_KEY)
     }
 
@@ -383,7 +383,7 @@ impl Index {
     }
 
     /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
-    pub fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::SEARCHABLE_FIELDS_KEY)
     }
 
@@ -429,7 +429,7 @@ impl Index {
     }
 
     /// Deletes the filterable fields ids in the database.
-    pub fn delete_filterable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_filterable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
@@ -602,7 +602,7 @@ impl Index {
         self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, main_key::CRITERIA_KEY, &criteria)
     }
 
-    pub fn delete_criteria(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_criteria(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::CRITERIA_KEY)
     }
 
@@ -642,7 +642,7 @@ impl Index {
         self.main.put::<_, Str, ByteSlice>(wtxn, main_key::STOP_WORDS_KEY, fst.as_fst().as_bytes())
     }
 
-    pub fn delete_stop_words(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_stop_words(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::STOP_WORDS_KEY)
     }
 
@@ -663,7 +663,7 @@ impl Index {
         self.main.put::<_, Str, SerdeBincode<_>>(wtxn, main_key::SYNONYMS_KEY, synonyms)
     }
 
-    pub fn delete_synonyms(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    pub(crate) fn delete_synonyms(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::SYNONYMS_KEY)
     }
 

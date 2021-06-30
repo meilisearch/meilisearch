@@ -173,7 +173,7 @@ impl<'a> Search<'a> {
 
             let mut candidates = distinct.distinct(candidates, excluded);
 
-            initial_candidates.union_with(&bucket_candidates);
+            initial_candidates |= bucket_candidates;
 
             if offset != 0 {
                 let discarded = candidates.by_ref().take(offset).count();

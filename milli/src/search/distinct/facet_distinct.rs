@@ -61,7 +61,7 @@ impl<'a> FacetDistinctIter<'a> {
                     db_name: db_name::FACET_ID_STRING_DOCIDS,
                     key: None,
                 })?;
-            self.excluded.union_with(&facet_docids);
+            self.excluded |= facet_docids;
         }
 
         self.excluded.remove(id);
@@ -79,7 +79,7 @@ impl<'a> FacetDistinctIter<'a> {
                     db_name: db_name::FACET_ID_F64_DOCIDS,
                     key: None,
                 })?;
-            self.excluded.union_with(&facet_docids);
+            self.excluded |= facet_docids;
         }
 
         self.excluded.remove(id);
@@ -92,7 +92,7 @@ impl<'a> FacetDistinctIter<'a> {
     /// handling easier.
     fn next_inner(&mut self) -> Result<Option<DocumentId>> {
         // The first step is to remove all the excluded documents from our candidates
-        self.candidates.difference_with(&self.excluded);
+        self.candidates -= &self.excluded;
 
         let mut candidates_iter = self.candidates.iter().skip(self.iter_offset);
         match candidates_iter.next() {

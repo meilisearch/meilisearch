@@ -122,7 +122,7 @@ impl<'a> FacetDistribution<'a> {
 
         for result in iter {
             let (value, mut docids) = result?;
-            docids.intersect_with(candidates);
+            docids &= candidates;
             if !docids.is_empty() {
                 distribution.insert(value.to_string(), docids.len());
             }

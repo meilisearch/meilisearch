@@ -281,7 +281,7 @@ fn resolve_candidates<'t>(
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
                     let docids = resolve_operation(ctx, op, number_typos, cache, wdcache)?;
-                    candidates.union_with(&docids);
+                    candidates |= docids;
                 }
                 Ok(candidates)
             }
@@ -329,8 +329,8 @@ fn resolve_candidates<'t>(
                     };
                     if !head_candidates.is_empty() {
                         let tail_candidates = mdfs(ctx, tail, mana - m, cache, wdcache)?;
-                        head_candidates.intersect_with(&tail_candidates);
-                        candidates.union_with(&head_candidates);
+                        head_candidates &= tail_candidates;
+                        candidates |= head_candidates;
                     }
                 }
 

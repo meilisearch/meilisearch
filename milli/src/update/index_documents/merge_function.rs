@@ -61,8 +61,7 @@ pub fn roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>
     let mut head = RoaringBitmap::deserialize_from(&head[..])?;
 
     for value in tail {
-        let bitmap = RoaringBitmap::deserialize_from(&value[..])?;
-        head.union_with(&bitmap);
+        head |= RoaringBitmap::deserialize_from(&value[..])?;
     }
 
     let mut vec = Vec::with_capacity(head.serialized_size());
@@ -75,8 +74,7 @@ pub fn cbo_roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec
     let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
 
     for value in tail {
-        let bitmap = CboRoaringBitmapCodec::deserialize_from(&value[..])?;
-        head.union_with(&bitmap);
+        head |= CboRoaringBitmapCodec::deserialize_from(&value[..])?;
     }
 
     let mut vec = Vec::new();

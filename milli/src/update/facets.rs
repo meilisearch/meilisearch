@@ -181,7 +181,7 @@ fn compute_facet_number_levels<'t>(
             }
 
             // The right bound is always the bound we run through.
-            group_docids.union_with(&docids);
+            group_docids |= docids;
             right = value;
         }
 

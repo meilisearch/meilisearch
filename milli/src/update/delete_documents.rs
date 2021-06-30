@@ -43,7 +43,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     pub fn delete_documents(&mut self, docids: &RoaringBitmap) {
-        self.documents_ids.union_with(docids);
+        self.documents_ids |= docids;
     }
 
     pub fn delete_external_id(&mut self, external_id: &str) -> Option<u32> {
@@ -65,7 +65,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We remove the documents ids that we want to delete
         // from the documents in the database and write them back.
         let current_documents_ids_len = documents_ids.len();
-        documents_ids.difference_with(&self.documents_ids);
+        documents_ids -= &self.documents_ids;
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         // We can execute a ClearDocuments operation when the number of documents
@@ -194,7 +194,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if let Some((key, mut docids)) = iter.next().transpose()? {
                 if key == word.as_ref() {
                     let previous_len = docids.len();
-                    docids.difference_with(&self.documents_ids);
+                    docids -= &self.documents_ids;
                     if docids.is_empty() {
                         // safety: we don't keep references from inside the LMDB database.
                         unsafe { iter.del_current()? };
@@ -245,7 +245,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let (prefix, mut docids) = result?;
             let prefix = prefix.to_owned();
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -285,7 +285,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         while let Some(result) = iter.next() {
             let (key, mut docids) = result?;
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -306,7 +306,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -325,7 +325,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -344,7 +344,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         while let Some(result) = iter.next() {
             let (bytes, mut docids) = result?;
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -361,7 +361,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         let mut iter = field_id_word_count_docids.iter_mut(self.wtxn)?;
         while let Some((key, mut docids)) = iter.next().transpose()? {
             let previous_len = docids.len();
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             if docids.is_empty() {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
@@ -390,7 +390,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         for field_id in self.index.faceted_fields_ids(self.wtxn)? {
             // Remove docids from the number faceted documents ids
             let mut docids = self.index.number_faceted_documents_ids(self.wtxn, field_id)?;
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &docids)?;
 
             remove_docids_from_field_id_docid_facet_value(
@@ -403,7 +403,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
             // Remove docids from the string faceted documents ids
             let mut docids = self.index.string_faceted_documents_ids(self.wtxn, field_id)?;
-            docids.difference_with(&self.documents_ids);
+            docids -= &self.documents_ids;
             self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &docids)?;
 
             remove_docids_from_field_id_docid_facet_value(
@@ -456,7 +456,7 @@ where
     while let Some(result) = iter.next() {
         let (bytes, mut docids) = result?;
         let previous_len = docids.len();
-        docids.difference_with(to_remove);
+        docids -= to_remove;
         if docids.is_empty() {
             // safety: we don't keep references from inside the LMDB database.
             unsafe { iter.del_current()? };

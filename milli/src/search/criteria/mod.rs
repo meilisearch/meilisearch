@@ -328,7 +328,7 @@ pub fn resolve_query_tree<'t>(
                         candidates = docids;
                         first_loop = false;
                     } else {
-                        candidates.intersect_with(&docids);
+                        candidates &= &docids;
                     }
                 }
                 Ok(candidates)
@@ -358,7 +358,7 @@ pub fn resolve_query_tree<'t>(
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
                     let docids = resolve_operation(ctx, op, wdcache)?;
-                    candidates.union_with(&docids);
+                    candidates |= docids;
                 }
                 Ok(candidates)
             }
@@ -381,7 +381,7 @@ fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
             let current_docids = ctx
                 .word_pair_proximity_docids(left.as_ref(), right.as_ref(), proximity)?
                 .unwrap_or_default();
-            docids.union_with(&current_docids);
+            docids |= current_docids;
         }
     }
     Ok(docids)
@@ -401,7 +401,7 @@ fn query_docids(
                 let mut docids = RoaringBitmap::new();
                 for (word, _typo) in words {
                     let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
-                    docids.union_with(&current_docids);
+                    docids |= current_docids;
                 }
                 Ok(docids)
             } else {
@@ -413,7 +413,7 @@ fn query_docids(
             let mut docids = RoaringBitmap::new();
             for (word, _typo) in words {
                 let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
-                docids.union_with(&current_docids);
+                docids |= current_docids;
             }
             Ok(docids)
         }
@@ -430,7 +430,7 @@ fn query_pair_proximity_docids(
     if proximity >= 8 {
         let mut candidates = query_docids(ctx, left, wdcache)?;
         let right_candidates = query_docids(ctx, right, wdcache)?;
-        candidates.intersect_with(&right_candidates);
+        candidates &= right_candidates;
         return Ok(candidates);
     }
 
@@ -463,7 +463,7 @@ fn query_pair_proximity_docids(
                             proximity,
                         )?
                         .unwrap_or_default();
-                    docids.union_with(&current_docids);
+                    docids |= current_docids;
                 }
                 Ok(docids)
             } else if prefix {
