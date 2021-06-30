@@ -1,9 +1,7 @@
 [workspace]
 members = [
-    "meilisearch-core",
     "meilisearch-http",
-    "meilisearch-schema",
-    "meilisearch-types",
+    "meilisearch-error",
 ]
 
 [profile.release]

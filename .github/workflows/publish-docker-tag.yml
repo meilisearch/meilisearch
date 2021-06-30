@@ -11,10 +11,16 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v1
+      - name: Set COMMIT_DATE env variable
+        run: |
+          echo "COMMIT_DATE=$( git log --pretty=format:'%ad' -n1 --date=short )" >> $GITHUB_ENV
       - name: Publish to Registry
         uses: elgohr/Publish-Docker-Github-Action@master
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         with:
           name: getmeili/meilisearch
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tag_names: true
+          buildargs: COMMIT_SHA,COMMIT_DATE

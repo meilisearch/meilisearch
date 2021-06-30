@@ -1,18 +1,48 @@
-use std::collections::{BTreeSet, HashSet};
-
-use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
-use indexmap::IndexMap;
-use meilisearch_core::{update, MainReader};
-use serde_json::Value;
+use log::debug;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
+use serde_json::Value;
 
+use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::payload::Payload;
+use crate::routes::IndexParam;
 use crate::Data;
-use crate::error::{Error, ResponseError};
-use crate::helpers::Authentication;
-use crate::routes::{IndexParam, IndexUpdateResponse};
 
-type Document = IndexMap<String, Value>;
+const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
+const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
+
+/*
+macro_rules! guard_content_type {
+    ($fn_name:ident, $guard_value:literal) => {
+        fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
+            if let Some(content_type) = head.headers.get("Content-Type") {
+                content_type
+                    .to_str()
+                    .map(|v| v.contains($guard_value))
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+    };
+}
+
+guard_content_type!(guard_json, "application/json");
+*/
+
+fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
+    if let Some(content_type) = head.headers.get("Content-Type") {
+        content_type
+            .to_str()
+            .map(|v| v.contains("application/json"))
+            .unwrap_or(false)
+    } else {
+        // if no content-type is specified we still accept the data as json!
+        true
+    }
+}
 
 #[derive(Deserialize)]
 struct DocumentParam {
@@ -21,64 +51,50 @@ struct DocumentParam {
 }
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_document)
-        .service(delete_document)
-        .service(get_all_documents)
-        .service(add_documents)
-        .service(update_documents)
-        .service(delete_documents)
-        .service(clear_all_documents);
+    cfg.service(
+        web::scope("/indexes/{index_uid}/documents")
+            .service(
+                web::resource("")
+                    .route(web::get().to(get_all_documents))
+                    .route(web::post().guard(guard_json).to(add_documents))
+                    .route(web::put().guard(guard_json).to(update_documents))
+                    .route(web::delete().to(clear_all_documents)),
+            )
+            // this route needs to be before the /documents/{document_id} to match properly
+            .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
+            .service(
+                web::resource("/{document_id}")
+                    .route(web::get().to(get_document))
+                    .route(web::delete().to(delete_document)),
+            ),
+    );
 }
 
-#[get(
-    "/indexes/{index_uid}/documents/{document_id}",
-    wrap = "Authentication::Public"
-)]
 async fn get_document(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let reader = data.db.main_read_txn()?;
-
-    let internal_id = index
-        .main
-        .external_to_internal_docid(&reader, &path.document_id)?
-        .ok_or(Error::document_not_found(&path.document_id))?;
-
-    let document: Document = index
-        .document(&reader, None, internal_id)?
-        .ok_or(Error::document_not_found(&path.document_id))?;
-
+    let index = path.index_uid.clone();
+    let id = path.document_id.clone();
+    let document = data
+        .retrieve_document(index, id, None as Option<Vec<String>>)
+        .await?;
+    debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
 
-#[delete(
-    "/indexes/{index_uid}/documents/{document_id}",
-    wrap = "Authentication::Private"
-)]
 async fn delete_document(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let mut documents_deletion = index.documents_deletion();
-    documents_deletion.delete_document_by_external_docid(path.document_id.clone());
-
-    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let update_status = data
+        .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
+        .await?;
+    debug!("returns: {:?}", update_status);
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BrowseQuery {
     offset: Option<usize>,
@@ -86,181 +102,112 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
-pub fn get_all_documents_sync(
-    data: &web::Data<Data>,
-    reader: &MainReader,
-    index_uid: &str,
-    offset: usize,
-    limit: usize,
-    attributes_to_retrieve: Option<&String>
-) -> Result<Vec<Document>, Error> {
-    let index = data
-        .db
-        .open_index(index_uid)
-        .ok_or(Error::index_not_found(index_uid))?;
-
-
-    let documents_ids: Result<BTreeSet<_>, _> = index
-        .documents_fields_counts
-        .documents_ids(reader)?
-        .skip(offset)
-        .take(limit)
-        .collect();
-
-    let attributes: Option<HashSet<&str>> = attributes_to_retrieve
-        .map(|a| a.split(',').collect());
-
-    let mut documents = Vec::new();
-    for document_id in documents_ids? {
-        if let Ok(Some(document)) =
-            index.document::<Document>(reader, attributes.as_ref(), document_id)
-        {
-            documents.push(document);
-        }
-    }
-
-    Ok(documents)
-}
-
-#[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
 async fn get_all_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let offset = params.offset.unwrap_or(0);
-    let limit = params.limit.unwrap_or(20);
-    let index_uid = &path.index_uid;
-    let reader = data.db.main_read_txn()?;
+    debug!("called with params: {:?}", params);
+    let attributes_to_retrieve = params.attributes_to_retrieve.as_ref().and_then(|attrs| {
+        let mut names = Vec::new();
+        for name in attrs.split(',').map(String::from) {
+            if name == "*" {
+                return None;
+            }
+            names.push(name);
+        }
+        Some(names)
+    });
 
-    let documents = get_all_documents_sync(
-        &data,
-        &reader,
-        index_uid,
-        offset,
-        limit,
-        params.attributes_to_retrieve.as_ref()
-    )?;
-
+    let documents = data
+        .retrieve_documents(
+            path.index_uid.clone(),
+            params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
+            params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
+            attributes_to_retrieve,
+        )
+        .await?;
+    debug!("returns: {:?}", documents);
     Ok(HttpResponse::Ok().json(documents))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-async fn update_multiple_documents(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
-    is_partial: bool,
-) -> Result<HttpResponse, ResponseError> {
-    let update_id = data.get_or_create_index(&path.index_uid, |index| {
-
-        let mut document_addition = if is_partial {
-            index.documents_partial_addition()
-        } else {
-            index.documents_addition()
-        };
-
-        // Return an early error if primary key is already set, otherwise, try to set it up in the
-        // update later.
-        let reader = data.db.main_read_txn()?;
-        let schema = index
-            .main
-            .schema(&reader)?
-            .ok_or(meilisearch_core::Error::SchemaMissing)?;
-
-        match (params.into_inner().primary_key, schema.primary_key()) {
-            (Some(key), None) => document_addition.set_primary_key(key),
-            (None, None) => {
-                let key = body
-                    .first()
-                    .and_then(find_primary_key)
-                    .ok_or(meilisearch_core::Error::MissingPrimaryKey)?;
-                document_addition.set_primary_key(key);
-            }
-            _ => ()
-        }
-
-        for document in body.into_inner() {
-            document_addition.update_document(document);
-        }
-
-        Ok(data.db.update_write(|w| document_addition.finalize(w))?)
-    })?;
-    return Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)));
-}
-
-fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
-    for key in document.keys() {
-        if key.to_lowercase().contains("id") {
-            return Some(key.to_string());
-        }
-    }
-    None
-}
-
-#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+/// Route used when the payload type is "application/json"
+/// Used to add or replace documents
 async fn add_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
+    body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    update_multiple_documents(data, path, params, body, false).await
+    debug!("called with params: {:?}", params);
+    let update_status = data
+        .add_documents(
+            path.into_inner().index_uid,
+            IndexDocumentsMethod::ReplaceDocuments,
+            UpdateFormat::Json,
+            body,
+            params.primary_key.clone(),
+        )
+        .await?;
+
+    debug!("returns: {:?}", update_status);
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+/// Route used when the payload type is "application/json"
+/// Used to add or replace documents
 async fn update_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
+    body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    update_multiple_documents(data, path, params, body, true).await
+    debug!("called with params: {:?}", params);
+    let update = data
+        .add_documents(
+            path.into_inner().index_uid,
+            IndexDocumentsMethod::UpdateDocuments,
+            UpdateFormat::Json,
+            body,
+            params.primary_key.clone(),
+        )
+        .await?;
+
+    debug!("returns: {:?}", update);
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
 }
 
-#[post(
-    "/indexes/{index_uid}/documents/delete-batch",
-    wrap = "Authentication::Private"
-)]
 async fn delete_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+    debug!("called with params: {:?}", body);
+    let ids = body
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .map(String::from)
+                .unwrap_or_else(|| v.to_string())
+        })
+        .collect();
 
-    let mut documents_deletion = index.documents_deletion();
-
-    for document_id in body.into_inner() {
-        let document_id = update::value_to_string(&document_id);
-        documents_deletion.delete_document_by_external_docid(document_id);
-    }
-
-    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let update_status = data.delete_documents(path.index_uid.clone(), ids).await?;
+    debug!("returns: {:?}", update_status);
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-#[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
-    data: web::Data<Data>,
+    data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let update_id = data.db.update_write(|w| index.clear_all(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let update_status = data.clear_documents(path.index_uid.clone()).await?;
+    debug!("returns: {:?}", update_status);
+    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }

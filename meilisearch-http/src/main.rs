@@ -1,35 +1,32 @@
-use std::{env, thread};
+use std::env;
 
-use actix_cors::Cors;
-use actix_web::{middleware, HttpServer};
+use actix_web::HttpServer;
 use main_error::MainError;
-use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::{create_app, index_update_callback, Data, Opt};
+use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
-use meilisearch_http::{snapshot, dump};
 
-mod analytics;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+use meilisearch_http::analytics;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+const SENTRY_DSN: &str = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337";
+
 #[actix_web::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    let _sentry = sentry::init((
-        if !opt.no_sentry {
-            Some(opt.sentry_dsn.clone())
-        } else {
-            None
-        },
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    let mut log_builder = env_logger::Builder::new();
+    log_builder.parse_filters(&opt.log_level);
+    if opt.log_level == "info" {
+        // if we are in info we only allow the warn log_level for milli
+        log_builder.filter_module("milli", log::LevelFilter::Warn);
+    }
 
     match opt.env.as_ref() {
         "production" => {
@@ -40,61 +37,60 @@ async fn main() -> Result<(), MainError> {
                 );
             }
 
-            #[cfg(all(not(debug_assertions), feature = "sentry"))]
-            if !opt.no_sentry && _sentry.is_enabled() {
-                sentry::integrations::panic::register_panic_handler(); // TODO: This shouldn't be needed when upgrading to sentry 0.19.0. These integrations are turned on by default when using `sentry::init`.
-                sentry::integrations::env_logger::init(None, Default::default());
+            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+            if !opt.no_analytics {
+                let logger =
+                    sentry::integrations::log::SentryLogger::with_dest(log_builder.build());
+                log::set_boxed_logger(Box::new(logger))
+                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                    .unwrap();
+
+                let sentry = sentry::init(sentry::ClientOptions {
+                    release: sentry::release_name!(),
+                    dsn: Some(SENTRY_DSN.parse()?),
+                    before_send: Some(Arc::new(|event| {
+                        event
+                            .message
+                            .as_ref()
+                            .map(|msg| msg.to_lowercase().contains("no space left on device"))
+                            .unwrap_or(false)
+                            .then(|| event)
+                    })),
+                    ..Default::default()
+                });
+                // sentry must stay alive as long as possible
+                std::mem::forget(sentry);
+            } else {
+                log_builder.init();
             }
         }
         "development" => {
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            log_builder.init();
         }
         _ => unreachable!(),
     }
 
-    if let Some(path) = &opt.import_snapshot {
-        snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
-    }
-
     let data = Data::new(opt.clone())?;
 
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
         let analytics_data = data.clone();
         let analytics_opt = opt.clone();
-        thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
-    }
-
-    let data_cloned = data.clone();
-    data.db.set_update_callback(Box::new(move |name, status| {
-        index_update_callback(name, &data_cloned, status);
-    }));
-
-
-    if let Some(path) = &opt.import_dump {
-        dump::import_dump(&data, path, opt.dump_batch_size)?;
-    }
-
-    if opt.schedule_snapshot {
-        snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
+        tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
     }
 
     print_launch_resume(&opt, &data);
 
-    let enable_frontend = opt.env != "production";
-    let http_server = HttpServer::new(move || {
-        let cors = Cors::default()
-                    .send_wildcard()
-                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                    .allow_any_origin()
-                    .allow_any_method()
-                    .max_age(86_400); // 24h
+    run_http(data, opt).await?;
 
-        create_app(&data, enable_frontend)
-            .wrap(cors)
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
-            .wrap(NormalizePath)
-    });
+    Ok(())
+}
+
+async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+    let _enable_dashboard = &opt.env == "development";
+    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
+        // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+        .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
@@ -104,11 +100,19 @@ async fn main() -> Result<(), MainError> {
     } else {
         http_server.bind(opt.http_addr)?.run().await?;
     }
-
     Ok(())
 }
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
+    let commit_sha = match option_env!("COMMIT_SHA") {
+        Some("") | None => env!("VERGEN_SHA"),
+        Some(commit_sha) => commit_sha,
+    };
+    let commit_date = match option_env!("COMMIT_DATE") {
+        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some(commit_date) => commit_date,
+    };
+
     let ascii_name = r#"
 888b     d888          d8b 888 d8b  .d8888b.                                    888
 8888b   d8888          Y8P 888 Y8P d88P  Y88b                                   888
@@ -125,38 +129,32 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"http://{}\"", opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
-    eprintln!("Commit SHA:\t\t{:?}", env!("VERGEN_SHA").to_string());
-    eprintln!(
-        "Build date:\t\t{:?}",
-        env!("VERGEN_BUILD_TIMESTAMP").to_string()
-    );
+    eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
+    eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
     eprintln!(
         "Package version:\t{:?}",
         env!("CARGO_PKG_VERSION").to_string()
     );
 
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    eprintln!(
-        "Sentry DSN:\t\t{:?}",
-        if !opt.no_sentry {
-            &opt.sentry_dsn
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    {
+        if opt.no_analytics {
+            eprintln!("Anonymous telemetry:\t\"Disabled\"");
         } else {
-            "Disabled"
-        }
-    );
+            eprintln!(
+                "
+Thank you for using MeiliSearch!
 
-    eprintln!(
-        "Anonymous telemetry:\t{:?}",
-        if !opt.no_analytics {
-            "Enabled"
-        } else {
-            "Disabled"
+We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/reference/features/configuration.html#analytics
+
+Anonymous telemetry:   \"Enabled\""
+            );
         }
-    );
+    }
 
     eprintln!();
 
-    if data.api_keys.master.is_some() {
+    if data.api_keys().master.is_some() {
         eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \
@@ -166,6 +164,6 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!();
     eprintln!("Documentation:\t\thttps://docs.meilisearch.com");
     eprintln!("Source code:\t\thttps://github.com/meilisearch/meilisearch");
-    eprintln!("Contact:\t\thttps://docs.meilisearch.com/learn/what_is_meilisearch/contact.html or bonjour@meilisearch.com");
+    eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html or bonjour@meilisearch.com");
     eprintln!();
 }

@@ -1,105 +1,138 @@
-#![allow(clippy::or_fun_call)]
-
 pub mod data;
+#[macro_use]
 pub mod error;
+#[macro_use]
+pub mod extractors;
 pub mod helpers;
-pub mod models;
+mod index;
+mod index_controller;
 pub mod option;
 pub mod routes;
+
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
-pub mod snapshot;
-pub mod dump;
 
-use actix_http::Error;
-use actix_service::ServiceFactory;
-use actix_web::{dev, web, App};
-use chrono::Utc;
-use log::error;
+use crate::extractors::authentication::AuthConfig;
 
-use meilisearch_core::{Index, MainWriter, ProcessedUpdateResult};
-
-pub use option::Opt;
 pub use self::data::Data;
-use self::error::{payload_error_handler, ResponseError};
+pub use option::Opt;
 
-pub fn create_app(
-    data: &Data,
-    enable_frontend: bool,
-) -> App<
-    impl ServiceFactory<
-        Config = (),
-        Request = dev::ServiceRequest,
-        Response = dev::ServiceResponse<actix_http::body::Body>,
-        Error = Error,
-        InitError = (),
-    >,
-    actix_http::body::Body,
-> {
-    let app = App::new()
+use actix_web::web;
+
+use extractors::authentication::policies::*;
+use extractors::payload::PayloadConfig;
+
+pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
+    let http_payload_size_limit = data.http_payload_size_limit();
+    config
         .data(data.clone())
+        .app_data(data)
         .app_data(
             web::JsonConfig::default()
-                .limit(data.http_payload_size_limit)
+                .limit(http_payload_size_limit)
                 .content_type(|_mime| true) // Accept all mime types
-                .error_handler(|err, _req| payload_error_handler(err).into()),
+                .error_handler(|err, _req| error::payload_error_handler(err).into()),
         )
+        .app_data(PayloadConfig::new(http_payload_size_limit))
         .app_data(
             web::QueryConfig::default()
-            .error_handler(|err, _req| payload_error_handler(err).into())
-        )
-        .configure(routes::document::services)
-        .configure(routes::index::services)
-        .configure(routes::search::services)
-        .configure(routes::setting::services)
-        .configure(routes::stop_words::services)
-        .configure(routes::synonym::services)
-        .configure(routes::health::services)
-        .configure(routes::stats::services)
-        .configure(routes::key::services)
-        .configure(routes::dump::services);
-    if enable_frontend {
-        app
-            .service(routes::load_html)
-            .service(routes::load_css)
+                .error_handler(|err, _req| error::payload_error_handler(err).into()),
+        );
+}
+
+pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
+    let keys = data.api_keys();
+    let auth_config = if let Some(ref master_key) = keys.master {
+        let private_key = keys.private.as_ref().unwrap();
+        let public_key = keys.public.as_ref().unwrap();
+        let mut policies = init_policies!(Public, Private, Admin);
+        create_users!(
+            policies,
+            master_key.as_bytes() => { Admin, Private, Public },
+            private_key.as_bytes() => { Private, Public },
+            public_key.as_bytes() => { Public }
+        );
+        AuthConfig::Auth(policies)
     } else {
-        app
-            .service(routes::running)
-    }
+        AuthConfig::NoAuth
+    };
+
+    config.app_data(auth_config);
 }
 
-pub fn index_update_callback_txn(index: Index, index_uid: &str, data: &Data, mut writer: &mut MainWriter) -> Result<(), String> {
-    if let Err(e) = data.db.compute_stats(&mut writer, index_uid) {
-        return Err(format!("Impossible to compute stats; {}", e));
+#[cfg(feature = "mini-dashboard")]
+pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
+    use actix_web::HttpResponse;
+    use actix_web_static_files::Resource;
+
+    mod generated {
+        include!(concat!(env!("OUT_DIR"), "/generated.rs"));
     }
 
-    if let Err(e) = data.db.set_last_update(&mut writer, &Utc::now()) {
-        return Err(format!("Impossible to update last_update; {}", e));
-    }
-
-    if let Err(e) = index.main.put_updated_at(&mut writer) {
-        return Err(format!("Impossible to update updated_at; {}", e));
-    }
-
-    Ok(())
-}
-
-pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {
-    if status.error.is_some() {
-        return;
-    }
-
-    if let Some(index) = data.db.open_index(index_uid) {
-        let db = &data.db;
-        let res = db.main_write::<_, _, ResponseError>(|mut writer| {
-            if let Err(e) = index_update_callback_txn(index, index_uid, data, &mut writer) {
-                error!("{}", e);
+    if enable_frontend {
+        let generated = generated::generate();
+        let mut scope = web::scope("/");
+        // Generate routes for mini-dashboard assets
+        for (path, resource) in generated.into_iter() {
+            let Resource {
+                mime_type, data, ..
+            } = resource;
+            // Redirect index.html to /
+            if path == "index.html" {
+                config.service(web::resource("/").route(
+                    web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
+                ));
+            } else {
+                scope = scope.service(web::resource(path).route(
+                    web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
+                ));
             }
-
-            Ok(())
-        });
-        match res {
-            Ok(_) => (),
-            Err(e) => error!("{}", e),
         }
+        config.service(scope);
+    } else {
+        config.service(web::resource("/").route(web::get().to(routes::running)));
     }
+}
+
+#[cfg(not(feature = "mini-dashboard"))]
+pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
+    config.service(web::resource("/").route(web::get().to(routes::running)));
+}
+
+#[macro_export]
+macro_rules! create_app {
+    ($data:expr, $enable_frontend:expr) => {{
+        use actix_cors::Cors;
+        use actix_web::middleware::TrailingSlash;
+        use actix_web::App;
+        use actix_web::{middleware, web};
+        use meilisearch_http::routes::*;
+        use meilisearch_http::{configure_auth, configure_data, dashboard};
+
+        App::new()
+            .configure(|s| configure_data(s, $data.clone()))
+            .configure(|s| configure_auth(s, &$data))
+            .configure(document::services)
+            .configure(index::services)
+            .configure(search::services)
+            .configure(settings::services)
+            .configure(health::services)
+            .configure(stats::services)
+            .configure(key::services)
+            .configure(dump::services)
+            .configure(|s| dashboard(s, $enable_frontend))
+            .wrap(
+                Cors::default()
+                    .send_wildcard()
+                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .max_age(86_400), // 24h
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::Compress::default())
+            .wrap(middleware::NormalizePath::new(
+                middleware::TrailingSlash::Trim,
+            ))
+    }};
 }

@@ -1,8 +1,10 @@
-use std::{error, fs};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::{error, fs};
 
+use byte_unit::Byte;
+use grenad::CompressionType;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
@@ -10,13 +12,81 @@ use rustls::{
 };
 use structopt::StructOpt;
 
+#[derive(Debug, Clone, StructOpt)]
+pub struct IndexerOpts {
+    /// The amount of documents to skip before printing
+    /// a log regarding the indexing advancement.
+    #[structopt(long, default_value = "100000")] // 100k
+    pub log_every_n: usize,
+
+    /// Grenad max number of chunks in bytes.
+    #[structopt(long)]
+    pub max_nb_chunks: Option<usize>,
+
+    /// The maximum amount of memory to use for the Grenad buffer. It is recommended
+    /// to use something like 80%-90% of the available memory.
+    ///
+    /// It is automatically split by the number of jobs e.g. if you use 7 jobs
+    /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
+    #[structopt(long, default_value = "7 GiB")]
+    pub max_memory: Byte,
+
+    /// Size of the linked hash map cache when indexing.
+    /// The bigger it is, the faster the indexing is but the more memory it takes.
+    #[structopt(long, default_value = "500")]
+    pub linked_hash_map_size: usize,
+
+    /// The name of the compression algorithm to use when compressing intermediate
+    /// Grenad chunks while indexing documents.
+    ///
+    /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
+    #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
+    pub chunk_compression_type: CompressionType,
+
+    /// The level of compression of the chosen algorithm.
+    #[structopt(long, requires = "chunk-compression-type")]
+    pub chunk_compression_level: Option<u32>,
+
+    /// The number of bytes to remove from the begining of the chunks while reading/sorting
+    /// or merging them.
+    ///
+    /// File fusing must only be enable on file systems that support the `FALLOC_FL_COLLAPSE_RANGE`,
+    /// (i.e. ext4 and XFS). File fusing will only work if the `enable-chunk-fusing` is set.
+    #[structopt(long, default_value = "4 GiB")]
+    pub chunk_fusing_shrink_size: Byte,
+
+    /// Enable the chunk fusing or not, this reduces the amount of disk space used.
+    #[structopt(long)]
+    pub enable_chunk_fusing: bool,
+
+    /// Number of parallel jobs for indexing, defaults to # of CPUs.
+    #[structopt(long)]
+    pub indexing_jobs: Option<usize>,
+}
+
+impl Default for IndexerOpts {
+    fn default() -> Self {
+        Self {
+            log_every_n: 100_000,
+            max_nb_chunks: None,
+            max_memory: Byte::from_str("1GiB").unwrap(),
+            linked_hash_map_size: 500,
+            chunk_compression_type: CompressionType::None,
+            chunk_compression_level: None,
+            chunk_fusing_shrink_size: Byte::from_str("4GiB").unwrap(),
+            enable_chunk_fusing: false,
+            indexing_jobs: None,
+        }
+    }
+}
+
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
-#[derive(Debug, Default, Clone, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[structopt(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
-    pub db_path: String,
+    pub db_path: PathBuf,
 
     /// The address on which the http server will listen.
     #[structopt(long, env = "MEILI_HTTP_ADDR", default_value = "127.0.0.1:7700")]
@@ -26,17 +96,6 @@ pub struct Opt {
     #[structopt(long, env = "MEILI_MASTER_KEY")]
     pub master_key: Option<String>,
 
-    /// The Sentry DSN to use for error reporting. This defaults to the MeiliSearch Sentry project.
-    /// You can disable sentry all together using the `--no-sentry` flag or `MEILI_NO_SENTRY` environment variable.
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(long, env = "SENTRY_DSN", default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337")]
-    pub sentry_dsn: String,
-
-    /// Disable Sentry error reporting.
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(long, env = "MEILI_NO_SENTRY")]
-    pub no_sentry: bool,
-
     /// This environment variable must be set to `production` if you are running in production.
     /// If the server is running in development mode more logs will be displayed,
     /// and the master key can be avoided which implies that there is no security on the updates routes.
@@ -45,20 +104,21 @@ pub struct Opt {
     pub env: String,
 
     /// Do not send analytics to Meili.
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]
     pub no_analytics: bool,
 
     /// The maximum size, in bytes, of the main lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", default_value = "107374182400")] // 100GB
-    pub max_mdb_size: usize,
+    #[structopt(long, env = "MEILI_MAX_INDEX_SIZE", default_value = "100 GiB")]
+    pub max_index_size: Byte,
 
     /// The maximum size, in bytes, of the update lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "107374182400")] // 100GB
-    pub max_udb_size: usize,
+    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "100 GiB")]
+    pub max_udb_size: Byte,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "104857600")] // 100MB
-    pub http_payload_size_limit: usize,
+    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "100 MB")]
+    pub http_payload_size_limit: Byte,
 
     /// Read server certificates from CERTFILE.
     /// This should contain PEM-format certificates
@@ -117,20 +177,23 @@ pub struct Opt {
     pub schedule_snapshot: bool,
 
     /// Defines time interval, in seconds, between each snapshot creation.
-    #[structopt(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
-    pub snapshot_interval_sec: Option<u64>,
+    #[structopt(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC", default_value = "86400")] // 24h
+    pub snapshot_interval_sec: u64,
 
     /// Folder where dumps are created when the dump route is called.
     #[structopt(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]
     pub dumps_dir: PathBuf,
 
-    /// Import a dump from the specified path, must be a `.tar.gz` file.
+    /// Import a dump from the specified path, must be a `.dump` file.
     #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    /// The batch size used in the importation process, the bigger it is the faster the dump is created.
-    #[structopt(long, env = "MEILI_DUMP_BATCH_SIZE", default_value = "1024")]
-    pub dump_batch_size: usize,
+    /// Set the log level
+    #[structopt(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
+    pub log_level: String,
+
+    #[structopt(skip)]
+    pub indexer_options: IndexerOpts,
 }
 
 impl Opt {
