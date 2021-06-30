@@ -738,7 +738,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "The <em>Hob</em>bit");
+        assert_eq!(value["title"], "The Hobbit");
         assert_eq!(value["author"], "J. R. R. Tolkien");
     }
 
@@ -1122,7 +1122,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
+        assert_eq!(value["title"], "the Half-Blood Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
