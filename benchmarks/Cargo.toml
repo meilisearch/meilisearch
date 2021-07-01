@@ -11,7 +11,7 @@ milli = { path = "../milli" }
 jemallocator = "0.3.2"
 
 [dev-dependencies]
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0", default-features = false, features = ["lmdb", "sync-read-txn"] }
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0" }
 criterion = { version = "0.3.4", features = ["html_reports"] }
 
 [build-dependencies]
