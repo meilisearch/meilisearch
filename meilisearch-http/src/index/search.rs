@@ -580,13 +580,23 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             // Matcher::match since the call is expensive.
             if format_options.highlight && token.is_word() {
                 if let Some(length) = matcher.matches(token.text()) {
-                    if format_options.highlight {
-                        out.push_str(&self.marks.0);
-                        out.push_str(&word[..length]);
-                        out.push_str(&self.marks.1);
-                        out.push_str(&word[length..]);
-                        return out;
+                    match word.get(..length).zip(word.get(length..)) {
+                        Some((head, tail)) => {
+                            out.push_str(&self.marks.0);
+                            out.push_str(head);
+                            out.push_str(&self.marks.1);
+                            out.push_str(tail);
+                        }
+                        // if we are in the middle of a character
+                        // or if all the word should be highlighted,
+                        // we highlight the complete word.
+                        None => {
+                            out.push_str(&self.marks.0);
+                            out.push_str(&word);
+                            out.push_str(&self.marks.1);
+                        }
                     }
+                    return out;
                 }
             }
             out.push_str(word);
@@ -738,6 +748,132 @@ mod test {
         .unwrap();
 
         assert_eq!(value["title"], "The <em>Hob</em>bit");
+        assert_eq!(value["author"], "J. R. R. Tolkien");
+    }
+
+    /// https://github.com/meilisearch/MeiliSearch/issues/1368
+    #[test]
+    fn formatted_with_highlight_emoji() {
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(
+            title,
+            Value::String("Go💼od luck.".into()).to_string().as_bytes(),
+        )
+        .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(
+            author,
+            Value::String("JacobLey".into()).to_string().as_bytes(),
+        )
+        .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let mut formatted_options = BTreeMap::new();
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: None,
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
+
+        let mut matching_words = BTreeMap::new();
+        // emojis are deunicoded during tokenization
+        // TODO Tokenizer should remove spaces after deunicode
+        matching_words.insert("gobriefcase od", Some(11));
+
+        let value = format_fields(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "<em>Go💼od</em> luck.");
+        assert_eq!(value["author"], "JacobLey");
+    }
+
+    #[test]
+    fn formatted_with_highlight_in_unicode_word() {
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("étoile".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(
+            author,
+            Value::String("J. R. R. Tolkien".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let mut formatted_options = BTreeMap::new();
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: None,
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
+
+        let mut matching_words = BTreeMap::new();
+        matching_words.insert("etoile", Some(1));
+
+        let value = format_fields(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "<em>étoile</em>");
         assert_eq!(value["author"], "J. R. R. Tolkien");
     }
 
