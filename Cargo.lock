@@ -131,7 +131,7 @@ dependencies = [
  "convert_case",
  "criterion",
  "flate2",
- "heed 0.11.0",
+ "heed",
  "jemallocator",
  "milli",
  "reqwest",
@@ -872,33 +872,14 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "269c7486ed6def5d7b59a427cec3e87b4d4dd4381d01e21c8c9f2d3985688392"
-dependencies = [
- "bytemuck",
- "byteorder",
- "heed-traits 0.8.0",
- "heed-types 0.8.0",
- "libc",
- "lmdb-rkv-sys 0.11.0",
- "once_cell",
- "page_size",
- "serde",
- "synchronoise",
- "url",
-]
-
-[[package]]
-name = "heed"
 version = "0.12.0"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 dependencies = [
  "byteorder",
- "heed-traits 0.7.0",
- "heed-types 0.7.2",
+ "heed-traits",
+ "heed-types",
  "libc",
- "lmdb-rkv-sys 0.15.0",
+ "lmdb-rkv-sys",
  "once_cell",
  "page_size",
  "serde",
@@ -913,35 +894,15 @@ version = "0.7.0"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 
 [[package]]
-name = "heed-traits"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a53a94e5b2fd60417e83ffdfe136c39afacff0d4ac1d8d01cd66928ac610e1a2"
-
-[[package]]
 name = "heed-types"
 version = "0.7.2"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
 dependencies = [
  "bincode",
- "heed-traits 0.7.0",
+ "heed-traits",
  "serde",
  "serde_json",
  "zerocopy",
-]
-
-[[package]]
-name = "heed-types"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a6cf0a6952fcedc992602d5cddd1e3fff091fbe87d38636e3ec23a31f32acbd"
-dependencies = [
- "bincode",
- "bytemuck",
- "byteorder",
- "heed-traits 0.8.0",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -950,7 +911,7 @@ version = "0.7.1"
 dependencies = [
  "anyhow",
  "byte-unit",
- "heed 0.12.0",
+ "heed",
  "jemallocator",
  "milli",
  "stderrlog",
@@ -1014,7 +975,7 @@ dependencies = [
  "funty",
  "futures",
  "grenad",
- "heed 0.12.0",
+ "heed",
  "jemallocator",
  "log",
  "maplit",
@@ -1154,7 +1115,7 @@ dependencies = [
  "anyhow",
  "byte-unit",
  "csv",
- "heed 0.12.0",
+ "heed",
  "jemallocator",
  "milli",
  "roaring",
@@ -1317,17 +1278,6 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lmdb-rkv-sys"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b27470ac25167b3afdfb6af8fcd3bc1be67de50ffbdaf4073378cfded6ae24a5"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
-]
-
-[[package]]
-name = "lmdb-rkv-sys"
 version = "0.15.0"
 source = "git+https://github.com/meilisearch/lmdb-rs#d0b50d02938ee84e4e4372697ea991fe2a4cae3b"
 dependencies = [
@@ -1434,7 +1384,7 @@ dependencies = [
  "fst",
  "fxhash",
  "grenad",
- "heed 0.12.0",
+ "heed",
  "human_format",
  "itertools 0.10.1",
  "levenshtein_automata",
@@ -2278,7 +2228,7 @@ version = "0.7.1"
 dependencies = [
  "anyhow",
  "byte-unit",
- "heed 0.12.0",
+ "heed",
  "jemallocator",
  "log",
  "milli",
