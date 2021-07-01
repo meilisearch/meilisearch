@@ -1018,7 +1018,7 @@ dependencies = [
  "jemallocator",
  "log",
  "maplit",
- "meilisearch-tokenizer 0.2.3",
+ "meilisearch-tokenizer",
  "memmap",
  "milli",
  "once_cell",
@@ -1381,22 +1381,6 @@ checksum = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.2.2"
-source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.2#eda4ed4968c8ac973cf1707ef89bd7012bb2722f"
-dependencies = [
- "character_converter",
- "cow-utils",
- "deunicode",
- "fst",
- "jieba-rs",
- "once_cell",
- "slice-group-by",
- "unicode-segmentation",
- "whatlang",
-]
-
-[[package]]
-name = "meilisearch-tokenizer"
 version = "0.2.3"
 source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.3#c2399c3f879144ad92e20ae057e14984dfd22781"
 dependencies = [
@@ -1458,7 +1442,7 @@ dependencies = [
  "log",
  "logging_timer",
  "maplit",
- "meilisearch-tokenizer 0.2.2",
+ "meilisearch-tokenizer",
  "memmap",
  "obkv",
  "once_cell",
