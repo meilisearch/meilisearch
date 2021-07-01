@@ -753,7 +753,7 @@ mod test {
 
     /// https://github.com/meilisearch/MeiliSearch/issues/1368
     #[test]
-    fn formatted_with_highlight_in_unicode_word() {
+    fn formatted_with_highlight_emoji() {
         let stop_words = fst::Set::default();
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
@@ -814,6 +814,67 @@ mod test {
 
         assert_eq!(value["title"], "<em>Go💼od</em> luck.");
         assert_eq!(value["author"], "JacobLey");
+    }
+
+    #[test]
+    fn formatted_with_highlight_in_unicode_word() {
+        let stop_words = fst::Set::default();
+        let mut config = AnalyzerConfig::default();
+        config.stop_words(&stop_words);
+        let analyzer = Analyzer::new(config);
+        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+
+        let mut fields = FieldsIdsMap::new();
+        let title = fields.insert("title").unwrap();
+        let author = fields.insert("author").unwrap();
+
+        let mut buf = Vec::new();
+        let mut obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(title, Value::String("étoile".into()).to_string().as_bytes())
+            .unwrap();
+        obkv.finish().unwrap();
+        obkv = obkv::KvWriter::new(&mut buf);
+        obkv.insert(
+            author,
+            Value::String("J. R. R. Tolkien".into())
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+        obkv.finish().unwrap();
+
+        let obkv = obkv::KvReader::new(&buf);
+
+        let mut formatted_options = BTreeMap::new();
+        formatted_options.insert(
+            title,
+            FormatOptions {
+                highlight: true,
+                crop: None,
+            },
+        );
+        formatted_options.insert(
+            author,
+            FormatOptions {
+                highlight: false,
+                crop: None,
+            },
+        );
+
+        let mut matching_words = BTreeMap::new();
+        matching_words.insert("etoile", Some(1));
+
+        let value = format_fields(
+            &fields,
+            obkv,
+            &formatter,
+            &matching_words,
+            &formatted_options,
+        )
+        .unwrap();
+
+        assert_eq!(value["title"], "<em>étoile</em>");
+        assert_eq!(value["author"], "J. R. R. Tolkien");
     }
 
     #[test]
