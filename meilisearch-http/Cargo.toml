@@ -18,7 +18,7 @@ hex = { version = "0.4.3", optional = true }
 reqwest = { version = "0.11.3", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
 sha-1 = { version = "0.9.4", optional = true }
 tempfile = { version = "3.1.0", optional = true }
-vergen = "3.1.0"
+vergen = "5.1.12"
 zip = { version = "0.5.12", optional = true }
 
 [dependencies]
