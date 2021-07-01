@@ -5,3 +5,5 @@
 /*.mdb
 /query-history.txt
 /data.ms
+/snapshots
+/dumps
