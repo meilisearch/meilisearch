@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
     - uses: actions/checkout@v2
     - name: Run cargo check without any default features
@@ -32,22 +32,6 @@ jobs:
       with:
         command: test
         args: --locked --release
-
-  # We don't run test on Windows since we get the following error: There is not enough space on the disk.
-  check-on-windows:
-    name: Cargo check on Windows
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Run cargo check without any default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
-        args: --no-default-features
-    - name: Run cargo check with all default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
 
   clippy:
     name: Run Clippy
