@@ -162,8 +162,7 @@ impl UpdateStore {
             // function returns a Result and we must just unlock the loop on Result.
             'outer: while timeout(duration, notification_receiver.recv())
                 .await
-                .transpose()
-                .map_or(false, |r| r.is_ok())
+                .map_or(true, |o| o.is_some())
             {
                 loop {
                     match update_store_weak.upgrade() {
