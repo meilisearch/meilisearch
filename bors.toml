@@ -1,7 +1,7 @@
 status = [
     'Tests on ubuntu-18.04',
     'Tests on macos-latest',
-    'Tests on windows-latest ',
+    'Tests on windows-latest',
     'Run Clippy',
     'Run Rustfmt'
 ]
