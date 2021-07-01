@@ -108,7 +108,8 @@ impl<T> IndexMut<(usize, usize)> for N2Array<T> {
 /// The algorithm is a modified
 /// [Damerau-Levenshtein](https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance)
 fn bytes_to_highlight(source: &str, target: &str) -> usize {
-    let (n, m) = (source.chars().count(), target.chars().count());
+    let n = source.chars().count();
+    let m = target.chars().count();
 
     if n == 0 {
         return 0;
@@ -125,11 +126,11 @@ fn bytes_to_highlight(source: &str, target: &str) -> usize {
     let mut matrix = N2Array::new(n + 2, m + 2, 0);
 
     matrix[(0, 0)] = inf;
-    for i in 0..n + 1 {
+    for i in 0..=n {
         matrix[(i + 1, 0)] = inf;
         matrix[(i + 1, 1)] = i;
     }
-    for j in 0..m + 1 {
+    for j in 0..=m {
         matrix[(0, j + 1)] = inf;
         matrix[(1, j + 1)] = j;
     }
@@ -163,16 +164,16 @@ fn bytes_to_highlight(source: &str, target: &str) -> usize {
         last_row.insert(char_s, row);
     }
 
-    let mut minimum = 2;
-    for x in 0..=n {
-        let min_dist = (0..=m).map(|y| matrix[(x + 1, y + 1)]).min().unwrap();
-        if min_dist <= 2 {
-            minimum = x;
+    let mut minimum = (u32::max_value(), 0);
+    for x in 0..=m {
+        let dist = matrix[(n + 1, x + 1)] as u32;
+        if dist < minimum.0 {
+            minimum = (dist, x);
         }
     }
 
     // everything was done characters wise and now we want to returns a number of bytes
-    source.chars().take(minimum).map(|c| c.len_utf8()).sum()
+    source.chars().take(minimum.1).map(|c| c.len_utf8()).sum()
 }
 
 #[cfg(test)]
@@ -208,7 +209,7 @@ mod tests {
             TestBytesToHighlight {
                 query: "Levenstein",
                 text: "Levenshte",
-                length: "Levenstei".len(),
+                length: "Levenste".len(),
             },
             // we get to the end of our word with only two typos at the beginning
             TestBytesToHighlight {
@@ -216,13 +217,8 @@ mod tests {
                 text: "Levenshtein",
                 length: "Bavenshtein".len(),
             },
-            // Since we calculate a distance char by char we are supposed to have only two mistakes
-            // here. That would've not be the case if we were computing the distance bytes per bytes
-            TestBytesToHighlight { query: "Båve", text: "Chiøt", length: "Bå".len() },
-            TestBytesToHighlight { query: "💪🙂🍤", text: "plouf", length: "💪🙂".len() },
-            TestBytesToHighlight { query: "clôu¿i", text: "bloubi", length: "clôu".len() },
             TestBytesToHighlight {
-                query: "Альфа", text: "Альфой", length: "Альфа".len()
+                query: "Альфа", text: "Альфой", length: "Альф".len()
             },
             TestBytesToHighlight {
                 query: "Go💼", text: "Go💼od luck.", length: "Go💼".len()
@@ -240,7 +236,7 @@ mod tests {
         ];
 
         for test in &tests {
-            let length = bytes_to_highlight(test.query, test.text);
+            let length = bytes_to_highlight(test.text, test.query);
             assert_eq!(length, test.length, r#"lenght between: "{}" "{}""#, test.query, test.text);
             assert!(
                 from_utf8(&test.query.as_bytes()[..length]).is_ok(),
@@ -273,12 +269,12 @@ mod tests {
 
         let matching_words = MatchingWords::from_query_tree(&query_tree);
 
-        assert_eq!(matching_words.matching_bytes("word"), Some(4));
+        assert_eq!(matching_words.matching_bytes("word"), Some(3));
         assert_eq!(matching_words.matching_bytes("nyc"), None);
         assert_eq!(matching_words.matching_bytes("world"), Some(5));
-        assert_eq!(matching_words.matching_bytes("splitted"), Some(7));
+        assert_eq!(matching_words.matching_bytes("splitted"), Some(5));
         assert_eq!(matching_words.matching_bytes("thisnew"), None);
         assert_eq!(matching_words.matching_bytes("borld"), Some(5));
-        assert_eq!(matching_words.matching_bytes("wordsplit"), Some(5));
+        assert_eq!(matching_words.matching_bytes("wordsplit"), Some(4));
     }
 }
