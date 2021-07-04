@@ -16,7 +16,7 @@ where
     type DItem = (Option<(&'a str, &'a str)>, C::DItem);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (contains_bounds, tail_bytes) = bytes.split_first()?;
+        let (contains_bounds, bytes) = bytes.split_first()?;
 
         if *contains_bounds != 0 {
             let (left_len, bytes) = try_split_at(bytes, 2)?;
@@ -33,7 +33,7 @@ where
 
             C::bytes_decode(bytes).map(|item| (Some((left, right)), item))
         } else {
-            C::bytes_decode(tail_bytes).map(|item| (None, item))
+            C::bytes_decode(bytes).map(|item| (None, item))
         }
     }
 }
@@ -49,10 +49,20 @@ where
 
         match bounds {
             Some((left, right)) => {
+                bytes.push(u8::max_value());
+
+                if left.is_empty() || right.is_empty() {
+                    return None;
+                }
+
                 let left_len: u16 = left.len().try_into().ok()?;
                 let right_len: u16 = right.len().try_into().ok()?;
+
                 bytes.extend_from_slice(&left_len.to_be_bytes());
                 bytes.extend_from_slice(&right_len.to_be_bytes());
+
+                bytes.extend_from_slice(left.as_bytes());
+                bytes.extend_from_slice(right.as_bytes());
 
                 let value_bytes = C::bytes_encode(&value)?;
                 bytes.extend_from_slice(&value_bytes[..]);
@@ -76,5 +86,37 @@ fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
         Some(slice.split_at(mid))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use heed::types::Unit;
+    use heed::{BytesDecode, BytesEncode};
+    use roaring::RoaringBitmap;
+
+    use super::*;
+    use crate::CboRoaringBitmapCodec;
+
+    #[test]
+    fn deserialize_roaring_bitmaps() {
+        let bounds = Some(("abc", "def"));
+        let docids: RoaringBitmap = (0..100).chain(3500..4398).collect();
+        let key = (bounds, docids.clone());
+        let bytes =
+            FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(&key).unwrap();
+        let (out_bounds, out_docids) =
+            FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(&bytes).unwrap();
+        assert_eq!((out_bounds, out_docids), (bounds, docids));
+    }
+
+    #[test]
+    fn deserialize_unit() {
+        let bounds = Some(("abc", "def"));
+        let key = (bounds, ());
+        let bytes = FacetStringZeroBoundsValueCodec::<Unit>::bytes_encode(&key).unwrap();
+        let (out_bounds, out_unit) =
+            FacetStringZeroBoundsValueCodec::<Unit>::bytes_decode(&bytes).unwrap();
+        assert_eq!((out_bounds, out_unit), (bounds, ()));
     }
 }

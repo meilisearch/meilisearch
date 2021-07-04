@@ -286,6 +286,10 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         value: String,
         id: DocumentId,
     ) -> Result<()> {
+        if value.is_empty() {
+            return Ok(());
+        }
+
         let sorter = &mut self.field_id_docid_facet_strings_sorter;
         Self::write_field_id_docid_facet_string_value(sorter, field_id, id, &value)?;
 
