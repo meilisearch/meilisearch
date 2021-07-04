@@ -9,7 +9,7 @@ use roaring::RoaringBitmap;
 use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetStringLevelZeroCodec;
-use crate::search::facet::{FacetNumberIter, FacetNumberRange};
+use crate::search::facet::{FacetNumberIter, FacetNumberRange, FacetStringIter};
 use crate::{DocumentId, FieldId, Index, Result};
 
 /// The default number of values by facets that will
@@ -134,6 +134,29 @@ impl<'a> FacetDistribution<'a> {
         Ok(())
     }
 
+    fn facet_strings_distribution_from_facet_levels(
+        &self,
+        field_id: FieldId,
+        candidates: &RoaringBitmap,
+        distribution: &mut BTreeMap<String, u64>,
+    ) -> heed::Result<()> {
+        let iter =
+            FacetStringIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
+
+        for result in iter {
+            let (value, mut docids) = result?;
+            docids &= candidates;
+            if !docids.is_empty() {
+                distribution.insert(value.to_string(), docids.len());
+            }
+            if distribution.len() == self.max_values_by_facet {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
     /// facet values one by one and iterate on the facet level 0 for numbers.
     fn facet_values_from_raw_facet_database(
@@ -198,9 +221,8 @@ impl<'a> FacetDistribution<'a> {
                         candidates,
                         &mut distribution,
                     )?;
-                    self.facet_distribution_from_documents(
+                    self.facet_strings_distribution_from_facet_levels(
                         field_id,
-                        String,
                         candidates,
                         &mut distribution,
                     )?;

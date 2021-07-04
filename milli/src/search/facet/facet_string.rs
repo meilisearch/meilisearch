@@ -192,7 +192,7 @@ impl<'t> Iterator for FacetStringGroupRange<'t> {
                 };
                 if must_be_returned {
                     match docids.decode() {
-                        Ok(docids) => Some(Ok(((level, left, right), docids))),
+                        Ok((bounds, docids)) => Some(Ok(((level, left, right), (bounds, docids)))),
                         Err(e) => Some(Err(e)),
                     }
                 } else {
