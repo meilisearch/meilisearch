@@ -490,7 +490,6 @@ impl UpdateStore {
                 let _ = remove_file(path);
             });
 
-
         Ok(())
     }
 
