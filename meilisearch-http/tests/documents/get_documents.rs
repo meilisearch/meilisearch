@@ -61,7 +61,7 @@ async fn get_no_documents() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_, code) = index.create(None).await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions::default())

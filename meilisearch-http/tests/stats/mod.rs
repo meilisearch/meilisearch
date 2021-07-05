@@ -28,7 +28,7 @@ async fn stats() {
     let index = server.index("test");
     let (_, code) = index.create(Some("id")).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
 
     let (response, code) = server.stats().await;
 

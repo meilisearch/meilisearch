@@ -7,7 +7,7 @@ async fn create_and_get_index() {
     let index = server.index("test");
     let (_, code) = index.create(None).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
 
     let (response, code) = index.get().await;
 

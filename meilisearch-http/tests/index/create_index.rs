@@ -7,7 +7,7 @@ async fn create_index_no_primary_key() {
     let index = server.index("test");
     let (response, code) = index.create(None).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
     assert_eq!(response["uid"], "test");
     assert_eq!(response["name"], "test");
     assert!(response.get("createdAt").is_some());
@@ -23,7 +23,7 @@ async fn create_index_with_primary_key() {
     let index = server.index("test");
     let (response, code) = index.create(Some("primary")).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
     assert_eq!(response["uid"], "test");
     assert_eq!(response["name"], "test");
     assert!(response.get("createdAt").is_some());
@@ -41,7 +41,7 @@ async fn create_existing_index() {
     let index = server.index("test");
     let (_, code) = index.create(Some("primary")).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
 
     let (_response, code) = index.create(Some("primary")).await;
     assert_eq!(code, 400);
