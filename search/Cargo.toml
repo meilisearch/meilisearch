@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0" }
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 log = "0.4.14"
 milli = { path = "../milli" }
 serde_json = "1.0.62"
