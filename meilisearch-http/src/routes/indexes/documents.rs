@@ -54,23 +54,20 @@ struct DocumentParam {
     document_id: String,
 }
 
-pub fn services(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/indexes/{index_uid}/documents")
-            .service(
-                web::resource("")
-                    .route(web::get().to(get_all_documents))
-                    .route(web::post().guard(guard_json).to(add_documents))
-                    .route(web::put().guard(guard_json).to(update_documents))
-                    .route(web::delete().to(clear_all_documents)),
-            )
-            // this route needs to be before the /documents/{document_id} to match properly
-            .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
-            .service(
-                web::resource("/{document_id}")
-                    .route(web::get().to(get_document))
-                    .route(web::delete().to(delete_document)),
-            ),
+        web::resource("")
+            .route(web::get().to(get_all_documents))
+            .route(web::post().guard(guard_json).to(add_documents))
+            .route(web::put().guard(guard_json).to(update_documents))
+            .route(web::delete().to(clear_all_documents)),
+    )
+    // this route needs to be before the /documents/{document_id} to match properly
+    .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
+    .service(
+        web::resource("/{document_id}")
+            .route(web::get().to(get_document))
+            .route(web::delete().to(delete_document)),
     );
 }
 

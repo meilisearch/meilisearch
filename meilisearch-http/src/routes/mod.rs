@@ -1,21 +1,27 @@
 use std::time::Duration;
 
-use actix_web::HttpResponse;
+use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{Settings, Unchecked};
 use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
+use crate::Data;
 
-pub mod document;
-pub mod dump;
-pub mod health;
-pub mod index;
-pub mod key;
-pub mod search;
-pub mod settings;
-pub mod stats;
+mod dump;
+mod indexes;
+
+pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/dumps").configure(dump::configure))
+        .service(web::resource("/keys").route(web::get().to(list_keys)))
+        .service(web::resource("/stats").route(web::get().to(get_stats)))
+        .service(web::resource("/version").route(web::get().to(get_version)))
+        .service(web::scope("/indexes").configure(indexes::configure));
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
@@ -43,7 +49,6 @@ pub enum UpdateType {
 impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
         use milli::update::IndexDocumentsMethod::*;
-
         match other.meta() {
             UpdateMeta::DocumentsAddition { method, .. } => {
                 let number = match other {
@@ -222,4 +227,54 @@ impl IndexUpdateResponse {
 /// ```
 pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
+}
+
+async fn get_stats(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+    let response = data.get_all_stats().await?;
+
+    debug!("returns: {:?}", response);
+    Ok(HttpResponse::Ok().json(response))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionResponse {
+    commit_sha: String,
+    commit_date: String,
+    pkg_version: String,
+}
+
+async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
+    let commit_sha = match option_env!("COMMIT_SHA") {
+        Some("") | None => env!("VERGEN_SHA"),
+        Some(commit_sha) => commit_sha,
+    };
+    let commit_date = match option_env!("COMMIT_DATE") {
+        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some(commit_date) => commit_date,
+    };
+
+    HttpResponse::Ok().json(VersionResponse {
+        commit_sha: commit_sha.to_string(),
+        commit_date: commit_date.to_string(),
+        pkg_version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}
+
+#[derive(Serialize)]
+struct KeysResponse {
+    private: Option<String>,
+    public: Option<String>,
+}
+
+pub async fn list_keys(data: GuardedData<Admin, Data>) -> HttpResponse {
+    let api_keys = data.api_keys.clone();
+    HttpResponse::Ok().json(&KeysResponse {
+        private: api_keys.private,
+        public: api_keys.public,
+    })
+}
+
+pub async fn get_health() -> Result<HttpResponse, ResponseError> {
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
 }

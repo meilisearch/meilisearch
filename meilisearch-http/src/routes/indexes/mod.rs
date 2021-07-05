@@ -3,30 +3,42 @@ use chrono::{DateTime, Utc};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-use super::{IndexParam, UpdateStatusResponse};
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::routes::IndexParam;
 use crate::Data;
 
-pub fn services(cfg: &mut web::ServiceConfig) {
+mod documents;
+mod search;
+mod settings;
+mod updates;
+
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::resource("indexes")
+        web::resource("")
             .route(web::get().to(list_indexes))
             .route(web::post().to(create_index)),
     )
     .service(
-        web::resource("/indexes/{index_uid}")
-            .route(web::get().to(get_index))
-            .route(web::put().to(update_index))
-            .route(web::delete().to(delete_index)),
-    )
-    .service(
-        web::resource("/indexes/{index_uid}/updates").route(web::get().to(get_all_updates_status)),
-    )
-    .service(
-        web::resource("/indexes/{index_uid}/updates/{update_id}")
-            .route(web::get().to(get_update_status)),
+        web::scope("/{index_uid}")
+            .service(
+                web::resource("")
+                    .route(web::get().to(get_index))
+                    .route(web::put().to(update_index))
+                    .route(web::delete().to(delete_index)),
+            )
+            .service(web::resource("/stats").route(web::get().to(get_index_stats)))
+            .service(web::scope("/documents").configure(documents::configure))
+            .service(web::scope("/search").configure(search::configure))
+            .service(web::scope("/updates").configure(updates::configure))
+            .service(web::scope("/settings").configure(settings::configure)),
     );
+}
+
+async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+    let indexes = data.list_indexes().await?;
+    debug!("returns: {:?}", indexes);
+    Ok(HttpResponse::Ok().json(indexes))
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +46,15 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 struct IndexCreateRequest {
     uid: String,
     primary_key: Option<String>,
+}
+
+async fn create_index(
+    data: GuardedData<Private, Data>,
+    body: web::Json<IndexCreateRequest>,
+) -> Result<HttpResponse, ResponseError> {
+    let body = body.into_inner();
+    let meta = data.create_index(body.uid, body.primary_key).await?;
+    Ok(HttpResponse::Ok().json(meta))
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,22 +73,6 @@ pub struct UpdateIndexResponse {
     updated_at: DateTime<Utc>,
     primary_key: Option<String>,
 }
-
-async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
-    let indexes = data.list_indexes().await?;
-    debug!("returns: {:?}", indexes);
-    Ok(HttpResponse::Ok().json(indexes))
-}
-
-async fn create_index(
-    data: GuardedData<Private, Data>,
-    body: web::Json<IndexCreateRequest>,
-) -> Result<HttpResponse, ResponseError> {
-    let body = body.into_inner();
-    let meta = data.create_index(body.uid, body.primary_key).await?;
-    Ok(HttpResponse::Ok().json(meta))
-}
-
 async fn get_index(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
@@ -99,35 +104,12 @@ async fn delete_index(
     Ok(HttpResponse::NoContent().finish())
 }
 
-#[derive(Deserialize)]
-struct UpdateParam {
-    index_uid: String,
-    update_id: u64,
-}
-
-async fn get_update_status(
-    data: GuardedData<Private, Data>,
-    path: web::Path<UpdateParam>,
-) -> Result<HttpResponse, ResponseError> {
-    let params = path.into_inner();
-    let meta = data
-        .get_update_status(params.index_uid, params.update_id)
-        .await?;
-    let meta = UpdateStatusResponse::from(meta);
-    debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
-}
-
-async fn get_all_updates_status(
+async fn get_index_stats(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let metas = data.get_updates_status(path.into_inner().index_uid).await?;
-    let metas = metas
-        .into_iter()
-        .map(UpdateStatusResponse::from)
-        .collect::<Vec<_>>();
+    let response = data.get_index_stats(path.index_uid.clone()).await?;
 
-    debug!("returns: {:?}", metas);
-    Ok(HttpResponse::Ok().json(metas))
+    debug!("returns: {:?}", response);
+    Ok(HttpResponse::Ok().json(response))
 }
