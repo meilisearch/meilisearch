@@ -14,7 +14,7 @@ flate2 = "1.0.20"
 fst = "0.4.5"
 fxhash = "0.2.1"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0", default-features = false, features = ["lmdb", "sync-read-txn"] }
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 human_format = "1.0.3"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.4"

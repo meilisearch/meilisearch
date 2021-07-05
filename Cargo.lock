@@ -873,7 +873,7 @@ dependencies = [
 [[package]]
 name = "heed"
 version = "0.12.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -891,12 +891,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 dependencies = [
  "bincode",
  "heed-traits",
