@@ -983,7 +983,9 @@ async fn main() -> anyhow::Result<()> {
         });
 
     let die_route = warp::filters::method::get().and(warp::path!("die")).map(move || {
+        eprintln!("Killed by an HTTP request received on the die route");
         std::process::exit(0);
+        #[allow(unreachable_code)]
         warp::reply()
     });
 
