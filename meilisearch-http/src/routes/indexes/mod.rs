@@ -54,7 +54,7 @@ async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
     let meta = data.create_index(body.uid, body.primary_key).await?;
-    Ok(HttpResponse::Ok().json(meta))
+    Ok(HttpResponse::Created().json(meta))
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +73,7 @@ pub struct UpdateIndexResponse {
     updated_at: DateTime<Utc>,
     primary_key: Option<String>,
 }
+
 async fn get_index(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
