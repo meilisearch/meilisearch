@@ -206,7 +206,7 @@ macro_rules! test_setting_routes {
                     let server = Server::new().await;
                     let index = server.index("test");
                     let (response, code) = index.create(None).await;
-                    assert_eq!(code, 200, "{}", response);
+                    assert_eq!(code, 201, "{}", response);
                     let url = format!("/indexes/test/settings/{}",
                         stringify!($setting)
                         .chars()

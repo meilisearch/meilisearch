@@ -8,7 +8,7 @@ async fn create_and_delete_index() {
     let index = server.index("test");
     let (_response, code) = index.create(None).await;
 
-    assert_eq!(code, 200);
+    assert_eq!(code, 201);
 
     let (_response, code) = index.delete().await;
 
