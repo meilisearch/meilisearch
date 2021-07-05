@@ -442,12 +442,15 @@ impl UpdateStore {
 
         while let Some(Ok(((_, uuid, _), pending))) = pendings.next() {
             if uuid == index_uuid {
-                unsafe {
-                    pendings.del_current()?;
-                }
                 let mut pending = pending.decode()?;
                 if let Some(update_uuid) = pending.content.take() {
                     uuids_to_remove.push(update_uuid);
+                }
+
+                // Invariant check: we can only delete the current entry when we don't hold
+                // references to it anymore. This must be done after we have retrieved its content.
+                unsafe {
+                    pendings.del_current()?;
                 }
             }
         }
