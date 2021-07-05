@@ -106,20 +106,13 @@ macro_rules! create_app {
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
-        use meilisearch_http::routes::*;
+        use meilisearch_http::routes;
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone()))
             .configure(|s| configure_auth(s, &$data))
-            .configure(document::services)
-            .configure(index::services)
-            .configure(search::services)
-            .configure(settings::services)
-            .configure(health::services)
-            .configure(stats::services)
-            .configure(key::services)
-            .configure(dump::services)
+            .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
             .wrap(
                 Cors::default()

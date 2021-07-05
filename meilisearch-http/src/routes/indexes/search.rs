@@ -11,9 +11,9 @@ use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
-pub fn services(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::resource("/indexes/{index_uid}/search")
+        web::resource("")
             .route(web::get().to(search_with_url_query))
             .route(web::post().to(search_with_post)),
     );

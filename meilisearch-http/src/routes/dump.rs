@@ -6,9 +6,9 @@ use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::Data;
 
-pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("/dumps").route(web::post().to(create_dump)))
-        .service(web::resource("/dumps/{dump_uid}/status").route(web::get().to(get_dump_status)));
+pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::resource("").route(web::post().to(create_dump)))
+        .service(web::resource("/{dump_uid}/status").route(web::get().to(get_dump_status)));
 }
 
 async fn create_dump(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {

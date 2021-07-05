@@ -69,68 +69,63 @@ macro_rules! make_setting_route {
 }
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/filterable-attributes",
+    "/filterable-attributes",
     std::collections::HashSet<String>,
     filterable_attributes,
     "filterableAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/displayed-attributes",
+    "/displayed-attributes",
     Vec<String>,
     displayed_attributes,
     "displayedAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/searchable-attributes",
+    "/searchable-attributes",
     Vec<String>,
     searchable_attributes,
     "searchableAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/stop-words",
+    "/stop-words",
     std::collections::BTreeSet<String>,
     stop_words,
     "stopWords"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/synonyms",
+    "/synonyms",
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
     "synonyms"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/distinct-attribute",
+    "/distinct-attribute",
     String,
     distinct_attribute,
     "distinctAttribute"
 );
 
-make_setting_route!(
-    "/indexes/{index_uid}/settings/ranking-rules",
-    Vec<String>,
-    ranking_rules,
-    "rankingRules"
-);
+make_setting_route!("/ranking-rules", Vec<String>, ranking_rules, "rankingRules");
 
-macro_rules! create_services {
+macro_rules! generate_configure {
     ($($mod:ident),*) => {
-        pub fn services(cfg: &mut web::ServiceConfig) {
-            cfg
-                .service(web::resource("/indexes/{index_uid}/settings")
-                    .route(web::post().to(update_all))
-                    .route(web::get().to(get_all))
-                    .route(web::delete().to(delete_all)))
+        pub fn configure(cfg: &mut web::ServiceConfig) {
+            cfg.service(
+                web::resource("")
+                .route(web::post().to(update_all))
+                .route(web::get().to(get_all))
+                .route(web::delete().to(delete_all)))
                 $(.service($mod::resources()))*;
         }
     };
 }
 
-create_services!(
+generate_configure!(
     filterable_attributes,
     displayed_attributes,
     searchable_attributes,
