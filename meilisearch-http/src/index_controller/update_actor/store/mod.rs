@@ -470,13 +470,6 @@ impl UpdateStore {
 
         txn.commit()?;
 
-        uuids_to_remove
-            .iter()
-            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
-            .for_each(|path| {
-                let _ = remove_file(path);
-            });
-
         // If the currently processing update is from our index, we wait until it is
         // finished before returning. This ensure that no write to the index occurs after we delete it.
         if let State::Processing(uuid, _) = *self.state.read() {
@@ -485,6 +478,16 @@ impl UpdateStore {
                 self.state.write();
             }
         }
+
+        // Finally, remove any outstanding update files. This must be done after waiting for the
+        // last update to ensure that the update files are not deleted before the update needs
+        // them.
+        uuids_to_remove
+            .iter()
+            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
+            .for_each(|path| {
+                let _ = remove_file(path);
+            });
 
         Ok(())
     }
