@@ -982,6 +982,11 @@ async fn main() -> anyhow::Result<()> {
             })
         });
 
+    let die_route = warp::filters::method::get().and(warp::path!("die")).map(move || {
+        std::process::exit(0);
+        warp::reply()
+    });
+
     let routes = dash_html_route
         .or(updates_list_or_html_route)
         .or(dash_bulma_route)
@@ -1001,7 +1006,8 @@ async fn main() -> anyhow::Result<()> {
         .or(clearing_route)
         .or(change_settings_route)
         .or(change_facet_levels_route)
-        .or(update_ws_route);
+        .or(update_ws_route)
+        .or(die_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
     warp::serve(routes).run(addr).await;
