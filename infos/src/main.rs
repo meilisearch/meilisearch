@@ -7,7 +7,7 @@ use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use milli::facet::FacetType;
 use milli::index::db_name::*;
-use milli::{Index, TreeLevel};
+use milli::{FieldId, Index, TreeLevel};
 use structopt::StructOpt;
 use Command::*;
 
@@ -322,7 +322,7 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
 fn facet_values_iter<'txn, KC: 'txn, DC: 'txn>(
     rtxn: &'txn heed::RoTxn,
     db: heed::Database<KC, DC>,
-    field_id: u8,
+    field_id: FieldId,
 ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<(KC::DItem, DC::DItem)>> + 'txn>>
 where
     KC: heed::BytesDecode<'txn>,
@@ -330,7 +330,7 @@ where
 {
     let iter = db
         .remap_key_type::<heed::types::ByteSlice>()
-        .prefix_iter(&rtxn, &[field_id])?
+        .prefix_iter(&rtxn, &field_id.to_be_bytes())?
         .remap_key_type::<KC>();
 
     Ok(Box::new(iter))
