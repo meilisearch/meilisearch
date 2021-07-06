@@ -430,8 +430,10 @@ where
     C: heed::BytesDecode<'a, DItem = K> + heed::BytesEncode<'a, EItem = K>,
     F: Fn(K) -> DocumentId,
 {
-    let mut iter =
-        db.remap_key_type::<ByteSlice>().prefix_iter_mut(wtxn, &[field_id])?.remap_key_type::<C>();
+    let mut iter = db
+        .remap_key_type::<ByteSlice>()
+        .prefix_iter_mut(wtxn, &field_id.to_be_bytes())?
+        .remap_key_type::<C>();
 
     while let Some(result) = iter.next() {
         let (key, ()) = result?;

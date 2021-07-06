@@ -15,7 +15,7 @@ use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::update::index_documents::{
     create_writer, write_into_lmdb_database, writer_into_reader, WriteMethod,
 };
-use crate::{Index, Result};
+use crate::{FieldId, Index, Result};
 
 pub struct Facets<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -119,7 +119,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 fn clear_field_number_levels<'t>(
     wtxn: &'t mut heed::RwTxn,
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-    field_id: u8,
+    field_id: FieldId,
 ) -> heed::Result<()> {
     let left = (field_id, 1, f64::MIN, f64::MIN);
     let right = (field_id, u8::MAX, f64::MAX, f64::MAX);
@@ -135,11 +135,11 @@ fn compute_facet_number_levels<'t>(
     shrink_size: Option<u64>,
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
-    field_id: u8,
+    field_id: FieldId,
 ) -> Result<Reader<FileFuse>> {
     let first_level_size = db
         .remap_key_type::<ByteSlice>()
-        .prefix_iter(rtxn, &[field_id])?
+        .prefix_iter(rtxn, &field_id.to_be_bytes())?
         .remap_types::<DecodeIgnore, DecodeIgnore>()
         .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
@@ -196,11 +196,11 @@ fn compute_facet_number_levels<'t>(
 fn compute_faceted_documents_ids(
     rtxn: &heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
-    field_id: u8,
+    field_id: FieldId,
 ) -> Result<RoaringBitmap> {
     let mut documents_ids = RoaringBitmap::new();
 
-    for result in db.prefix_iter(rtxn, &[field_id])? {
+    for result in db.prefix_iter(rtxn, &field_id.to_be_bytes())? {
         let (_key, docids) = result?;
         documents_ids |= docids;
     }
@@ -210,7 +210,7 @@ fn compute_faceted_documents_ids(
 
 fn write_number_entry(
     writer: &mut Writer<File>,
-    field_id: u8,
+    field_id: FieldId,
     level: u8,
     left: f64,
     right: f64,

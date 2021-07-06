@@ -40,7 +40,7 @@ pub fn keep_first(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
     Ok(values.first().unwrap().to_vec())
 }
 
-pub fn merge_two_obkvs(base: obkv::KvReader, update: obkv::KvReader, buffer: &mut Vec<u8>) {
+pub fn merge_two_obkvs(base: obkv::KvReaderU16, update: obkv::KvReaderU16, buffer: &mut Vec<u8>) {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 

@@ -7,6 +7,7 @@ use std::time::Instant;
 use std::{cmp, iter};
 
 use bstr::ByteSlice as _;
+use concat_arrays::concat_arrays;
 use fst::Set;
 use grenad::{CompressionType, FileFuse, Reader, Sorter, Writer};
 use heed::BytesEncode;
@@ -776,7 +777,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         for ((fid, count), docids) in self.field_id_word_count_docids {
             docids_buffer.clear();
             CboRoaringBitmapCodec::serialize_into(&docids, &mut docids_buffer);
-            self.field_id_word_count_docids_sorter.insert([fid, count], &docids_buffer)?;
+            let key: [u8; 3] = concat_arrays!(fid.to_be_bytes(), [count]);
+            self.field_id_word_count_docids_sorter.insert(key, &docids_buffer)?;
         }
 
         let fst = builder.into_set();

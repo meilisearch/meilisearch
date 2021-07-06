@@ -15,6 +15,7 @@ pub mod update;
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 use std::result::Result as StdResult;
 
@@ -48,7 +49,7 @@ pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type Attribute = u32;
 pub type DocumentId = u32;
-pub type FieldId = u8;
+pub type FieldId = u16;
 pub type Position = u32;
 pub type FieldDistribution = BTreeMap<String, u64>;
 
@@ -58,7 +59,7 @@ type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Vec<u8>, E>;
 pub fn obkv_to_json(
     displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReader,
+    obkv: obkv::KvReaderU16,
 ) -> Result<Map<String, Value>> {
     displayed_fields
         .iter()
@@ -121,6 +122,26 @@ pub fn json_to_string(value: &Value) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Divides one slice into two at an index, returns `None` if mid is out of bounds.
+fn try_split_at<T>(slice: &[T], mid: usize) -> Option<(&[T], &[T])> {
+    if mid <= slice.len() {
+        Some(slice.split_at(mid))
+    } else {
+        None
+    }
+}
+
+/// Divides one slice into an array and the tail at an index,
+/// returns `None` if `N` is out of bounds.
+fn try_split_array_at<T, const N: usize>(slice: &[T]) -> Option<([T; N], &[T])>
+where
+    [T; N]: for<'a> TryFrom<&'a [T]>,
+{
+    let (head, tail) = try_split_at(slice, N)?;
+    let head = head.try_into().ok()?;
+    Some((head, tail))
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ edition = "2018"
 bstr = "0.2.15"
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }
+concat-arrays = "0.1.2"
 csv = "1.1.5"
 either = "1.6.1"
 flate2 = "1.0.20"
@@ -20,7 +21,7 @@ levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.4"
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.2.3" }
 memmap = "0.7.0"
-obkv = "0.1.1"
+obkv = "0.2.0"
 once_cell = "1.5.2"
 ordered-float = "2.1.1"
 rayon = "1.5.0"
