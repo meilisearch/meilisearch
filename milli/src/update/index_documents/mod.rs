@@ -842,10 +842,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 mod tests {
     use std::io::Cursor;
 
+    use big_s::S;
     use heed::EnvOpenOptions;
 
     use super::*;
     use crate::update::DeleteDocuments;
+    use crate::HashMap;
 
     #[test]
     fn simple_document_replacement() {
@@ -1349,6 +1351,32 @@ mod tests {
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn index_more_than_256_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let mut big_object = HashMap::new();
+        big_object.insert(S("id"), "wow");
+        for i in 0..1000 {
+            let key = i.to_string();
+            big_object.insert(key, "I am a text!");
+        }
+
+        let content = vec![big_object];
+        let content = serde_json::to_string(&content).unwrap();
+
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(Cursor::new(content), |_, _| ()).unwrap();
 
         wtxn.commit().unwrap();
     }
