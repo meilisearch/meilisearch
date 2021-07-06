@@ -626,7 +626,7 @@ mod test {
                 Some("tata".to_string()),
                 false,
             );
-            assert_eq!(result.unwrap(), (0u8, "toto".to_string()));
+            assert_eq!(result.unwrap(), (0, "toto".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
 
@@ -635,7 +635,7 @@ mod test {
             let mut fields_map = FieldsIdsMap::new();
             let result =
                 compute_primary_key_pair(None, &mut fields_map, Some("tata".to_string()), false);
-            assert_eq!(result.unwrap(), (0u8, "tata".to_string()));
+            assert_eq!(result.unwrap(), (0, "tata".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
 
@@ -643,7 +643,7 @@ mod test {
         fn should_return_default_if_both_are_none() {
             let mut fields_map = FieldsIdsMap::new();
             let result = compute_primary_key_pair(None, &mut fields_map, None, true);
-            assert_eq!(result.unwrap(), (0u8, "id".to_string()));
+            assert_eq!(result.unwrap(), (0, "id".to_string()));
             assert_eq!(fields_map.len(), 1);
         }
 

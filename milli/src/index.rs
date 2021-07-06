@@ -523,10 +523,11 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        *buffer.last_mut().unwrap() = field_id;
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+            .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
 
@@ -536,10 +537,11 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        *buffer.last_mut().unwrap() = field_id;
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+            .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
@@ -553,10 +555,11 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        *buffer.last_mut().unwrap() = field_id;
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+            .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
 
@@ -569,7 +572,8 @@ impl Index {
         let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        *buffer.last_mut().unwrap() = field_id;
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+            .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
@@ -723,7 +727,7 @@ impl Index {
         &self,
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReader<'t>)>> {
+    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
         let mut documents = Vec::new();
 
         for id in ids {
@@ -741,7 +745,7 @@ impl Index {
     pub fn all_documents<'t>(
         &self,
         rtxn: &'t RoTxn,
-    ) -> Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReader<'t>)>>> {
+    ) -> Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReaderU16<'t>)>>> {
         Ok(self
             .documents
             .iter(rtxn)?

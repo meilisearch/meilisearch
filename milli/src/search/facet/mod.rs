@@ -187,7 +187,7 @@ impl<'t> FacetIter<'t> {
     ) -> heed::Result<Option<u8>> {
         let level = db
             .remap_types::<ByteSlice, DecodeIgnore>()
-            .prefix_iter(rtxn, &[fid][..])?
+            .prefix_iter(rtxn, &fid.to_be_bytes())?
             .remap_key_type::<FacetLevelValueF64Codec>()
             .last()
             .transpose()?

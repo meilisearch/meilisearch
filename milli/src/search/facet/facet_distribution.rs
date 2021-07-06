@@ -78,7 +78,7 @@ impl<'a> FacetDistribution<'a> {
             K: fmt::Display,
             KC: BytesDecode<'t, DItem = (FieldId, DocumentId, K)>,
         {
-            let mut key_buffer = vec![field_id];
+            let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
             for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
                 key_buffer.truncate(1);
@@ -157,7 +157,7 @@ impl<'a> FacetDistribution<'a> {
             .index
             .facet_id_string_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(self.rtxn, &[field_id])?
+            .prefix_iter(self.rtxn, &field_id.to_be_bytes())?
             .remap_key_type::<FacetValueStringCodec>();
 
         for result in iter {

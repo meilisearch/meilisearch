@@ -1,8 +1,7 @@
 use std::borrow::Cow;
-use std::convert::TryInto;
 use std::str;
 
-use crate::{DocumentId, FieldId};
+use crate::{try_split_array_at, DocumentId, FieldId};
 
 pub struct FieldDocIdFacetStringCodec;
 
@@ -13,8 +12,8 @@ impl FieldDocIdFacetStringCodec {
         value: &str,
         out: &mut Vec<u8>,
     ) {
-        out.reserve(1 + 4 + value.len());
-        out.push(field_id);
+        out.reserve(2 + 4 + value.len());
+        out.extend_from_slice(&field_id.to_be_bytes());
         out.extend_from_slice(&document_id.to_be_bytes());
         out.extend_from_slice(value.as_bytes());
     }
@@ -24,11 +23,14 @@ impl<'a> heed::BytesDecode<'a> for FieldDocIdFacetStringCodec {
     type DItem = (FieldId, DocumentId, &'a str);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (field_id, bytes) = bytes.split_first()?;
-        let (document_id_bytes, bytes) = bytes.split_at(4);
-        let document_id = document_id_bytes.try_into().map(u32::from_be_bytes).ok()?;
+        let (field_id_bytes, bytes) = try_split_array_at(bytes)?;
+        let field_id = u16::from_be_bytes(field_id_bytes);
+
+        let (document_id_bytes, bytes) = try_split_array_at(bytes)?;
+        let document_id = u32::from_be_bytes(document_id_bytes);
+
         let value = str::from_utf8(bytes).ok()?;
-        Some((*field_id, document_id, value))
+        Some((field_id, document_id, value))
     }
 }
 

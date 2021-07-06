@@ -342,6 +342,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "concat-arrays"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1df715824eb382e34b7afb7463b0247bf41538aeba731fba05241ecdb5dc3747"
+dependencies = [
+ "proc-macro2 1.0.27",
+ "quote 1.0.9",
+ "syn 1.0.73",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1378,6 +1389,7 @@ dependencies = [
  "bstr",
  "byteorder",
  "chrono",
+ "concat-arrays",
  "csv",
  "either",
  "flate2",
@@ -1609,9 +1621,9 @@ dependencies = [
 
 [[package]]
 name = "obkv"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd8a5a0aa2f3adafe349259a5b3e21a19c388b792414c1161d60a69c1fa48e8"
+checksum = "f69e48cd7c8e5bb52a1da1287fdbfd877c32673176583ce664cd63b201aba385"
 
 [[package]]
 name = "once_cell"
