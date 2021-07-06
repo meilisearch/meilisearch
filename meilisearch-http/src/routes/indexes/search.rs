@@ -85,6 +85,11 @@ async fn search_with_url_query(
     debug!("called with params: {:?}", params);
     let query = params.into_inner().into();
     let search_result = data.search(path.into_inner().index_uid, query).await?;
+
+    // Tests that the nb_hits is always set to false
+    #[cfg(test)]
+    assert!(!search_result.exhaustive_nb_hits);
+
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }
@@ -98,6 +103,11 @@ async fn search_with_post(
     let search_result = data
         .search(path.into_inner().index_uid, params.into_inner())
         .await?;
+
+    // Tests that the nb_hits is always set to false
+    #[cfg(test)]
+    assert!(!search_result.exhaustive_nb_hits);
+
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }

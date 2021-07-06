@@ -1,4 +1,7 @@
-use std::{panic::{UnwindSafe, catch_unwind, resume_unwind}, time::Duration};
+use std::{
+    panic::{catch_unwind, resume_unwind, UnwindSafe},
+    time::Duration,
+};
 
 use actix_web::http::StatusCode;
 use paste::paste;
@@ -185,13 +188,17 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn search(&self, query: Value, test: impl Fn(Value, StatusCode) + UnwindSafe + Clone) {
+    /// Performs both GET and POST search queries
+    pub async fn search(
+        &self,
+        query: Value,
+        test: impl Fn(Value, StatusCode) + UnwindSafe + Clone,
+    ) {
         let (response, code) = self.search_post(query.clone()).await;
         let t = test.clone();
         if let Err(e) = catch_unwind(move || t(response, code)) {
             eprintln!("Error with post search");
             resume_unwind(e);
-
         }
 
         let (response, code) = self.search_get(query).await;
