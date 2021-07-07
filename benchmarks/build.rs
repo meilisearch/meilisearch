@@ -10,8 +10,9 @@ use reqwest::IntoUrl;
 
 const BASE_URL: &str = "https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets";
 
-const DATASET_SONGS: &str = "smol-songs";
-const DATASET_WIKI: &str = "smol-wiki-articles";
+const DATASET_SONGS: (&str, &str) = ("smol-songs", "csv");
+const DATASET_WIKI: (&str, &str) = ("smol-wiki-articles", "csv");
+const DATASET_MOVIES: (&str, &str) = ("movies", "json");
 
 /// The name of the environment variable used to select the path
 /// of the directory containing the datasets
@@ -31,9 +32,9 @@ fn main() -> anyhow::Result<()> {
     )?;
     writeln!(manifest_paths_file)?;
 
-    for dataset in &[DATASET_SONGS, DATASET_WIKI] {
+    for (dataset, extension) in [DATASET_SONGS, DATASET_WIKI, DATASET_MOVIES] {
         let out_path = out_dir.join(dataset);
-        let out_file = out_path.with_extension("csv");
+        let out_file = out_path.with_extension(extension);
 
         writeln!(
             &mut manifest_paths_file,
@@ -45,15 +46,15 @@ fn main() -> anyhow::Result<()> {
         if out_file.exists() {
             eprintln!(
                 "The dataset {} already exists on the file system and will not be downloaded again",
-                dataset
+                out_path.display(),
             );
             continue;
         }
-        let url = format!("{}/{}.csv.gz", BASE_URL, dataset);
+        let url = format!("{}/{}.{}.gz", BASE_URL, dataset, extension);
         eprintln!("downloading: {}", url);
         let bytes = download_dataset(url.clone())?;
         eprintln!("{} downloaded successfully", url);
-        eprintln!("uncompressing in {}", out_path.display());
+        eprintln!("uncompressing in {}", out_file.display());
         uncompress_in_file(bytes, &out_file)?;
     }
 
