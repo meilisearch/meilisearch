@@ -78,7 +78,7 @@ impl From<SearchQueryGet> for SearchQuery {
 }
 
 async fn search_with_url_query(
-    data: GuardedData<Admin, Data>,
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
