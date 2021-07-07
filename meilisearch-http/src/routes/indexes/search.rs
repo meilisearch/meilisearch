@@ -77,7 +77,7 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
-async fn search_with_url_query(
+pub async fn search_with_url_query(
     data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
@@ -94,7 +94,7 @@ async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-async fn search_with_post(
+pub async fn search_with_post(
     data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,

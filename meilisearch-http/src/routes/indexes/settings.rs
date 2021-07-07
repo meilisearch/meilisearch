@@ -9,7 +9,7 @@ use crate::{error::ResponseError, index::Unchecked};
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        mod $attr {
+        pub mod $attr {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
 
@@ -18,7 +18,7 @@ macro_rules! make_setting_route {
             use crate::index::Settings;
             use crate::extractors::authentication::{GuardedData, policies::*};
 
-            async fn delete(
+            pub async fn delete(
                 data: GuardedData<Private, data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
@@ -32,7 +32,7 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            async fn update(
+            pub async fn update(
                 data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
@@ -47,7 +47,7 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            async fn get(
+            pub async fn get(
                 data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -135,7 +135,7 @@ generate_configure!(
     ranking_rules
 );
 
-async fn update_all(
+pub async fn update_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
@@ -149,7 +149,7 @@ async fn update_all(
     Ok(HttpResponse::Accepted().json(json))
 }
 
-async fn get_all(
+pub async fn get_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -158,7 +158,7 @@ async fn get_all(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-async fn delete_all(
+pub async fn delete_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {

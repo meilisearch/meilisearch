@@ -8,10 +8,10 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
 use crate::Data;
 
-mod documents;
-mod search;
-mod settings;
-mod updates;
+pub mod documents;
+pub mod search;
+pub mod settings;
+pub mod updates;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -35,7 +35,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+pub async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
     let indexes = data.list_indexes().await?;
     debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))
@@ -43,12 +43,12 @@ async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, 
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct IndexCreateRequest {
+pub struct IndexCreateRequest {
     uid: String,
     primary_key: Option<String>,
 }
 
-async fn create_index(
+pub async fn create_index(
     data: GuardedData<Private, Data>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -59,7 +59,7 @@ async fn create_index(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct UpdateIndexRequest {
+pub struct UpdateIndexRequest {
     uid: Option<String>,
     primary_key: Option<String>,
 }
@@ -74,7 +74,7 @@ pub struct UpdateIndexResponse {
     primary_key: Option<String>,
 }
 
-async fn get_index(
+pub async fn get_index(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -83,7 +83,7 @@ async fn get_index(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-async fn update_index(
+pub async fn update_index(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
@@ -97,7 +97,7 @@ async fn update_index(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-async fn delete_index(
+pub async fn delete_index(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -105,7 +105,7 @@ async fn delete_index(
     Ok(HttpResponse::NoContent().finish())
 }
 
-async fn get_index_stats(
+pub async fn get_index_stats(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {

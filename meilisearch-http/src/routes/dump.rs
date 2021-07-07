@@ -11,7 +11,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/{dump_uid}/status").route(web::get().to(get_dump_status)));
 }
 
-async fn create_dump(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+pub async fn create_dump(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
     let res = data.create_dump().await?;
 
     debug!("returns: {:?}", res);
