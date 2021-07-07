@@ -30,13 +30,13 @@ _[More about critcmp](https://github.com/BurntSushi/critcmp)._
 
 ### On your machine
 
-To run all the benchmarks (~4h):
+To run all the benchmarks (~5h):
 
 ```bash
 cargo bench
 ```
 
-To run only the `songs` (~1h) or `wiki` (~3h) benchmark:
+To run only the `songs` (~1h), `wiki` (~3h) or `indexing` (~4h) benchmark:
 
 ```bash
 cargo bench --bench <dataset name>
@@ -47,7 +47,7 @@ If you don't want to download the datasets every time you update something on th
 
 ```bash
 mkdir ~/datasets
-MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the two datasets are downloaded
+MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the three datasets are downloaded
 touch build.rs
 MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the code is compiled again but the datasets are not downloaded
 ```
@@ -84,6 +84,7 @@ Run the comparison script:
 The benchmarks are available for the following datasets:
 - `songs`
 - `wiki`
+- `movies`
 
 ### Songs
 
@@ -107,5 +108,9 @@ It was generated with the following command:
 xsv sample --seed 42 500000 wiki-articles.csv -o smol-wiki-articles.csv
 ```
 
-_[Download the generated `wiki` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-wiki-articles.csv.gz)._
+### Movies
+
+`movies` is a really small dataset we uses as our example in the [getting started](https://docs.meilisearch.com/learn/getting_started/)
+
+_[Download the `movies` dataset](https://docs.meilisearch.com/movies.json)._
 

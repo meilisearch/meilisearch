@@ -28,3 +28,7 @@ harness = false
 [[bench]]
 name = "wiki"
 harness = false
+
+[[bench]]
+name = "indexing"
+harness = false
