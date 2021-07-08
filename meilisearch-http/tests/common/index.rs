@@ -201,7 +201,18 @@ impl Index<'_> {
             resume_unwind(e);
         }
 
-        let (response, code) = self.search_get(query).await;
+        // transform the query parameters into the format accepted by meilisearch GET serach route.
+        let get_query = query
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(key, value)| match value {
+                Value::Array(_) => (key.clone(), Value::String(value.to_string())),
+                _ => (key.clone(), value.clone())
+            })
+        .collect();
+
+        let (response, code) = self.search_get(get_query).await;
         if let Err(e) = catch_unwind(move || test(response, code)) {
             eprintln!("Error with get search");
             resume_unwind(e);

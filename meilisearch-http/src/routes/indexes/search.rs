@@ -1,11 +1,11 @@
-use std::collections::{BTreeSet, HashSet};
+use std::convert::{TryFrom, TryInto};
 
 use actix_web::{web, HttpResponse};
 use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::ResponseError;
+use crate::error::{ResponseError, SerdeJsonError};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
@@ -36,23 +36,33 @@ pub struct SearchQueryGet {
     facets_distribution: Option<String>,
 }
 
-impl From<SearchQueryGet> for SearchQuery {
-    fn from(other: SearchQueryGet) -> Self {
+impl TryFrom<SearchQueryGet> for SearchQuery {
+    type Error = SerdeJsonError;
+
+    fn try_from(other: SearchQueryGet) -> Result<Self, Self::Error> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect::<BTreeSet<_>>());
+            .as_ref()
+            .map(|s| serde_json::from_str(s))
+            .transpose()?;
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .as_ref()
+            .map(|s| serde_json::from_str(s))
+            .transpose()?;
 
         let attributes_to_highlight = other
             .attributes_to_highlight
-            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
+            .as_ref()
+            .map(|s| serde_json::from_str(s))
+            .transpose()?;
 
         let facets_distribution = other
             .facets_distribution
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .as_ref()
+            .map(|s| serde_json::from_str(s))
+            .transpose()?;
 
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
@@ -62,7 +72,7 @@ impl From<SearchQueryGet> for SearchQuery {
             None => None,
         };
 
-        Self {
+        Ok(Self {
             q: other.q,
             offset: other.offset,
             limit: other.limit.unwrap_or(DEFAULT_SEARCH_LIMIT),
@@ -73,7 +83,7 @@ impl From<SearchQueryGet> for SearchQuery {
             filter,
             matches: other.matches,
             facets_distribution,
-        }
+        })
     }
 }
 
@@ -83,7 +93,7 @@ async fn search_with_url_query(
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let query = params.into_inner().into();
+    let query = params.into_inner().try_into()?;
     let search_result = data.search(path.into_inner().index_uid, query).await?;
 
     // Tests that the nb_hits is always set to false

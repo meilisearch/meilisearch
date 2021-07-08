@@ -165,3 +165,13 @@ where
 {
     err.into().into()
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct SerdeJsonError(#[from] serde_json::Error);
+
+impl ErrorCode for SerdeJsonError {
+    fn error_code(&self) -> Code {
+        Code::BadRequest
+    }
+}
