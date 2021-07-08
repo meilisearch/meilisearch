@@ -31,12 +31,12 @@ pub struct UpdateIndexResponse {
 }
 
 #[derive(Deserialize)]
-struct UpdateParam {
+pub struct UpdateParam {
     index_uid: String,
     update_id: u64,
 }
 
-async fn get_update_status(
+pub async fn get_update_status(
     data: GuardedData<Private, Data>,
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -49,7 +49,7 @@ async fn get_update_status(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-async fn get_all_updates_status(
+pub async fn get_all_updates_status(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
