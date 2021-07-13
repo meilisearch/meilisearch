@@ -69,7 +69,7 @@ impl Index {
             .searchable_fields(&txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
-        let faceted_attributes = self.faceted_fields(&txn)?.into_iter().collect();
+        let filterable_attributes = self.filterable_fields(&txn)?.into_iter().collect();
 
         let criteria = self
             .criteria(&txn)?
@@ -102,7 +102,7 @@ impl Index {
         Ok(Settings {
             displayed_attributes: Some(displayed_attributes),
             searchable_attributes: Some(searchable_attributes),
-            filterable_attributes: Some(Some(faceted_attributes)),
+            filterable_attributes: Some(Some(filterable_attributes)),
             ranking_rules: Some(Some(criteria)),
             stop_words: Some(Some(stop_words)),
             distinct_attribute: Some(distinct_field),
