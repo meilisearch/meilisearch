@@ -220,36 +220,34 @@ impl<'t> FacetStringLevelZeroRange<'t> {
         left: Bound<&str>,
         right: Bound<&str>,
     ) -> heed::Result<FacetStringLevelZeroRange<'t>> {
-        fn encode_bound<'a>(
-            buffer: &'a mut Vec<u8>,
-            field_id: FieldId,
-            bound: Bound<&str>,
-        ) -> Bound<&'a [u8]> {
-            match bound {
-                Included(value) => {
-                    buffer.extend_from_slice(&field_id.to_be_bytes());
-                    buffer.push(0);
-                    buffer.extend_from_slice(value.as_bytes());
-                    Included(&buffer[..])
-                }
-                Excluded(value) => {
-                    buffer.extend_from_slice(&field_id.to_be_bytes());
-                    buffer.push(0);
-                    buffer.extend_from_slice(value.as_bytes());
-                    Excluded(&buffer[..])
-                }
-                Unbounded => {
-                    buffer.extend_from_slice(&field_id.to_be_bytes());
-                    buffer.push(1); // we must only get the level 0
-                    Excluded(&buffer[..])
-                }
-            }
+        fn encode_value<'a>(buffer: &'a mut Vec<u8>, field_id: FieldId, value: &str) -> &'a [u8] {
+            buffer.extend_from_slice(&field_id.to_be_bytes());
+            buffer.push(0);
+            buffer.extend_from_slice(value.as_bytes());
+            &buffer[..]
         }
 
         let mut left_buffer = Vec::new();
+        let left_bound = match left {
+            Included(value) => Included(encode_value(&mut left_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut left_buffer, field_id, value)),
+            Unbounded => {
+                left_buffer.extend_from_slice(&field_id.to_be_bytes());
+                left_buffer.push(0);
+                Included(&left_buffer[..])
+            }
+        };
+
         let mut right_buffer = Vec::new();
-        let left_bound = encode_bound(&mut left_buffer, field_id, left);
-        let right_bound = encode_bound(&mut right_buffer, field_id, right);
+        let right_bound = match right {
+            Included(value) => Included(encode_value(&mut right_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut right_buffer, field_id, value)),
+            Unbounded => {
+                right_buffer.extend_from_slice(&field_id.to_be_bytes());
+                right_buffer.push(1); // we must only get the level 0
+                Excluded(&right_buffer[..])
+            }
+        };
 
         let iter = db
             .remap_key_type::<ByteSlice>()
@@ -290,7 +288,6 @@ impl<'t> FacetStringIter<'t> {
         field_id: FieldId,
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetStringIter<'t>> {
-        // TODO make sure that we change the database before using it, or merging the PR.
         let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = match NonZeroU8::new(highest_level) {

@@ -22,7 +22,7 @@ const MAX_VALUES_BY_FACET: usize = 1000;
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
-const CANDIDATES_THRESHOLD: u64 = 1000;
+const CANDIDATES_THRESHOLD: u64 = 35_000;
 
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
@@ -80,7 +80,7 @@ impl<'a> FacetDistribution<'a> {
         {
             let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
-            for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
+            for docid in candidates.into_iter() {
                 key_buffer.truncate(mem::size_of::<FieldId>());
                 key_buffer.extend_from_slice(&docid.to_be_bytes());
                 let iter = db
