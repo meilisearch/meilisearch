@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use heed::types::ByteSlice;
+use heed::types::{ByteSlice, Str, Unit};
 use roaring::RoaringBitmap;
 
 use super::{Distinct, DocIter};
@@ -127,7 +127,7 @@ fn facet_number_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, Unit>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
@@ -144,14 +144,14 @@ fn facet_string_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, Str>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
         .field_id_docid_facet_strings
         .remap_key_type::<ByteSlice>()
         .prefix_iter(txn, &key)?
-        .remap_key_type::<FieldDocIdFacetStringCodec>();
+        .remap_types::<FieldDocIdFacetStringCodec, Str>();
 
     Ok(iter)
 }

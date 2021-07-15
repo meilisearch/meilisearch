@@ -2,15 +2,16 @@ use std::collections::{BTreeMap, HashSet};
 use std::ops::Bound::Unbounded;
 use std::{cmp, fmt, mem};
 
-use heed::types::{ByteSlice, Unit};
-use heed::{BytesDecode, Database};
+use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
 use crate::error::{FieldIdMapMissingEntry, UserError};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::FacetStringLevelZeroCodec;
+use crate::heed_codec::facet::{
+    FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+};
 use crate::search::facet::{FacetNumberIter, FacetNumberRange, FacetStringIter};
-use crate::{DocumentId, FieldId, Index, Result};
+use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -67,46 +68,55 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        fn fetch_facet_values<'t, KC, K: 't>(
-            rtxn: &'t heed::RoTxn,
-            db: Database<KC, Unit>,
-            field_id: FieldId,
-            candidates: &RoaringBitmap,
-            distribution: &mut BTreeMap<String, u64>,
-        ) -> heed::Result<()>
-        where
-            K: fmt::Display,
-            KC: BytesDecode<'t, DItem = (FieldId, DocumentId, K)>,
-        {
-            let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
-
-            for docid in candidates.into_iter() {
-                key_buffer.truncate(mem::size_of::<FieldId>());
-                key_buffer.extend_from_slice(&docid.to_be_bytes());
-                let iter = db
-                    .remap_key_type::<ByteSlice>()
-                    .prefix_iter(rtxn, &key_buffer)?
-                    .remap_key_type::<KC>();
-
-                for result in iter {
-                    let ((_, _, value), ()) = result?;
-                    *distribution.entry(value.to_string()).or_insert(0) += 1;
-                }
-            }
-
-            Ok(())
-        }
-
         match facet_type {
             FacetType::Number => {
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
+
                 let db = self.index.field_id_docid_facet_f64s;
-                fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
+                for docid in candidates.into_iter() {
+                    key_buffer.truncate(mem::size_of::<FieldId>());
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = db
+                        .remap_key_type::<ByteSlice>()
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetF64Codec>();
+
+                    for result in iter {
+                        let ((_, _, value), ()) = result?;
+                        *distribution.entry(value.to_string()).or_insert(0) += 1;
+                    }
+                }
             }
             FacetType::String => {
+                let mut normalized_distribution = BTreeMap::new();
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
+
                 let db = self.index.field_id_docid_facet_strings;
-                fetch_facet_values(self.rtxn, db, field_id, candidates, distribution)
+                for docid in candidates.into_iter() {
+                    key_buffer.truncate(mem::size_of::<FieldId>());
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = db
+                        .remap_key_type::<ByteSlice>()
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetStringCodec>();
+
+                    for result in iter {
+                        let ((_, _, normalized_value), original_value) = result?;
+                        let (_, count) = normalized_distribution
+                            .entry(normalized_value)
+                            .or_insert_with(|| (original_value, 0));
+                        *count += 1;
+                    }
+                }
+
+                let iter = normalized_distribution
+                    .into_iter()
+                    .map(|(_normalized, (original, count))| (original.to_string(), count));
+                distribution.extend(iter);
             }
         }
+
+        Ok(())
     }
 
     /// There is too much documents, we use the facet levels to move throught
@@ -227,7 +237,6 @@ impl<'a> FacetDistribution<'a> {
                         &mut distribution,
                     )?;
                 }
-
                 Ok(distribution)
             }
             None => self.facet_values_from_raw_facet_database(field_id),

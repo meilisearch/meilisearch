@@ -96,7 +96,7 @@ pub struct Index {
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
     /// Maps the document id, the facet field id and the strings.
-    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Unit>,
+    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
     /// Maps the document id to the document as an obkv store.
     pub documents: Database<OwnedType<BEU32>, ObkvCodec>,

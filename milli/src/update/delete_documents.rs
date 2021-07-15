@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use fst::IntoStreamer;
-use heed::types::{ByteSlice, Unit};
+use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
@@ -419,15 +419,16 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 }
 
-fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F>(
+fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F, DC, V>(
     wtxn: &'a mut heed::RwTxn,
-    db: &heed::Database<C, Unit>,
+    db: &heed::Database<C, DC>,
     field_id: FieldId,
     to_remove: &RoaringBitmap,
     convert: F,
 ) -> heed::Result<()>
 where
-    C: heed::BytesDecode<'a, DItem = K> + heed::BytesEncode<'a, EItem = K>,
+    C: heed::BytesDecode<'a, DItem = K>,
+    DC: heed::BytesDecode<'a, DItem = V>,
     F: Fn(K) -> DocumentId,
 {
     let mut iter = db
@@ -436,7 +437,7 @@ where
         .remap_key_type::<C>();
 
     while let Some(result) = iter.next() {
-        let (key, ()) = result?;
+        let (key, _) = result?;
         if to_remove.contains(convert(key)) {
             // safety: we don't keep references from inside the LMDB database.
             unsafe { iter.del_current()? };

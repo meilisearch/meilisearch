@@ -65,7 +65,7 @@ pub struct Store<'s, A> {
         LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
     facet_field_number_docids: LinkedHashMap<(FieldId, OrderedFloat<f64>), RoaringBitmap>,
-    facet_field_string_docids: LinkedHashMap<(FieldId, String), RoaringBitmap>,
+    facet_field_string_docids: LinkedHashMap<(FieldId, String), (String, RoaringBitmap)>,
     facet_field_value_docids_limit: usize,
     // MTBL parameters
     chunk_compression_type: CompressionType,
@@ -283,25 +283,33 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     fn insert_facet_string_values_docid(
         &mut self,
         field_id: FieldId,
-        value: String,
+        normalized_value: String,
+        original_value: String,
         id: DocumentId,
     ) -> Result<()> {
-        if value.is_empty() {
+        if normalized_value.is_empty() {
             return Ok(());
         }
 
         let sorter = &mut self.field_id_docid_facet_strings_sorter;
-        Self::write_field_id_docid_facet_string_value(sorter, field_id, id, &value)?;
+        Self::write_field_id_docid_facet_string_value(
+            sorter,
+            field_id,
+            id,
+            &normalized_value,
+            &original_value,
+        )?;
 
-        let key = (field_id, value);
+        let key = (field_id, normalized_value);
         // if get_refresh finds the element it is assured to be at the end of the linked hash map.
         match self.facet_field_string_docids.get_refresh(&key) {
-            Some(old) => {
+            Some((_original_value, old)) => {
                 old.insert(id);
             }
             None => {
                 // A newly inserted element is append at the end of the linked hash map.
-                self.facet_field_string_docids.insert(key, RoaringBitmap::from_iter(Some(id)));
+                self.facet_field_string_docids
+                    .insert(key, (original_value, RoaringBitmap::from_iter(Some(id))));
                 // If the word docids just reached it's capacity we must make sure to remove
                 // one element, this way next time we insert we doesn't grow the capacity.
                 if self.facet_field_string_docids.len() == self.facet_field_value_docids_limit {
@@ -363,7 +371,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         document_id: DocumentId,
         words_positions: &mut HashMap<String, SmallVec32<Position>>,
         facet_numbers_values: &mut HashMap<FieldId, Vec<f64>>,
-        facet_strings_values: &mut HashMap<FieldId, Vec<String>>,
+        facet_strings_values: &mut HashMap<FieldId, Vec<(String, String)>>,
         record: &[u8],
     ) -> Result<()> {
         // We compute the list of words pairs proximities (self-join) and write it directly to disk.
@@ -399,8 +407,8 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
         // We store document_id associated with all the facet strings fields ids and values.
         for (field, values) in facet_strings_values.drain() {
-            for value in values {
-                self.insert_facet_string_values_docid(field, value, document_id)?;
+            for (normalized, original) in values {
+                self.insert_facet_string_values_docid(field, normalized, original, document_id)?;
             }
         }
 
@@ -516,23 +524,23 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
 
     fn write_facet_field_string_docids<I, E>(sorter: &mut Sorter<MergeFn<E>>, iter: I) -> Result<()>
     where
-        I: IntoIterator<Item = ((FieldId, String), RoaringBitmap)>,
+        I: IntoIterator<Item = ((FieldId, String), (String, RoaringBitmap))>,
         Error: From<E>,
     {
         let mut key_buffer = Vec::new();
         let mut data_buffer = Vec::new();
 
-        for ((field_id, value), docids) in iter {
+        for ((field_id, normalized_value), (original_value, docids)) in iter {
             key_buffer.clear();
             data_buffer.clear();
 
-            FacetStringLevelZeroCodec::serialize_into(field_id, &value, &mut key_buffer);
+            FacetStringLevelZeroCodec::serialize_into(field_id, &normalized_value, &mut key_buffer);
             CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
 
             if lmdb_key_valid_size(&key_buffer) {
                 sorter.insert(&key_buffer, &data_buffer)?;
             } else {
-                warn!("facet value {:?} is too large to be saved", value);
+                warn!("facet value {:?} is too large to be saved", original_value);
             }
         }
 
@@ -587,19 +595,24 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         sorter: &mut Sorter<MergeFn<E>>,
         field_id: FieldId,
         document_id: DocumentId,
-        value: &str,
+        normalized_value: &str,
+        original_value: &str,
     ) -> Result<()>
     where
         Error: From<E>,
     {
         let mut buffer = Vec::new();
-
-        FieldDocIdFacetStringCodec::serialize_into(field_id, document_id, value, &mut buffer);
+        FieldDocIdFacetStringCodec::serialize_into(
+            field_id,
+            document_id,
+            normalized_value,
+            &mut buffer,
+        );
 
         if lmdb_key_valid_size(&buffer) {
-            sorter.insert(&buffer, &[])?;
+            sorter.insert(&buffer, original_value.as_bytes())?;
         } else {
-            warn!("facet value {:?} is too large to be saved", value);
+            warn!("facet value {:?} is too large to be saved", original_value);
         }
 
         Ok(())
@@ -929,24 +942,24 @@ fn process_tokens<'a>(
         .filter(|(_, t)| t.is_word())
 }
 
-fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<String>) {
+fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<(String, String)>) {
     fn inner_extract_facet_values(
         value: &Value,
         can_recurse: bool,
         output_numbers: &mut Vec<f64>,
-        output_strings: &mut Vec<String>,
+        output_strings: &mut Vec<(String, String)>,
     ) {
         match value {
             Value::Null => (),
-            Value::Bool(b) => output_strings.push(b.to_string()),
+            Value::Bool(b) => output_strings.push((b.to_string(), b.to_string())),
             Value::Number(number) => {
                 if let Some(float) = number.as_f64() {
                     output_numbers.push(float);
                 }
             }
-            Value::String(string) => {
-                let string = string.trim().to_lowercase();
-                output_strings.push(string);
+            Value::String(original) => {
+                let normalized = original.trim().to_lowercase();
+                output_strings.push((normalized, original.clone()));
             }
             Value::Array(values) => {
                 if can_recurse {

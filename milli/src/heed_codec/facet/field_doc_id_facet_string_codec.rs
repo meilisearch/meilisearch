@@ -9,13 +9,13 @@ impl FieldDocIdFacetStringCodec {
     pub fn serialize_into(
         field_id: FieldId,
         document_id: DocumentId,
-        value: &str,
+        normalized_value: &str,
         out: &mut Vec<u8>,
     ) {
-        out.reserve(2 + 4 + value.len());
+        out.reserve(2 + 4 + normalized_value.len());
         out.extend_from_slice(&field_id.to_be_bytes());
         out.extend_from_slice(&document_id.to_be_bytes());
-        out.extend_from_slice(value.as_bytes());
+        out.extend_from_slice(normalized_value.as_bytes());
     }
 }
 
@@ -29,17 +29,22 @@ impl<'a> heed::BytesDecode<'a> for FieldDocIdFacetStringCodec {
         let (document_id_bytes, bytes) = try_split_array_at(bytes)?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        let value = str::from_utf8(bytes).ok()?;
-        Some((field_id, document_id, value))
+        let normalized_value = str::from_utf8(bytes).ok()?;
+        Some((field_id, document_id, normalized_value))
     }
 }
 
 impl<'a> heed::BytesEncode<'a> for FieldDocIdFacetStringCodec {
     type EItem = (FieldId, DocumentId, &'a str);
 
-    fn bytes_encode((field_id, document_id, value): &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode((field_id, document_id, normalized_value): &Self::EItem) -> Option<Cow<[u8]>> {
         let mut bytes = Vec::new();
-        FieldDocIdFacetStringCodec::serialize_into(*field_id, *document_id, value, &mut bytes);
+        FieldDocIdFacetStringCodec::serialize_into(
+            *field_id,
+            *document_id,
+            normalized_value,
+            &mut bytes,
+        );
         Some(Cow::Owned(bytes))
     }
 }
