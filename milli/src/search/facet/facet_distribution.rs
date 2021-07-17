@@ -23,7 +23,7 @@ const MAX_VALUES_BY_FACET: usize = 1000;
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
-const CANDIDATES_THRESHOLD: u64 = 35_000;
+const CANDIDATES_THRESHOLD: u64 = 3000;
 
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
@@ -72,6 +72,7 @@ impl<'a> FacetDistribution<'a> {
             FacetType::Number => {
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
+                let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
                 for docid in candidates.into_iter() {
                     key_buffer.truncate(mem::size_of::<FieldId>());
@@ -84,6 +85,9 @@ impl<'a> FacetDistribution<'a> {
                     for result in iter {
                         let ((_, _, value), ()) = result?;
                         *distribution.entry(value.to_string()).or_insert(0) += 1;
+                        if distribution.len() - distribution_prelength == self.max_values_by_facet {
+                            break;
+                        }
                     }
                 }
             }
@@ -106,6 +110,10 @@ impl<'a> FacetDistribution<'a> {
                             .entry(normalized_value)
                             .or_insert_with(|| (original_value, 0));
                         *count += 1;
+
+                        if normalized_distribution.len() == self.max_values_by_facet {
+                            break;
+                        }
                     }
                 }
 
@@ -154,10 +162,10 @@ impl<'a> FacetDistribution<'a> {
             FacetStringIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
 
         for result in iter {
-            let (value, mut docids) = result?;
+            let (_normalized, original, mut docids) = result?;
             docids &= candidates;
             if !docids.is_empty() {
-                distribution.insert(value.to_string(), docids.len());
+                distribution.insert(original.to_string(), docids.len());
             }
             if distribution.len() == self.max_values_by_facet {
                 break;
@@ -193,13 +201,19 @@ impl<'a> FacetDistribution<'a> {
             .prefix_iter(self.rtxn, &field_id.to_be_bytes())?
             .remap_key_type::<FacetStringLevelZeroCodec>();
 
+        let mut normalized_distribution = BTreeMap::new();
         for result in iter {
-            let ((_, value), docids) = result?;
-            distribution.insert(value.to_string(), docids.len());
+            let ((_, normalized_value), (original_value, docids)) = result?;
+            normalized_distribution.insert(normalized_value, (original_value, docids.len()));
             if distribution.len() == self.max_values_by_facet {
                 break;
             }
         }
+
+        let iter = normalized_distribution
+            .into_iter()
+            .map(|(_normalized, (original, count))| (original.to_string(), count));
+        distribution.extend(iter);
 
         Ok(distribution)
     }

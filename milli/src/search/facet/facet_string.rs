@@ -135,7 +135,8 @@ use heed::{Database, LazyDecode, RoRange};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{
-    FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringZeroBoundsValueCodec,
+    FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
+    FacetStringZeroBoundsValueCodec,
 };
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::{FieldId, Index};
@@ -209,7 +210,11 @@ impl<'t> Iterator for FacetStringGroupRange<'t> {
 ///
 /// It yields the facet string and the roaring bitmap associated with it.
 pub struct FacetStringLevelZeroRange<'t> {
-    iter: RoRange<'t, FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+    iter: RoRange<
+        't,
+        FacetStringLevelZeroCodec,
+        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
+    >,
 }
 
 impl<'t> FacetStringLevelZeroRange<'t> {
@@ -252,18 +257,23 @@ impl<'t> FacetStringLevelZeroRange<'t> {
         let iter = db
             .remap_key_type::<ByteSlice>()
             .range(rtxn, &(left_bound, right_bound))?
-            .remap_types::<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>();
+            .remap_types::<
+                FacetStringLevelZeroCodec,
+                FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>
+            >();
 
         Ok(FacetStringLevelZeroRange { iter })
     }
 }
 
 impl<'t> Iterator for FacetStringLevelZeroRange<'t> {
-    type Item = heed::Result<(&'t str, RoaringBitmap)>;
+    type Item = heed::Result<(&'t str, &'t str, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
-            Some(Ok(((_fid, value), docids))) => Some(Ok((value, docids))),
+            Some(Ok(((_fid, normalized), (original, docids)))) => {
+                Some(Ok((normalized, original, docids)))
+            }
             Some(Err(e)) => Some(Err(e)),
             None => None,
         }
@@ -326,7 +336,7 @@ impl<'t> FacetStringIter<'t> {
 }
 
 impl<'t> Iterator for FacetStringIter<'t> {
-    type Item = heed::Result<(&'t str, RoaringBitmap)>;
+    type Item = heed::Result<(&'t str, &'t str, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
@@ -377,11 +387,11 @@ impl<'t> Iterator for FacetStringIter<'t> {
                     // level zero only
                     for result in last {
                         match result {
-                            Ok((value, mut docids)) => {
+                            Ok((normalized, original, mut docids)) => {
                                 docids &= &*documents_ids;
                                 if !docids.is_empty() {
                                     *documents_ids -= &docids;
-                                    return Some(Ok((value, docids)));
+                                    return Some(Ok((normalized, original, docids)));
                                 }
                             }
                             Err(e) => return Some(Err(e)),

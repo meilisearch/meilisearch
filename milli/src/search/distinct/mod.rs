@@ -47,7 +47,7 @@ mod test {
 
         let mut documents = Vec::new();
 
-        let txts = ["toto", "titi", "tata"];
+        let txts = ["Toto", "Titi", "Tata"];
         let cats = (1..10).map(|i| i.to_string()).collect::<Vec<_>>();
         let cat_ints = (1..10).collect::<Vec<_>>();
 
@@ -90,7 +90,6 @@ mod test {
 
         addition.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
         addition.update_format(UpdateFormat::Json);
-
         addition.execute(JSON.to_string().as_bytes(), |_, _| ()).unwrap();
 
         let fields_map = index.fields_ids_map(&txn).unwrap();

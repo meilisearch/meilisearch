@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::{marker, str};
 
-/// A codec that encodes two strings in front of the value.
+use super::try_split_at;
+
+/// A codec that optionally encodes two strings in front of the value.
 ///
 /// The usecase is for the facet string levels algorithm where we must
 /// know the origin of a group, the group left and right bounds are stored
@@ -76,16 +78,6 @@ where
                 Some(Cow::Owned(bytes))
             }
         }
-    }
-}
-
-/// Tries to split a slice in half at the given middle point,
-/// `None` if the slice is too short.
-fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
-    if slice.len() >= mid {
-        Some(slice.split_at(mid))
-    } else {
-        None
     }
 }
 

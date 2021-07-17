@@ -22,12 +22,13 @@ use tempfile::tempfile;
 
 use super::merge_function::{
     cbo_roaring_bitmap_merge, fst_merge, keep_first, roaring_bitmap_merge,
+    tuple_string_cbo_roaring_bitmap_merge,
 };
 use super::{create_sorter, create_writer, writer_into_reader, MergeFn};
 use crate::error::{Error, InternalError, SerializationError};
 use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec,
-    FieldDocIdFacetStringCodec,
+    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
 };
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
@@ -153,7 +154,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             max_memory,
         );
         let facet_field_strings_docids_sorter = create_sorter(
-            cbo_roaring_bitmap_merge,
+            tuple_string_cbo_roaring_bitmap_merge,
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -528,17 +529,18 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         Error: From<E>,
     {
         let mut key_buffer = Vec::new();
-        let mut data_buffer = Vec::new();
 
         for ((field_id, normalized_value), (original_value, docids)) in iter {
             key_buffer.clear();
-            data_buffer.clear();
 
             FacetStringLevelZeroCodec::serialize_into(field_id, &normalized_value, &mut key_buffer);
-            CboRoaringBitmapCodec::serialize_into(&docids, &mut data_buffer);
+
+            let data = (original_value.as_str(), docids);
+            let data = FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_encode(&data)
+                .ok_or(SerializationError::Encoding { db_name: Some("facet-id-string-docids") })?;
 
             if lmdb_key_valid_size(&key_buffer) {
-                sorter.insert(&key_buffer, &data_buffer)?;
+                sorter.insert(&key_buffer, &data)?;
             } else {
                 warn!("facet value {:?} is too large to be saved", original_value);
             }

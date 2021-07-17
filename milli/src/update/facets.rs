@@ -12,7 +12,7 @@ use roaring::RoaringBitmap;
 use crate::error::InternalError;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetLevelValueU32Codec, FacetStringLevelZeroCodec,
-    FacetStringZeroBoundsValueCodec,
+    FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
 };
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::update::index_documents::{
@@ -75,7 +75,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             )?;
 
             // Compute and store the faceted strings documents ids.
-            let string_documents_ids = compute_faceted_documents_ids(
+            let string_documents_ids = compute_faceted_strings_documents_ids(
                 self.wtxn,
                 self.index.facet_id_string_docids.remap_key_type::<ByteSlice>(),
                 field_id,
@@ -96,7 +96,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             clear_field_number_levels(self.wtxn, self.index.facet_id_f64_docids, field_id)?;
 
             // Compute and store the faceted numbers documents ids.
-            let number_documents_ids = compute_faceted_documents_ids(
+            let number_documents_ids = compute_faceted_numbers_documents_ids(
                 self.wtxn,
                 self.index.facet_id_f64_docids.remap_key_type::<ByteSlice>(),
                 field_id,
@@ -237,13 +237,26 @@ fn write_number_entry(
     Ok(())
 }
 
-fn compute_faceted_documents_ids(
+fn compute_faceted_strings_documents_ids(
+    rtxn: &heed::RoTxn,
+    db: heed::Database<ByteSlice, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
+    field_id: FieldId,
+) -> Result<RoaringBitmap> {
+    let mut documents_ids = RoaringBitmap::new();
+    for result in db.prefix_iter(rtxn, &field_id.to_be_bytes())? {
+        let (_key, (_original_value, docids)) = result?;
+        documents_ids |= docids;
+    }
+
+    Ok(documents_ids)
+}
+
+fn compute_faceted_numbers_documents_ids(
     rtxn: &heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     field_id: FieldId,
 ) -> Result<RoaringBitmap> {
     let mut documents_ids = RoaringBitmap::new();
-
     for result in db.prefix_iter(rtxn, &field_id.to_be_bytes())? {
         let (_key, docids) = result?;
         documents_ids |= docids;
@@ -265,7 +278,10 @@ fn clear_field_string_levels<'t>(
 
 fn compute_facet_string_levels<'t>(
     rtxn: &'t heed::RoTxn,
-    db: heed::Database<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+    db: heed::Database<
+        FacetStringLevelZeroCodec,
+        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
+    >,
     compression_type: CompressionType,
     compression_level: Option<u32>,
     shrink_size: Option<u64>,
@@ -299,7 +315,7 @@ fn compute_facet_string_levels<'t>(
         // Because we know the size of the level 0 we can use a range iterator that starts
         // at the first value of the level and goes to the last by simply counting.
         for (i, result) in db.range(rtxn, &((field_id, "")..))?.take(first_level_size).enumerate() {
-            let ((_field_id, value), docids) = result?;
+            let ((_field_id, value), (_original_value, docids)) = result?;
 
             if i == 0 {
                 left = (i as u32, value);

@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::ClearDocuments;
 use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
+use crate::heed_codec::facet::FacetStringLevelZeroValueCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{DocumentId, ExternalDocumentsIds, FieldId, Index, Result, SmallString32, BEU32};
@@ -374,13 +375,13 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         drop(iter);
 
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_value_docids(
+        remove_docids_from_facet_field_id_number_docids(
             self.wtxn,
             facet_id_f64_docids,
             &self.documents_ids,
         )?;
 
-        remove_docids_from_facet_field_id_value_docids(
+        remove_docids_from_facet_field_id_string_docids(
             self.wtxn,
             facet_id_string_docids,
             &self.documents_ids,
@@ -447,7 +448,33 @@ where
     Ok(())
 }
 
-fn remove_docids_from_facet_field_id_value_docids<'a, C>(
+fn remove_docids_from_facet_field_id_string_docids<'a, C>(
+    wtxn: &'a mut heed::RwTxn,
+    db: &heed::Database<C, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
+    to_remove: &RoaringBitmap,
+) -> heed::Result<()>
+where
+    C: heed::BytesDecode<'a> + heed::BytesEncode<'a>,
+{
+    let mut iter = db.remap_key_type::<ByteSlice>().iter_mut(wtxn)?;
+    while let Some(result) = iter.next() {
+        let (bytes, (original_value, mut docids)) = result?;
+        let previous_len = docids.len();
+        docids -= to_remove;
+        if docids.is_empty() {
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.del_current()? };
+        } else if docids.len() != previous_len {
+            let bytes = bytes.to_owned();
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.put_current(&bytes, &(original_value, docids))? };
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_docids_from_facet_field_id_number_docids<'a, C>(
     wtxn: &'a mut heed::RwTxn,
     db: &heed::Database<C, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,

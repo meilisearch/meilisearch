@@ -1,5 +1,6 @@
 use std::mem::size_of;
 
+use concat_arrays::concat_arrays;
 use heed::types::{ByteSlice, Str, Unit};
 use roaring::RoaringBitmap;
 
@@ -43,7 +44,10 @@ pub struct FacetDistinctIter<'a> {
 
 impl<'a> FacetDistinctIter<'a> {
     fn facet_string_docids(&self, key: &str) -> heed::Result<Option<RoaringBitmap>> {
-        self.index.facet_id_string_docids.get(self.txn, &(self.distinct, key))
+        self.index
+            .facet_id_string_docids
+            .get(self.txn, &(self.distinct, key))
+            .map(|result| result.map(|(_original, docids)| docids))
     }
 
     fn facet_number_docids(&self, key: f64) -> heed::Result<Option<RoaringBitmap>> {
@@ -116,10 +120,7 @@ impl<'a> FacetDistinctIter<'a> {
 }
 
 fn facet_values_prefix_key(distinct: FieldId, id: DocumentId) -> [u8; FID_SIZE + DOCID_SIZE] {
-    let mut key = [0; FID_SIZE + DOCID_SIZE];
-    key[0..FID_SIZE].copy_from_slice(&distinct.to_be_bytes());
-    key[FID_SIZE..].copy_from_slice(&id.to_be_bytes());
-    key
+    concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
 }
 
 fn facet_number_values<'a>(

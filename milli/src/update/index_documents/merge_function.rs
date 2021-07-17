@@ -2,8 +2,11 @@ use std::borrow::Cow;
 use std::result::Result as StdResult;
 
 use fst::IntoStreamer;
+use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 
+use crate::error::SerializationError;
+use crate::heed_codec::facet::FacetStringLevelZeroValueCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::Result;
 
@@ -67,6 +70,26 @@ pub fn roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>
     let mut vec = Vec::with_capacity(head.serialized_size());
     head.serialize_into(&mut vec)?;
     Ok(vec)
+}
+
+/// Uses the FacetStringLevelZeroValueCodec to merge the values.
+pub fn tuple_string_cbo_roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {
+    let (head, tail) = values.split_first().unwrap();
+    let (head_string, mut head_rb) =
+        FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_decode(&head[..])
+            .ok_or(SerializationError::Decoding { db_name: None })?;
+
+    for value in tail {
+        let (_string, rb) =
+            FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_decode(&value[..])
+                .ok_or(SerializationError::Decoding { db_name: None })?;
+        head_rb |= rb;
+    }
+
+    FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_encode(&(head_string, head_rb))
+        .map(|cow| cow.into_owned())
+        .ok_or(SerializationError::Encoding { db_name: None })
+        .map_err(Into::into)
 }
 
 pub fn cbo_roaring_bitmap_merge(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Vec<u8>> {

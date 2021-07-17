@@ -11,8 +11,8 @@ use roaring::RoaringBitmap;
 use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec,
-    FieldDocIdFacetStringCodec,
+    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
 };
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
@@ -90,8 +90,9 @@ pub struct Index {
 
     /// Maps the facet field id, level and the number with the docids that corresponds to it.
     pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-    /// Maps the facet field id and the string with the docids that corresponds to it.
-    pub facet_id_string_docids: Database<FacetStringLevelZeroCodec, CboRoaringBitmapCodec>,
+    /// Maps the facet field id and the string with the original string and docids that corresponds to it.
+    pub facet_id_string_docids:
+        Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
