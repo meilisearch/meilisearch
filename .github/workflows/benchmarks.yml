@@ -8,6 +8,9 @@ on:
         required: false
         default: 'songs'
 
+env:
+  HOME: "/home/runner" # The actions-rs/toolchain@v1 can fail we have no $HOME defined
+
 jobs:
   benchmarks:
     name: Run and upload benchmarks
