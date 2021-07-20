@@ -28,6 +28,8 @@
 **MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
+**Note: This repository does not contain MeiliSearch's indexer and searcher code. For that, see [the milli repository](https://github.com/meilisearch/milli), which serves as the core for MeiliSearch.**
+
 <p align="center">
   <img src="assets/trumen_quick_loop.gif" alt="Web interface gif" />
 </p>
