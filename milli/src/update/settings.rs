@@ -276,8 +276,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // every time the searchable attributes are updated, we need to update the
-                // ids for any settings that uses the facets. (displayed_fields,
-                // filterable_fields)
+                // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
                 let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
                 let mut new_fields_ids_map = FieldsIdsMap::new();

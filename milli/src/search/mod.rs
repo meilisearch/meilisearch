@@ -15,7 +15,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub(crate) use self::facet::ParserRule;
-pub use self::facet::{FacetDistribution, FacetIter, FilterCondition, Operator};
+pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 use crate::error::FieldIdMapMissingEntry;

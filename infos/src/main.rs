@@ -627,14 +627,14 @@ fn facet_values_docids(
         FacetType::String => {
             wtr.write_record(&["facet_string", "documents_count", "documents_ids"])?;
             for result in facet_values_iter(rtxn, index.facet_id_string_docids, field_id)? {
-                let ((_fid, value), docids) = result?;
+                let ((_fid, normalized), (_original, docids)) = result?;
                 let count = docids.len();
                 let docids = if debug {
                     format!("{:?}", docids)
                 } else {
                     format!("{:?}", docids.iter().collect::<Vec<_>>())
                 };
-                wtr.write_record(&[value.to_string(), count.to_string(), docids])?;
+                wtr.write_record(&[normalized.to_string(), count.to_string(), docids])?;
             }
         }
     }

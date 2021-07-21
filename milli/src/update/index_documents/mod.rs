@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 pub use self::merge_function::{
     cbo_roaring_bitmap_merge, fst_merge, keep_first, roaring_bitmap_merge,
+    tuple_string_cbo_roaring_bitmap_merge,
 };
 use self::store::{Readers, Store};
 pub use self::transform::{Transform, TransformOutput};
@@ -655,7 +656,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             self.wtxn,
             *self.index.facet_id_string_docids.as_polymorph(),
             facet_field_strings_docids_readers,
-            cbo_roaring_bitmap_merge,
+            tuple_string_cbo_roaring_bitmap_merge,
             write_method,
         )?;
 

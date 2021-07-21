@@ -1,6 +1,7 @@
 use std::mem::size_of;
 
-use heed::types::ByteSlice;
+use concat_arrays::concat_arrays;
+use heed::types::{ByteSlice, Str, Unit};
 use roaring::RoaringBitmap;
 
 use super::{Distinct, DocIter};
@@ -43,7 +44,10 @@ pub struct FacetDistinctIter<'a> {
 
 impl<'a> FacetDistinctIter<'a> {
     fn facet_string_docids(&self, key: &str) -> heed::Result<Option<RoaringBitmap>> {
-        self.index.facet_id_string_docids.get(self.txn, &(self.distinct, key))
+        self.index
+            .facet_id_string_docids
+            .get(self.txn, &(self.distinct, key))
+            .map(|result| result.map(|(_original, docids)| docids))
     }
 
     fn facet_number_docids(&self, key: f64) -> heed::Result<Option<RoaringBitmap>> {
@@ -116,10 +120,7 @@ impl<'a> FacetDistinctIter<'a> {
 }
 
 fn facet_values_prefix_key(distinct: FieldId, id: DocumentId) -> [u8; FID_SIZE + DOCID_SIZE] {
-    let mut key = [0; FID_SIZE + DOCID_SIZE];
-    key[0..FID_SIZE].copy_from_slice(&distinct.to_be_bytes());
-    key[FID_SIZE..].copy_from_slice(&id.to_be_bytes());
-    key
+    concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
 }
 
 fn facet_number_values<'a>(
@@ -127,7 +128,7 @@ fn facet_number_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetF64Codec, Unit>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
@@ -144,14 +145,14 @@ fn facet_string_values<'a>(
     distinct: FieldId,
     index: &Index,
     txn: &'a heed::RoTxn,
-) -> Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, heed::types::Unit>> {
+) -> Result<heed::RoPrefix<'a, FieldDocIdFacetStringCodec, Str>> {
     let key = facet_values_prefix_key(distinct, id);
 
     let iter = index
         .field_id_docid_facet_strings
         .remap_key_type::<ByteSlice>()
         .prefix_iter(txn, &key)?
-        .remap_key_type::<FieldDocIdFacetStringCodec>();
+        .remap_types::<FieldDocIdFacetStringCodec, Str>();
 
     Ok(iter)
 }

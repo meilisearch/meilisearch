@@ -15,9 +15,11 @@ use roaring::RoaringBitmap;
 use self::FilterCondition::*;
 use self::Operator::*;
 use super::parser::{FilterParser, Rule, PREC_CLIMBER};
-use super::FacetRange;
+use super::FacetNumberRange;
 use crate::error::UserError;
-use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetValueStringCodec};
+use crate::heed_codec::facet::{
+    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
+};
 use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -282,7 +284,7 @@ impl FilterCondition {
 
         // We must create a custom iterator to be able to iterate over the
         // requested range as the range iterator cannot express some conditions.
-        let iter = FacetRange::new(rtxn, db, field_id, level, left, right)?;
+        let iter = FacetNumberRange::new(rtxn, db, field_id, level, left, right)?;
 
         debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
 
@@ -363,7 +365,10 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-        strings_db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
+        strings_db: heed::Database<
+            FacetStringLevelZeroCodec,
+            FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
+        >,
         field_id: FieldId,
         operator: &Operator,
     ) -> Result<RoaringBitmap> {
@@ -374,7 +379,8 @@ impl FilterCondition {
             GreaterThan(val) => (Excluded(*val), Included(f64::MAX)),
             GreaterThanOrEqual(val) => (Included(*val), Included(f64::MAX)),
             Equal(number, string) => {
-                let string_docids = strings_db.get(rtxn, &(field_id, &string))?.unwrap_or_default();
+                let (_original_value, string_docids) =
+                    strings_db.get(rtxn, &(field_id, &string))?.unwrap_or_default();
                 let number_docids = match number {
                     Some(n) => {
                         let n = Included(*n);
