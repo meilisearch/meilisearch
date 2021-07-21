@@ -49,12 +49,12 @@ async fn main() -> Result<(), MainError> {
                     release: sentry::release_name!(),
                     dsn: Some(SENTRY_DSN.parse()?),
                     before_send: Some(Arc::new(|event| {
-                        event
-                            .message
-                            .as_ref()
-                            .map(|msg| msg.to_lowercase().contains("no space left on device"))
-                            .unwrap_or(false)
-                            .then(|| event)
+                        if matches!(event.message, Some(ref msg) if msg.to_lowercase().contains("no space left on device"))
+                        {
+                            None
+                        } else {
+                            Some(event)
+                        }
                     })),
                     ..Default::default()
                 });
