@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::ClearDocuments;
-use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
+use crate::error::{InternalError, UserError};
 use crate::heed_codec::facet::FacetStringLevelZeroValueCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
@@ -82,11 +82,13 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 key: Some(main_key::PRIMARY_KEY_KEY),
             }
         })?;
-        let id_field =
-            fields_ids_map.id(primary_key).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                field_name: primary_key.to_string(),
-                process: "DeleteDocuments::execute",
-            })?;
+
+        // If we can't find the id of the primary key it means that the database
+        // is empty and it should be safe to return that we deleted 0 documents.
+        let id_field = match fields_ids_map.id(primary_key) {
+            Some(field) => field,
+            None => return Ok(0),
+        };
 
         let Index {
             env: _env,

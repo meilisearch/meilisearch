@@ -235,15 +235,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_displayed(&mut self) -> Result<bool> {
         match self.displayed_fields {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names: Vec<_> = fields.iter().unique().map(String::as_str).collect();
-
-                for name in names.iter() {
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
                 self.index.put_displayed_fields(self.wtxn, &names)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_displayed_fields(self.wtxn)?;
@@ -256,11 +250,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_distinct_field(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-                fields_ids_map.insert(attr).ok_or(UserError::AttributeLimitReached)?;
-
                 self.index.put_distinct_field(self.wtxn, &attr)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_distinct_field(self.wtxn)?;
@@ -388,14 +378,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_facets = HashSet::new();
                 for name in fields {
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                     new_facets.insert(name.clone());
                 }
                 self.index.put_filterable_fields(self.wtxn, &new_facets)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_filterable_fields(self.wtxn)?;
@@ -408,17 +395,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_criteria(&mut self) -> Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
                     let criterion: Criterion = name.parse()?;
-                    if let Some(name) = criterion.field_name() {
-                        fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                    }
                     new_criteria.push(criterion);
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_criteria(self.wtxn)?;

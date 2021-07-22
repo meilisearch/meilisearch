@@ -6,7 +6,6 @@ use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
-use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetNumberIter;
 use crate::search::query_tree::Operation;
@@ -20,7 +19,7 @@ pub struct AscDesc<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
     field_name: String,
-    field_id: FieldId,
+    field_id: Option<FieldId>,
     ascending: bool,
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
@@ -57,11 +56,11 @@ impl<'t> AscDesc<'t> {
         ascending: bool,
     ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let field_id =
-            fields_ids_map.id(&field_name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                field_name: field_name.clone(),
-                process: "AscDesc::new",
-            })?;
+        let field_id = fields_ids_map.id(&field_name);
+        let faceted_candidates = match field_id {
+            Some(field_id) => index.number_faceted_documents_ids(rtxn, field_id)?,
+            None => RoaringBitmap::default(),
+        };
 
         Ok(AscDesc {
             index,
@@ -72,7 +71,7 @@ impl<'t> AscDesc<'t> {
             query_tree: None,
             candidates: Box::new(std::iter::empty()),
             allowed_candidates: RoaringBitmap::new(),
-            faceted_candidates: index.number_faceted_documents_ids(rtxn, field_id)?,
+            faceted_candidates,
             bucket_candidates: RoaringBitmap::new(),
             parent,
         })
@@ -132,13 +131,16 @@ impl<'t> Criterion for AscDesc<'t> {
                         }
 
                         self.allowed_candidates = &candidates - params.excluded_candidates;
-                        self.candidates = facet_ordered(
-                            self.index,
-                            self.rtxn,
-                            self.field_id,
-                            self.ascending,
-                            candidates & &self.faceted_candidates,
-                        )?;
+                        self.candidates = match self.field_id {
+                            Some(field_id) => facet_ordered(
+                                self.index,
+                                self.rtxn,
+                                field_id,
+                                self.ascending,
+                                candidates & &self.faceted_candidates,
+                            )?,
+                            None => Box::new(std::iter::empty()),
+                        };
                     }
                     None => return Ok(None),
                 },

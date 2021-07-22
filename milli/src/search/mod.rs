@@ -18,7 +18,6 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
-use crate::error::FieldIdMapMissingEntry;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{DocumentId, Index, Result};
 
@@ -142,13 +141,13 @@ impl<'a> Search<'a> {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
-                let id =
-                    field_ids_map.id(name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                        field_name: name.to_string(),
-                        process: "distinct attribute",
-                    })?;
-                let distinct = FacetDistinct::new(id, self.index, self.rtxn);
-                self.perform_sort(distinct, matching_words, criteria)
+                match field_ids_map.id(name) {
+                    Some(fid) => {
+                        let distinct = FacetDistinct::new(fid, self.index, self.rtxn);
+                        self.perform_sort(distinct, matching_words, criteria)
+                    }
+                    None => Ok(SearchResult::default()),
+                }
             }
         }
     }
