@@ -367,6 +367,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
             } else if docids.len() != previous_len {
+                let key = key.to_owned();
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.put_current(&key, &docids)? };
             }

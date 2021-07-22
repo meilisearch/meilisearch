@@ -1381,4 +1381,26 @@ mod tests {
 
         wtxn.commit().unwrap();
     }
+
+    #[test]
+    fn index_documents_with_zeroes() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = r#"#id,title,au{hor,genre,price$
+2,"Prideand Prejudice","Jane Austin","romance",3.5$
+456,"Le Petit Prince","Antoine de Saint-Exupéry","adventure",10.0$
+1,Wonderland","Lewis Carroll","fantasy",25.99$
+4,"Harry Potter ing","fantasy\0lood Prince","J. K. Rowling","fantasy\0,
+"#;
+
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+
+        wtxn.commit().unwrap();
+    }
 }
