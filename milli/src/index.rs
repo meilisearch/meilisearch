@@ -492,10 +492,10 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
@@ -506,10 +506,10 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
@@ -524,10 +524,10 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
@@ -538,10 +538,10 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
