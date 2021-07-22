@@ -990,7 +990,7 @@ dependencies = [
  "jemallocator",
  "log",
  "maplit",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.3",
  "memmap",
  "milli",
  "once_cell",
@@ -1353,7 +1353,23 @@ dependencies = [
  "once_cell",
  "slice-group-by",
  "unicode-segmentation",
- "whatlang",
+ "whatlang 0.9.0",
+]
+
+[[package]]
+name = "meilisearch-tokenizer"
+version = "0.2.4"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.4#135d08dce465a756abaf6a1bcad70f315bda99b9"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang 0.12.0",
 ]
 
 [[package]]
@@ -1404,7 +1420,7 @@ dependencies = [
  "log",
  "logging_timer",
  "maplit",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.4",
  "memmap",
  "obkv",
  "once_cell",
@@ -3083,6 +3099,15 @@ name = "whatlang"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc0289c1d1548414a5645e6583e118e9c569c579ec2a0c32417cc3dbf7a89075"
+dependencies = [
+ "hashbrown 0.7.2",
+]
+
+[[package]]
+name = "whatlang"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a346d2eb29c03618693ed24a29d1acd0c3f2cb08ae58b9669d7461e033cf703"
 dependencies = [
  "hashbrown 0.7.2",
 ]
