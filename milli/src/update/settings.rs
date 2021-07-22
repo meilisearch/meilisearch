@@ -1066,4 +1066,53 @@ mod tests {
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
     }
+
+    #[test]
+    fn setting_impact_relevancy() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the genres setting
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_filterable_fields(hashset! { S("genres") });
+        builder.execute(|_, _| ()).unwrap();
+
+        let content = &br#"[
+          {
+            "id": 11,
+            "title": "Star Wars",
+            "overview":
+              "Princess Leia is captured and held hostage by the evil Imperial forces in their effort to take over the galactic Empire. Venturesome Luke Skywalker and dashing captain Han Solo team together with the loveable robot duo R2-D2 and C-3PO to rescue the beautiful princess and restore peace and justice in the Empire.",
+            "genres": ["Adventure", "Action", "Science Fiction"],
+            "poster": "https://image.tmdb.org/t/p/w500/6FfCtAuVAW8XJjZ7eWeLibRLWTw.jpg",
+            "release_date": 233366400
+          },
+          {
+            "id": 30,
+            "title": "Magnetic Rose",
+            "overview": "",
+            "genres": ["Animation", "Science Fiction"],
+            "poster": "https://image.tmdb.org/t/p/w500/gSuHDeWemA1menrwfMRChnSmMVN.jpg",
+            "release_date": 819676800
+          }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // We now try to reset the primary key
+        let rtxn = index.read_txn().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
+        let first_id = documents_ids[0];
+        let documents = index.documents(&rtxn, documents_ids).unwrap();
+        let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();
+
+        let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
+        let line = std::str::from_utf8(content.get(fid).unwrap()).unwrap();
+        assert_eq!(line, r#""Star Wars""#);
+    }
 }
