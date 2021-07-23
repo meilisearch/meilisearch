@@ -28,8 +28,6 @@
 **MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
-**Note: This repository does not contain MeiliSearch's indexing and searching code. For that, see [the milli repository](https://github.com/meilisearch/milli), which serves as the core for MeiliSearch.**
-
 <p align="center">
   <img src="assets/trumen_quick_loop.gif" alt="Web interface gif" />
 </p>
@@ -172,6 +170,10 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 ## Contributing
 
 Hey! We're glad you're thinking about contributing to MeiliSearch! However, we are currently working on a huge refactor and accepting PRs on this repository wouldn't be productive. We are sorry about this! Be sure we are doing our best so that you can contribute to MeiliSearch again as soon as possible ❤️
+
+## Core library
+
+This repository does not contain MeiliSearch's indexing and searching code. For that, see [the milli repository](https://github.com/meilisearch/milli), which serves as the core for MeiliSearch.
 
 ## Telemetry
 
