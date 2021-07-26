@@ -16,13 +16,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
         rust:
           - stable
           - beta
           - nightly
     steps:
     - uses: actions/checkout@v2
+    - name: Cache dependencies
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo
+          ./Cargo.lock
+          ./target
+        key: ${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('Cargo.toml') }}
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
@@ -32,34 +40,26 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: check
-        args: --all --locked
+        args: --all
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --locked --release
-
-  # We don't run test on Windows since we get the following error: There is not enough space on the disk.
-  check-on-windows:
-    name: Cargo check on Windows
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Run cargo check without any default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
-        args: --all --locked
-    - name: Run cargo check with all default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
+        args: --release
 
   fmt:
     name: Run Rustfmt
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo
+            ./Cargo.lock
+            ./target
+          key: ${{ matrix.os }}-${{ matrix.rust}}-${{ hashFiles('Cargo.toml') }}
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
