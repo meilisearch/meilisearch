@@ -246,11 +246,11 @@ struct VersionResponse {
 
 async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
     let commit_sha = match option_env!("COMMIT_SHA") {
-        Some("") | None => env!("VERGEN_SHA"),
+        Some("") | None => env!("VERGEN_GIT_SHA"),
         Some(commit_sha) => commit_sha,
     };
     let commit_date = match option_env!("COMMIT_DATE") {
-        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some("") | None => env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
         Some(commit_date) => commit_date,
     };
 
