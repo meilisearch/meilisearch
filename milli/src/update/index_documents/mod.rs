@@ -391,6 +391,10 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             documents_file,
         } = output;
 
+        // The fields_ids_map is put back to the store now so the rest of the transaction sees an
+        // up to date field map.
+        self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+
         // We delete the documents that this document addition replaces. This way we are
         // able to simply insert all the documents even if they already exist in the database.
         if !replaced_documents_ids.is_empty() {
@@ -595,9 +599,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             if contains_documents { WriteMethod::GetMergePut } else { WriteMethod::Append };
 
         debug!("Writing using the write method: {:?}", write_method);
-
-        // We write the fields ids map into the main database
-        self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;

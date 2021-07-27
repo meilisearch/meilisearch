@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use either::Either;
 use heed::types::DecodeIgnore;
+use itertools::Itertools;
 use log::debug;
 use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
@@ -54,6 +55,7 @@ pub enum FilterCondition {
     Operator(FieldId, Operator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
+    Empty,
 }
 
 impl FilterCondition {
@@ -108,7 +110,7 @@ impl FilterCondition {
         expression: &str,
     ) -> Result<FilterCondition> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let filterable_fields = index.filterable_fields_ids(rtxn)?;
+        let filterable_fields = index.filterable_fields(rtxn)?;
         let lexed =
             FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
         FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
@@ -116,7 +118,7 @@ impl FilterCondition {
 
     fn from_pairs(
         fim: &FieldsIdsMap,
-        ff: &HashSet<FieldId>,
+        ff: &HashSet<String>,
         expression: Pairs<Rule>,
     ) -> Result<Self> {
         PREC_CLIMBER.climb(
@@ -150,17 +152,22 @@ impl FilterCondition {
             },
             Or(a, b) => And(Box::new(a.negate()), Box::new(b.negate())),
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
+            Empty => Empty,
         }
     }
 
     fn between(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
@@ -173,12 +180,16 @@ impl FilterCondition {
 
     fn equal(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let value = items.next().unwrap();
         let (result, svalue) = pest_parse(value);
@@ -189,12 +200,16 @@ impl FilterCondition {
 
     fn greater_than(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -205,12 +220,16 @@ impl FilterCondition {
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -221,12 +240,16 @@ impl FilterCondition {
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -237,12 +260,16 @@ impl FilterCondition {
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<FieldId>,
+        filterable_fields: &HashSet<String>,
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?;
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
+            .map_err(UserError::InvalidFilterAttribute)?
+        {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
@@ -461,57 +488,41 @@ impl FilterCondition {
                 let rhs = rhs.evaluate(rtxn, index)?;
                 Ok(lhs & rhs)
             }
+            Empty => Ok(RoaringBitmap::new()),
         }
     }
 }
 
-/// Retrieve the field id base on the pest value, returns an error is
-/// the field does not exist or is not filterable.
+/// Retrieve the field id base on the pest value.
+///
+/// Returns an error if the given value is not filterable.
+///
+/// Returns Ok(None) if the given value is filterable, but is not yet ascociated to a field_id.
 ///
 /// The pest pair is simply a string associated with a span, a location to highlight in
 /// the error message.
 fn field_id(
     fields_ids_map: &FieldsIdsMap,
-    filterable_fields: &HashSet<FieldId>,
+    filterable_fields: &HashSet<String>,
     items: &mut Pairs<Rule>,
-) -> StdResult<FieldId, PestError<Rule>> {
+) -> StdResult<Option<FieldId>, PestError<Rule>> {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
 
-    let field_id = match fields_ids_map.id(key.as_str()) {
-        Some(field_id) => field_id,
-        None => {
-            return Err(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                        "attribute `{}` not found, available attributes are: {}",
-                        key.as_str(),
-                        fields_ids_map.iter().map(|(_, n)| n).collect::<Vec<_>>().join(", "),
-                    ),
-                },
-                key.as_span(),
-            ))
-        }
-    };
-
-    if !filterable_fields.contains(&field_id) {
+    if !filterable_fields.contains(key.as_str()) {
         return Err(PestError::new_from_span(
             ErrorVariant::CustomError {
                 message: format!(
                     "attribute `{}` is not filterable, available filterable attributes are: {}",
                     key.as_str(),
-                    filterable_fields
-                        .iter()
-                        .flat_map(|id| { fields_ids_map.name(*id) })
-                        .collect::<Vec<_>>()
-                        .join(", "),
+                    filterable_fields.iter().join(", "),
                 ),
             },
             key.as_span(),
         ));
     }
 
-    Ok(field_id)
+    Ok(fields_ids_map.id(key.as_str()))
 }
 
 /// Tries to parse the pest pair into the type `T` specified, always returns
@@ -552,6 +563,9 @@ mod tests {
 
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
+        let mut map = index.fields_ids_map(&wtxn).unwrap();
+        map.insert("channel");
+        index.put_fields_ids_map(&mut wtxn, &map).unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_filterable_fields(hashset! { S("channel") });
         builder.execute(|_, _| ()).unwrap();
@@ -581,6 +595,9 @@ mod tests {
 
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
+        let mut map = index.fields_ids_map(&wtxn).unwrap();
+        map.insert("timestamp");
+        index.put_fields_ids_map(&mut wtxn, &map).unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_filterable_fields(hashset! { "timestamp".into() });
         builder.execute(|_, _| ()).unwrap();

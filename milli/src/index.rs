@@ -8,7 +8,7 @@ use heed::types::*;
 use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
-use crate::error::{FieldIdMapMissingEntry, InternalError, UserError};
+use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
@@ -353,15 +353,8 @@ impl Index {
                 let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields.into_iter() {
-                    match fields_ids_map.id(name) {
-                        Some(field_id) => fields_ids.push(field_id),
-                        None => {
-                            return Err(FieldIdMapMissingEntry::FieldName {
-                                field_name: name.to_string(),
-                                process: "Index::displayed_fields_ids",
-                            }
-                            .into())
-                        }
+                    if let Some(field_id) = fields_ids_map.id(name) {
+                        fields_ids.push(field_id);
                     }
                 }
                 Ok(Some(fields_ids))
@@ -403,15 +396,8 @@ impl Index {
                 let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields {
-                    match fields_ids_map.id(name) {
-                        Some(field_id) => fields_ids.push(field_id),
-                        None => {
-                            return Err(FieldIdMapMissingEntry::FieldName {
-                                field_name: name.to_string(),
-                                process: "Index::searchable_fields_ids",
-                            }
-                            .into())
-                        }
+                    if let Some(field_id) = fields_ids_map.id(name) {
+                        fields_ids.push(field_id);
                     }
                 }
                 Ok(Some(fields_ids))
@@ -451,17 +437,8 @@ impl Index {
 
         let mut fields_ids = HashSet::new();
         for name in fields {
-            match fields_ids_map.id(&name) {
-                Some(field_id) => {
-                    fields_ids.insert(field_id);
-                }
-                None => {
-                    return Err(FieldIdMapMissingEntry::FieldName {
-                        field_name: name,
-                        process: "Index::filterable_fields_ids",
-                    }
-                    .into())
-                }
+            if let Some(field_id) = fields_ids_map.id(&name) {
+                fields_ids.insert(field_id);
             }
         }
 
@@ -498,17 +475,8 @@ impl Index {
 
         let mut fields_ids = HashSet::new();
         for name in fields.into_iter() {
-            match fields_ids_map.id(&name) {
-                Some(field_id) => {
-                    fields_ids.insert(field_id);
-                }
-                None => {
-                    return Err(FieldIdMapMissingEntry::FieldName {
-                        field_name: name,
-                        process: "Index::faceted_fields_ids",
-                    }
-                    .into())
-                }
+            if let Some(field_id) = fields_ids_map.id(&name) {
+                fields_ids.insert(field_id);
             }
         }
 
@@ -524,10 +492,10 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
@@ -538,10 +506,10 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
@@ -556,10 +524,10 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
@@ -570,10 +538,10 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
+        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
+            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),

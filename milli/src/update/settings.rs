@@ -235,15 +235,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_displayed(&mut self) -> Result<bool> {
         match self.displayed_fields {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names: Vec<_> = fields.iter().unique().map(String::as_str).collect();
-
-                for name in names.iter() {
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
                 self.index.put_displayed_fields(self.wtxn, &names)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_displayed_fields(self.wtxn)?;
@@ -256,11 +250,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_distinct_field(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-                fields_ids_map.insert(attr).ok_or(UserError::AttributeLimitReached)?;
-
                 self.index.put_distinct_field(self.wtxn, &attr)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_distinct_field(self.wtxn)?;
@@ -388,14 +378,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_facets = HashSet::new();
                 for name in fields {
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                     new_facets.insert(name.clone());
                 }
                 self.index.put_filterable_fields(self.wtxn, &new_facets)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_filterable_fields(self.wtxn)?;
@@ -408,17 +395,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_criteria(&mut self) -> Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 let mut new_criteria = Vec::new();
                 for name in fields {
                     let criterion: Criterion = name.parse()?;
-                    if let Some(name) = criterion.field_name() {
-                        fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                    }
                     new_criteria.push(criterion);
                 }
                 self.index.put_criteria(self.wtxn, &new_criteria)?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
             }
             Setting::Reset => {
                 self.index.delete_criteria(self.wtxn)?;
@@ -692,7 +674,8 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0])
+            // The faceted field id is 2u16
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 3);
@@ -718,7 +701,7 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0])
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 4);
@@ -1065,5 +1048,54 @@ mod tests {
         builder.set_primary_key(S("myid"));
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn setting_impact_relevancy() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the genres setting
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_filterable_fields(hashset! { S("genres") });
+        builder.execute(|_, _| ()).unwrap();
+
+        let content = &br#"[
+          {
+            "id": 11,
+            "title": "Star Wars",
+            "overview":
+              "Princess Leia is captured and held hostage by the evil Imperial forces in their effort to take over the galactic Empire. Venturesome Luke Skywalker and dashing captain Han Solo team together with the loveable robot duo R2-D2 and C-3PO to rescue the beautiful princess and restore peace and justice in the Empire.",
+            "genres": ["Adventure", "Action", "Science Fiction"],
+            "poster": "https://image.tmdb.org/t/p/w500/6FfCtAuVAW8XJjZ7eWeLibRLWTw.jpg",
+            "release_date": 233366400
+          },
+          {
+            "id": 30,
+            "title": "Magnetic Rose",
+            "overview": "",
+            "genres": ["Animation", "Science Fiction"],
+            "poster": "https://image.tmdb.org/t/p/w500/gSuHDeWemA1menrwfMRChnSmMVN.jpg",
+            "release_date": 819676800
+          }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // We now try to reset the primary key
+        let rtxn = index.read_txn().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
+        let first_id = documents_ids[0];
+        let documents = index.documents(&rtxn, documents_ids).unwrap();
+        let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();
+
+        let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
+        let line = std::str::from_utf8(content.get(fid).unwrap()).unwrap();
+        assert_eq!(line, r#""Star Wars""#);
     }
 }

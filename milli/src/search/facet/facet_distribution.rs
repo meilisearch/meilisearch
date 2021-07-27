@@ -5,7 +5,7 @@ use std::{cmp, fmt, mem};
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
-use crate::error::{FieldIdMapMissingEntry, UserError};
+use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
@@ -277,13 +277,10 @@ impl<'a> FacetDistribution<'a> {
 
         let mut distribution = BTreeMap::new();
         for name in fields {
-            let fid =
-                fields_ids_map.id(&name).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                    field_name: name.clone(),
-                    process: "FacetDistribution::execute",
-                })?;
-            let values = self.facet_values(fid)?;
-            distribution.insert(name, values);
+            if let Some(fid) = fields_ids_map.id(&name) {
+                let values = self.facet_values(fid)?;
+                distribution.insert(name, values);
+            }
         }
 
         Ok(distribution)
