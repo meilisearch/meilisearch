@@ -674,7 +674,8 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0])
+            // The faceted field id is 2u16
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 3);
@@ -700,7 +701,7 @@ mod tests {
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 0])
+            .prefix_iter(&rtxn, &[0, 2, 0])
             .unwrap()
             .count();
         assert_eq!(count, 4);
