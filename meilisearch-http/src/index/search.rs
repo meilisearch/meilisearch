@@ -342,7 +342,7 @@ fn add_crop_to_formatted_options(
     attr_to_crop: &[String],
     crop_length: usize,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u16>,
+    displayed_ids: &BTreeSet<FieldId>,
 ) {
     for attr in attr_to_crop {
         let mut split = attr.rsplitn(2, ':');
