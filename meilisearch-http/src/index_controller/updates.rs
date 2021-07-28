@@ -73,6 +73,8 @@ impl Enqueued {
     }
 }
 
+/// This state indicate that we were able to process the update successfully. Now we are waiting
+/// for the user to `commit` his change
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Processed {
@@ -90,8 +92,55 @@ impl Processed {
     pub fn meta(&self) -> &UpdateMeta {
         self.from.meta()
     }
+
+    /// The commit was made successfully and we can move to our last state
+    pub fn commit(self) -> Done {
+        Done {
+            success: self.success,
+            from: self.from,
+            processed_at: Utc::now(),
+        }
+    }
+
+    /// The commit failed
+    pub fn fail(self, error: ResponseError) -> Failed {
+        Failed {
+            from: self.from, // MARIN: maybe we should update Failed so it can fail from the processed state?
+            error,
+            failed_at: Utc::now(),
+        }
+    }
+
+    /// The update was aborted
+    pub fn abort(self) -> Aborted {
+        Aborted {
+            from: self.from.from, // MARIN: maybe we should update Aborted so it can fail from the processed state?
+            aborted_at: Utc::now(),
+        }
+    }
 }
 
+/// Final state: everything went well
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Done {
+    pub success: UpdateResult,
+    pub processed_at: DateTime<Utc>,
+    #[serde(flatten)]
+    pub from: Processing,
+}
+
+impl Done {
+    pub fn id(&self) -> u64 {
+        self.from.id()
+    }
+
+    pub fn meta(&self) -> &UpdateMeta {
+        self.from.meta()
+    }
+}
+
+/// The update is being handled by milli. It can fail but not be aborted.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Processing {
@@ -126,6 +175,7 @@ impl Processing {
     }
 }
 
+/// Final state: The update has been aborted.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Aborted {
@@ -144,6 +194,7 @@ impl Aborted {
     }
 }
 
+/// Final state: The update failed to process or commit correctly.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Failed {
@@ -169,6 +220,7 @@ pub enum UpdateStatus {
     Processing(Processing),
     Enqueued(Enqueued),
     Processed(Processed),
+    Done(Done),
     Aborted(Aborted),
     Failed(Failed),
 }
@@ -179,6 +231,7 @@ impl UpdateStatus {
             UpdateStatus::Processing(u) => u.id(),
             UpdateStatus::Enqueued(u) => u.id(),
             UpdateStatus::Processed(u) => u.id(),
+            UpdateStatus::Done(u) => u.id(),
             UpdateStatus::Aborted(u) => u.id(),
             UpdateStatus::Failed(u) => u.id(),
         }
@@ -189,6 +242,7 @@ impl UpdateStatus {
             UpdateStatus::Processing(u) => u.meta(),
             UpdateStatus::Enqueued(u) => u.meta(),
             UpdateStatus::Processed(u) => u.meta(),
+            UpdateStatus::Done(u) => u.meta(),
             UpdateStatus::Aborted(u) => u.meta(),
             UpdateStatus::Failed(u) => u.meta(),
         }
@@ -214,15 +268,21 @@ impl From<Aborted> for UpdateStatus {
     }
 }
 
+impl From<Processing> for UpdateStatus {
+    fn from(other: Processing) -> Self {
+        Self::Processing(other)
+    }
+}
+
 impl From<Processed> for UpdateStatus {
     fn from(other: Processed) -> Self {
         Self::Processed(other)
     }
 }
 
-impl From<Processing> for UpdateStatus {
-    fn from(other: Processing) -> Self {
-        Self::Processing(other)
+impl From<Done> for UpdateStatus {
+    fn from(other: Done) -> Self {
+        Self::Done(other)
     }
 }
 

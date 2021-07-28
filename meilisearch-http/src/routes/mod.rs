@@ -132,6 +132,10 @@ pub enum UpdateStatusResponse {
         #[serde(flatten)]
         content: ProcessedUpdateResult,
     },
+    Done {
+        #[serde(flatten)]
+        content: ProcessedUpdateResult,
+    },
 }
 
 impl From<UpdateStatus> for UpdateStatusResponse {
@@ -172,6 +176,24 @@ impl From<UpdateStatus> for UpdateStatusResponse {
                     duration,
                     enqueued_at: processed.from.from.enqueued_at,
                     processed_at: processed.processed_at,
+                };
+                UpdateStatusResponse::Processed { content }
+            }
+            UpdateStatus::Done(done) => {
+                let duration = done
+                    .processed_at
+                    .signed_duration_since(done.from.started_processing_at)
+                    .num_milliseconds();
+
+                // necessary since chrono::duration don't expose a f64 secs method.
+                let duration = Duration::from_millis(duration as u64).as_secs_f64();
+
+                let content = ProcessedUpdateResult {
+                    update_id: done.id(),
+                    update_type,
+                    duration,
+                    enqueued_at: done.from.from.enqueued_at,
+                    processed_at: done.processed_at,
                 };
                 UpdateStatusResponse::Processed { content }
             }
