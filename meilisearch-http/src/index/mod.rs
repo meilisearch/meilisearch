@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use heed::{EnvOpenOptions, RoTxn};
-use milli::obkv_to_json;
+use milli::{obkv_to_json, FieldId};
 use serde::{de::Deserializer, Deserialize};
 use serde_json::{Map, Value};
 
