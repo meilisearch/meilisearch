@@ -382,7 +382,7 @@ fn add_crop_to_formatted_options(
 
 fn add_non_formatted_ids_to_formatted_options(
     formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
-    to_retrieve_ids: &BTreeSet<u16>,
+    to_retrieve_ids: &BTreeSet<FieldId>,
 ) {
     for id in to_retrieve_ids {
         formatted_options.entry(*id).or_insert(FormatOptions {
