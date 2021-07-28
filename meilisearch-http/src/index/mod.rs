@@ -174,7 +174,7 @@ impl Index {
         txn: &heed::RoTxn,
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Vec<u16>> {
         let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)? {
             Some(ids) => ids.into_iter().collect::<Vec<_>>(),
             None => fields_ids_map.iter().map(|(id, _)| id).collect(),

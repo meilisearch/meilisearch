@@ -621,6 +621,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "concat-arrays"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1df715824eb382e34b7afb7463b0247bf41538aeba731fba05241ecdb5dc3747"
+dependencies = [
+ "proc-macro2 1.0.27",
+ "quote 1.0.9",
+ "syn 1.0.73",
+]
+
+[[package]]
 name = "const_fn"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1191,7 +1202,7 @@ dependencies = [
 [[package]]
 name = "heed"
 version = "0.12.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1209,12 +1220,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.0#6c0b95793a805dc598f05c119494e6c069de0326"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1647,7 +1658,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.3",
  "memmap",
  "milli",
  "mime",
@@ -1699,7 +1710,23 @@ dependencies = [
  "once_cell",
  "slice-group-by",
  "unicode-segmentation",
- "whatlang",
+ "whatlang 0.9.0",
+]
+
+[[package]]
+name = "meilisearch-tokenizer"
+version = "0.2.4"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.4#135d08dce465a756abaf6a1bcad70f315bda99b9"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang 0.12.0",
 ]
 
 [[package]]
@@ -1729,12 +1756,13 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.7.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.7.2#007fec21fcb3accad807aa2f2cf66c168afb043f"
+version = "0.8.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.8.0#200e98c211510750e2ead475b8571b533ac6caa1"
 dependencies = [
  "bstr",
  "byteorder",
  "chrono",
+ "concat-arrays",
  "csv",
  "either",
  "flate2",
@@ -1748,7 +1776,7 @@ dependencies = [
  "linked-hash-map",
  "log",
  "logging_timer",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.4",
  "memmap",
  "obkv",
  "once_cell",
@@ -1910,9 +1938,9 @@ dependencies = [
 
 [[package]]
 name = "obkv"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd8a5a0aa2f3adafe349259a5b3e21a19c388b792414c1161d60a69c1fa48e8"
+checksum = "f69e48cd7c8e5bb52a1da1287fdbfd877c32673176583ce664cd63b201aba385"
 
 [[package]]
 name = "once_cell"
@@ -3528,6 +3556,15 @@ name = "whatlang"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc0289c1d1548414a5645e6583e118e9c569c579ec2a0c32417cc3dbf7a89075"
+dependencies = [
+ "hashbrown 0.7.2",
+]
+
+[[package]]
+name = "whatlang"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a346d2eb29c03618693ed24a29d1acd0c3f2cb08ae58b9669d7461e033cf703"
 dependencies = [
  "hashbrown 0.7.2",
 ]

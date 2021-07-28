@@ -281,9 +281,9 @@ fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
     query_crop_length: usize,
-    to_retrieve_ids: &BTreeSet<u8>,
+    to_retrieve_ids: &BTreeSet<u16>,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u8>,
+    displayed_ids: &BTreeSet<u16>,
 ) -> BTreeMap<FieldId, FormatOptions> {
     let mut formatted_options = BTreeMap::new();
 
@@ -314,7 +314,7 @@ fn add_highlight_to_formatted_options(
     formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
     attr_to_highlight: &HashSet<String>,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u8>,
+    displayed_ids: &BTreeSet<u16>,
 ) {
     for attr in attr_to_highlight {
         let new_format = FormatOptions {
@@ -342,7 +342,7 @@ fn add_crop_to_formatted_options(
     attr_to_crop: &[String],
     crop_length: usize,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u8>,
+    displayed_ids: &BTreeSet<u16>,
 ) {
     for attr in attr_to_crop {
         let mut split = attr.rsplitn(2, ':');
@@ -382,7 +382,7 @@ fn add_crop_to_formatted_options(
 
 fn add_non_formatted_ids_to_formatted_options(
     formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
-    to_retrieve_ids: &BTreeSet<u8>,
+    to_retrieve_ids: &BTreeSet<u16>,
 ) {
     for id in to_retrieve_ids {
         formatted_options.entry(*id).or_insert(FormatOptions {
@@ -395,7 +395,7 @@ fn add_non_formatted_ids_to_formatted_options(
 fn make_document(
     attributes_to_retrieve: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReader,
+    obkv: obkv::KvReaderU16,
 ) -> Result<Document> {
     let mut document = Document::new();
 
@@ -418,7 +418,7 @@ fn make_document(
 
 fn format_fields<A: AsRef<[u8]>>(
     field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReader,
+    obkv: obkv::KvReaderU16,
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
