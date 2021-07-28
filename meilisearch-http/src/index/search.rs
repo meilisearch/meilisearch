@@ -314,7 +314,7 @@ fn add_highlight_to_formatted_options(
     formatted_options: &mut BTreeMap<FieldId, FormatOptions>,
     attr_to_highlight: &HashSet<String>,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u16>,
+    displayed_ids: &BTreeSet<FieldId>,
 ) {
     for attr in attr_to_highlight {
         let new_format = FormatOptions {
