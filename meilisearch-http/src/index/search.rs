@@ -281,7 +281,7 @@ fn compute_formatted_options(
     attr_to_highlight: &HashSet<String>,
     attr_to_crop: &[String],
     query_crop_length: usize,
-    to_retrieve_ids: &BTreeSet<u16>,
+    to_retrieve_ids: &BTreeSet<FieldId>,
     fields_ids_map: &FieldsIdsMap,
     displayed_ids: &BTreeSet<FieldId>,
 ) -> BTreeMap<FieldId, FormatOptions> {
