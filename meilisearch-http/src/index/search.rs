@@ -283,7 +283,7 @@ fn compute_formatted_options(
     query_crop_length: usize,
     to_retrieve_ids: &BTreeSet<u16>,
     fields_ids_map: &FieldsIdsMap,
-    displayed_ids: &BTreeSet<u16>,
+    displayed_ids: &BTreeSet<FieldId>,
 ) -> BTreeMap<FieldId, FormatOptions> {
     let mut formatted_options = BTreeMap::new();
 
