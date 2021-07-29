@@ -3,15 +3,15 @@
 //!
 //! To help you in this task, we'll try to do a little overview of the project.
 //! ## Milli
-//! [Milli](https://github.com/meilisearch/milli) is the core library of MeiliSearch, it's where we actually index documents and perform searches. It's aim is to do theses two tasks as fast as possible. You can give an update to milli and it'll uses as many cores as provided to perform it as fast as possible. Nothing more. You can perform searches at the same time (search only use one core).
-//! As you can see we're missing quite a lot of features here, milli does not handle multiples indexes, it can't queue updates, it doesn't provide any web / API frontend, it doesn't implements dumps or snapshots, etc...
+//! [Milli](https://github.com/meilisearch/milli) is the core library of MeiliSearch. It's where we actually index documents and perform searches. Its purpose is to do these two tasks as fast as possible. You can give an update to milli, and it'll uses as many cores as provided to perform it as fast as possible. Nothing more. You can perform searches at the same time (search only uses one core).
+//! As you can see, we're missing quite a lot of features here; milli does not handle multiples indexes, it can't queue updates, it doesn't provide any web / API frontend, it doesn't implement dumps or snapshots, etc...
 //!
 //! ## `Index` module
-//! The [index] module is what encapsulate one milli index. It abstracts over its transaction and isolate a task that can be run into a thread. This is the unit of interaction with milli.
-//! If you add a feature to milli, you'll probably need to add it in this module too before being able to expose it to the rest of meilisearch.
+//! The [index] module is what encapsulates one milli index. It abstracts over its transaction and isolates a task that can be run into a thread. This is the unit of interaction with milli.
+//! If you add a feature to milli, you'll probably need to add it in this module too before exposing it to the rest of meilisearch.
 //!
 //! ## `IndexController` module
-//! To handle multiple indexes we created an [index_controller]. It's in charge of creating new indexes, keeping references to all its indexes forward asynchronous updates to its indexes and provide an API to synchronously search in its indexes.
+//! To handle multiple indexes, we created an [index_controller]. It's in charge of creating new indexes, keeping references to all its indexes, forward asynchronous updates to its indexes, and provide an API to search in its indexes synchronously.
 //! To achieves this goal, we use an [actor model](https://en.wikipedia.org/wiki/Actor_model).
 //!
 //! ### The actor model
@@ -30,12 +30,12 @@
 //! - [`dump_actor`](index_controller/dump_actor/index.html) this actor handle the  [dumps](https://docs.meilisearch.com/reference/api/dump.html). It needs to contact all the others actors and create a dump of everything that was currently happening.
 //!
 //! ## Data module
-//! The [data] module provide an unified interface to communicate with the index controller and other services (snapshot, dumps, ...), initialize the MeiliSearch instance
+//! The [data] module provide a unified interface to communicate with the index controller and other services (snapshot, dumps, ...), initialize the MeiliSearch instance
 //!
-//! ## Http server
+//! ## HTTP server
 //! To handle the web and API part, we are using [actix-web](https://docs.rs/actix-web/); you can find all routes in the [routes] module.
-//! Currently the configuration of actix-web is made in the [lib.rs](crate).
-//! Most of the routes uses [extractors] to handle the authentication.
+//! Currently, the configuration of actix-web is made in the [lib.rs](crate).
+//! Most of the routes use [extractors] to handle the authentication.
 
 #![allow(rustdoc::private_intra_doc_links)]
 pub mod data;
