@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::mem::size_of;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
@@ -492,7 +493,8 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        let mut buffer =
+            [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
@@ -506,7 +508,8 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        let mut buffer =
+            [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
         buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
@@ -524,7 +527,8 @@ impl Index {
         field_id: FieldId,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 2];
+        let mut buffer =
+            [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
@@ -538,7 +542,8 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer = [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        let mut buffer =
+            [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
         buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
             .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
