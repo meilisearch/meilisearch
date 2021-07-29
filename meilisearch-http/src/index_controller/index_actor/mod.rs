@@ -40,9 +40,9 @@ impl IndexMeta {
     }
 
     fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
-        let created_at = index.created_at(&txn)?;
-        let updated_at = index.updated_at(&txn)?;
-        let primary_key = index.primary_key(&txn)?.map(String::from);
+        let created_at = index.created_at(txn)?;
+        let updated_at = index.updated_at(txn)?;
+        let primary_key = index.primary_key(txn)?.map(String::from);
         Ok(Self {
             created_at,
             updated_at,

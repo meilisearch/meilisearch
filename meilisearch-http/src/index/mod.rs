@@ -62,34 +62,34 @@ impl Index {
 
     pub fn settings_txn(&self, txn: &RoTxn) -> Result<Settings<Checked>> {
         let displayed_attributes = self
-            .displayed_fields(&txn)?
+            .displayed_fields(txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
         let searchable_attributes = self
-            .searchable_fields(&txn)?
+            .searchable_fields(txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
-        let filterable_attributes = self.filterable_fields(&txn)?.into_iter().collect();
+        let filterable_attributes = self.filterable_fields(txn)?.into_iter().collect();
 
         let criteria = self
-            .criteria(&txn)?
+            .criteria(txn)?
             .into_iter()
             .map(|c| c.to_string())
             .collect();
 
         let stop_words = self
-            .stop_words(&txn)?
+            .stop_words(txn)?
             .map(|stop_words| -> Result<BTreeSet<_>> {
                 Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
             .transpose()?
             .unwrap_or_else(BTreeSet::new);
-        let distinct_field = self.distinct_field(&txn)?.map(String::from);
+        let distinct_field = self.distinct_field(txn)?.map(String::from);
 
         // in milli each word in the synonyms map were split on their separator. Since we lost
         // this information we are going to put space between words.
         let synonyms = self
-            .synonyms(&txn)?
+            .synonyms(txn)?
             .iter()
             .map(|(key, values)| {
                 (
@@ -175,7 +175,7 @@ impl Index {
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> Result<Vec<FieldId>> {
-        let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)? {
+        let mut displayed_fields_ids = match self.displayed_fields_ids(txn)? {
             Some(ids) => ids.into_iter().collect::<Vec<_>>(),
             None => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };

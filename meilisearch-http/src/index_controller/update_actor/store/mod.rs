@@ -268,13 +268,13 @@ impl UpdateStore {
                 self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
                     wtxn,
                     &(global_id, index_uuid, enqueued.id()),
-                    &enqueued,
+                    enqueued,
                 )?;
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
                 self.updates
-                    .put(wtxn, &(index_uuid, update.id()), &update)?;
+                    .put(wtxn, &(index_uuid, update.id()), update)?;
             }
         }
         Ok(())

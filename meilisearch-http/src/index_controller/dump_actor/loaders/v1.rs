@@ -98,7 +98,7 @@ fn load_index(
 
     let mut txn = index.write_txn()?;
 
-    let handler = UpdateHandler::new(&indexer_options)?;
+    let handler = UpdateHandler::new(indexer_options)?;
 
     index.update_settings_txn(&mut txn, &settings.check(), handler.update_builder(0))?;
 
