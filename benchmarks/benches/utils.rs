@@ -115,5 +115,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
             });
         }
         group.finish();
+
+        index.prepare_for_closing().wait();
     }
 }
