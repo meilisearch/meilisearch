@@ -1666,7 +1666,6 @@ dependencies = [
  "num_cpus",
  "obkv",
  "once_cell",
- "oxidized-json-checker",
  "parking_lot",
  "paste",
  "pin-project",
@@ -1679,6 +1678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_url_params",
+ "serdeval",
  "sha-1 0.9.6",
  "sha2",
  "siphasher",
@@ -1968,12 +1968,6 @@ checksum = "f100fcfb41e5385e0991f74981732049f9b896821542a219420491046baafdc2"
 dependencies = [
  "num-traits",
 ]
-
-[[package]]
-name = "oxidized-json-checker"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "938464aebf563f48ab86d1cfc0e2df952985c0b814d3108f41d1b85e7f5b0dac"
 
 [[package]]
 name = "page_size"
@@ -2781,6 +2775,15 @@ dependencies = [
  "form_urlencoded",
  "itoa",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serdeval"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94023adfd3d548a8bd9a1f09c09f44eaab7080c7a9ab20314bb65154bee62bd0"
+dependencies = [
  "serde",
 ]
 
