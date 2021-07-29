@@ -101,7 +101,7 @@ impl Index {
         let index = Self::open(&dst_dir_path, size)?;
         let mut txn = index.write_txn()?;
 
-        let handler = UpdateHandler::new(&indexing_options)?;
+        let handler = UpdateHandler::new(indexing_options)?;
 
         index.update_settings_txn(&mut txn, &settings, handler.update_builder(0))?;
 

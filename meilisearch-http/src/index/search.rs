@@ -239,7 +239,7 @@ fn compute_matches<A: AsRef<[u8]>>(
 
     for (key, value) in document {
         let mut infos = Vec::new();
-        compute_value_matches(&mut infos, value, matcher, &analyzer);
+        compute_value_matches(&mut infos, value, matcher, analyzer);
         if !infos.is_empty() {
             matches.insert(key.clone(), infos);
         }
@@ -329,7 +329,7 @@ fn add_highlight_to_formatted_options(
             break;
         }
 
-        if let Some(id) = fields_ids_map.id(&attr) {
+        if let Some(id) = fields_ids_map.id(attr) {
             if displayed_ids.contains(&id) {
                 formatted_options.insert(id, new_format);
             }
@@ -366,7 +366,7 @@ fn add_crop_to_formatted_options(
             }
         }
 
-        if let Some(id) = fields_ids_map.id(&attr_name) {
+        if let Some(id) = fields_ids_map.id(attr_name) {
             if displayed_ids.contains(&id) {
                 formatted_options
                     .entry(id)
@@ -592,7 +592,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                         // we highlight the complete word.
                         None => {
                             out.push_str(&self.marks.0);
-                            out.push_str(&word);
+                            out.push_str(word);
                             out.push_str(&self.marks.1);
                         }
                     }
