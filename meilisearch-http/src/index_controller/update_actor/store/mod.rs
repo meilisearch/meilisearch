@@ -273,8 +273,7 @@ impl UpdateStore {
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates
-                    .put(wtxn, &(index_uuid, update.id()), update)?;
+                self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
             }
         }
         Ok(())
