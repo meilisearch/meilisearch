@@ -7,16 +7,16 @@ use futures::stream::StreamExt;
 use heed::CompactionOption;
 use log::debug;
 use milli::update::UpdateBuilder;
+use tokio::sync::oneshot;
 use tokio::task::spawn_blocking;
 use tokio::{fs, sync::mpsc};
 use uuid::Uuid;
 
+use crate::index::update_handler::Hello;
 use crate::index::{
     update_handler::UpdateHandler, Checked, Document, SearchQuery, SearchResult, Settings,
 };
-use crate::index_controller::{
-    get_arc_ownership_blocking, Failed, IndexStats, Processed, Processing,
-};
+use crate::index_controller::{Aborted, Done, Failed, IndexStats, Processed, Processing, get_arc_ownership_blocking};
 use crate::option::IndexerOpts;
 
 use super::error::{IndexActorError, Result};
@@ -81,11 +81,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
             Update {
                 ret,
+                channel,
                 meta,
                 data,
                 uuid,
             } => {
-                let _ = ret.send(self.handle_update(uuid, meta, data).await);
+                let _ = ret.send(self.handle_update(channel, uuid, meta, data).await);
             }
             Search { ret, query, uuid } => {
                 let _ = ret.send(self.handle_search(uuid, query).await);
@@ -163,10 +164,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
     async fn handle_update(
         &self,
+        channel: std::sync::mpsc::Sender<(std::sync::mpsc::Sender<Hello>, std::result::Result<Processed, Failed>)>,
         uuid: Uuid,
         meta: Processing,
         data: Option<File>,
-    ) -> Result<std::result::Result<Processed, Failed>> {
+    ) -> Result<std::result::Result<Done, Aborted>> {
         debug!("Processing update {}", meta.id());
         let update_handler = self.update_handler.clone();
         let index = match self.store.get(uuid).await? {
@@ -174,7 +176,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             None => self.store.create(uuid, None).await?,
         };
 
-        Ok(spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?)
+        Ok(spawn_blocking(move || update_handler.handle_update(channel, meta, data, index)).await?)
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {

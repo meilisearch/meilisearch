@@ -4,6 +4,7 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::error::Result as IndexResult;
+use crate::index::update_handler::Hello;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 
@@ -18,9 +19,10 @@ pub enum IndexMsg {
     },
     Update {
         uuid: Uuid,
+        channel: std::sync::mpsc::Sender<(std::sync::mpsc::Sender<Hello>, std::result::Result<Processed, Failed>)>,
         meta: Processing,
         data: Option<std::fs::File>,
-        ret: oneshot::Sender<IndexResult<Result<Processed, Failed>>>,
+        ret: oneshot::Sender<IndexResult<Result<(Processed, oneshot::Sender<()>), Failed>>>,
     },
     Search {
         uuid: Uuid,

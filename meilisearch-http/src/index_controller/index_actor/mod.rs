@@ -13,6 +13,7 @@ pub use handle_impl::IndexActorHandleImpl;
 use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
 
+use crate::index::update_handler::Hello;
 use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 use error::Result;
@@ -57,6 +58,7 @@ pub trait IndexActorHandle {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn update(
         &self,
+        channel: std::sync::mpsc::Sender<(std::sync::mpsc::Sender<Hello>, std::result::Result<Processed, Failed>)>,
         uuid: Uuid,
         meta: Processing,
         data: Option<File>,

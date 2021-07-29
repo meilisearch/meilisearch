@@ -2,6 +2,7 @@ mod codec;
 pub mod dump;
 
 use std::fs::{copy, create_dir_all, remove_file, File};
+use std::io::BufRead;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,6 +30,7 @@ use codec::*;
 use super::error::Result;
 use super::UpdateMeta;
 use crate::helpers::EnvSizer;
+use crate::index::update_handler::Hello;
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
 #[allow(clippy::upper_case_acronyms)]
@@ -329,13 +331,29 @@ impl UpdateStore {
             None => None,
         };
 
+        let (sender, receiver) = std::sync::mpsc::channel();
         // Process the pending update using the provided user function.
-        let handle = Handle::current();
-        let result =
-            match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
-                Ok(result) => result,
-                Err(e) => Err(processing.fail(e.into())),
+        let handle =
+            tokio::task::spawn(index_handle.update(sender, index_uuid, processing.clone(), file));
+
+        let (sender2, receiver) = std::sync::mpsc::channel();
+        // TODO: we should not panic here
+        let (sender, result) = receiver.recv().unwrap();
+        let mut line = String::new();
+        loop {
+            std::io::stdin().lock().read_line(&mut line).unwrap();
+            match line.as_str() {
+                "commit" => {
+                    sender.send((sender2, Hello::Commit));
+                    break;
+                }
+                "abort" => {
+                    sender.send((sender2, Hello::Abort));
+                    break;
+                }
+                _ => (),
             };
+        }
 
         // Once the pending update have been successfully processed
         // we must remove the content from the pending and processing stores and

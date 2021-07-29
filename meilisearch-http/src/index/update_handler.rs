@@ -1,12 +1,13 @@
 use std::fs::File;
+use std::sync::{mpsc, Arc};
 
 use crate::index::Index;
 use milli::update::UpdateBuilder;
 use milli::CompressionType;
 use rayon::ThreadPool;
 
-use crate::index_controller::UpdateMeta;
-use crate::index_controller::{Failed, Processed, Processing};
+use crate::index_controller::{Aborted, Done, Failed, Processed, Processing};
+use crate::index_controller::{UpdateMeta, UpdateResult};
 use crate::option::IndexerOpts;
 
 pub struct UpdateHandler {
@@ -54,15 +55,17 @@ impl UpdateHandler {
 
     pub fn handle_update(
         &self,
+        channel: mpsc::Sender<(mpsc::Sender<Hello>, Result<Processed, Failed>)>,
         meta: Processing,
         content: Option<File>,
         index: Index,
-    ) -> Result<Processed, Failed> {
+    ) -> Result<Done, Aborted> {
         use UpdateMeta::*;
 
         let update_id = meta.id();
 
         let update_builder = self.update_builder(update_id);
+        let mut wtxn = index.write_txn().unwrap();
 
         let result = match meta.meta() {
             DocumentsAddition {
@@ -70,20 +73,47 @@ impl UpdateHandler {
                 format,
                 primary_key,
             } => index.update_documents(
+                &mut wtxn,
                 *format,
                 *method,
                 content,
                 update_builder,
                 primary_key.as_deref(),
             ),
-            ClearDocuments => index.clear_documents(update_builder),
-            DeleteDocuments { ids } => index.delete_documents(ids, update_builder),
-            Settings(settings) => index.update_settings(&settings.clone().check(), update_builder),
+            ClearDocuments => index.clear_documents(&mut wtxn, update_builder),
+            DeleteDocuments { ids } => index.delete_documents(&mut wtxn, ids, update_builder),
+            Settings(settings) => {
+                index.update_settings(&mut wtxn, &settings.clone().check(), update_builder)
+            }
         };
 
-        match result {
+        let result = match result {
             Ok(result) => Ok(meta.process(result)),
             Err(e) => Err(meta.fail(e.into())),
+        };
+
+
+        let (sender, receiver) = mpsc::channel();
+        channel.send((sender, result));
+
+        // here we should decide how we want to handle a failure. probably by closing the channel
+        // right: for now I'm just going to panic
+
+        let meta = result.unwrap();
+
+        match receiver.recv() {
+            Ok(Hello::Abort) => Err(meta.abort()),
+            Ok(Hello::Commit) => wtxn
+                .commit()
+                .map(|ok| meta.commit())
+                .map_err(|e| meta.abort()),
+            Err(e) => panic!("update actor died {}", e),
         }
     }
+}
+
+/// MARIN: I can't find any good name for this and I'm not even sure we need a new enum
+pub enum Hello {
+    Commit,
+    Abort,
 }

@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
+use heed::RwTxn;
 use log::{debug, info, trace};
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize, Serializer};
@@ -160,24 +161,17 @@ pub struct Facets {
 }
 
 impl Index {
-    pub fn update_documents(
-        &self,
+    pub fn update_documents<'a>(
+        &'a self,
+        txn: &mut RwTxn<'a, 'a>,
         format: UpdateFormat,
         method: IndexDocumentsMethod,
         content: Option<impl io::Read>,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
-        let mut txn = self.write_txn()?;
-        let result = self.update_documents_txn(
-            &mut txn,
-            format,
-            method,
-            content,
-            update_builder,
-            primary_key,
-        )?;
-        txn.commit()?;
+        let result =
+            self.update_documents_txn(txn, format, method, content, update_builder, primary_key)?;
         Ok(result)
     }
 
@@ -220,16 +214,14 @@ impl Index {
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
-        // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
-        let builder = update_builder.clear_documents(&mut wtxn, self);
-
+    pub fn clear_documents<'a>(
+        &'a self,
+        wtxn: &mut RwTxn<'a, 'a>,
+        update_builder: UpdateBuilder,
+    ) -> Result<UpdateResult> {
+        let builder = update_builder.clear_documents(wtxn, self);
         let _count = builder.execute()?;
-
-        wtxn.commit()
-            .and(Ok(UpdateResult::Other))
-            .map_err(Into::into)
+        Ok(UpdateResult::Other)
     }
 
     pub fn update_settings_txn<'a, 'b>(
@@ -302,8 +294,9 @@ impl Index {
         Ok(UpdateResult::Other)
     }
 
-    pub fn update_settings(
-        &self,
+    pub fn update_settings<'a>(
+        &'a self,
+        txn: &mut RwTxn<'a, 'a>,
         settings: &Settings<Checked>,
         update_builder: UpdateBuilder,
     ) -> Result<UpdateResult> {
@@ -313,12 +306,12 @@ impl Index {
         Ok(result)
     }
 
-    pub fn delete_documents(
-        &self,
+    pub fn delete_documents<'a>(
+        &'a self,
+        txn: &mut RwTxn<'a, 'a>,
         document_ids: &[String],
         update_builder: UpdateBuilder,
     ) -> Result<UpdateResult> {
-        let mut txn = self.write_txn()?;
         let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
         // We ignore unexisting document ids
@@ -327,9 +320,7 @@ impl Index {
         });
 
         let deleted = builder.execute()?;
-        txn.commit()
-            .and(Ok(UpdateResult::DocumentDeletion { deleted }))
-            .map_err(Into::into)
+        Ok(UpdateResult::DocumentDeletion { deleted })
     }
 }
 

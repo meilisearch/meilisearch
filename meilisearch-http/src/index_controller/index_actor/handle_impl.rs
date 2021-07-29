@@ -4,10 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::{
-    index::Checked,
-    index_controller::{IndexSettings, IndexStats, Processing},
-};
+use crate::{index::{Checked, update_handler::Hello}, index_controller::{IndexSettings, IndexStats, Processing}};
 use crate::{
     index::{Document, SearchQuery, SearchResult, Settings},
     index_controller::{Failed, Processed},
@@ -36,13 +33,15 @@ impl IndexActorHandle for IndexActorHandleImpl {
 
     async fn update(
         &self,
+        channel: std::sync::mpsc::Sender<(std::sync::mpsc::Sender<Hello>, std::result::Result<Processed, Failed>)>,
         uuid: Uuid,
         meta: Processing,
         data: Option<std::fs::File>,
-    ) -> Result<std::result::Result<Processed, Failed>> {
+    ) -> Result<std::result::Result<(Processed, oneshot::Sender<()>), Failed>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update {
             ret,
+            channel,
             meta,
             data,
             uuid,
