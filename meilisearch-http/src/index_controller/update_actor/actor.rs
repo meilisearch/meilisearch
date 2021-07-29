@@ -7,7 +7,7 @@ use std::sync::Arc;
 use async_stream::stream;
 use futures::StreamExt;
 use log::trace;
-use oxidized_json_checker::JsonChecker;
+use serdeval::*;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
@@ -180,7 +180,7 @@ where
         let update_store = self.store.clone();
 
         tokio::task::spawn_blocking(move || {
-            use std::io::{copy, sink, BufReader, Seek};
+            use std::io::{BufReader, Seek};
 
             // If the payload is empty, ignore the check.
             let update_uuid = if let Some((mut file, uuid)) = file_path {
@@ -188,14 +188,10 @@ where
                 file.seek(SeekFrom::Start(0))?;
                 // Check that the json payload is valid:
                 let reader = BufReader::new(&mut file);
-                let mut checker = JsonChecker::new(reader);
+                // Validate that the payload is in the correct format.
+                let _: Seq<Map<Str, Any>> = serde_json::from_reader(reader)
+                    .map_err(|e| UpdateActorError::InvalidPayload(Box::new(e)))?;
 
-                if copy(&mut checker, &mut sink()).is_err() || checker.finish().is_err() {
-                    // The json file is invalid, we use Serde to get a nice error message:
-                    file.seek(SeekFrom::Start(0))?;
-                    let _: serde_json::Value = serde_json::from_reader(file)
-                        .map_err(|e| UpdateActorError::InvalidPayload(Box::new(e)))?;
-                }
                 Some(uuid)
             } else {
                 None
