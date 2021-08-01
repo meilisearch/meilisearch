@@ -39,7 +39,7 @@ either = "1.6.1"
 env_logger = "0.8.2"
 flate2 = "1.0.19"
 fst = "0.4.5"
-futures = "0.3.7"
+futures = "0.3.16"
 futures-util = "0.3.8"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
