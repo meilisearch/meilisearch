@@ -180,3 +180,17 @@ fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
 
     Ok(metadata)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn settings_format_regression() {
+        let settings = Settings::default();
+        assert_eq!(
+            r##"{"rankingRules":null,"distinctAttribute":null,"searchableAttributes":null,"displayedAttributes":null,"stopWords":null,"synonyms":null,"attributesForFaceting":null}"##,
+            serde_json::to_string(&settings).unwrap()
+        );
+    }
+}
