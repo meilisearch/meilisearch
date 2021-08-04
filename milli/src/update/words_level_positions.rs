@@ -3,16 +3,16 @@ use std::fs::File;
 use std::num::NonZeroU32;
 use std::{cmp, str};
 
-use fst::automaton::{self, Automaton};
-use fst::{IntoStreamer, Streamer};
+use fst::Streamer;
 use grenad::{CompressionType, FileFuse, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore, Str};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
 
-use crate::error::InternalError;
+use crate::error::{InternalError, SerializationError};
 use crate::heed_codec::{CboRoaringBitmapCodec, StrLevelPositionCodec};
+use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
     cbo_roaring_bitmap_merge, create_sorter, create_writer, sorter_into_lmdb_database,
     write_into_lmdb_database, writer_into_reader, WriteMethod,
@@ -102,13 +102,22 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         // in the prefix FST previously constructed.
         let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
         let db = self.index.word_level_position_docids.remap_data_type::<ByteSlice>();
-        for result in db.iter(self.wtxn)? {
-            let ((word, level, left, right), data) = result?;
-            if level == TreeLevel::min_value() {
-                let automaton = automaton::Str::new(word).starts_with();
-                let mut matching_prefixes = prefix_fst.search(automaton).into_stream();
-                while let Some(prefix) = matching_prefixes.next() {
-                    let prefix = str::from_utf8(prefix)?;
+        // iter over all prefixes in the prefix fst.
+        let mut word_stream = prefix_fst.stream();
+        while let Some(prefix_bytes) = word_stream.next() {
+            let prefix = str::from_utf8(prefix_bytes).map_err(|_| {
+                SerializationError::Decoding { db_name: Some(WORDS_PREFIXES_FST_KEY) }
+            })?;
+
+            // iter over all lines of the DB where the key is prefixed by the current prefix.
+            let mut iter = db
+                .remap_key_type::<ByteSlice>()
+                .prefix_iter(self.wtxn, &prefix_bytes)?
+                .remap_key_type::<StrLevelPositionCodec>();
+            while let Some(((_word, level, left, right), data)) = iter.next().transpose()? {
+                // if level is 0, we push the line in the sorter
+                // replacing the complete word by the prefix.
+                if level == TreeLevel::min_value() {
                     let key = (prefix, level, left, right);
                     let bytes = StrLevelPositionCodec::bytes_encode(&key).unwrap();
                     word_prefix_level_positions_docids_sorter.insert(bytes, data)?;
