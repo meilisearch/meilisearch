@@ -73,7 +73,7 @@ struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub filterable_attributes: Option<Option<Vec<String>>>,
+    pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
 fn load_index(
@@ -142,7 +142,7 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
             // representing the name of the faceted field + the type of the field. Since the type
             // was not known in the V1 of the dump we are just going to assume everything is a
             // String
-            filterable_attributes: settings.filterable_attributes.map(|o| o.map(|vec| vec.into_iter().collect())),
+            filterable_attributes: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter_map(|criterion| {
                 match criterion.as_str() {
