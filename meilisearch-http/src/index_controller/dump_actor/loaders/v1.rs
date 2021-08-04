@@ -146,14 +146,10 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter_map(|criterion| {
                 match criterion.as_str() {
-                    "words" | "typo" | "proximity" | "attribute" => Some(criterion),
+                    "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
                     s if s.starts_with("asc") || s.starts_with("desc") => Some(criterion),
                     "wordsPosition" => {
-                        warn!("The criteria `words` and `wordsPosition` have been merged into a single criterion `words` so `wordsPositon` will be ignored");
-                        Some(String::from("words"))
-                    }
-                    "exactness" => {
-                        error!("The criterion `{}` is not implemented currently and thus will be ignored", criterion);
+                        warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
                         None
                     }
                     s => {
