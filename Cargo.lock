@@ -1756,8 +1756,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.8.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.8.1#1290edd58a50d368106674cca28775b75e7ef183"
+version = "0.9.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.9.0#2102e0da6b046f252b75b2bb5a9fd34a5954ac8b"
 dependencies = [
  "bstr",
  "byteorder",
