@@ -1700,7 +1700,7 @@ dependencies = [
 [[package]]
 name = "meilisearch-tokenizer"
 version = "0.2.3"
-source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.3#c2399c3f879144ad92e20ae057e14984dfd22781"
+source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.3#c2399c3f879144ad92e20ae057e14984dfd22781"
 dependencies = [
  "character_converter",
  "cow-utils",
