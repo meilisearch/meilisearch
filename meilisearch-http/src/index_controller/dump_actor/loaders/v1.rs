@@ -144,17 +144,17 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
             // String
             filterable_attributes: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
-            ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter_map(|criterion| {
+            ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter(|criterion| {
                 match criterion.as_str() {
-                    "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
-                    s if s.starts_with("asc") || s.starts_with("desc") => Some(criterion),
+                    "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
+                    s if s.starts_with("asc") || s.starts_with("desc") => true,
                     "wordsPosition" => {
                         warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
-                        None
+                        false
                     }
                     s => {
                         error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
-                        None
+                        false
                     }
                     }
                 }).collect())),
