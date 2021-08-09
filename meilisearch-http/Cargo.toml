@@ -29,7 +29,7 @@ actix-web = { version = "=4.0.0-beta.6", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
 anyhow = "1.0.36"
 async-stream = "0.3.0"
-async-trait = "0.1.42"
+async-trait = "0.1.51"
 arc-swap = "1.2.0"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 bytes = "0.6.0"
