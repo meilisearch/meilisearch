@@ -186,7 +186,7 @@ This program is optional, you can disable these analytics by using the `MEILI_NO
 
 The feature requests are not managed in this repository. Please visit our [dedicated repository](https://github.com/meilisearch/product) to see our work about the MeiliSearch product.
 
-If you have a faeture request or any feedback about an existing feature, please open [a discussion](https://github.com/meilisearch/product/discussions).
+If you have a feature request or any feedback about an existing feature, please open [a discussion](https://github.com/meilisearch/product/discussions).
 Also, feel free to participate in the current discussions, we are looking forward to reading your returns.
 
 ## 💌 Contact
