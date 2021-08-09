@@ -1,0 +1,10 @@
+contact_links:
+  - name: Feature request
+    url: https://github.com/meilisearch/product/discussions/new
+    about: For feature requests, please open a discussion in our dedicated product repository
+  - name: Documentation issue
+    url: https://github.com/meilisearch/documentation/issues/new
+    about: For documentation issues, open an issue or a PR in the documentation repository
+  - name: Support questions & other
+    url: https://github.com/meilisearch/MeiliSearch/discussions/new
+    about: For any other question, open a discussion in this repository
