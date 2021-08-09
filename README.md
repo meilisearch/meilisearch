@@ -108,7 +108,7 @@ Let's create an index! If you need a sample dataset, use [this movie database](h
 curl -L 'https://bit.ly/2PAcw9l' -o movies.json
 ```
 
-Now, you're ready to index some data. 
+Now, you're ready to index some data.
 
 ```bash
 curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
@@ -182,11 +182,15 @@ We also use Sentry to make us crash and error reports. If you want to know more 
 
 This program is optional, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
+## Feature request
+
+The feature requests are not managed in this repository. Please visit our [dedicated repository](https://github.com/meilisearch/product) to see our work about the MeiliSearch product.
+
+If you have a faeture request or any feedback about an existing feature, please open [a discussion](https://github.com/meilisearch/product/discussions).
+Also, feel free to participate in the current discussions, we are looking forward to reading your returns.
+
 ## 💌 Contact
 
-Feel free to contact us with any questions you may have:
-* 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
-* Join our [Slack community](https://slack.meilisearch.com/).
-* By opening an issue.
+Please visit [this page](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html#contact-us).
 
 MeiliSearch is developed by [Meili](https://www.meilisearch.com), a young company. To know more about us, you can [read our blog](https://blog.meilisearch.com). Any suggestion or feedback is highly appreciated. Thank you for your support!

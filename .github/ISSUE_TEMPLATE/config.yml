@@ -1,7 +1,7 @@
 contact_links:
   - name: Feature request
-    url: https://github.com/meilisearch/product/discussions/new
-    about: For feature requests, please open a discussion in our dedicated product repository
+    url: https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal
+    about: The feature requests are not managed in this repository, please open a discussion in our dedicated product repository
   - name: Documentation issue
     url: https://github.com/meilisearch/documentation/issues/new
     about: For documentation issues, open an issue or a PR in the documentation repository
