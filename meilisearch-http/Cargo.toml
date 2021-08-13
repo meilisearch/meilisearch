@@ -41,7 +41,7 @@ flate2 = "1.0.19"
 fst = "0.4.5"
 futures = "0.3.7"
 futures-util = "0.3.8"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
+grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "cf659ce" }
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.0" }
 http = "0.2.1"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
