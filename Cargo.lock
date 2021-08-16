@@ -458,6 +458,20 @@ name = "bytemuck"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9966d2ab714d0f785dbac0a0396251a35280aeb42413281617d0209ab4898435"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e215f8c2f9f79cb53c8335e687ffd07d5bfcb6fe5fc80723762d0be46e7cc54"
+dependencies = [
+ "proc-macro2 1.0.27",
+ "quote 1.0.9",
+ "syn 1.0.73",
+]
 
 [[package]]
 name = "byteorder"
@@ -631,6 +645,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-foundation-sys"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea221b5284a47e40033bf9b66f35f984ec0ea2931eb03505246cd27a963f981b"
+
+[[package]]
 name = "cow-utils"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -786,6 +806,12 @@ name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
+
+[[package]]
+name = "doc-comment"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "downcast"
@@ -1097,9 +1123,11 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "grenad"
-version = "0.1.0"
-source = "git+https://github.com/Kerollmops/grenad.git?rev=3adcb26#3adcb267dcbc590c7da10eb5f887a254865b3dbe"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29a631f65b886f839c561fc5d086ba0fb1a27df5bb52f57439e415238329ce08"
 dependencies = [
+ "bytemuck",
  "byteorder",
  "flate2",
  "log",
@@ -1594,7 +1622,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.4",
  "memmap",
  "milli",
  "mime",
@@ -1645,7 +1673,7 @@ dependencies = [
  "once_cell",
  "slice-group-by",
  "unicode-segmentation",
- "whatlang",
+ "whatlang 0.12.0",
 ]
 
 [[package]]
@@ -1676,12 +1704,14 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.11.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.11.0#c51bb6789cb3fbb6511138374b3443f9116a445c"
+source = "git+https://github.com/meilisearch/milli.git?branch=plug-new-indexer#a1dc915af8d62c77f0431bb1d0fc4e53cc35ff42"
 dependencies = [
  "bstr",
+ "byte-unit",
  "byteorder",
  "chrono",
  "concat-arrays",
+ "crossbeam-channel",
  "csv",
  "either",
  "flate2",
@@ -1695,7 +1725,7 @@ dependencies = [
  "linked-hash-map",
  "log",
  "logging_timer",
- "meilisearch-tokenizer",
+ "meilisearch-tokenizer 0.2.3",
  "memmap",
  "obkv",
  "once_cell",
@@ -1709,6 +1739,7 @@ dependencies = [
  "slice-group-by",
  "smallstr",
  "smallvec",
+ "sysinfo",
  "tempfile",
  "uuid",
 ]
@@ -2813,6 +2844,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e7de153d0438a648bb71e06e300e54fc641685e96af96d49b843f43172d341c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "core-foundation-sys",
+ "doc-comment",
+ "libc",
+ "ntapi",
+ "once_cell",
+ "rayon",
+ "winapi",
+]
+
+[[package]]
 name = "tar"
 version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3317,6 +3364,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aabe153544e473b775453675851ecc86863d2a81d786d741f6b76778f2a48940"
 dependencies = [
  "webpki",
+]
+
+[[package]]
+name = "whatlang"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0289c1d1548414a5645e6583e118e9c569c579ec2a0c32417cc3dbf7a89075"
+dependencies = [
+ "hashbrown 0.7.2",
 ]
 
 [[package]]
