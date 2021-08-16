@@ -289,6 +289,7 @@ pub struct FacetStringIter<'t> {
     field_id: FieldId,
     level_iters:
         Vec<(RoaringBitmap, Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>)>,
+    must_reduce: bool,
 }
 
 impl<'t> FacetStringIter<'t> {
@@ -318,7 +319,13 @@ impl<'t> FacetStringIter<'t> {
             )?),
         };
 
-        Ok(FacetStringIter { rtxn, db, field_id, level_iters: vec![(documents_ids, highest_iter)] })
+        Ok(FacetStringIter {
+            rtxn,
+            db,
+            field_id,
+            level_iters: vec![(documents_ids, highest_iter)],
+            must_reduce: false,
+        })
     }
 
     fn highest_level<X, Y>(
@@ -348,7 +355,9 @@ impl<'t> Iterator for FacetStringIter<'t> {
                             Ok(((level, left, right), (string_bounds, mut docids))) => {
                                 docids &= &*documents_ids;
                                 if !docids.is_empty() {
-                                    *documents_ids -= &docids;
+                                    if self.must_reduce {
+                                        *documents_ids -= &docids;
+                                    }
 
                                     let result = match string_bounds {
                                         Some((left, right)) => FacetStringLevelZeroRange::new(
@@ -390,7 +399,9 @@ impl<'t> Iterator for FacetStringIter<'t> {
                             Ok((normalized, original, mut docids)) => {
                                 docids &= &*documents_ids;
                                 if !docids.is_empty() {
-                                    *documents_ids -= &docids;
+                                    if self.must_reduce {
+                                        *documents_ids -= &docids;
+                                    }
                                     return Some(Ok((normalized, original, docids)));
                                 }
                             }
