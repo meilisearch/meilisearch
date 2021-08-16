@@ -54,7 +54,7 @@ pub type FieldId = u16;
 pub type Position = u32;
 pub type FieldDistribution = BTreeMap<String, u64>;
 
-type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Vec<u8>, E>;
+type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, E>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
