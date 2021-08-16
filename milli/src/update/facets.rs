@@ -3,7 +3,7 @@ use std::num::{NonZeroU8, NonZeroUsize};
 use std::{cmp, mem};
 
 use chrono::Utc;
-use grenad::{CompressionType, FileFuse, Reader, Writer};
+use grenad::{CompressionType, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
 use log::debug;
@@ -25,7 +25,6 @@ pub struct Facets<'t, 'u, 'i> {
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
     _update_id: u64,
@@ -42,7 +41,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             index,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             level_group_size: NonZeroUsize::new(4).unwrap(),
             min_level_size: NonZeroUsize::new(5).unwrap(),
             _update_id: update_id,
@@ -86,7 +84,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 self.index.facet_id_string_docids,
                 self.chunk_compression_type,
                 self.chunk_compression_level,
-                self.chunk_fusing_shrink_size,
                 self.level_group_size,
                 self.min_level_size,
                 field_id,
@@ -107,7 +104,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 self.index.facet_id_f64_docids,
                 self.chunk_compression_type,
                 self.chunk_compression_level,
-                self.chunk_fusing_shrink_size,
                 self.level_group_size,
                 self.min_level_size,
                 field_id,
@@ -128,7 +124,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 self.wtxn,
                 *self.index.facet_id_f64_docids.as_polymorph(),
                 facet_number_levels,
-                |_, _| Err(InternalError::IndexingMergingKeys { process: "facet number levels" }),
+                |_, _| Err(InternalError::IndexingMergingKeys { process: "facet number levels" })?,
                 WriteMethod::GetMergePut,
             )?;
 
@@ -136,7 +132,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 self.wtxn,
                 *self.index.facet_id_string_docids.as_polymorph(),
                 facet_string_levels,
-                |_, _| Err(InternalError::IndexingMergingKeys { process: "facet string levels" }),
+                |_, _| Err(InternalError::IndexingMergingKeys { process: "facet string levels" })?,
                 WriteMethod::GetMergePut,
             )?;
         }
@@ -161,11 +157,10 @@ fn compute_facet_number_levels<'t>(
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
-    shrink_size: Option<u64>,
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
     field_id: FieldId,
-) -> Result<Reader<FileFuse>> {
+) -> Result<Reader<File>> {
     let first_level_size = db
         .remap_key_type::<ByteSlice>()
         .prefix_iter(rtxn, &field_id.to_be_bytes())?
@@ -219,7 +214,7 @@ fn compute_facet_number_levels<'t>(
         }
     }
 
-    writer_into_reader(writer, shrink_size)
+    writer_into_reader(writer)
 }
 
 fn write_number_entry(
@@ -239,7 +234,7 @@ fn write_number_entry(
 
 fn compute_faceted_strings_documents_ids(
     rtxn: &heed::RoTxn,
-    db: heed::Database<ByteSlice, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
+    db: heed::Database<ByteSlice, FacetStringLevelZeroValueCodec>,
     field_id: FieldId,
 ) -> Result<RoaringBitmap> {
     let mut documents_ids = RoaringBitmap::new();
@@ -278,17 +273,13 @@ fn clear_field_string_levels<'t>(
 
 fn compute_facet_string_levels<'t>(
     rtxn: &'t heed::RoTxn,
-    db: heed::Database<
-        FacetStringLevelZeroCodec,
-        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
-    >,
+    db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
-    shrink_size: Option<u64>,
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
     field_id: FieldId,
-) -> Result<Reader<FileFuse>> {
+) -> Result<Reader<File>> {
     let first_level_size = db
         .remap_key_type::<ByteSlice>()
         .prefix_iter(rtxn, &field_id.to_be_bytes())?
@@ -340,7 +331,7 @@ fn compute_facet_string_levels<'t>(
         }
     }
 
-    writer_into_reader(writer, shrink_size)
+    writer_into_reader(writer)
 }
 
 fn write_string_entry(

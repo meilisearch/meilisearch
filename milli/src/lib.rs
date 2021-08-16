@@ -13,11 +13,9 @@ mod search;
 pub mod tree_level;
 pub mod update;
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
-use std::result::Result as StdResult;
 
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
@@ -53,8 +51,6 @@ pub type DocumentId = u32;
 pub type FieldId = u16;
 pub type Position = u32;
 pub type FieldDistribution = BTreeMap<String, u64>;
-
-type MergeFn<E> = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> StdResult<Cow<'a, [u8]>, E>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(

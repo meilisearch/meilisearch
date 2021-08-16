@@ -65,10 +65,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) log_every_n: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
-    pub(crate) linked_hash_map_size: Option<usize>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     update_id: u64,
 
@@ -95,10 +93,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             log_every_n: None,
             max_nb_chunks: None,
             max_memory: None,
-            linked_hash_map_size: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             thread_pool: None,
             searchable_fields: Setting::NotSet,
             displayed_fields: Setting::NotSet,
@@ -205,7 +201,6 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             log_every_n: self.log_every_n,
             chunk_compression_type: self.chunk_compression_type,
             chunk_compression_level: self.chunk_compression_level,
-            chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
             max_nb_chunks: self.max_nb_chunks,
             max_memory: self.max_memory,
             index_documents_method: IndexDocumentsMethod::ReplaceDocuments,
@@ -232,10 +227,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         indexing_builder.log_every_n = self.log_every_n;
         indexing_builder.max_nb_chunks = self.max_nb_chunks;
         indexing_builder.max_memory = self.max_memory;
-        indexing_builder.linked_hash_map_size = self.linked_hash_map_size;
         indexing_builder.chunk_compression_type = self.chunk_compression_type;
         indexing_builder.chunk_compression_level = self.chunk_compression_level;
-        indexing_builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         indexing_builder.thread_pool = self.thread_pool;
         indexing_builder.execute_raw(output, &cb)?;
 

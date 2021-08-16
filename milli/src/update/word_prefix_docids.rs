@@ -5,7 +5,7 @@ use grenad::CompressionType;
 use heed::types::ByteSlice;
 
 use crate::update::index_documents::{
-    create_sorter, roaring_bitmap_merge, sorter_into_lmdb_database, WriteMethod,
+    create_sorter, merge_roaring_bitmaps, sorter_into_lmdb_database, WriteMethod,
 };
 use crate::{Index, Result};
 
@@ -14,7 +14,6 @@ pub struct WordPrefixDocids<'t, 'u, 'i> {
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
 }
@@ -29,7 +28,6 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             index,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             max_nb_chunks: None,
             max_memory: None,
         }
@@ -44,10 +42,9 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
-            roaring_bitmap_merge,
+            merge_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -70,7 +67,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_docids.as_polymorph(),
             prefix_docids_sorter,
-            roaring_bitmap_merge,
+            merge_roaring_bitmaps,
             WriteMethod::Append,
         )?;
 

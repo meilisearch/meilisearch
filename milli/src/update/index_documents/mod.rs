@@ -1,238 +1,39 @@
-use std::borrow::Cow;
+mod extract;
+mod helpers;
+mod transform;
+mod typed_chunk;
+
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Seek, SeekFrom};
+use std::io::{self, BufRead, BufReader};
+use std::iter::FromIterator;
 use std::num::{NonZeroU32, NonZeroUsize};
-use std::result::Result as StdResult;
-use std::str;
-use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
-use bstr::ByteSlice as _;
+use byte_unit::Byte;
 use chrono::Utc;
-use grenad::{CompressionType, FileFuse, Merger, MergerIter, Reader, Sorter, Writer};
-use heed::types::ByteSlice;
-use log::{debug, error, info};
-use memmap::Mmap;
-use rayon::prelude::*;
+use crossbeam_channel::{Receiver, Sender};
+use grenad::{self, CompressionType};
+use log::{debug, info};
 use rayon::ThreadPool;
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
-pub use self::merge_function::{
-    cbo_roaring_bitmap_merge, fst_merge, keep_first, roaring_bitmap_merge,
-    tuple_string_cbo_roaring_bitmap_merge,
+pub use self::helpers::{
+    create_sorter, create_writer, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
+    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader,
 };
-use self::store::{Readers, Store};
+use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use super::UpdateBuilder;
-use crate::error::{Error, InternalError};
 use crate::update::{
-    Facets, UpdateIndexingStep, WordPrefixDocids, WordPrefixPairProximityDocids,
+    Facets, UpdateBuilder, UpdateIndexingStep, WordPrefixDocids, WordPrefixPairProximityDocids,
     WordsLevelPositions, WordsPrefixesFst,
 };
-use crate::{Index, MergeFn, Result};
-
-mod merge_function;
-mod store;
-mod transform;
+use crate::{Index, Result};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentAdditionResult {
     pub nb_documents: usize,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum WriteMethod {
-    Append,
-    GetMergePut,
-}
-
-pub fn create_writer(
-    typ: CompressionType,
-    level: Option<u32>,
-    file: File,
-) -> io::Result<Writer<File>> {
-    let mut builder = Writer::builder();
-    builder.compression_type(typ);
-    if let Some(level) = level {
-        builder.compression_level(level);
-    }
-    builder.build(file)
-}
-
-pub fn create_sorter<E>(
-    merge: MergeFn<E>,
-    chunk_compression_type: CompressionType,
-    chunk_compression_level: Option<u32>,
-    chunk_fusing_shrink_size: Option<u64>,
-    max_nb_chunks: Option<usize>,
-    max_memory: Option<usize>,
-) -> Sorter<MergeFn<E>> {
-    let mut builder = Sorter::builder(merge);
-    if let Some(shrink_size) = chunk_fusing_shrink_size {
-        builder.file_fusing_shrink_size(shrink_size);
-    }
-    builder.chunk_compression_type(chunk_compression_type);
-    if let Some(level) = chunk_compression_level {
-        builder.chunk_compression_level(level);
-    }
-    if let Some(nb_chunks) = max_nb_chunks {
-        builder.max_nb_chunks(nb_chunks);
-    }
-    if let Some(memory) = max_memory {
-        builder.max_memory(memory);
-    }
-    builder.build()
-}
-
-pub fn writer_into_reader(
-    writer: Writer<File>,
-    shrink_size: Option<u64>,
-) -> Result<Reader<FileFuse>> {
-    let mut file = writer.into_inner()?;
-    file.seek(SeekFrom::Start(0))?;
-    let file = if let Some(shrink_size) = shrink_size {
-        FileFuse::builder().shrink_size(shrink_size).build(file)
-    } else {
-        FileFuse::new(file)
-    };
-    Reader::new(file).map_err(Into::into)
-}
-
-pub fn merge_readers<E>(
-    sources: Vec<Reader<FileFuse>>,
-    merge: MergeFn<E>,
-) -> Merger<FileFuse, MergeFn<E>> {
-    let mut builder = Merger::builder(merge);
-    builder.extend(sources);
-    builder.build()
-}
-
-pub fn merge_into_lmdb_database<E>(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    sources: Vec<Reader<FileFuse>>,
-    merge: MergeFn<E>,
-    method: WriteMethod,
-) -> Result<()>
-where
-    Error: From<E>,
-{
-    debug!("Merging {} MTBL stores...", sources.len());
-    let before = Instant::now();
-
-    let merger = merge_readers(sources, merge);
-    merger_iter_into_lmdb_database(wtxn, database, merger.into_merge_iter()?, merge, method)?;
-
-    debug!("MTBL stores merged in {:.02?}!", before.elapsed());
-    Ok(())
-}
-
-pub fn write_into_lmdb_database<E>(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    mut reader: Reader<FileFuse>,
-    merge: MergeFn<E>,
-    method: WriteMethod,
-) -> Result<()>
-where
-    Error: From<E>,
-{
-    debug!("Writing MTBL stores...");
-    let before = Instant::now();
-
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = reader.next()? {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { out_iter.append(k, v)? };
-            }
-        }
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = reader.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
-                        let val = merge(k, &vals)?;
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.put_current(k, &val)? };
-                    }
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    }
-                }
-            }
-        }
-    }
-
-    debug!("MTBL stores merged in {:.02?}!", before.elapsed());
-    Ok(())
-}
-
-pub fn sorter_into_lmdb_database<E>(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    sorter: Sorter<MergeFn<E>>,
-    merge: MergeFn<E>,
-    method: WriteMethod,
-) -> Result<()>
-where
-    Error: From<E>,
-    Error: From<grenad::Error<E>>,
-{
-    debug!("Writing MTBL sorter...");
-    let before = Instant::now();
-
-    merger_iter_into_lmdb_database(wtxn, database, sorter.into_iter()?, merge, method)?;
-
-    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
-    Ok(())
-}
-
-fn merger_iter_into_lmdb_database<R: io::Read, E>(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    mut sorter: MergerIter<R, MergeFn<E>>,
-    merge: MergeFn<E>,
-    method: WriteMethod,
-) -> Result<()>
-where
-    Error: From<E>,
-{
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = sorter.next()? {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { out_iter.append(k, v)? };
-            }
-        }
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = sorter.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).map_err(|_| {
-                            // TODO just wrap this error?
-                            InternalError::IndexingMergingKeys { process: "get-put-merge" }
-                        })?;
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.put_current(k, &val)? };
-                    }
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -245,6 +46,12 @@ pub enum IndexDocumentsMethod {
     /// Merge the previous version of the document with the new version,
     /// replacing old attributes values with the new ones and add the new attributes.
     UpdateDocuments,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum WriteMethod {
+    Append,
+    GetMergePut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -262,12 +69,11 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     pub(crate) log_every_n: Option<usize>,
+    pub(crate) documents_chunk_size: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
-    pub(crate) linked_hash_map_size: Option<usize>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
@@ -291,12 +97,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             wtxn,
             index,
             log_every_n: None,
+            documents_chunk_size: None,
             max_nb_chunks: None,
             max_memory: None,
-            linked_hash_map_size: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             thread_pool: None,
             facet_level_group_size: None,
             facet_min_level_size: None,
@@ -344,14 +149,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let before_transform = Instant::now();
         let update_id = self.update_id;
         let progress_callback = |step| progress_callback(step, update_id);
-
         let transform = Transform {
             rtxn: &self.wtxn,
             index: self.index,
             log_every_n: self.log_every_n,
             chunk_compression_type: self.chunk_compression_type,
             chunk_compression_level: self.chunk_compression_level,
-            chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
             max_nb_chunks: self.max_nb_chunks,
             max_memory: self.max_memory,
             index_documents_method: self.update_method,
@@ -378,8 +181,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        let before_indexing = Instant::now();
-
         let TransformOutput {
             primary_key,
             fields_ids_map,
@@ -395,6 +196,65 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // up to date field map.
         self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 
+        let backup_pool;
+        let pool = match self.thread_pool {
+            Some(pool) => pool,
+            #[cfg(not(test))]
+            None => {
+                // We initialize a bakcup pool with the default
+                // settings if none have already been set.
+                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
+                &backup_pool
+            }
+            #[cfg(test)]
+            None => {
+                // We initialize a bakcup pool with the default
+                // settings if none have already been set.
+                backup_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+                &backup_pool
+            }
+        };
+
+        let documents_file = grenad::Reader::new(documents_file)?;
+
+        // create LMDB writer channel
+        let (lmdb_writer_sx, lmdb_writer_rx): (Sender<TypedChunk>, Receiver<TypedChunk>) =
+            crossbeam_channel::unbounded();
+
+        // get searchable fields for word databases
+        let searchable_fields =
+            self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
+        // get filterable fields for facet databases
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
+
+        // Run extraction pipeline in parallel.
+        pool.install(|| {
+            let params = GrenadParameters {
+                chunk_compression_type: self.chunk_compression_type,
+                chunk_compression_level: self.chunk_compression_level,
+                max_memory: self.max_memory,
+                max_nb_chunks: self.max_nb_chunks, // default value, may be chosen.
+            };
+
+            // split obkv file into several chuncks
+            let mut chunk_iter = grenad_obkv_into_chunks(
+                documents_file,
+                params.clone(),
+                self.log_every_n,
+                Byte::from_bytes(self.documents_chunk_size.unwrap_or(1024 * 1024 * 128) as u64), // 128MiB
+            )
+            .unwrap();
+            // extract all databases from the chunked obkv douments
+            extract::data_from_obkv_documents(
+                &mut chunk_iter,
+                params,
+                lmdb_writer_sx,
+                searchable_fields,
+                faceted_fields,
+            )
+            .unwrap();
+        });
+
         // We delete the documents that this document addition replaces. This way we are
         // able to simply insert all the documents even if they already exist in the database.
         if !replaced_documents_ids.is_empty() {
@@ -402,10 +262,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 log_every_n: self.log_every_n,
                 max_nb_chunks: self.max_nb_chunks,
                 max_memory: self.max_memory,
-                linked_hash_map_size: self.linked_hash_map_size,
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
-                chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
                 thread_pool: self.thread_pool,
                 update_id: self.update_id,
             };
@@ -416,189 +274,20 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             debug!("{} documents actually deleted", deleted_documents_count);
         }
 
-        if documents_count == 0 {
-            return Ok(());
+        let index_documents_ids = self.index.documents_ids(self.wtxn)?;
+        let index_is_empty = index_documents_ids.len() == 0;
+        let mut final_documents_ids = RoaringBitmap::new();
+
+        for typed_chunk in lmdb_writer_rx {
+            let docids =
+                write_typed_chunk_into_index(typed_chunk, &self.index, self.wtxn, index_is_empty)?;
+            final_documents_ids |= docids;
+            debug!(
+                "We have seen {} documents on {} total document so far",
+                final_documents_ids.len(),
+                documents_count
+            );
         }
-
-        let bytes = unsafe { Mmap::map(&documents_file)? };
-        let documents = grenad::Reader::new(bytes.as_bytes()).unwrap();
-
-        // The enum which indicates the type of the readers
-        // merges that are potentially done on different threads.
-        enum DatabaseType {
-            Main,
-            WordDocids,
-            WordLevel0PositionDocids,
-            FieldIdWordCountDocids,
-            FacetLevel0NumbersDocids,
-        }
-
-        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
-        let searchable_fields: HashSet<_> = match self.index.searchable_fields_ids(self.wtxn)? {
-            Some(fields) => fields.iter().copied().collect(),
-            None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
-        };
-
-        let stop_words = self.index.stop_words(self.wtxn)?;
-        let stop_words = stop_words.as_ref();
-        let linked_hash_map_size = self.linked_hash_map_size;
-        let max_nb_chunks = self.max_nb_chunks;
-        let max_memory = self.max_memory;
-        let chunk_compression_type = self.chunk_compression_type;
-        let chunk_compression_level = self.chunk_compression_level;
-        let log_every_n = self.log_every_n;
-        let chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
-
-        let backup_pool;
-        let pool = match self.thread_pool {
-            Some(pool) => pool,
-            None => {
-                // We initialize a bakcup pool with the default
-                // settings if none have already been set.
-                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
-                &backup_pool
-            }
-        };
-
-        let readers = pool.install(|| {
-            let num_threads = rayon::current_num_threads();
-            let max_memory_by_job = max_memory.map(|mm| mm / num_threads);
-
-            let readers = rayon::iter::repeatn(documents, num_threads)
-                .enumerate()
-                .map(|(i, documents)| {
-                    let store = Store::new(
-                        searchable_fields.clone(),
-                        faceted_fields.clone(),
-                        linked_hash_map_size,
-                        max_nb_chunks,
-                        max_memory_by_job,
-                        chunk_compression_type,
-                        chunk_compression_level,
-                        chunk_fusing_shrink_size,
-                        stop_words,
-                    )?;
-                    store.index(
-                        documents,
-                        documents_count,
-                        i,
-                        num_threads,
-                        log_every_n,
-                        &progress_callback,
-                    )
-                })
-                .collect::<StdResult<Vec<_>, _>>()?;
-
-            let mut main_readers = Vec::with_capacity(readers.len());
-            let mut word_docids_readers = Vec::with_capacity(readers.len());
-            let mut docid_word_positions_readers = Vec::with_capacity(readers.len());
-            let mut words_pairs_proximities_docids_readers = Vec::with_capacity(readers.len());
-            let mut word_level_position_docids_readers = Vec::with_capacity(readers.len());
-            let mut field_id_word_count_docids_readers = Vec::with_capacity(readers.len());
-            let mut facet_field_numbers_docids_readers = Vec::with_capacity(readers.len());
-            let mut facet_field_strings_docids_readers = Vec::with_capacity(readers.len());
-            let mut field_id_docid_facet_numbers_readers = Vec::with_capacity(readers.len());
-            let mut field_id_docid_facet_strings_readers = Vec::with_capacity(readers.len());
-            let mut documents_readers = Vec::with_capacity(readers.len());
-            readers.into_iter().for_each(|readers| {
-                let Readers {
-                    main,
-                    word_docids,
-                    docid_word_positions,
-                    words_pairs_proximities_docids,
-                    word_level_position_docids,
-                    field_id_word_count_docids,
-                    facet_field_numbers_docids,
-                    facet_field_strings_docids,
-                    field_id_docid_facet_numbers,
-                    field_id_docid_facet_strings,
-                    documents,
-                } = readers;
-                main_readers.push(main);
-                word_docids_readers.push(word_docids);
-                docid_word_positions_readers.push(docid_word_positions);
-                words_pairs_proximities_docids_readers.push(words_pairs_proximities_docids);
-                word_level_position_docids_readers.push(word_level_position_docids);
-                field_id_word_count_docids_readers.push(field_id_word_count_docids);
-                facet_field_numbers_docids_readers.push(facet_field_numbers_docids);
-                facet_field_strings_docids_readers.push(facet_field_strings_docids);
-                field_id_docid_facet_numbers_readers.push(field_id_docid_facet_numbers);
-                field_id_docid_facet_strings_readers.push(field_id_docid_facet_strings);
-                documents_readers.push(documents);
-            });
-
-            // This is the function that merge the readers
-            // by using the given merge function.
-            let merge_readers = move |readers, merge| {
-                let mut writer = tempfile::tempfile().and_then(|f| {
-                    create_writer(chunk_compression_type, chunk_compression_level, f)
-                })?;
-                let merger = merge_readers(readers, merge);
-                merger.write_into(&mut writer)?;
-                writer_into_reader(writer, chunk_fusing_shrink_size)
-            };
-
-            // The enum and the channel which is used to transfert
-            // the readers merges potentially done on another thread.
-            let (sender, receiver) = sync_channel(2);
-
-            debug!("Merging the main, word docids and words pairs proximity docids in parallel...");
-            rayon::spawn(move || {
-                vec![
-                    (DatabaseType::Main, main_readers, fst_merge as MergeFn<_>),
-                    (DatabaseType::WordDocids, word_docids_readers, roaring_bitmap_merge),
-                    (
-                        DatabaseType::FacetLevel0NumbersDocids,
-                        facet_field_numbers_docids_readers,
-                        cbo_roaring_bitmap_merge,
-                    ),
-                    (
-                        DatabaseType::WordLevel0PositionDocids,
-                        word_level_position_docids_readers,
-                        cbo_roaring_bitmap_merge,
-                    ),
-                    (
-                        DatabaseType::FieldIdWordCountDocids,
-                        field_id_word_count_docids_readers,
-                        cbo_roaring_bitmap_merge,
-                    ),
-                ]
-                .into_par_iter()
-                .for_each(|(dbtype, readers, merge)| {
-                    let result = merge_readers(readers, merge);
-                    if let Err(e) = sender.send((dbtype, result)) {
-                        error!("sender error: {}", e);
-                    }
-                });
-            });
-
-            Ok((
-                receiver,
-                docid_word_positions_readers,
-                documents_readers,
-                words_pairs_proximities_docids_readers,
-                facet_field_strings_docids_readers,
-                field_id_docid_facet_numbers_readers,
-                field_id_docid_facet_strings_readers,
-            )) as Result<_>
-        })?;
-
-        let (
-            receiver,
-            docid_word_positions_readers,
-            documents_readers,
-            words_pairs_proximities_docids_readers,
-            facet_field_strings_docids_readers,
-            field_id_docid_facet_numbers_readers,
-            field_id_docid_facet_strings_readers,
-        ) = readers;
-
-        let mut documents_ids = self.index.documents_ids(self.wtxn)?;
-        let contains_documents = !documents_ids.is_empty();
-        let write_method =
-            if contains_documents { WriteMethod::GetMergePut } else { WriteMethod::Append };
-
-        debug!("Writing using the write method: {:?}", write_method);
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
@@ -609,180 +298,24 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
-        // We merge the new documents ids with the existing ones.
-        documents_ids |= new_documents_ids;
-        documents_ids |= replaced_documents_ids;
-        self.index.put_documents_ids(self.wtxn, &documents_ids)?;
+        let all_documents_ids = index_documents_ids | new_documents_ids;
+        self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        let mut database_count = 0;
-        let total_databases = 11;
+        self.execute_prefix_databases(progress_callback)
+    }
 
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: 0,
-            total_databases,
-        });
-
-        debug!("Inserting the docid word positions into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.docid_word_positions.as_polymorph(),
-            docid_word_positions_readers,
-            keep_first,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        debug!("Inserting the documents into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.documents.as_polymorph(),
-            documents_readers,
-            keep_first,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        debug!("Writing the facet id string docids into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.facet_id_string_docids.as_polymorph(),
-            facet_field_strings_docids_readers,
-            tuple_string_cbo_roaring_bitmap_merge,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        debug!("Writing the field id docid facet numbers into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.field_id_docid_facet_f64s.as_polymorph(),
-            field_id_docid_facet_numbers_readers,
-            keep_first,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        debug!("Writing the field id docid facet strings into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.field_id_docid_facet_strings.as_polymorph(),
-            field_id_docid_facet_strings_readers,
-            keep_first,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        debug!("Writing the words pairs proximities docids into LMDB on disk...");
-        merge_into_lmdb_database(
-            self.wtxn,
-            *self.index.word_pair_proximity_docids.as_polymorph(),
-            words_pairs_proximities_docids_readers,
-            cbo_roaring_bitmap_merge,
-            write_method,
-        )?;
-
-        database_count += 1;
-        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-            databases_seen: database_count,
-            total_databases,
-        });
-
-        for (db_type, result) in receiver {
-            let content = result?;
-            match db_type {
-                DatabaseType::Main => {
-                    debug!("Writing the main elements into LMDB on disk...");
-                    write_into_lmdb_database(
-                        self.wtxn,
-                        self.index.main,
-                        content,
-                        fst_merge,
-                        WriteMethod::GetMergePut,
-                    )?;
-                }
-                DatabaseType::WordDocids => {
-                    debug!("Writing the words docids into LMDB on disk...");
-                    let db = *self.index.word_docids.as_polymorph();
-                    write_into_lmdb_database(
-                        self.wtxn,
-                        db,
-                        content,
-                        roaring_bitmap_merge,
-                        write_method,
-                    )?;
-                }
-                DatabaseType::FacetLevel0NumbersDocids => {
-                    debug!("Writing the facet numbers docids into LMDB on disk...");
-                    let db = *self.index.facet_id_f64_docids.as_polymorph();
-                    write_into_lmdb_database(
-                        self.wtxn,
-                        db,
-                        content,
-                        cbo_roaring_bitmap_merge,
-                        write_method,
-                    )?;
-                }
-                DatabaseType::FieldIdWordCountDocids => {
-                    debug!("Writing the field id word count docids into LMDB on disk...");
-                    let db = *self.index.field_id_word_count_docids.as_polymorph();
-                    write_into_lmdb_database(
-                        self.wtxn,
-                        db,
-                        content,
-                        cbo_roaring_bitmap_merge,
-                        write_method,
-                    )?;
-                }
-                DatabaseType::WordLevel0PositionDocids => {
-                    debug!("Writing the word level 0 positions docids into LMDB on disk...");
-                    let db = *self.index.word_level_position_docids.as_polymorph();
-                    write_into_lmdb_database(
-                        self.wtxn,
-                        db,
-                        content,
-                        cbo_roaring_bitmap_merge,
-                        write_method,
-                    )?;
-                }
-            }
-
-            database_count += 1;
-            progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-                databases_seen: database_count,
-                total_databases,
-            });
-        }
-
+    pub fn execute_prefix_databases<F>(
+        self,
+        // output: TransformOutput,
+        progress_callback: F,
+    ) -> Result<()>
+    where
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
         // Run the facets update operation.
         let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         if let Some(value) = self.facet_level_group_size {
             builder.level_group_size(value);
         }
@@ -805,7 +338,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
         builder.execute()?;
@@ -814,7 +346,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
         builder.execute()?;
@@ -823,7 +354,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut builder = WordsLevelPositions::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         if let Some(value) = self.words_positions_level_group_size {
             builder.level_group_size(value);
         }
@@ -831,10 +361,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             builder.min_level_size(value);
         }
         builder.execute()?;
-
-        debug_assert_eq!(database_count, total_databases);
-
-        info!("Transform output indexed in {:.02?}", before_indexing.elapsed());
 
         Ok(())
     }

@@ -93,8 +93,7 @@ pub struct Index {
     /// Maps the facet field id, level and the number with the docids that corresponds to it.
     pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     /// Maps the facet field id and the string with the original string and docids that corresponds to it.
-    pub facet_id_string_docids:
-        Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
+    pub facet_id_string_docids: Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,

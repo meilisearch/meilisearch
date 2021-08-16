@@ -269,11 +269,7 @@ impl<'t> Iterator for FacetStringGroupRevRange<'t> {
 ///
 /// It yields the facet string and the roaring bitmap associated with it.
 pub struct FacetStringLevelZeroRange<'t> {
-    iter: RoRange<
-        't,
-        FacetStringLevelZeroCodec,
-        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
-    >,
+    iter: RoRange<'t, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
 }
 
 impl<'t> FacetStringLevelZeroRange<'t> {
@@ -316,10 +312,7 @@ impl<'t> FacetStringLevelZeroRange<'t> {
         let iter = db
             .remap_key_type::<ByteSlice>()
             .range(rtxn, &(left_bound, right_bound))?
-            .remap_types::<
-                FacetStringLevelZeroCodec,
-                FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>
-            >();
+            .remap_types::<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>();
 
         Ok(FacetStringLevelZeroRange { iter })
     }
@@ -340,11 +333,7 @@ impl<'t> Iterator for FacetStringLevelZeroRange<'t> {
 }
 
 pub struct FacetStringLevelZeroRevRange<'t> {
-    iter: RoRevRange<
-        't,
-        FacetStringLevelZeroCodec,
-        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
-    >,
+    iter: RoRevRange<'t, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
 }
 
 impl<'t> FacetStringLevelZeroRevRange<'t> {
@@ -387,10 +376,7 @@ impl<'t> FacetStringLevelZeroRevRange<'t> {
         let iter = db
             .remap_key_type::<ByteSlice>()
             .rev_range(rtxn, &(left_bound, right_bound))?
-            .remap_types::<
-                FacetStringLevelZeroCodec,
-                FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>
-            >();
+            .remap_types::<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>();
 
         Ok(FacetStringLevelZeroRevRange { iter })
     }

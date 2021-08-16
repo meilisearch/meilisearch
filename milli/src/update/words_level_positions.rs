@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::{cmp, str};
 
 use fst::Streamer;
-use grenad::{CompressionType, FileFuse, Reader, Writer};
+use grenad::{CompressionType, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore, Str};
 use heed::{BytesEncode, Error};
 use log::debug;
@@ -14,7 +14,7 @@ use crate::error::{InternalError, SerializationError};
 use crate::heed_codec::{CboRoaringBitmapCodec, StrLevelPositionCodec};
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
-    cbo_roaring_bitmap_merge, create_sorter, create_writer, sorter_into_lmdb_database,
+    create_sorter, create_writer, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database,
     write_into_lmdb_database, writer_into_reader, WriteMethod,
 };
 use crate::{Index, Result, TreeLevel};
@@ -24,7 +24,6 @@ pub struct WordsLevelPositions<'t, 'u, 'i> {
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
     level_group_size: NonZeroU32,
@@ -41,7 +40,6 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             index,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             max_nb_chunks: None,
             max_memory: None,
             level_group_size: NonZeroU32::new(4).unwrap(),
@@ -68,7 +66,6 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.index.word_level_position_docids,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.level_group_size,
             self.min_level_size,
         )?;
@@ -81,7 +78,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_level_position_docids.as_polymorph(),
             entries,
-            |_, _| Err(InternalError::IndexingMergingKeys { process: "word level position" }),
+            |_, _| Err(InternalError::IndexingMergingKeys { process: "word level position" })?,
             WriteMethod::Append,
         )?;
 
@@ -89,10 +86,9 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         self.index.word_prefix_level_position_docids.clear(self.wtxn)?;
 
         let mut word_prefix_level_positions_docids_sorter = create_sorter(
-            cbo_roaring_bitmap_merge,
+            merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -131,7 +127,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             word_prefix_level_positions_docids_sorter,
-            cbo_roaring_bitmap_merge,
+            merge_cbo_roaring_bitmaps,
             WriteMethod::Append,
         )?;
 
@@ -141,7 +137,6 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             self.index.word_prefix_level_position_docids,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.level_group_size,
             self.min_level_size,
         )?;
@@ -155,7 +150,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
             *self.index.word_prefix_level_position_docids.as_polymorph(),
             entries,
             |_, _| {
-                Err(InternalError::IndexingMergingKeys { process: "word prefix level position" })
+                Err(InternalError::IndexingMergingKeys { process: "word prefix level position" })?
             },
             WriteMethod::Append,
         )?;
@@ -185,10 +180,9 @@ fn compute_positions_levels(
     words_positions_db: heed::Database<StrLevelPositionCodec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
-    shrink_size: Option<u64>,
     level_group_size: NonZeroU32,
     min_level_size: NonZeroU32,
-) -> Result<Reader<FileFuse>> {
+) -> Result<Reader<File>> {
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
     let mut writer = tempfile::tempfile()
@@ -254,7 +248,7 @@ fn compute_positions_levels(
         }
     }
 
-    writer_into_reader(writer, shrink_size)
+    writer_into_reader(writer)
 }
 
 fn write_level_entry(

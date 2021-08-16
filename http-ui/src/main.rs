@@ -343,10 +343,7 @@ async fn main() -> anyhow::Result<()> {
             update_builder.thread_pool(GLOBAL_THREAD_POOL.get().unwrap());
             update_builder.log_every_n(indexer_opt_cloned.log_every_n);
             update_builder.max_memory(indexer_opt_cloned.max_memory.get_bytes() as usize);
-            update_builder.linked_hash_map_size(indexer_opt_cloned.linked_hash_map_size);
             update_builder.chunk_compression_type(indexer_opt_cloned.chunk_compression_type);
-            update_builder
-                .chunk_fusing_shrink_size(indexer_opt_cloned.chunk_fusing_shrink_size.get_bytes());
 
             let before_update = Instant::now();
             // we extract the update type and execute the update itself.

@@ -180,6 +180,10 @@ fn resolve_state(
                     if let Some(attribute_allowed_docids) =
                         ctx.field_id_word_count_docids(id, query_len)?
                     {
+                        println!(
+                            "found candidates that have the good count: {:?}",
+                            attribute_allowed_docids
+                        );
                         let mut attribute_candidates_array =
                             attribute_start_with_docids(ctx, id as u32, query)?;
                         attribute_candidates_array.push(attribute_allowed_docids);

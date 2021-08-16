@@ -5,7 +5,7 @@ use big_s::S;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
-use milli::update::{IndexDocuments, Settings, UpdateFormat};
+use milli::update::{IndexDocuments, Settings, UpdateBuilder, UpdateFormat};
 use milli::{AscDesc, Criterion, DocumentId, Index};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
@@ -50,7 +50,9 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.execute(|_, _| ()).unwrap();
 
     // index documents
-    let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+    let mut builder = UpdateBuilder::new(0);
+    builder.max_memory(10 * 1024 * 1024); // 10MiB
+    let mut builder = builder.index_documents(&mut wtxn, &index);
     builder.update_format(UpdateFormat::JsonStream);
     builder.enable_autogenerate_docids();
     builder.execute(CONTENT.as_bytes(), |_, _| ()).unwrap();

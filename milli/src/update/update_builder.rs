@@ -8,10 +8,8 @@ pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
-    pub(crate) linked_hash_map_size: Option<usize>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     pub(crate) update_id: u64,
 }
@@ -22,10 +20,8 @@ impl<'a> UpdateBuilder<'a> {
             log_every_n: None,
             max_nb_chunks: None,
             max_memory: None,
-            linked_hash_map_size: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             thread_pool: None,
             update_id,
         }
@@ -43,20 +39,12 @@ impl<'a> UpdateBuilder<'a> {
         self.max_memory = Some(max_memory);
     }
 
-    pub fn linked_hash_map_size(&mut self, linked_hash_map_size: usize) {
-        self.linked_hash_map_size = Some(linked_hash_map_size);
-    }
-
     pub fn chunk_compression_type(&mut self, chunk_compression_type: CompressionType) {
         self.chunk_compression_type = chunk_compression_type;
     }
 
     pub fn chunk_compression_level(&mut self, chunk_compression_level: u32) {
         self.chunk_compression_level = Some(chunk_compression_level);
-    }
-
-    pub fn chunk_fusing_shrink_size(&mut self, chunk_fusing_shrink_size: u64) {
-        self.chunk_fusing_shrink_size = Some(chunk_fusing_shrink_size);
     }
 
     pub fn thread_pool(&mut self, thread_pool: &'a ThreadPool) {
@@ -89,10 +77,8 @@ impl<'a> UpdateBuilder<'a> {
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
-        builder.linked_hash_map_size = self.linked_hash_map_size;
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         builder.thread_pool = self.thread_pool;
 
         builder
@@ -108,10 +94,8 @@ impl<'a> UpdateBuilder<'a> {
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
-        builder.linked_hash_map_size = self.linked_hash_map_size;
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         builder.thread_pool = self.thread_pool;
 
         builder
@@ -126,7 +110,6 @@ impl<'a> UpdateBuilder<'a> {
 
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
-        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
 
         builder
     }

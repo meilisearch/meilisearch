@@ -9,7 +9,7 @@ use log::debug;
 
 use crate::heed_codec::StrStrU8Codec;
 use crate::update::index_documents::{
-    cbo_roaring_bitmap_merge, create_sorter, sorter_into_lmdb_database, WriteMethod,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, WriteMethod,
 };
 use crate::{Index, Result};
 
@@ -18,7 +18,6 @@ pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
 }
@@ -33,7 +32,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             index,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: None,
             max_nb_chunks: None,
             max_memory: None,
         }
@@ -48,10 +46,9 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 
         // Here we create a sorter akin to the previous one.
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
-            cbo_roaring_bitmap_merge,
+            merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -78,7 +75,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             self.wtxn,
             *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
             word_prefix_pair_proximity_docids_sorter,
-            cbo_roaring_bitmap_merge,
+            merge_cbo_roaring_bitmaps,
             WriteMethod::Append,
         )?;
 

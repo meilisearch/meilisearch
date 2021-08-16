@@ -11,15 +11,14 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use super::merge_function::merge_two_obkvs;
-use super::{create_sorter, create_writer, IndexDocumentsMethod};
-use crate::error::{Error, InternalError, UserError};
-use crate::index::db_name;
-use crate::update::index_documents::merge_function::{keep_latest_obkv, merge_obkvs};
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
-use crate::{
-    ExternalDocumentsIds, FieldDistribution, FieldId, FieldsIdsMap, Index, MergeFn, Result, BEU32,
+use super::helpers::{
+    create_sorter, create_writer, keep_latest_obkv, merge_obkvs, merge_two_obkvs, MergeFn,
 };
+use super::IndexDocumentsMethod;
+use crate::error::{InternalError, UserError};
+use crate::index::db_name;
+use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::{ExternalDocumentsIds, FieldDistribution, FieldId, FieldsIdsMap, Index, Result, BEU32};
 
 const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
 
@@ -46,7 +45,6 @@ pub struct Transform<'t, 'i> {
     pub log_every_n: Option<usize>,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
-    pub chunk_fusing_shrink_size: Option<u64>,
     pub max_nb_chunks: Option<usize>,
     pub max_memory: Option<usize>,
     pub index_documents_method: IndexDocumentsMethod,
@@ -149,7 +147,6 @@ impl Transform<'_, '_> {
             merge_function,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -169,7 +166,7 @@ impl Transform<'_, '_> {
             }
 
             obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
+            let mut writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
 
             // We prepare the fields ids map with the documents keys.
             for (key, _value) in &document {
@@ -209,7 +206,6 @@ impl Transform<'_, '_> {
                         .map_err(InternalError::SerdeJson)?;
                     writer.insert(field_id, &json_buffer)?;
                 }
-
                 // We validate the document id [a-zA-Z0-9\-_].
                 if field_id == primary_key_id && validate_document_id(&external_id).is_none() {
                     return Err(UserError::InvalidDocumentId {
@@ -291,7 +287,6 @@ impl Transform<'_, '_> {
             keep_latest_obkv,
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -306,7 +301,7 @@ impl Transform<'_, '_> {
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record).map_err(UserError::Csv)? {
             obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
+            let mut writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
 
             if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
@@ -372,9 +367,9 @@ impl Transform<'_, '_> {
     /// Generate the `TransformOutput` based on the given sorter that can be generated from any
     /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
-    fn output_from_sorter<F, E>(
+    fn output_from_sorter<F>(
         self,
-        sorter: grenad::Sorter<MergeFn<E>>,
+        sorter: grenad::Sorter<MergeFn>,
         primary_key: String,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
@@ -383,7 +378,6 @@ impl Transform<'_, '_> {
     ) -> Result<TransformOutput>
     where
         F: Fn(UpdateIndexingStep) + Sync,
-        Error: From<E>,
     {
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let mut field_distribution = self.index.field_distribution(self.rtxn)?;
@@ -391,10 +385,15 @@ impl Transform<'_, '_> {
 
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
-            |_id, _obkvs| Err(InternalError::IndexingMergingKeys { process: "documents" }),
+            |_id, obkvs| {
+                if obkvs.len() == 1 {
+                    Ok(obkvs[0].clone())
+                } else {
+                    Err(InternalError::IndexingMergingKeys { process: "documents" }.into())
+                }
+            },
             self.chunk_compression_type,
             self.chunk_compression_level,
-            self.chunk_fusing_shrink_size,
             self.max_nb_chunks,
             self.max_memory,
         );
@@ -405,7 +404,7 @@ impl Transform<'_, '_> {
 
         // While we write into final file we get or generate the internal documents ids.
         let mut documents_count = 0;
-        let mut iter = sorter.into_iter()?;
+        let mut iter = sorter.into_merger_iter()?;
         while let Some((external_id, update_obkv)) = iter.next()? {
             if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
@@ -534,7 +533,7 @@ impl Transform<'_, '_> {
             let docid = docid.get();
 
             obkv_buffer.clear();
-            let mut obkv_writer = obkv::KvWriter::new(&mut obkv_buffer);
+            let mut obkv_writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
 
             // We iterate over the new `FieldsIdsMap` ids in order and construct the new obkv.
             for (id, name) in new_fields_ids_map.iter() {

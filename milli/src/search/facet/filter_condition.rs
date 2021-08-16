@@ -392,10 +392,7 @@ impl FilterCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-        strings_db: heed::Database<
-            FacetStringLevelZeroCodec,
-            FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
-        >,
+        strings_db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
         field_id: FieldId,
         operator: &Operator,
     ) -> Result<RoaringBitmap> {
