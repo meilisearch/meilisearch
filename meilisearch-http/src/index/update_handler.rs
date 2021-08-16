@@ -15,9 +15,7 @@ pub struct UpdateHandler {
     thread_pool: ThreadPool,
     log_frequency: usize,
     max_memory: Option<usize>,
-    linked_hash_map_size: usize,
     chunk_compression_type: CompressionType,
-    chunk_fusing_shrink_size: u64,
 }
 
 impl UpdateHandler {
@@ -32,9 +30,7 @@ impl UpdateHandler {
             thread_pool,
             log_frequency: opt.log_every_n,
             max_memory: opt.max_memory.map(|m| m.get_bytes() as usize),
-            linked_hash_map_size: opt.linked_hash_map_size,
             chunk_compression_type: opt.chunk_compression_type,
-            chunk_fusing_shrink_size: opt.chunk_fusing_shrink_size.get_bytes(),
         })
     }
 
@@ -52,9 +48,7 @@ impl UpdateHandler {
         if let Some(max_memory) = self.max_memory {
             update_builder.max_memory(max_memory);
         }
-        update_builder.linked_hash_map_size(self.linked_hash_map_size);
         update_builder.chunk_compression_type(self.chunk_compression_type);
-        update_builder.chunk_fusing_shrink_size(self.chunk_fusing_shrink_size);
         update_builder
     }
 
