@@ -410,6 +410,10 @@ impl<'t> Iterator for FacetStringLevelZeroRevRange<'t> {
     }
 }
 
+type EitherStringRange<'t> = Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>;
+type EitherStringRevRange<'t> =
+    Either<FacetStringGroupRevRange<'t>, FacetStringLevelZeroRevRange<'t>>;
+
 /// An iterator that is used to explore the facet strings level by level,
 /// it will only return facets strings that are associated with the
 /// candidates documents ids given.
@@ -417,8 +421,7 @@ pub struct FacetStringIter<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: Database<ByteSlice, ByteSlice>,
     field_id: FieldId,
-    level_iters:
-        Vec<(RoaringBitmap, Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>)>,
+    level_iters: Vec<(RoaringBitmap, EitherStringRange<'t>)>,
     must_reduce: bool,
 }
 
