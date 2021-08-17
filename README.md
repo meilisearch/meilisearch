@@ -6,11 +6,21 @@
 
 ## Introduction
 
-This engine is a prototype, do not use it in production.
-This is one of the most advanced search engine I have worked on.
-It currently only supports the proximity criterion.
+This repository contains the core engine used in [MeiliSearch].
 
-### Compile and Run the server
+It contains a library that can manage one and only one index. MeiliSearch
+manages the multi-index itself. Milli is unable to store updates in a store:
+it is the job of something else above and this is why it is only able
+to process one update at a time.
+
+This repository contains crates to quickly debug the engine:
+ - There are benchmarks located in the `benchmarks` crate.
+ - The `http-ui` crate is a simple HTTP dashboard to tests the features like for real!
+ - The `infos` crate is used to dump the internal data-structure and ensure correctness.
+ - The `search` crate is a simple command-line that helps run [flamegraph] on top of it.
+ - The `helpers` crate is only used to modify the database inplace, sometimes.
+
+### Compile and run the HTTP debug server
 
 You can specify the number of threads to use to index documents and many other settings too.
 
@@ -42,7 +52,6 @@ the `content-type:application/json` and `content-type:application/x-ndjson` head
 
 You can query the engine by going to [the HTML page itself](http://127.0.0.1:9700).
 
-
 ## Contributing
 
 You can setup a `git-hook` to stop you from making a commit too fast. It'll stop you if:
@@ -56,3 +65,6 @@ To enable the hook, run the following command from the root of the project:
 ```
 cp script/pre-commit .git/hooks/pre-commit
 ```
+
+[MeiliSearch]: https://github.com/MeiliSearch/MeiliSearch
+[flamegraph]: https://github.com/flamegraph-rs/flamegraph
