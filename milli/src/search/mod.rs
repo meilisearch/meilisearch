@@ -18,6 +18,7 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
+use crate::criterion::AscDesc;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{DocumentId, Index, Result};
 
@@ -37,6 +38,7 @@ pub struct Search<'a> {
     filter: Option<FilterCondition>,
     offset: usize,
     limit: usize,
+    sort_criteria: Option<Vec<AscDesc>>,
     optional_words: bool,
     authorize_typos: bool,
     words_limit: usize,
@@ -51,6 +53,7 @@ impl<'a> Search<'a> {
             filter: None,
             offset: 0,
             limit: 20,
+            sort_criteria: None,
             optional_words: true,
             authorize_typos: true,
             words_limit: 10,
@@ -71,6 +74,11 @@ impl<'a> Search<'a> {
 
     pub fn limit(&mut self, limit: usize) -> &mut Search<'a> {
         self.limit = limit;
+        self
+    }
+
+    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
+        self.sort_criteria = Some(criteria);
         self
     }
 
@@ -135,7 +143,7 @@ impl<'a> Search<'a> {
         };
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let sort_criteria = None;
+        let sort_criteria = self.sort_criteria.clone();
         let criteria = criteria_builder.build(
             query_tree,
             primitive_query,
@@ -205,6 +213,7 @@ impl fmt::Debug for Search<'_> {
             filter,
             offset,
             limit,
+            sort_criteria,
             optional_words,
             authorize_typos,
             words_limit,
@@ -216,6 +225,7 @@ impl fmt::Debug for Search<'_> {
             .field("filter", filter)
             .field("offset", offset)
             .field("limit", limit)
+            .field("sort_criteria", sort_criteria)
             .field("optional_words", optional_words)
             .field("authorize_typos", authorize_typos)
             .field("words_limit", words_limit)

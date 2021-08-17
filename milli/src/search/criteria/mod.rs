@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use roaring::RoaringBitmap;
 
@@ -13,6 +12,7 @@ use self::r#final::Final;
 use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
+use crate::criterion::AscDesc as AscDescName;
 use crate::search::{word_derivations, WordDerivationsCache};
 use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
 
@@ -274,9 +274,9 @@ impl<'t> CriteriaBuilder<'t> {
         query_tree: Option<Operation>,
         primitive_query: Option<Vec<PrimitiveQueryPart>>,
         filtered_candidates: Option<RoaringBitmap>,
-        sort_criteria: Option<Vec<String>>,
+        sort_criteria: Option<Vec<AscDescName>>,
     ) -> Result<Final<'t>> {
-        use crate::criterion::{AscDesc as AscDescName, Criterion as Name};
+        use crate::criterion::Criterion as Name;
 
         let primitive_query = primitive_query.unwrap_or_default();
 
@@ -288,19 +288,19 @@ impl<'t> CriteriaBuilder<'t> {
                 Name::Typo => Box::new(Typo::new(self, criterion)),
                 Name::Sort => match sort_criteria {
                     Some(ref sort_criteria) => {
-                        for text in sort_criteria {
-                            criterion = match AscDescName::from_str(text)? {
+                        for asc_desc in sort_criteria {
+                            criterion = match asc_desc {
                                 AscDescName::Asc(field) => Box::new(AscDesc::asc(
                                     &self.index,
                                     &self.rtxn,
                                     criterion,
-                                    field,
+                                    field.to_string(),
                                 )?),
                                 AscDescName::Desc(field) => Box::new(AscDesc::desc(
                                     &self.index,
                                     &self.rtxn,
                                     criterion,
-                                    field,
+                                    field.to_string(),
                                 )?),
                             };
                         }
