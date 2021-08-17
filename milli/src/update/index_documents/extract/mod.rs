@@ -11,6 +11,7 @@ use std::collections::HashSet;
 use std::fs::File;
 
 use crossbeam_channel::Sender;
+use log::debug;
 use rayon::prelude::*;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
@@ -192,6 +193,7 @@ fn spawn_extraction_task<FE, FS>(
             .map(|chunk| extract_fn(chunk, indexer.clone()).unwrap())
             .collect();
         rayon::spawn(move || {
+            debug!("merge {} database", name);
             let reader = merge_readers(chunks, merge_fn, indexer).unwrap();
             lmdb_writer_sx.send(serialize_fn(reader)).unwrap();
         });

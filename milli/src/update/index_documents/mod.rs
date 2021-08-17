@@ -31,6 +31,10 @@ use crate::update::{
 };
 use crate::{Index, Result};
 
+static MERGED_DATABASE_COUNT: usize = 7;
+static PREFIX_DATABASE_COUNT: usize = 5;
+static TOTAL_POSTING_DATABASE_COUNT: usize = MERGED_DATABASE_COUNT + PREFIX_DATABASE_COUNT;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentAdditionResult {
     pub nb_documents: usize,
@@ -278,15 +282,34 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
 
+        let mut databases_seen = 0;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
+
         for typed_chunk in lmdb_writer_rx {
-            let docids =
+            let (docids, is_merged_database) =
                 write_typed_chunk_into_index(typed_chunk, &self.index, self.wtxn, index_is_empty)?;
-            final_documents_ids |= docids;
-            debug!(
-                "We have seen {} documents on {} total document so far",
-                final_documents_ids.len(),
-                documents_count
-            );
+            if !docids.is_empty() {
+                final_documents_ids |= docids;
+                let documents_seen_count = final_documents_ids.len();
+                progress_callback(UpdateIndexingStep::IndexDocuments {
+                    documents_seen: documents_seen_count as usize,
+                    total_documents: documents_count,
+                });
+                debug!(
+                    "We have seen {} documents on {} total document so far",
+                    documents_seen_count, documents_count
+                );
+            }
+            if is_merged_database {
+                databases_seen += 1;
+                progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                    databases_seen: databases_seen,
+                    total_databases: TOTAL_POSTING_DATABASE_COUNT,
+                });
+            }
         }
 
         // We write the field distribution into the main database
@@ -298,20 +321,19 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
-        let all_documents_ids = index_documents_ids | new_documents_ids;
+        let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
         self.execute_prefix_databases(progress_callback)
     }
 
-    pub fn execute_prefix_databases<F>(
-        self,
-        // output: TransformOutput,
-        progress_callback: F,
-    ) -> Result<()>
+    pub fn execute_prefix_databases<F>(self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
+        // Merged databases are already been indexed, we start from this count;
+        let mut databases_seen = MERGED_DATABASE_COUNT;
+
         // Run the facets update operation.
         let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
@@ -324,6 +346,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         builder.execute()?;
 
+        databases_seen += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
+
         // Run the words prefixes update operation.
         let mut builder = WordsPrefixesFst::new(self.wtxn, self.index, self.update_id);
         if let Some(value) = self.words_prefix_threshold {
@@ -334,6 +362,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         builder.execute()?;
 
+        databases_seen += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
+
         // Run the word prefix docids update operation.
         let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
@@ -342,6 +376,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         builder.max_memory = self.max_memory;
         builder.execute()?;
 
+        databases_seen += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
+
         // Run the word prefix pair proximity docids update operation.
         let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
@@ -349,6 +389,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
         builder.execute()?;
+
+        databases_seen += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
 
         // Run the words level positions update operation.
         let mut builder = WordsLevelPositions::new(self.wtxn, self.index);
@@ -361,6 +407,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             builder.min_level_size(value);
         }
         builder.execute()?;
+
+        databases_seen += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: databases_seen,
+            total_databases: TOTAL_POSTING_DATABASE_COUNT,
+        });
 
         Ok(())
     }

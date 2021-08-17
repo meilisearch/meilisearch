@@ -32,7 +32,8 @@ pub(crate) fn write_typed_chunk_into_index(
     index: &Index,
     wtxn: &mut RwTxn,
     index_is_empty: bool,
-) -> Result<RoaringBitmap> {
+) -> Result<(RoaringBitmap, bool)> {
+    let mut is_merged_database = false;
     match typed_chunk {
         TypedChunk::DocidWordPositions(docid_word_positions_iter) => {
             write_entries_into_database(
@@ -71,8 +72,11 @@ pub(crate) fn write_typed_chunk_into_index(
                 |value, _buffer| Ok(value),
                 merge_cbo_roaring_bitmaps,
             )?;
+            is_merged_database = true;
         }
-        TypedChunk::NewDocumentsIds(documents_ids) => return Ok(documents_ids),
+        TypedChunk::NewDocumentsIds(documents_ids) => {
+            return Ok((documents_ids, is_merged_database))
+        }
         TypedChunk::WordDocids(word_docids_iter) => {
             let mut word_docids_iter = unsafe { into_clonable_grenad(word_docids_iter) }?;
             append_entries_into_database(
@@ -100,6 +104,7 @@ pub(crate) fn write_typed_chunk_into_index(
             builder.extend_stream(union_stream)?;
             let fst = builder.into_set();
             index.put_words_fst(wtxn, &fst)?;
+            is_merged_database = true;
         }
         TypedChunk::WordLevelPositionDocids(word_level_position_docids_iter) => {
             append_entries_into_database(
@@ -110,6 +115,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 |value, _buffer| Ok(value),
                 merge_cbo_roaring_bitmaps,
             )?;
+            is_merged_database = true;
         }
         TypedChunk::FieldIdFacetNumberDocids(facet_id_f64_docids_iter) => {
             append_entries_into_database(
@@ -120,6 +126,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 |value, _buffer| Ok(value),
                 merge_cbo_roaring_bitmaps,
             )?;
+            is_merged_database = true;
         }
         TypedChunk::WordPairProximityDocids(word_pair_proximity_docids_iter) => {
             append_entries_into_database(
@@ -130,6 +137,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 |value, _buffer| Ok(value),
                 merge_cbo_roaring_bitmaps,
             )?;
+            is_merged_database = true;
         }
         TypedChunk::FieldIdDocidFacetNumbers(mut fid_docid_facet_number) => {
             let index_fid_docid_facet_numbers =
@@ -166,10 +174,11 @@ pub(crate) fn write_typed_chunk_into_index(
                     Ok(values.serialize_into(buffer)?)
                 },
             )?;
+            is_merged_database = true;
         }
     }
 
-    Ok(RoaringBitmap::new())
+    Ok((RoaringBitmap::new(), is_merged_database))
 }
 
 fn merge_roaring_bitmaps(new_value: &[u8], db_value: &[u8], buffer: &mut Vec<u8>) -> Result<()> {
