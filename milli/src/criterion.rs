@@ -64,6 +64,15 @@ pub enum AscDesc {
     Desc(String),
 }
 
+impl AscDesc {
+    pub fn field(&self) -> &str {
+        match self {
+            AscDesc::Asc(field) => field,
+            AscDesc::Desc(field) => field,
+        }
+    }
+}
+
 impl FromStr for AscDesc {
     type Err = UserError;
 

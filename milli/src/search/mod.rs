@@ -19,6 +19,7 @@ pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Opera
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 use crate::criterion::AscDesc;
+use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{DocumentId, Index, Result};
 
@@ -142,13 +143,28 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
+        // We check that we are allowed to use the sort criteria, we check
+        // that they are declared in the sortable fields.
+        let sortable_fields = self.index.sortable_fields(self.rtxn)?;
+        if let Some(sort_criteria) = &self.sort_criteria {
+            for asc_desc in sort_criteria {
+                let field = asc_desc.field();
+                if !sortable_fields.contains(field) {
+                    return Err(UserError::InvalidSortableAttribute {
+                        field: field.to_string(),
+                        valid_fields: sortable_fields,
+                    }
+                    .into());
+                }
+            }
+        }
+
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let sort_criteria = self.sort_criteria.clone();
         let criteria = criteria_builder.build(
             query_tree,
             primitive_query,
             filtered_candidates,
-            sort_criteria,
+            self.sort_criteria.clone(),
         )?;
 
         match self.index.distinct_field(self.rtxn)? {
