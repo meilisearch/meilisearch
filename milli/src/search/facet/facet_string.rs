@@ -339,6 +339,77 @@ impl<'t> Iterator for FacetStringLevelZeroRange<'t> {
     }
 }
 
+pub struct FacetStringLevelZeroRevRange<'t> {
+    iter: RoRevRange<
+        't,
+        FacetStringLevelZeroCodec,
+        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
+    >,
+}
+
+impl<'t> FacetStringLevelZeroRevRange<'t> {
+    pub fn new<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        db: Database<X, Y>,
+        field_id: FieldId,
+        left: Bound<&str>,
+        right: Bound<&str>,
+    ) -> heed::Result<FacetStringLevelZeroRevRange<'t>> {
+        fn encode_value<'a>(buffer: &'a mut Vec<u8>, field_id: FieldId, value: &str) -> &'a [u8] {
+            buffer.extend_from_slice(&field_id.to_be_bytes());
+            buffer.push(0);
+            buffer.extend_from_slice(value.as_bytes());
+            &buffer[..]
+        }
+
+        let mut left_buffer = Vec::new();
+        let left_bound = match left {
+            Included(value) => Included(encode_value(&mut left_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut left_buffer, field_id, value)),
+            Unbounded => {
+                left_buffer.extend_from_slice(&field_id.to_be_bytes());
+                left_buffer.push(0);
+                Included(&left_buffer[..])
+            }
+        };
+
+        let mut right_buffer = Vec::new();
+        let right_bound = match right {
+            Included(value) => Included(encode_value(&mut right_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut right_buffer, field_id, value)),
+            Unbounded => {
+                right_buffer.extend_from_slice(&field_id.to_be_bytes());
+                right_buffer.push(1); // we must only get the level 0
+                Excluded(&right_buffer[..])
+            }
+        };
+
+        let iter = db
+            .remap_key_type::<ByteSlice>()
+            .rev_range(rtxn, &(left_bound, right_bound))?
+            .remap_types::<
+                FacetStringLevelZeroCodec,
+                FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>
+            >();
+
+        Ok(FacetStringLevelZeroRevRange { iter })
+    }
+}
+
+impl<'t> Iterator for FacetStringLevelZeroRevRange<'t> {
+    type Item = heed::Result<(&'t str, &'t str, RoaringBitmap)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, normalized), (original, docids)))) => {
+                Some(Ok((normalized, original, docids)))
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
 /// An iterator that is used to explore the facet strings level by level,
 /// it will only return facets strings that are associated with the
 /// candidates documents ids given.
