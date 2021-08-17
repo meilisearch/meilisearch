@@ -21,6 +21,7 @@ pub fn extract_docid_word_positions<R: io::Read>(
     mut obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
+    stop_words: Option<&fst::Set<&[u8]>>,
 ) -> Result<(RoaringBitmap, grenad::Reader<File>)> {
     let max_memory = indexer.max_memory_by_thread();
 
@@ -35,6 +36,10 @@ pub fn extract_docid_word_positions<R: io::Read>(
 
     let mut key_buffer = Vec::new();
     let mut field_buffer = String::new();
+    let mut config = AnalyzerConfig::default();
+    if let Some(stop_words) = stop_words {
+        config.stop_words(stop_words);
+    }
     let analyzer = Analyzer::<Vec<u8>>::new(AnalyzerConfig::default());
 
     while let Some((key, value)) = obkv_documents.next()? {

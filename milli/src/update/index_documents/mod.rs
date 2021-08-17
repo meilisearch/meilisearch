@@ -231,6 +231,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // get filterable fields for facet databases
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
+        let stop_words = self.index.stop_words(self.wtxn)?;
+        // let stop_words = stop_words.as_ref();
+
         // Run extraction pipeline in parallel.
         pool.install(|| {
             let params = GrenadParameters {
@@ -255,6 +258,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 lmdb_writer_sx,
                 searchable_fields,
                 faceted_fields,
+                stop_words,
             )
             .unwrap();
         });

@@ -37,6 +37,7 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<TypedChunk>,
     searchable_fields: Option<HashSet<FieldId>>,
     faceted_fields: HashSet<FieldId>,
+    stop_words: Option<fst::Set<&[u8]>>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
         .par_bridge()
@@ -54,6 +55,7 @@ pub(crate) fn data_from_obkv_documents(
                         documents_chunk.clone(),
                         indexer.clone(),
                         &searchable_fields,
+                        stop_words.as_ref(),
                     )?;
 
                     // send documents_ids to DB writer
