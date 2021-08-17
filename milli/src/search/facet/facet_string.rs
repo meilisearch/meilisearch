@@ -421,7 +421,7 @@ pub struct FacetStringIter<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: Database<ByteSlice, ByteSlice>,
     field_id: FieldId,
-    level_iters: Vec<(RoaringBitmap, EitherStringRange<'t>)>,
+    level_iters: Vec<(RoaringBitmap, Either<EitherStringRange<'t>, EitherStringRevRange<'t>>)>,
     must_reduce: bool,
 }
 
@@ -438,7 +438,24 @@ impl<'t> FacetStringIter<'t> {
             rtxn,
             db,
             field_id,
-            level_iters: vec![(documents_ids, highest_iter)],
+            level_iters: vec![(documents_ids, Left(highest_iter))],
+            must_reduce: true,
+        })
+    }
+
+    pub fn new_reverse_reducing(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        field_id: FieldId,
+        documents_ids: RoaringBitmap,
+    ) -> heed::Result<FacetStringIter<'t>> {
+        let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
+        let highest_reverse_iter = Self::highest_reverse_iter(rtxn, index, db, field_id)?;
+        Ok(FacetStringIter {
+            rtxn,
+            db,
+            field_id,
+            level_iters: vec![(documents_ids, Right(highest_reverse_iter))],
             must_reduce: true,
         })
     }
@@ -455,7 +472,7 @@ impl<'t> FacetStringIter<'t> {
             rtxn,
             db,
             field_id,
-            level_iters: vec![(documents_ids, highest_iter)],
+            level_iters: vec![(documents_ids, Left(highest_iter))],
             must_reduce: false,
         })
     }
@@ -536,6 +553,21 @@ impl<'t> Iterator for FacetStringIter<'t> {
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
             let (documents_ids, last) = self.level_iters.last_mut()?;
+            let is_ascending = last.is_left();
+
+            // We remap the different iterator types to make
+            // the algorithm less complex to understand.
+            let last = match last {
+                Left(ascending) => match ascending {
+                    Left(last) => Left(Left(last)),
+                    Right(last) => Right(Left(last)),
+                },
+                Right(descending) => match descending {
+                    Left(last) => Left(Right(last)),
+                    Right(last) => Right(Right(last)),
+                },
+            };
+
             match last {
                 Left(last) => {
                     for result in last {
@@ -547,24 +579,50 @@ impl<'t> Iterator for FacetStringIter<'t> {
                                         *documents_ids -= &docids;
                                     }
 
-                                    let result = match string_bounds {
-                                        Some((left, right)) => FacetStringLevelZeroRange::new(
-                                            self.rtxn,
-                                            self.db,
-                                            self.field_id,
-                                            Included(left),
-                                            Included(right),
-                                        )
-                                        .map(Right),
-                                        None => FacetStringGroupRange::new(
-                                            self.rtxn,
-                                            self.db,
-                                            self.field_id,
-                                            NonZeroU8::new(level.get() - 1).unwrap(),
-                                            Included(left),
-                                            Included(right),
-                                        )
-                                        .map(Left),
+                                    let result = if is_ascending {
+                                        match string_bounds {
+                                            Some((left, right)) => {
+                                                FacetStringLevelZeroRevRange::new(
+                                                    self.rtxn,
+                                                    self.db,
+                                                    self.field_id,
+                                                    Included(left),
+                                                    Included(right),
+                                                )
+                                                .map(Right)
+                                            }
+                                            None => FacetStringGroupRevRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                NonZeroU8::new(level.get() - 1).unwrap(),
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Left),
+                                        }
+                                        .map(Right)
+                                    } else {
+                                        match string_bounds {
+                                            Some((left, right)) => FacetStringLevelZeroRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Right),
+                                            None => FacetStringGroupRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                NonZeroU8::new(level.get() - 1).unwrap(),
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Left),
+                                        }
+                                        .map(Left)
                                     };
 
                                     match result {
