@@ -293,6 +293,15 @@ pub struct FacetStringIter<'t> {
 }
 
 impl<'t> FacetStringIter<'t> {
+    pub fn new_reducing(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        field_id: FieldId,
+        documents_ids: RoaringBitmap,
+    ) -> heed::Result<FacetStringIter<'t>> {
+        FacetStringIter::new(rtxn, index, field_id, documents_ids, true)
+    }
+
     pub fn new_non_reducing(
         rtxn: &'t heed::RoTxn,
         index: &'t Index,
