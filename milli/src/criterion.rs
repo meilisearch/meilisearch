@@ -15,7 +15,7 @@ pub enum Criterion {
     /// Sorted by increasing distance between matched query terms.
     Proximity,
     /// Documents with quey words contained in more important
-    /// attributes are considred better.
+    /// attributes are considered better.
     Attribute,
     /// Sorted by the similarity of the matched words with the query words.
     Exactness,
@@ -74,8 +74,8 @@ impl fmt::Display for Criterion {
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),
             Exactness => f.write_str("exactness"),
-            Asc(attr) => write!(f, "asc({})", attr),
-            Desc(attr) => write!(f, "desc({})", attr),
+            Asc(attr) => write!(f, "{}:asc", attr),
+            Desc(attr) => write!(f, "{}:desc", attr),
         }
     }
 }

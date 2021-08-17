@@ -719,7 +719,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name")]);
-        builder.set_criteria(vec![S("asc(age)")]);
+        builder.set_criteria(vec![S("age:asc")]);
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -953,7 +953,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         builder.set_filterable_fields(hashset! { S("age"), S("toto") });
-        builder.set_criteria(vec!["asc(toto)".to_string()]);
+        builder.set_criteria(vec!["toto:asc".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -990,7 +990,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
-        builder.set_criteria(vec!["asc(toto)".to_string()]);
+        builder.set_criteria(vec!["toto:asc".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
