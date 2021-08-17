@@ -299,6 +299,16 @@ impl<'t> FacetStringIter<'t> {
         field_id: FieldId,
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetStringIter<'t>> {
+        FacetStringIter::new(rtxn, index, field_id, documents_ids, false)
+    }
+
+    fn new(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        field_id: FieldId,
+        documents_ids: RoaringBitmap,
+        must_reduce: bool,
+    ) -> heed::Result<FacetStringIter<'t>> {
         let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
         let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
         let highest_iter = match NonZeroU8::new(highest_level) {
@@ -324,7 +334,7 @@ impl<'t> FacetStringIter<'t> {
             db,
             field_id,
             level_iters: vec![(documents_ids, highest_iter)],
-            must_reduce: false,
+            must_reduce,
         })
     }
 
