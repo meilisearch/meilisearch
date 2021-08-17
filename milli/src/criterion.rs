@@ -1,14 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
 
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, UserError};
-
-static ASC_DESC_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap());
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
@@ -50,22 +45,11 @@ impl FromStr for Criterion {
             "proximity" => Ok(Criterion::Proximity),
             "attribute" => Ok(Criterion::Attribute),
             "exactness" => Ok(Criterion::Exactness),
-            text => {
-                let caps = ASC_DESC_REGEX
-                    .captures(text)
-                    .ok_or_else(|| UserError::InvalidCriterionName { name: text.to_string() })?;
-                let order = caps.get(1).unwrap().as_str();
-                let field_name = caps.get(2).unwrap().as_str();
-                match order {
-                    "asc" => Ok(Criterion::Asc(field_name.to_string())),
-                    "desc" => Ok(Criterion::Desc(field_name.to_string())),
-                    text => {
-                        return Err(
-                            UserError::InvalidCriterionName { name: text.to_string() }.into()
-                        )
-                    }
-                }
-            }
+            text => match text.rsplit_once(':') {
+                Some((field_name, "asc")) => Ok(Criterion::Asc(field_name.to_string())),
+                Some((field_name, "desc")) => Ok(Criterion::Desc(field_name.to_string())),
+                _ => Err(UserError::InvalidCriterionName { name: text.to_string() }.into()),
+            },
         }
     }
 }
