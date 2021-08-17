@@ -497,6 +497,34 @@ impl<'t> FacetStringIter<'t> {
             .map(Right),
         }
     }
+
+    fn highest_reverse_iter<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        db: Database<X, Y>,
+        field_id: FieldId,
+    ) -> heed::Result<Either<FacetStringGroupRevRange<'t>, FacetStringLevelZeroRevRange<'t>>> {
+        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
+        match NonZeroU8::new(highest_level) {
+            Some(highest_level) => FacetStringGroupRevRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                highest_level,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Left),
+            None => FacetStringLevelZeroRevRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Right),
+        }
+    }
 }
 
 impl<'t> Iterator for FacetStringIter<'t> {
