@@ -90,6 +90,7 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.proximity_rank).map(Vec::from));
                 }
+                Criterion::Sort => todo!("sort not supported right now"),
                 Criterion::Typo => {
                     group.sort_by_key(|d| d.typo_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.typo_rank).map(Vec::from));

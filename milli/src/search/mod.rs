@@ -135,7 +135,13 @@ impl<'a> Search<'a> {
         };
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let criteria = criteria_builder.build(query_tree, primitive_query, filtered_candidates)?;
+        let sort_criteria = None;
+        let criteria = criteria_builder.build(
+            query_tree,
+            primitive_query,
+            filtered_candidates,
+            sort_criteria,
+        )?;
 
         match self.index.distinct_field(self.rtxn)? {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),

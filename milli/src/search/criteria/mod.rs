@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use roaring::RoaringBitmap;
 
@@ -273,8 +274,9 @@ impl<'t> CriteriaBuilder<'t> {
         query_tree: Option<Operation>,
         primitive_query: Option<Vec<PrimitiveQueryPart>>,
         filtered_candidates: Option<RoaringBitmap>,
+        sort_criteria: Option<Vec<String>>,
     ) -> Result<Final<'t>> {
-        use crate::criterion::Criterion as Name;
+        use crate::criterion::{AscDesc as AscDescName, Criterion as Name};
 
         let primitive_query = primitive_query.unwrap_or_default();
 
@@ -282,8 +284,30 @@ impl<'t> CriteriaBuilder<'t> {
             Box::new(Initial::new(query_tree, filtered_candidates)) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
             criterion = match name {
-                Name::Typo => Box::new(Typo::new(self, criterion)),
                 Name::Words => Box::new(Words::new(self, criterion)),
+                Name::Typo => Box::new(Typo::new(self, criterion)),
+                Name::Sort => match sort_criteria {
+                    Some(ref sort_criteria) => {
+                        for text in sort_criteria {
+                            criterion = match AscDescName::from_str(text)? {
+                                AscDescName::Asc(field) => Box::new(AscDesc::asc(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    field,
+                                )?),
+                                AscDescName::Desc(field) => Box::new(AscDesc::desc(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    field,
+                                )?),
+                            };
+                        }
+                        criterion
+                    }
+                    None => criterion,
+                },
                 Name::Proximity => Box::new(Proximity::new(self, criterion)),
                 Name::Attribute => Box::new(Attribute::new(self, criterion)),
                 Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
