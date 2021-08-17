@@ -131,7 +131,7 @@ use std::ops::Bound::{Excluded, Included, Unbounded};
 
 use either::{Either, Left, Right};
 use heed::types::{ByteSlice, DecodeIgnore};
-use heed::{Database, LazyDecode, RoRange};
+use heed::{Database, LazyDecode, RoRange, RoRevRange};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{
@@ -181,6 +181,65 @@ impl<'t> FacetStringGroupRange<'t> {
 }
 
 impl<'t> Iterator for FacetStringGroupRange<'t> {
+    type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, level, left, right), docids))) => {
+                let must_be_returned = match self.end {
+                    Included(end) => right <= end,
+                    Excluded(end) => right < end,
+                    Unbounded => true,
+                };
+                if must_be_returned {
+                    match docids.decode() {
+                        Ok((bounds, docids)) => Some(Ok(((level, left, right), (bounds, docids)))),
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
+                }
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
+pub struct FacetStringGroupRevRange<'t> {
+    iter: RoRevRange<
+        't,
+        FacetLevelValueU32Codec,
+        LazyDecode<FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>>,
+    >,
+    end: Bound<u32>,
+}
+
+impl<'t> FacetStringGroupRevRange<'t> {
+    pub fn new<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        db: Database<X, Y>,
+        field_id: FieldId,
+        level: NonZeroU8,
+        left: Bound<u32>,
+        right: Bound<u32>,
+    ) -> heed::Result<FacetStringGroupRevRange<'t>> {
+        let db = db.remap_types::<
+            FacetLevelValueU32Codec,
+            FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>,
+        >();
+        let left_bound = match left {
+            Included(left) => Included((field_id, level, left, u32::MIN)),
+            Excluded(left) => Excluded((field_id, level, left, u32::MIN)),
+            Unbounded => Included((field_id, level, u32::MIN, u32::MIN)),
+        };
+        let right_bound = Included((field_id, level, u32::MAX, u32::MAX));
+        let iter = db.lazily_decode_data().rev_range(rtxn, &(left_bound, right_bound))?;
+        Ok(FacetStringGroupRevRange { iter, end: right })
+    }
+}
+
+impl<'t> Iterator for FacetStringGroupRevRange<'t> {
     type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
 
     fn next(&mut self) -> Option<Self::Item> {
