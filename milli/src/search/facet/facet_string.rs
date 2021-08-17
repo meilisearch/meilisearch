@@ -299,7 +299,15 @@ impl<'t> FacetStringIter<'t> {
         field_id: FieldId,
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetStringIter<'t>> {
-        FacetStringIter::new(rtxn, index, field_id, documents_ids, true)
+        let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
+        let highest_iter = Self::highest_iter(rtxn, index, db, field_id)?;
+        Ok(FacetStringIter {
+            rtxn,
+            db,
+            field_id,
+            level_iters: vec![(documents_ids, highest_iter)],
+            must_reduce: true,
+        })
     }
 
     pub fn new_non_reducing(
@@ -308,42 +316,14 @@ impl<'t> FacetStringIter<'t> {
         field_id: FieldId,
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetStringIter<'t>> {
-        FacetStringIter::new(rtxn, index, field_id, documents_ids, false)
-    }
-
-    fn new(
-        rtxn: &'t heed::RoTxn,
-        index: &'t Index,
-        field_id: FieldId,
-        documents_ids: RoaringBitmap,
-        must_reduce: bool,
-    ) -> heed::Result<FacetStringIter<'t>> {
         let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
-        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
-        let highest_iter = match NonZeroU8::new(highest_level) {
-            Some(highest_level) => Left(FacetStringGroupRange::new(
-                rtxn,
-                index.facet_id_string_docids,
-                field_id,
-                highest_level,
-                Unbounded,
-                Unbounded,
-            )?),
-            None => Right(FacetStringLevelZeroRange::new(
-                rtxn,
-                index.facet_id_string_docids,
-                field_id,
-                Unbounded,
-                Unbounded,
-            )?),
-        };
-
+        let highest_iter = Self::highest_iter(rtxn, index, db, field_id)?;
         Ok(FacetStringIter {
             rtxn,
             db,
             field_id,
             level_iters: vec![(documents_ids, highest_iter)],
-            must_reduce,
+            must_reduce: false,
         })
     }
 
@@ -358,6 +338,34 @@ impl<'t> FacetStringIter<'t> {
             .last()
             .transpose()?
             .map(|(key_bytes, _)| key_bytes[2])) // the level is the third bit
+    }
+
+    fn highest_iter<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        db: Database<X, Y>,
+        field_id: FieldId,
+    ) -> heed::Result<Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>> {
+        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
+        match NonZeroU8::new(highest_level) {
+            Some(highest_level) => FacetStringGroupRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                highest_level,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Left),
+            None => FacetStringLevelZeroRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Right),
+        }
     }
 }
 
