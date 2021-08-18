@@ -75,6 +75,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
     filterable_fields: Setting<HashSet<String>>,
+    sortable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<String>>,
     stop_words: Setting<BTreeSet<String>>,
     distinct_field: Setting<String>,
@@ -102,6 +103,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             searchable_fields: Setting::NotSet,
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
+            sortable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             distinct_field: Setting::NotSet,
@@ -133,6 +135,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn set_filterable_fields(&mut self, names: HashSet<String>) {
         self.filterable_fields = Setting::Set(names);
+    }
+
+    pub fn set_sortable_fields(&mut self, names: HashSet<String>) {
+        self.sortable_fields = Setting::Set(names);
     }
 
     pub fn reset_criteria(&mut self) {
@@ -392,6 +398,23 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
+    fn update_sortable(&mut self) -> Result<()> {
+        match self.sortable_fields {
+            Setting::Set(ref fields) => {
+                let mut new_fields = HashSet::new();
+                for name in fields {
+                    new_fields.insert(name.clone());
+                }
+                self.index.put_sortable_fields(self.wtxn, &new_fields)?;
+            }
+            Setting::Reset => {
+                self.index.delete_sortable_fields(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+        Ok(())
+    }
+
     fn update_criteria(&mut self) -> Result<()> {
         match self.criteria {
             Setting::Set(ref fields) => {
@@ -446,6 +469,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
         self.update_displayed()?;
         self.update_filterable()?;
+        self.update_sortable()?;
         self.update_distinct_field()?;
         self.update_criteria()?;
         self.update_primary_key()?;
@@ -719,7 +743,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name")]);
-        builder.set_criteria(vec![S("asc(age)")]);
+        builder.set_criteria(vec![S("age:asc")]);
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
@@ -953,7 +977,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         builder.set_filterable_fields(hashset! { S("age"), S("toto") });
-        builder.set_criteria(vec!["asc(toto)".to_string()]);
+        builder.set_criteria(vec!["toto:asc".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -990,7 +1014,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
-        builder.set_criteria(vec!["asc(toto)".to_string()]);
+        builder.set_criteria(vec!["toto:asc".to_string()]);
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 

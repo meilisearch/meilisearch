@@ -1030,7 +1030,7 @@ mod tests {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
             searchable_attributes: Setting::Set(vec!["age".to_string()]),
             filterable_attributes: Setting::Set(hashset! { "age".to_string() }),
-            criteria: Setting::Set(vec!["asc(age)".to_string()]),
+            criteria: Setting::Set(vec!["age:asc".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
             synonyms: Setting::Set(hashmap! { "alex".to_string() => vec!["alexey".to_string()] }),
         };
@@ -1058,7 +1058,7 @@ mod tests {
                 Token::Str("criteria"),
                 Token::Some,
                 Token::Seq { len: Some(1) },
-                Token::Str("asc(age)"),
+                Token::Str("age:asc"),
                 Token::SeqEnd,
                 Token::Str("stopWords"),
                 Token::Some,

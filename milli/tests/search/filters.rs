@@ -29,7 +29,7 @@ macro_rules! test_filter {
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
             let filtered_ids = search::expected_filtered_ids($filter);
-            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true)
+            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true, &[])
                 .into_iter()
                 .filter_map(|d| if filtered_ids.contains(&d.id) { Some(d.id) } else { None })
                 .collect();

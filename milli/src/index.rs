@@ -28,6 +28,7 @@ pub mod main_key {
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
+    pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
@@ -446,13 +447,45 @@ impl Index {
         Ok(fields_ids)
     }
 
+    /* sortable fields */
+
+    /// Writes the sortable fields names in the database.
+    pub(crate) fn put_sortable_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &HashSet<String>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::SORTABLE_FIELDS_KEY, fields)
+    }
+
+    /// Deletes the sortable fields ids in the database.
+    pub(crate) fn delete_sortable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::SORTABLE_FIELDS_KEY)
+    }
+
+    /// Returns the sortable fields names.
+    pub fn sortable_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::SORTABLE_FIELDS_KEY)?
+            .unwrap_or_default())
+    }
+
+    /// Identical to `sortable_fields`, but returns ids instead.
+    pub fn sortable_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let fields = self.sortable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
+    }
+
     /* faceted documents ids */
 
     /// Returns the faceted fields names.
     ///
-    /// Faceted fields are the union of all the filterable, distinct, and Asc/Desc fields.
+    /// Faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
     pub fn faceted_fields(&self, rtxn: &RoTxn) -> Result<HashSet<String>> {
         let filterable_fields = self.filterable_fields(rtxn)?;
+        let sortable_fields = self.sortable_fields(rtxn)?;
         let distinct_field = self.distinct_field(rtxn)?;
         let asc_desc_fields =
             self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
@@ -461,6 +494,7 @@ impl Index {
             });
 
         let mut faceted_fields = filterable_fields;
+        faceted_fields.extend(sortable_fields);
         faceted_fields.extend(asc_desc_fields);
         if let Some(field) = distinct_field {
             faceted_fields.insert(field.to_owned());
