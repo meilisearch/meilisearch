@@ -1699,8 +1699,8 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.2.4"
-source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.2.4#135d08dce465a756abaf6a1bcad70f315bda99b9"
+version = "0.2.5"
+source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.5#c0b5cf741ed9485147f2cbe523f2214d4fa4c395"
 dependencies = [
  "character_converter",
  "cow-utils",
@@ -1740,8 +1740,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.10.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.10.0#51581d14f859b01411b586475f48b54eb81b7b1d"
+version = "0.10.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.10.1#198c416bd8dd1813d5e6efe37cc0e6273185a112"
 dependencies = [
  "bstr",
  "byteorder",
