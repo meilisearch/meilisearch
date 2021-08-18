@@ -1706,7 +1706,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-
+version = "0.10.1"
+source = "git+https://github.com/meilisearch/milli.git?branch=plug-new-indexer#e37100bd7393880eec2571089711f79b71849eb5"
 dependencies = [
  "bstr",
  "byte-unit",
