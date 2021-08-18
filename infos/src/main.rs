@@ -207,6 +207,24 @@ enum Command {
         word2: String,
     },
 
+    /// Outputs a CSV with the proximities for the two specified words and
+    /// the documents ids where these relations appears.
+    ///
+    /// `word1`, `prefix` defines the word pair specified *in this specific order*.
+    /// `proximity` defines the proximity between the two specified words.
+    /// `documents_ids` defines the documents ids where the relation appears.
+    WordPrefixPairProximitiesDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// First word of the word pair.
+        word1: String,
+
+        /// Second word of the word pair.
+        prefix: String,
+    },
+
     /// Outputs the words FST to standard output.
     ///
     /// One can use the FST binary helper to dissect and analyze it,
@@ -281,6 +299,9 @@ fn main() -> anyhow::Result<()> {
         DatabaseStats { database } => database_stats(&index, &rtxn, &database),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
+        }
+        WordPrefixPairProximitiesDocids { full_display, word1, prefix } => {
+            word_prefix_pair_proximities_docids(&index, &rtxn, !full_display, word1, prefix)
         }
         ExportWordsFst => export_words_fst(&index, &rtxn),
         ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
@@ -1127,6 +1148,49 @@ fn word_pair_proximities_docids(
             format!("{:?}", docids.iter().collect::<Vec<_>>())
         };
         wtr.write_record(&[&word1, &word2, &proximity.to_string(), &docids])?;
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn word_prefix_pair_proximities_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    word1: String,
+    word_prefix: String,
+) -> anyhow::Result<()> {
+    use heed::types::ByteSlice;
+    use milli::RoaringBitmapCodec;
+
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["word1", "word_prefix", "proximity", "documents_ids"])?;
+
+    // Create the prefix key with only the pair of words.
+    let mut prefix = Vec::with_capacity(word1.len() + word_prefix.len() + 1);
+    prefix.extend_from_slice(word1.as_bytes());
+    prefix.push(0);
+    prefix.extend_from_slice(word_prefix.as_bytes());
+
+    let db = index.word_prefix_pair_proximity_docids.as_polymorph();
+    let iter = db.prefix_iter::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &prefix)?;
+    for result in iter {
+        let (key, docids) = result?;
+
+        // Skip keys that are longer than the requested one,
+        // a longer key means that the second word is a prefix of the request word.
+        if key.len() != prefix.len() + 1 {
+            continue;
+        }
+
+        let proximity = key.last().unwrap();
+        let docids = if debug {
+            format!("{:?}", docids)
+        } else {
+            format!("{:?}", docids.iter().collect::<Vec<_>>())
+        };
+        wtr.write_record(&[&word1, &word_prefix, &proximity.to_string(), &docids])?;
     }
 
     Ok(wtr.flush()?)

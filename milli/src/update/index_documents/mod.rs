@@ -21,7 +21,7 @@ use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 pub use self::helpers::{
     create_sorter, create_writer, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader,
+    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
@@ -81,7 +81,7 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
-    words_prefix_threshold: Option<f64>,
+    words_prefix_threshold: Option<u32>,
     max_prefix_length: Option<usize>,
     words_positions_level_group_size: Option<NonZeroU32>,
     words_positions_min_level_size: Option<NonZeroU32>,

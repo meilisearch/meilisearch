@@ -8,7 +8,7 @@ use crate::{Index, Result, SmallString32};
 pub struct WordsPrefixesFst<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    threshold: f64,
+    threshold: u32,
     max_prefix_length: usize,
     _update_id: u64,
 }
@@ -22,20 +22,20 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
         WordsPrefixesFst {
             wtxn,
             index,
-            threshold: 0.1 / 100.0, // .01%
+            threshold: 100,
             max_prefix_length: 4,
             _update_id: update_id,
         }
     }
 
-    /// Set the ratio of concerned words required to make a prefix be part of the words prefixes
+    /// Set the number of words required to make a prefix be part of the words prefixes
     /// database. If a word prefix is supposed to match more than this number of words in the
     /// dictionnary, therefore this prefix is added to the words prefixes datastructures.
     ///
-    /// Default value is `0.01` or `1%`. This value must be between 0 and 1 and will be clamped
-    /// to these bounds otherwise.
-    pub fn threshold(&mut self, value: f64) -> &mut Self {
-        self.threshold = value.min(1.0).max(0.0); // clamp [0, 1]
+    /// Default value is 100. This value must be higher than 50 and will be clamped
+    /// to this bound otherwise.
+    pub fn threshold(&mut self, value: u32) -> &mut Self {
+        self.threshold = value.max(50);
         self
     }
 
@@ -50,8 +50,6 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
 
     pub fn execute(self) -> Result<()> {
         let words_fst = self.index.words_fst(&self.wtxn)?;
-        let number_of_words = words_fst.len();
-        let min_number_of_words = (number_of_words as f64 * self.threshold) as usize;
 
         let mut prefix_fsts = Vec::with_capacity(self.max_prefix_length);
         for n in 1..=self.max_prefix_length {
@@ -80,7 +78,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
                 current_prefix_count += 1;
 
                 // There is enough words corresponding to this prefix to add it to the cache.
-                if current_prefix_count == min_number_of_words {
+                if current_prefix_count >= self.threshold {
                     builder.insert(prefix)?;
                 }
             }
