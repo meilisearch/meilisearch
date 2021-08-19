@@ -171,13 +171,11 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 
 Hey! We're glad you're thinking about contributing to MeiliSearch! However, we are currently working on a huge refactor and accepting PRs on this repository wouldn't be productive. We are sorry about this! Be sure we are doing our best so that you can contribute to MeiliSearch again as soon as possible ❤️
 
-## Code base
+## Core engine and tokenizer
 
-To perform search and indexation, MeiliSearch uses [the `milli` library](https://github.com/meilisearch/milli), present in another repository. This library only works for one index. <br>
-The MeiliSearch code base available in this repository manages multiple indexes handling, the update store, the HTTP API, and serves a pretty HTTP dashboard.
+The code in this repository is only concerned with managing multiple indexes, handling the update store, and exposing an HTTP API.
 
-Also, the tokenization is handled by [the `tokenizer` library](https://github.com/meilisearch/tokenizer/).
-
+Search and indexation are the domain of our core engine, [`milli`](https://github.com/meilisearch/milli), while tokenization is handled by [our `tokenizer` library](https://github.com/meilisearch/tokenizer/).
 ## Telemetry
 
 MeiliSearch collects anonymous data regarding general usage.
