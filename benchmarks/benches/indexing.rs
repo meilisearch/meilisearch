@@ -31,48 +31,43 @@ fn setup_index() -> Index {
 }
 
 fn indexing_songs_default(c: &mut Criterion) {
-    let index = setup_index();
-
-    let update_builder = UpdateBuilder::new(0);
-    let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
-
-    builder.set_primary_key("id".to_owned());
-    let displayed_fields = ["title", "album", "artist", "genre", "country", "released", "duration"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    builder.set_displayed_fields(displayed_fields);
-
-    let searchable_fields = ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
-    builder.set_searchable_fields(searchable_fields);
-
-    let faceted_fields = ["released-timestamp", "duration-float", "genre", "country", "artist"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    builder.set_filterable_fields(faceted_fields);
-    builder.execute(|_, _| ()).unwrap();
-    wtxn.commit().unwrap();
-
-    let index_ref = &index;
-
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
     group.bench_function("Indexing songs with default settings", |b| {
         b.iter_with_setup(
             move || {
+                let index = setup_index();
+
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let builder = update_builder.delete_documents(&mut wtxn, index_ref).unwrap();
-                builder.execute().unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields =
+                    ["title", "album", "artist", "genre", "country", "released", "duration"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let faceted_fields =
+                    ["released-timestamp", "duration-float", "genre", "country", "artist"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                builder.set_filterable_fields(faceted_fields);
+                builder.execute(|_, _| ()).unwrap();
                 wtxn.commit().unwrap();
-                ()
+                index
             },
-            move |_| {
+            move |index| {
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, index_ref);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
 
                 builder.update_format(UpdateFormat::Csv);
                 builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
@@ -82,53 +77,48 @@ fn indexing_songs_default(c: &mut Criterion) {
                 ));
                 builder.execute(reader, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
             },
         )
     });
-
-    index.prepare_for_closing().wait();
 }
 
 fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
-    let index = setup_index();
-
-    let update_builder = UpdateBuilder::new(0);
-    let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
-
-    builder.set_primary_key("id".to_owned());
-    let displayed_fields = ["title", "album", "artist", "genre", "country", "released", "duration"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    builder.set_displayed_fields(displayed_fields);
-
-    let searchable_fields = ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
-    builder.set_searchable_fields(searchable_fields);
-
-    let faceted_fields = ["genre", "country", "artist"].iter().map(|s| s.to_string()).collect();
-    builder.set_filterable_fields(faceted_fields);
-    builder.execute(|_, _| ()).unwrap();
-    wtxn.commit().unwrap();
-
-    let index_ref = &index;
-
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
     group.bench_function("Indexing songs without faceted numbers", |b| {
         b.iter_with_setup(
             move || {
+                let index = setup_index();
+
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let builder = update_builder.delete_documents(&mut wtxn, index_ref).unwrap();
-                builder.execute().unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields =
+                    ["title", "album", "artist", "genre", "country", "released", "duration"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let faceted_fields =
+                    ["genre", "country", "artist"].iter().map(|s| s.to_string()).collect();
+                builder.set_filterable_fields(faceted_fields);
+                builder.execute(|_, _| ()).unwrap();
                 wtxn.commit().unwrap();
-                ()
+                index
             },
-            move |_| {
+            move |index| {
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, index_ref);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
 
                 builder.update_format(UpdateFormat::Csv);
                 builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
@@ -138,49 +128,44 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 ));
                 builder.execute(reader, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
             },
         )
     });
-    index.prepare_for_closing().wait();
 }
 
 fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
-    let index = setup_index();
-
-    let update_builder = UpdateBuilder::new(0);
-    let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
-
-    builder.set_primary_key("id".to_owned());
-    let displayed_fields = ["title", "album", "artist", "genre", "country", "released", "duration"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    builder.set_displayed_fields(displayed_fields);
-
-    let searchable_fields = ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
-    builder.set_searchable_fields(searchable_fields);
-    builder.execute(|_, _| ()).unwrap();
-    wtxn.commit().unwrap();
-
-    let index_ref = &index;
-
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
     group.bench_function("Indexing songs without any facets", |b| {
         b.iter_with_setup(
             move || {
+                let index = setup_index();
+
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let builder = update_builder.delete_documents(&mut wtxn, index_ref).unwrap();
-                builder.execute().unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields =
+                    ["title", "album", "artist", "genre", "country", "released", "duration"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+                builder.execute(|_, _| ()).unwrap();
                 wtxn.commit().unwrap();
-                ()
+                index
             },
-            move |_| {
+            move |index| {
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, index_ref);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
 
                 builder.update_format(UpdateFormat::Csv);
                 builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
@@ -190,49 +175,43 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 ));
                 builder.execute(reader, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
             },
         )
     });
-    index.prepare_for_closing().wait();
 }
 
 fn indexing_wiki(c: &mut Criterion) {
-    let index = setup_index();
-
-    let update_builder = UpdateBuilder::new(0);
-    let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
-
-    builder.set_primary_key("id".to_owned());
-    let displayed_fields = ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
-    builder.set_displayed_fields(displayed_fields);
-
-    let searchable_fields = ["title", "body"].iter().map(|s| s.to_string()).collect();
-    builder.set_searchable_fields(searchable_fields);
-
-    // there is NO faceted fields at all
-
-    builder.execute(|_, _| ()).unwrap();
-    wtxn.commit().unwrap();
-
-    let index_ref = &index;
-
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
     group.bench_function("Indexing wiki", |b| {
         b.iter_with_setup(
             move || {
+                let index = setup_index();
+
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let builder = update_builder.delete_documents(&mut wtxn, index_ref).unwrap();
-                builder.execute().unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields =
+                    ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields = ["title", "body"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                // there is NO faceted fields at all
+
+                builder.execute(|_, _| ()).unwrap();
                 wtxn.commit().unwrap();
-                ()
+                index
             },
-            move |_| {
+            move |index| {
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, index_ref);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
 
                 builder.update_format(UpdateFormat::Csv);
                 builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
@@ -242,53 +221,48 @@ fn indexing_wiki(c: &mut Criterion) {
                 ));
                 builder.execute(reader, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
             },
         )
     });
-    index.prepare_for_closing().wait();
 }
 
 fn indexing_movies_default(c: &mut Criterion) {
-    let index = setup_index();
-
-    let update_builder = UpdateBuilder::new(0);
-    let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
-
-    builder.set_primary_key("id".to_owned());
-    let displayed_fields = ["title", "poster", "overview", "release_date", "genres"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    builder.set_displayed_fields(displayed_fields);
-
-    let searchable_fields = ["title", "overview"].iter().map(|s| s.to_string()).collect();
-    builder.set_searchable_fields(searchable_fields);
-
-    let faceted_fields = ["released_date", "genres"].iter().map(|s| s.to_string()).collect();
-    builder.set_filterable_fields(faceted_fields);
-
-    builder.execute(|_, _| ()).unwrap();
-    wtxn.commit().unwrap();
-
-    let index_ref = &index;
-
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
     group.bench_function("Indexing movies with default settings", |b| {
         b.iter_with_setup(
             move || {
+                let index = setup_index();
+
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let builder = update_builder.delete_documents(&mut wtxn, index_ref).unwrap();
-                builder.execute().unwrap();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields = ["title", "poster", "overview", "release_date", "genres"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["title", "overview"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let faceted_fields =
+                    ["released_date", "genres"].iter().map(|s| s.to_string()).collect();
+                builder.set_filterable_fields(faceted_fields);
+
+                builder.execute(|_, _| ()).unwrap();
                 wtxn.commit().unwrap();
-                ()
+                index
             },
-            move |_| {
+            move |index| {
                 let update_builder = UpdateBuilder::new(0);
-                let mut wtxn = index_ref.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, index_ref);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
 
                 builder.update_format(UpdateFormat::Json);
                 builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
@@ -296,11 +270,11 @@ fn indexing_movies_default(c: &mut Criterion) {
                     .expect(&format!("could not find the dataset in: {}", datasets_paths::MOVIES));
                 builder.execute(reader, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
             },
         )
     });
-
-    index.prepare_for_closing().wait();
 }
 
 criterion_group!(
