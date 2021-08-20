@@ -18,8 +18,6 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
-use crate::criterion::AscDesc;
-use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{DocumentId, Index, Result};
 
@@ -39,7 +37,6 @@ pub struct Search<'a> {
     filter: Option<FilterCondition>,
     offset: usize,
     limit: usize,
-    sort_criteria: Option<Vec<AscDesc>>,
     optional_words: bool,
     authorize_typos: bool,
     words_limit: usize,
@@ -54,7 +51,6 @@ impl<'a> Search<'a> {
             filter: None,
             offset: 0,
             limit: 20,
-            sort_criteria: None,
             optional_words: true,
             authorize_typos: true,
             words_limit: 10,
@@ -75,11 +71,6 @@ impl<'a> Search<'a> {
 
     pub fn limit(&mut self, limit: usize) -> &mut Search<'a> {
         self.limit = limit;
-        self
-    }
-
-    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
-        self.sort_criteria = Some(criteria);
         self
     }
 
@@ -143,29 +134,8 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
-        // We check that we are allowed to use the sort criteria, we check
-        // that they are declared in the sortable fields.
-        let sortable_fields = self.index.sortable_fields(self.rtxn)?;
-        if let Some(sort_criteria) = &self.sort_criteria {
-            for asc_desc in sort_criteria {
-                let field = asc_desc.field();
-                if !sortable_fields.contains(field) {
-                    return Err(UserError::InvalidSortableAttribute {
-                        field: field.to_string(),
-                        valid_fields: sortable_fields,
-                    }
-                    .into());
-                }
-            }
-        }
-
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let criteria = criteria_builder.build(
-            query_tree,
-            primitive_query,
-            filtered_candidates,
-            self.sort_criteria.clone(),
-        )?;
+        let criteria = criteria_builder.build(query_tree, primitive_query, filtered_candidates)?;
 
         match self.index.distinct_field(self.rtxn)? {
             None => self.perform_sort(NoopDistinct, matching_words, criteria),
@@ -229,7 +199,6 @@ impl fmt::Debug for Search<'_> {
             filter,
             offset,
             limit,
-            sort_criteria,
             optional_words,
             authorize_typos,
             words_limit,
@@ -241,7 +210,6 @@ impl fmt::Debug for Search<'_> {
             .field("filter", filter)
             .field("offset", offset)
             .field("limit", limit)
-            .field("sort_criteria", sort_criteria)
             .field("optional_words", optional_words)
             .field("authorize_typos", authorize_typos)
             .field("words_limit", words_limit)

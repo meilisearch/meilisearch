@@ -1,4 +1,3 @@
-use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use big_s::S;
@@ -6,7 +5,7 @@ use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::update::{IndexDocuments, Settings, UpdateFormat};
-use milli::{AscDesc, Criterion, DocumentId, Index};
+use milli::{Criterion, DocumentId, Index};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
 
@@ -34,10 +33,6 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let criteria = criteria.iter().map(|c| c.to_string()).collect();
     builder.set_criteria(criteria);
     builder.set_filterable_fields(hashset! {
-        S("tag"),
-        S("asc_desc_rank"),
-    });
-    builder.set_sortable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
     });
@@ -72,7 +67,6 @@ pub fn expected_order(
     criteria: &[Criterion],
     authorize_typo: bool,
     optional_words: bool,
-    sort_by: &[AscDesc],
 ) -> Vec<TestDocument> {
     let dataset =
         serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect();
@@ -96,14 +90,6 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.proximity_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Asc(S("tag"))] => {
-                    group.sort_by_key(|d| d.sort_by_rank);
-                    new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
-                }
-                Criterion::Sort if sort_by == [AscDesc::Desc(S("tag"))] => {
-                    group.sort_by_key(|d| Reverse(d.sort_by_rank));
-                    new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
-                }
                 Criterion::Typo => {
                     group.sort_by_key(|d| d.typo_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.typo_rank).map(Vec::from));
@@ -118,13 +104,11 @@ pub fn expected_order(
                         .extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 }
                 Criterion::Desc(field_name) if field_name == "asc_desc_rank" => {
-                    group.sort_by_key(|d| Reverse(d.asc_desc_rank));
+                    group.sort_by_key(|d| std::cmp::Reverse(d.asc_desc_rank));
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.asc_desc_rank).map(Vec::from));
                 }
-                Criterion::Asc(_) | Criterion::Desc(_) | Criterion::Sort => {
-                    new_groups.push(group.clone())
-                }
+                Criterion::Asc(_) | Criterion::Desc(_) => new_groups.push(group.clone()),
             }
         }
         groups = std::mem::take(&mut new_groups);
@@ -201,7 +185,6 @@ pub struct TestDocument {
     pub attribute_rank: u32,
     pub exact_rank: u32,
     pub asc_desc_rank: u32,
-    pub sort_by_rank: u32,
     pub title: String,
     pub description: String,
     pub tag: String,

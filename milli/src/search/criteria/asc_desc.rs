@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
-use crate::search::facet::{FacetNumberIter, FacetStringIter};
+use crate::search::facet::FacetNumberIter;
 use crate::search::query_tree::Operation;
 use crate::{FieldId, Index, Result};
 
@@ -20,7 +20,7 @@ pub struct AscDesc<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     field_name: String,
     field_id: Option<FieldId>,
-    is_ascending: bool,
+    ascending: bool,
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
     allowed_candidates: RoaringBitmap,
@@ -53,16 +53,12 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
-        is_ascending: bool,
+        ascending: bool,
     ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
         let faceted_candidates = match field_id {
-            Some(field_id) => {
-                let number_faceted = index.number_faceted_documents_ids(rtxn, field_id)?;
-                let string_faceted = index.string_faceted_documents_ids(rtxn, field_id)?;
-                number_faceted | string_faceted
-            }
+            Some(field_id) => index.number_faceted_documents_ids(rtxn, field_id)?,
             None => RoaringBitmap::default(),
         };
 
@@ -71,7 +67,7 @@ impl<'t> AscDesc<'t> {
             rtxn,
             field_name,
             field_id,
-            is_ascending,
+            ascending,
             query_tree: None,
             candidates: Box::new(std::iter::empty()),
             allowed_candidates: RoaringBitmap::new(),
@@ -91,7 +87,7 @@ impl<'t> Criterion for AscDesc<'t> {
         loop {
             debug!(
                 "Facet {}({}) iteration",
-                if self.is_ascending { "Asc" } else { "Desc" },
+                if self.ascending { "Asc" } else { "Desc" },
                 self.field_name
             );
 
@@ -140,7 +136,7 @@ impl<'t> Criterion for AscDesc<'t> {
                                 self.index,
                                 self.rtxn,
                                 field_id,
-                                self.is_ascending,
+                                self.ascending,
                                 candidates & &self.faceted_candidates,
                             )?,
                             None => Box::new(std::iter::empty()),
@@ -171,49 +167,31 @@ fn facet_ordered<'t>(
     index: &'t Index,
     rtxn: &'t heed::RoTxn,
     field_id: FieldId,
-    is_ascending: bool,
+    ascending: bool,
     candidates: RoaringBitmap,
 ) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
     if candidates.len() <= CANDIDATES_THRESHOLD {
-        let number_iter = iterative_facet_number_ordered_iter(
-            index,
-            rtxn,
-            field_id,
-            is_ascending,
-            candidates.clone(),
-        )?;
-        let string_iter =
-            iterative_facet_string_ordered_iter(index, rtxn, field_id, is_ascending, candidates)?;
-        Ok(Box::new(number_iter.chain(string_iter).map(Ok)) as Box<dyn Iterator<Item = _>>)
+        let iter = iterative_facet_ordered_iter(index, rtxn, field_id, ascending, candidates)?;
+        Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
     } else {
-        let facet_number_fn = if is_ascending {
+        let facet_fn = if ascending {
             FacetNumberIter::new_reducing
         } else {
             FacetNumberIter::new_reverse_reducing
         };
-        let number_iter = facet_number_fn(rtxn, index, field_id, candidates.clone())?
-            .map(|res| res.map(|(_, docids)| docids));
-
-        let facet_string_fn = if is_ascending {
-            FacetStringIter::new_reducing
-        } else {
-            FacetStringIter::new_reverse_reducing
-        };
-        let string_iter = facet_string_fn(rtxn, index, field_id, candidates)?
-            .map(|res| res.map(|(_, _, docids)| docids));
-
-        Ok(Box::new(number_iter.chain(string_iter)))
+        let iter = facet_fn(rtxn, index, field_id, candidates)?;
+        Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
     }
 }
 
-/// Fetch the whole list of candidates facet number values one by one and order them by it.
+/// Fetch the whole list of candidates facet values one by one and order them by it.
 ///
 /// This function is fast when the amount of candidates to rank is small.
-fn iterative_facet_number_ordered_iter<'t>(
+fn iterative_facet_ordered_iter<'t>(
     index: &'t Index,
     rtxn: &'t heed::RoTxn,
     field_id: FieldId,
-    is_ascending: bool,
+    ascending: bool,
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = RoaringBitmap> + 't> {
     let mut docids_values = Vec::with_capacity(candidates.len() as usize);
@@ -221,14 +199,14 @@ fn iterative_facet_number_ordered_iter<'t>(
         let left = (field_id, docid, f64::MIN);
         let right = (field_id, docid, f64::MAX);
         let mut iter = index.field_id_docid_facet_f64s.range(rtxn, &(left..=right))?;
-        let entry = if is_ascending { iter.next() } else { iter.last() };
+        let entry = if ascending { iter.next() } else { iter.last() };
         if let Some(((_, _, value), ())) = entry.transpose()? {
             docids_values.push((docid, OrderedFloat(value)));
         }
     }
     docids_values.sort_unstable_by_key(|(_, v)| *v);
     let iter = docids_values.into_iter();
-    let iter = if is_ascending {
+    let iter = if ascending {
         Box::new(iter) as Box<dyn Iterator<Item = _>>
     } else {
         Box::new(iter.rev())
@@ -238,49 +216,7 @@ fn iterative_facet_number_ordered_iter<'t>(
     // required to collect the result into an owned collection (a Vec).
     // https://github.com/rust-itertools/itertools/issues/499
     let vec: Vec<_> = iter
-        .group_by(|(_, v)| *v)
-        .into_iter()
-        .map(|(_, ids)| ids.map(|(id, _)| id).collect())
-        .collect();
-
-    Ok(vec.into_iter())
-}
-
-/// Fetch the whole list of candidates facet string values one by one and order them by it.
-///
-/// This function is fast when the amount of candidates to rank is small.
-fn iterative_facet_string_ordered_iter<'t>(
-    index: &'t Index,
-    rtxn: &'t heed::RoTxn,
-    field_id: FieldId,
-    is_ascending: bool,
-    candidates: RoaringBitmap,
-) -> Result<impl Iterator<Item = RoaringBitmap> + 't> {
-    let mut docids_values = Vec::with_capacity(candidates.len() as usize);
-    for docid in candidates.iter() {
-        let left = (field_id, docid, "");
-        let right = (field_id, docid.saturating_add(1), "");
-        // FIXME Doing this means that it will never be possible to retrieve
-        //       the document with id 2^32, not sure this is a real problem.
-        let mut iter = index.field_id_docid_facet_strings.range(rtxn, &(left..right))?;
-        let entry = if is_ascending { iter.next() } else { iter.last() };
-        if let Some(((_, _, value), _)) = entry.transpose()? {
-            docids_values.push((docid, value));
-        }
-    }
-    docids_values.sort_unstable_by_key(|(_, v)| *v);
-    let iter = docids_values.into_iter();
-    let iter = if is_ascending {
-        Box::new(iter) as Box<dyn Iterator<Item = _>>
-    } else {
-        Box::new(iter.rev())
-    };
-
-    // The itertools GroupBy iterator doesn't provide an owned version, we are therefore
-    // required to collect the result into an owned collection (a Vec).
-    // https://github.com/rust-itertools/itertools/issues/499
-    let vec: Vec<_> = iter
-        .group_by(|(_, v)| *v)
+        .group_by(|(_, v)| v.clone())
         .into_iter()
         .map(|(_, ids)| ids.map(|(id, _)| id).collect())
         .collect();
