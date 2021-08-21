@@ -22,7 +22,7 @@ use std::result::Result as StdResult;
 use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
-pub use self::criterion::{default_criteria, AscDesc, Criterion};
+pub use self::criterion::{default_criteria, Criterion};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
