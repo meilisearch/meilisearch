@@ -3,6 +3,7 @@ mod extract_facet_number_docids;
 mod extract_facet_string_docids;
 mod extract_fid_docid_facet_values;
 mod extract_fid_word_count_docids;
+mod extract_geo_points;
 mod extract_word_docids;
 mod extract_word_level_position_docids;
 mod extract_word_pair_proximity_docids;
@@ -19,6 +20,7 @@ use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
+use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_level_position_docids::extract_word_level_position_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
@@ -37,6 +39,7 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: Option<HashSet<FieldId>>,
     faceted_fields: HashSet<FieldId>,
+    geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
@@ -54,7 +57,7 @@ pub(crate) fn data_from_obkv_documents(
         .collect();
 
     let (
-        docid_word_positions_chunks,
+        (docid_word_positions_chunks),
         (docid_fid_facet_numbers_chunks, docid_fid_facet_strings_chunks),
     ) = result?;
 
@@ -116,6 +119,16 @@ pub(crate) fn data_from_obkv_documents(
         merge_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetNumberDocids,
         "field-id-facet-number-docids",
+    );
+
+    spawn_extraction_task(
+        documents_chunk,
+        indexer.clone(),
+        lmdb_writer_sx.clone(),
+        move |documents, indexer| extract_geo_points(documents, indexer, geo_field_id),
+        merge_cbo_roaring_bitmaps,
+        TypedChunk::GeoPoints,
+        "geo-points",
     );
 
     Ok(())

@@ -298,7 +298,7 @@ impl Index {
 
     /* geo rtree */
 
-    pub(crate) fn put_geo_rtree<A: AsRef<[u8]>>(
+    pub(crate) fn put_geo_rtree(
         &self,
         wtxn: &mut RwTxn,
         rtree: &RTree<GeoPoint>,
