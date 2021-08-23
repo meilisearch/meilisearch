@@ -1,21 +1,27 @@
 use std::time::Duration;
 
-use actix_web::HttpResponse;
+use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{Settings, Unchecked};
 use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
+use crate::Data;
 
-pub mod document;
-pub mod dump;
-pub mod health;
-pub mod index;
-pub mod key;
-pub mod search;
-pub mod settings;
-pub mod stats;
+mod dump;
+mod indexes;
+
+pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/dumps").configure(dump::configure))
+        .service(web::resource("/keys").route(web::get().to(list_keys)))
+        .service(web::resource("/stats").route(web::get().to(get_stats)))
+        .service(web::resource("/version").route(web::get().to(get_version)))
+        .service(web::scope("/indexes").configure(indexes::configure));
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
@@ -43,7 +49,6 @@ pub enum UpdateType {
 impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
         use milli::update::IndexDocumentsMethod::*;
-
         match other.meta() {
             UpdateMeta::DocumentsAddition { method, .. } => {
                 let number = match other {
@@ -222,4 +227,148 @@ impl IndexUpdateResponse {
 /// ```
 pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
+}
+
+async fn get_stats(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+    let response = data.get_all_stats().await?;
+
+    debug!("returns: {:?}", response);
+    Ok(HttpResponse::Ok().json(response))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionResponse {
+    commit_sha: String,
+    commit_date: String,
+    pkg_version: String,
+}
+
+async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
+    let commit_sha = match option_env!("COMMIT_SHA") {
+        Some("") | None => env!("VERGEN_GIT_SHA"),
+        Some(commit_sha) => commit_sha,
+    };
+    let commit_date = match option_env!("COMMIT_DATE") {
+        Some("") | None => env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
+        Some(commit_date) => commit_date,
+    };
+
+    HttpResponse::Ok().json(VersionResponse {
+        commit_sha: commit_sha.to_string(),
+        commit_date: commit_date.to_string(),
+        pkg_version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}
+
+#[derive(Serialize)]
+struct KeysResponse {
+    private: Option<String>,
+    public: Option<String>,
+}
+
+pub async fn list_keys(data: GuardedData<Admin, Data>) -> HttpResponse {
+    let api_keys = data.api_keys.clone();
+    HttpResponse::Ok().json(&KeysResponse {
+        private: api_keys.private,
+        public: api_keys.public,
+    })
+}
+
+pub async fn get_health() -> Result<HttpResponse, ResponseError> {
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::data::Data;
+    use crate::extractors::authentication::GuardedData;
+
+    /// A type implemented for a route that uses a authentication policy `Policy`.
+    ///
+    /// This trait is used for regression testing of route authenticaton policies.
+    trait Is<Policy, T> {}
+
+    macro_rules! impl_is_policy {
+        ($($param:ident)*) => {
+            impl<Policy, Func, $($param,)* Res> Is<Policy, (($($param,)*), Res)> for Func
+                where Func: Fn(GuardedData<Policy, Data>, $($param,)*) -> Res {}
+
+        };
+    }
+
+    impl_is_policy! {}
+    impl_is_policy! {A}
+    impl_is_policy! {A B}
+    impl_is_policy! {A B C}
+    impl_is_policy! {A B C D}
+
+    /// Emits a compile error if a route doesn't have the correct authentication policy.
+    ///
+    /// This works by trying to cast the route function into a Is<Policy, _> type, where Policy it
+    /// the authentication policy defined for the route.
+    macro_rules! test_auth_routes {
+        ($($policy:ident => { $($route:expr,)*})*) => {
+            #[test]
+            fn test_auth() {
+                $($(let _: &dyn Is<$policy, _> = &$route;)*)*
+            }
+        };
+    }
+
+    test_auth_routes! {
+        Public => {
+            indexes::search::search_with_url_query,
+            indexes::search::search_with_post,
+
+            indexes::documents::get_document,
+            indexes::documents::get_all_documents,
+        }
+        Private => {
+            get_stats,
+            get_version,
+
+            indexes::create_index,
+            indexes::list_indexes,
+            indexes::get_index_stats,
+            indexes::delete_index,
+            indexes::update_index,
+            indexes::get_index,
+
+            dump::create_dump,
+
+            indexes::settings::filterable_attributes::get,
+            indexes::settings::displayed_attributes::get,
+            indexes::settings::searchable_attributes::get,
+            indexes::settings::stop_words::get,
+            indexes::settings::synonyms::get,
+            indexes::settings::distinct_attribute::get,
+            indexes::settings::filterable_attributes::update,
+            indexes::settings::displayed_attributes::update,
+            indexes::settings::searchable_attributes::update,
+            indexes::settings::stop_words::update,
+            indexes::settings::synonyms::update,
+            indexes::settings::distinct_attribute::update,
+            indexes::settings::filterable_attributes::delete,
+            indexes::settings::displayed_attributes::delete,
+            indexes::settings::searchable_attributes::delete,
+            indexes::settings::stop_words::delete,
+            indexes::settings::synonyms::delete,
+            indexes::settings::distinct_attribute::delete,
+            indexes::settings::delete_all,
+            indexes::settings::get_all,
+            indexes::settings::update_all,
+
+            indexes::documents::clear_all_documents,
+            indexes::documents::delete_documents,
+            indexes::documents::update_documents,
+            indexes::documents::add_documents,
+            indexes::documents::delete_document,
+
+            indexes::updates::get_all_updates_status,
+            indexes::updates::get_update_status,
+        }
+        Admin => { list_keys, }
+    }
 }

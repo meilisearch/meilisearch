@@ -49,12 +49,12 @@ async fn main() -> Result<(), MainError> {
                     release: sentry::release_name!(),
                     dsn: Some(SENTRY_DSN.parse()?),
                     before_send: Some(Arc::new(|event| {
-                        event
-                            .message
-                            .as_ref()
-                            .map(|msg| msg.to_lowercase().contains("no space left on device"))
-                            .unwrap_or(false)
-                            .then(|| event)
+                        if matches!(event.message, Some(ref msg) if msg.to_lowercase().contains("no space left on device"))
+                        {
+                            None
+                        } else {
+                            Some(event)
+                        }
                     })),
                     ..Default::default()
                 });
@@ -105,11 +105,11 @@ async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
     let commit_sha = match option_env!("COMMIT_SHA") {
-        Some("") | None => env!("VERGEN_SHA"),
+        Some("") | None => env!("VERGEN_GIT_SHA"),
         Some(commit_sha) => commit_sha,
     };
     let commit_date = match option_env!("COMMIT_DATE") {
-        Some("") | None => env!("VERGEN_COMMIT_DATE"),
+        Some("") | None => env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
         Some(commit_date) => commit_date,
     };
 
@@ -145,7 +145,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
                 "
 Thank you for using MeiliSearch!
 
-We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/reference/features/configuration.html#analytics
+We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
 Anonymous telemetry:   \"Enabled\""
             );

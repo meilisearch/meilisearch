@@ -205,7 +205,7 @@ impl Index {
 
         // Set the primary key if not set already, ignore if already set.
         if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = UpdateBuilder::new(0).settings(txn, &self);
+            let mut builder = UpdateBuilder::new(0).settings(txn, self);
             builder.set_primary_key(primary_key.to_string());
             builder.execute(|_, _| ())?;
         }

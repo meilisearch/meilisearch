@@ -11,9 +11,9 @@ use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
-pub fn services(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::resource("/indexes/{index_uid}/search")
+        web::resource("")
             .route(web::get().to(search_with_url_query))
             .route(web::post().to(search_with_post)),
     );
@@ -77,19 +77,24 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
-async fn search_with_url_query(
-    data: GuardedData<Admin, Data>,
+pub async fn search_with_url_query(
+    data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let query = params.into_inner().into();
     let search_result = data.search(path.into_inner().index_uid, query).await?;
+
+    // Tests that the nb_hits is always set to false
+    #[cfg(test)]
+    assert!(!search_result.exhaustive_nb_hits);
+
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }
 
-async fn search_with_post(
+pub async fn search_with_post(
     data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
@@ -98,6 +103,11 @@ async fn search_with_post(
     let search_result = data
         .search(path.into_inner().index_uid, params.into_inner())
         .await?;
+
+    // Tests that the nb_hits is always set to false
+    #[cfg(test)]
+    assert!(!search_result.exhaustive_nb_hits);
+
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }

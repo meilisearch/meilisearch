@@ -162,8 +162,7 @@ impl UpdateStore {
             // function returns a Result and we must just unlock the loop on Result.
             'outer: while timeout(duration, notification_receiver.recv())
                 .await
-                .transpose()
-                .map_or(false, |r| r.is_ok())
+                .map_or(true, |o| o.is_some())
             {
                 loop {
                     match update_store_weak.upgrade() {
@@ -269,13 +268,12 @@ impl UpdateStore {
                 self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
                     wtxn,
                     &(global_id, index_uuid, enqueued.id()),
-                    &enqueued,
+                    enqueued,
                 )?;
             }
             _ => {
                 let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates
-                    .put(wtxn, &(index_uuid, update.id()), &update)?;
+                self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
             }
         }
         Ok(())
@@ -443,12 +441,15 @@ impl UpdateStore {
 
         while let Some(Ok(((_, uuid, _), pending))) = pendings.next() {
             if uuid == index_uuid {
-                unsafe {
-                    pendings.del_current()?;
-                }
                 let mut pending = pending.decode()?;
                 if let Some(update_uuid) = pending.content.take() {
                     uuids_to_remove.push(update_uuid);
+                }
+
+                // Invariant check: we can only delete the current entry when we don't hold
+                // references to it anymore. This must be done after we have retrieved its content.
+                unsafe {
+                    pendings.del_current()?;
                 }
             }
         }
@@ -471,13 +472,6 @@ impl UpdateStore {
 
         txn.commit()?;
 
-        uuids_to_remove
-            .iter()
-            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
-            .for_each(|path| {
-                let _ = remove_file(path);
-            });
-
         // If the currently processing update is from our index, we wait until it is
         // finished before returning. This ensure that no write to the index occurs after we delete it.
         if let State::Processing(uuid, _) = *self.state.read() {
@@ -486,6 +480,16 @@ impl UpdateStore {
                 self.state.write();
             }
         }
+
+        // Finally, remove any outstanding update files. This must be done after waiting for the
+        // last update to ensure that the update files are not deleted before the update needs
+        // them.
+        uuids_to_remove
+            .iter()
+            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
+            .for_each(|path| {
+                let _ = remove_file(path);
+            });
 
         Ok(())
     }

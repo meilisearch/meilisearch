@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    panic::{catch_unwind, resume_unwind, UnwindSafe},
+    time::Duration,
+};
 
 use actix_web::http::StatusCode;
 use paste::paste;
@@ -182,6 +185,37 @@ impl Index<'_> {
 
     pub async fn stats(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/stats", self.uid);
+        self.service.get(url).await
+    }
+
+    /// Performs both GET and POST search queries
+    pub async fn search(
+        &self,
+        query: Value,
+        test: impl Fn(Value, StatusCode) + UnwindSafe + Clone,
+    ) {
+        let (response, code) = self.search_post(query.clone()).await;
+        let t = test.clone();
+        if let Err(e) = catch_unwind(move || t(response, code)) {
+            eprintln!("Error with post search");
+            resume_unwind(e);
+        }
+
+        let (response, code) = self.search_get(query).await;
+        if let Err(e) = catch_unwind(move || test(response, code)) {
+            eprintln!("Error with get search");
+            resume_unwind(e);
+        }
+    }
+
+    pub async fn search_post(&self, query: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search", self.uid);
+        self.service.post(url, query).await
+    }
+
+    pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
+        let params = serde_url_params::to_string(&query).unwrap();
+        let url = format!("/indexes/{}/search?{}", self.uid, params);
         self.service.get(url).await
     }
 

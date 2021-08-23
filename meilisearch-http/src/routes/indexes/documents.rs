@@ -49,32 +49,29 @@ fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
 }
 
 #[derive(Deserialize)]
-struct DocumentParam {
+pub struct DocumentParam {
     index_uid: String,
     document_id: String,
 }
 
-pub fn services(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/indexes/{index_uid}/documents")
-            .service(
-                web::resource("")
-                    .route(web::get().to(get_all_documents))
-                    .route(web::post().guard(guard_json).to(add_documents))
-                    .route(web::put().guard(guard_json).to(update_documents))
-                    .route(web::delete().to(clear_all_documents)),
-            )
-            // this route needs to be before the /documents/{document_id} to match properly
-            .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
-            .service(
-                web::resource("/{document_id}")
-                    .route(web::get().to(get_document))
-                    .route(web::delete().to(delete_document)),
-            ),
+        web::resource("")
+            .route(web::get().to(get_all_documents))
+            .route(web::post().guard(guard_json).to(add_documents))
+            .route(web::put().guard(guard_json).to(update_documents))
+            .route(web::delete().to(clear_all_documents)),
+    )
+    // this route needs to be before the /documents/{document_id} to match properly
+    .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
+    .service(
+        web::resource("/{document_id}")
+            .route(web::get().to(get_document))
+            .route(web::delete().to(delete_document)),
     );
 }
 
-async fn get_document(
+pub async fn get_document(
     data: GuardedData<Public, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -87,7 +84,7 @@ async fn get_document(
     Ok(HttpResponse::Ok().json(document))
 }
 
-async fn delete_document(
+pub async fn delete_document(
     data: GuardedData<Private, Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -100,13 +97,13 @@ async fn delete_document(
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BrowseQuery {
+pub struct BrowseQuery {
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
 }
 
-async fn get_all_documents(
+pub async fn get_all_documents(
     data: GuardedData<Public, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
@@ -137,13 +134,13 @@ async fn get_all_documents(
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct UpdateDocumentsQuery {
+pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
-async fn add_documents(
+pub async fn add_documents(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
@@ -166,7 +163,7 @@ async fn add_documents(
 
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
-async fn update_documents(
+pub async fn update_documents(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
@@ -187,7 +184,7 @@ async fn update_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
 }
 
-async fn delete_documents(
+pub async fn delete_documents(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
@@ -207,7 +204,7 @@ async fn delete_documents(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-async fn clear_all_documents(
+pub async fn clear_all_documents(
     data: GuardedData<Private, Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {

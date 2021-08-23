@@ -9,7 +9,7 @@ use crate::{error::ResponseError, index::Unchecked};
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        mod $attr {
+        pub mod $attr {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
 
@@ -18,7 +18,7 @@ macro_rules! make_setting_route {
             use crate::index::Settings;
             use crate::extractors::authentication::{GuardedData, policies::*};
 
-            async fn delete(
+            pub async fn delete(
                 data: GuardedData<Private, data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
@@ -32,7 +32,7 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            async fn update(
+            pub async fn update(
                 data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
@@ -47,7 +47,7 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
-            async fn get(
+            pub async fn get(
                 data: GuardedData<Private, data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -69,68 +69,63 @@ macro_rules! make_setting_route {
 }
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/filterable-attributes",
+    "/filterable-attributes",
     std::collections::HashSet<String>,
     filterable_attributes,
     "filterableAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/displayed-attributes",
+    "/displayed-attributes",
     Vec<String>,
     displayed_attributes,
     "displayedAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/searchable-attributes",
+    "/searchable-attributes",
     Vec<String>,
     searchable_attributes,
     "searchableAttributes"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/stop-words",
+    "/stop-words",
     std::collections::BTreeSet<String>,
     stop_words,
     "stopWords"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/synonyms",
+    "/synonyms",
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
     "synonyms"
 );
 
 make_setting_route!(
-    "/indexes/{index_uid}/settings/distinct-attribute",
+    "/distinct-attribute",
     String,
     distinct_attribute,
     "distinctAttribute"
 );
 
-make_setting_route!(
-    "/indexes/{index_uid}/settings/ranking-rules",
-    Vec<String>,
-    ranking_rules,
-    "rankingRules"
-);
+make_setting_route!("/ranking-rules", Vec<String>, ranking_rules, "rankingRules");
 
-macro_rules! create_services {
+macro_rules! generate_configure {
     ($($mod:ident),*) => {
-        pub fn services(cfg: &mut web::ServiceConfig) {
-            cfg
-                .service(web::resource("/indexes/{index_uid}/settings")
-                    .route(web::post().to(update_all))
-                    .route(web::get().to(get_all))
-                    .route(web::delete().to(delete_all)))
+        pub fn configure(cfg: &mut web::ServiceConfig) {
+            cfg.service(
+                web::resource("")
+                .route(web::post().to(update_all))
+                .route(web::get().to(get_all))
+                .route(web::delete().to(delete_all)))
                 $(.service($mod::resources()))*;
         }
     };
 }
 
-create_services!(
+generate_configure!(
     filterable_attributes,
     displayed_attributes,
     searchable_attributes,
@@ -140,7 +135,7 @@ create_services!(
     ranking_rules
 );
 
-async fn update_all(
+pub async fn update_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
@@ -154,7 +149,7 @@ async fn update_all(
     Ok(HttpResponse::Accepted().json(json))
 }
 
-async fn get_all(
+pub async fn get_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -163,7 +158,7 @@ async fn get_all(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-async fn delete_all(
+pub async fn delete_all(
     data: GuardedData<Private, Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {

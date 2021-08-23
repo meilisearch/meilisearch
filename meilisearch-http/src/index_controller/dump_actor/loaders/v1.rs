@@ -73,7 +73,7 @@ struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub filterable_attributes: Option<Option<Vec<String>>>,
+    pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
 fn load_index(
@@ -98,7 +98,7 @@ fn load_index(
 
     let mut txn = index.write_txn()?;
 
-    let handler = UpdateHandler::new(&indexer_options)?;
+    let handler = UpdateHandler::new(indexer_options)?;
 
     index.update_settings_txn(&mut txn, &settings.check(), handler.update_builder(0))?;
 
@@ -142,23 +142,19 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
             // representing the name of the faceted field + the type of the field. Since the type
             // was not known in the V1 of the dump we are just going to assume everything is a
             // String
-            filterable_attributes: settings.filterable_attributes.map(|o| o.map(|vec| vec.into_iter().collect())),
+            filterable_attributes: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().collect())),
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
-            ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter_map(|criterion| {
+            ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter(|criterion| {
                 match criterion.as_str() {
-                    "words" | "typo" | "proximity" | "attribute" => Some(criterion),
-                    s if s.starts_with("asc") || s.starts_with("desc") => Some(criterion),
+                    "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
+                    s if s.starts_with("asc") || s.starts_with("desc") => true,
                     "wordsPosition" => {
-                        warn!("The criteria `words` and `wordsPosition` have been merged into a single criterion `words` so `wordsPositon` will be ignored");
-                        Some(String::from("words"))
-                    }
-                    "exactness" => {
-                        error!("The criterion `{}` is not implemented currently and thus will be ignored", criterion);
-                        None
+                        warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
+                        false
                     }
                     s => {
                         error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
-                        None
+                        false
                     }
                     }
                 }).collect())),
@@ -179,4 +175,18 @@ fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
     let metadata = serde_json::from_reader(reader)?;
 
     Ok(metadata)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn settings_format_regression() {
+        let settings = Settings::default();
+        assert_eq!(
+            r##"{"rankingRules":null,"distinctAttribute":null,"searchableAttributes":null,"displayedAttributes":null,"stopWords":null,"synonyms":null,"attributesForFaceting":null}"##,
+            serde_json::to_string(&settings).unwrap()
+        );
+    }
 }

@@ -37,7 +37,7 @@ pub trait DumpActorHandle {
     async fn create_dump(&self) -> Result<DumpInfo>;
 
     /// Return the status of an already created dump
-    /// Implementation: [handle_impl::DumpActorHandleImpl::dump_status]
+    /// Implementation: [handle_impl::DumpActorHandleImpl::dump_info]
     async fn dump_info(&self, uid: String) -> Result<DumpInfo>;
 }
 
