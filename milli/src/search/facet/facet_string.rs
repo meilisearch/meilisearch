@@ -131,7 +131,7 @@ use std::ops::Bound::{Excluded, Included, Unbounded};
 
 use either::{Either, Left, Right};
 use heed::types::{ByteSlice, DecodeIgnore};
-use heed::{Database, LazyDecode, RoRange};
+use heed::{Database, LazyDecode, RoRange, RoRevRange};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{
@@ -181,6 +181,65 @@ impl<'t> FacetStringGroupRange<'t> {
 }
 
 impl<'t> Iterator for FacetStringGroupRange<'t> {
+    type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, level, left, right), docids))) => {
+                let must_be_returned = match self.end {
+                    Included(end) => right <= end,
+                    Excluded(end) => right < end,
+                    Unbounded => true,
+                };
+                if must_be_returned {
+                    match docids.decode() {
+                        Ok((bounds, docids)) => Some(Ok(((level, left, right), (bounds, docids)))),
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
+                }
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
+pub struct FacetStringGroupRevRange<'t> {
+    iter: RoRevRange<
+        't,
+        FacetLevelValueU32Codec,
+        LazyDecode<FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>>,
+    >,
+    end: Bound<u32>,
+}
+
+impl<'t> FacetStringGroupRevRange<'t> {
+    pub fn new<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        db: Database<X, Y>,
+        field_id: FieldId,
+        level: NonZeroU8,
+        left: Bound<u32>,
+        right: Bound<u32>,
+    ) -> heed::Result<FacetStringGroupRevRange<'t>> {
+        let db = db.remap_types::<
+            FacetLevelValueU32Codec,
+            FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>,
+        >();
+        let left_bound = match left {
+            Included(left) => Included((field_id, level, left, u32::MIN)),
+            Excluded(left) => Excluded((field_id, level, left, u32::MIN)),
+            Unbounded => Included((field_id, level, u32::MIN, u32::MIN)),
+        };
+        let right_bound = Included((field_id, level, u32::MAX, u32::MAX));
+        let iter = db.lazily_decode_data().rev_range(rtxn, &(left_bound, right_bound))?;
+        Ok(FacetStringGroupRevRange { iter, end: right })
+    }
+}
+
+impl<'t> Iterator for FacetStringGroupRevRange<'t> {
     type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -280,6 +339,81 @@ impl<'t> Iterator for FacetStringLevelZeroRange<'t> {
     }
 }
 
+pub struct FacetStringLevelZeroRevRange<'t> {
+    iter: RoRevRange<
+        't,
+        FacetStringLevelZeroCodec,
+        FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>,
+    >,
+}
+
+impl<'t> FacetStringLevelZeroRevRange<'t> {
+    pub fn new<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        db: Database<X, Y>,
+        field_id: FieldId,
+        left: Bound<&str>,
+        right: Bound<&str>,
+    ) -> heed::Result<FacetStringLevelZeroRevRange<'t>> {
+        fn encode_value<'a>(buffer: &'a mut Vec<u8>, field_id: FieldId, value: &str) -> &'a [u8] {
+            buffer.extend_from_slice(&field_id.to_be_bytes());
+            buffer.push(0);
+            buffer.extend_from_slice(value.as_bytes());
+            &buffer[..]
+        }
+
+        let mut left_buffer = Vec::new();
+        let left_bound = match left {
+            Included(value) => Included(encode_value(&mut left_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut left_buffer, field_id, value)),
+            Unbounded => {
+                left_buffer.extend_from_slice(&field_id.to_be_bytes());
+                left_buffer.push(0);
+                Included(&left_buffer[..])
+            }
+        };
+
+        let mut right_buffer = Vec::new();
+        let right_bound = match right {
+            Included(value) => Included(encode_value(&mut right_buffer, field_id, value)),
+            Excluded(value) => Excluded(encode_value(&mut right_buffer, field_id, value)),
+            Unbounded => {
+                right_buffer.extend_from_slice(&field_id.to_be_bytes());
+                right_buffer.push(1); // we must only get the level 0
+                Excluded(&right_buffer[..])
+            }
+        };
+
+        let iter = db
+            .remap_key_type::<ByteSlice>()
+            .rev_range(rtxn, &(left_bound, right_bound))?
+            .remap_types::<
+                FacetStringLevelZeroCodec,
+                FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>
+            >();
+
+        Ok(FacetStringLevelZeroRevRange { iter })
+    }
+}
+
+impl<'t> Iterator for FacetStringLevelZeroRevRange<'t> {
+    type Item = heed::Result<(&'t str, &'t str, RoaringBitmap)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok(((_fid, normalized), (original, docids)))) => {
+                Some(Ok((normalized, original, docids)))
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
+type EitherStringRange<'t> = Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>;
+type EitherStringRevRange<'t> =
+    Either<FacetStringGroupRevRange<'t>, FacetStringLevelZeroRevRange<'t>>;
+
 /// An iterator that is used to explore the facet strings level by level,
 /// it will only return facets strings that are associated with the
 /// candidates documents ids given.
@@ -287,12 +421,45 @@ pub struct FacetStringIter<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: Database<ByteSlice, ByteSlice>,
     field_id: FieldId,
-    level_iters:
-        Vec<(RoaringBitmap, Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>)>,
+    level_iters: Vec<(RoaringBitmap, Either<EitherStringRange<'t>, EitherStringRevRange<'t>>)>,
     must_reduce: bool,
 }
 
 impl<'t> FacetStringIter<'t> {
+    pub fn new_reducing(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        field_id: FieldId,
+        documents_ids: RoaringBitmap,
+    ) -> heed::Result<FacetStringIter<'t>> {
+        let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
+        let highest_iter = Self::highest_iter(rtxn, index, db, field_id)?;
+        Ok(FacetStringIter {
+            rtxn,
+            db,
+            field_id,
+            level_iters: vec![(documents_ids, Left(highest_iter))],
+            must_reduce: true,
+        })
+    }
+
+    pub fn new_reverse_reducing(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        field_id: FieldId,
+        documents_ids: RoaringBitmap,
+    ) -> heed::Result<FacetStringIter<'t>> {
+        let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
+        let highest_reverse_iter = Self::highest_reverse_iter(rtxn, index, db, field_id)?;
+        Ok(FacetStringIter {
+            rtxn,
+            db,
+            field_id,
+            level_iters: vec![(documents_ids, Right(highest_reverse_iter))],
+            must_reduce: true,
+        })
+    }
+
     pub fn new_non_reducing(
         rtxn: &'t heed::RoTxn,
         index: &'t Index,
@@ -300,30 +467,12 @@ impl<'t> FacetStringIter<'t> {
         documents_ids: RoaringBitmap,
     ) -> heed::Result<FacetStringIter<'t>> {
         let db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
-        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
-        let highest_iter = match NonZeroU8::new(highest_level) {
-            Some(highest_level) => Left(FacetStringGroupRange::new(
-                rtxn,
-                index.facet_id_string_docids,
-                field_id,
-                highest_level,
-                Unbounded,
-                Unbounded,
-            )?),
-            None => Right(FacetStringLevelZeroRange::new(
-                rtxn,
-                index.facet_id_string_docids,
-                field_id,
-                Unbounded,
-                Unbounded,
-            )?),
-        };
-
+        let highest_iter = Self::highest_iter(rtxn, index, db, field_id)?;
         Ok(FacetStringIter {
             rtxn,
             db,
             field_id,
-            level_iters: vec![(documents_ids, highest_iter)],
+            level_iters: vec![(documents_ids, Left(highest_iter))],
             must_reduce: false,
         })
     }
@@ -340,6 +489,62 @@ impl<'t> FacetStringIter<'t> {
             .transpose()?
             .map(|(key_bytes, _)| key_bytes[2])) // the level is the third bit
     }
+
+    fn highest_iter<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        db: Database<X, Y>,
+        field_id: FieldId,
+    ) -> heed::Result<Either<FacetStringGroupRange<'t>, FacetStringLevelZeroRange<'t>>> {
+        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
+        match NonZeroU8::new(highest_level) {
+            Some(highest_level) => FacetStringGroupRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                highest_level,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Left),
+            None => FacetStringLevelZeroRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Right),
+        }
+    }
+
+    fn highest_reverse_iter<X, Y>(
+        rtxn: &'t heed::RoTxn,
+        index: &'t Index,
+        db: Database<X, Y>,
+        field_id: FieldId,
+    ) -> heed::Result<Either<FacetStringGroupRevRange<'t>, FacetStringLevelZeroRevRange<'t>>> {
+        let highest_level = Self::highest_level(rtxn, db, field_id)?.unwrap_or(0);
+        match NonZeroU8::new(highest_level) {
+            Some(highest_level) => FacetStringGroupRevRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                highest_level,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Left),
+            None => FacetStringLevelZeroRevRange::new(
+                rtxn,
+                index.facet_id_string_docids,
+                field_id,
+                Unbounded,
+                Unbounded,
+            )
+            .map(Right),
+        }
+    }
 }
 
 impl<'t> Iterator for FacetStringIter<'t> {
@@ -348,6 +553,21 @@ impl<'t> Iterator for FacetStringIter<'t> {
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
             let (documents_ids, last) = self.level_iters.last_mut()?;
+            let is_ascending = last.is_left();
+
+            // We remap the different iterator types to make
+            // the algorithm less complex to understand.
+            let last = match last {
+                Left(ascending) => match ascending {
+                    Left(last) => Left(Left(last)),
+                    Right(last) => Right(Left(last)),
+                },
+                Right(descending) => match descending {
+                    Left(last) => Left(Right(last)),
+                    Right(last) => Right(Right(last)),
+                },
+            };
+
             match last {
                 Left(last) => {
                     for result in last {
@@ -359,24 +579,50 @@ impl<'t> Iterator for FacetStringIter<'t> {
                                         *documents_ids -= &docids;
                                     }
 
-                                    let result = match string_bounds {
-                                        Some((left, right)) => FacetStringLevelZeroRange::new(
-                                            self.rtxn,
-                                            self.db,
-                                            self.field_id,
-                                            Included(left),
-                                            Included(right),
-                                        )
-                                        .map(Right),
-                                        None => FacetStringGroupRange::new(
-                                            self.rtxn,
-                                            self.db,
-                                            self.field_id,
-                                            NonZeroU8::new(level.get() - 1).unwrap(),
-                                            Included(left),
-                                            Included(right),
-                                        )
-                                        .map(Left),
+                                    let result = if is_ascending {
+                                        match string_bounds {
+                                            Some((left, right)) => {
+                                                FacetStringLevelZeroRevRange::new(
+                                                    self.rtxn,
+                                                    self.db,
+                                                    self.field_id,
+                                                    Included(left),
+                                                    Included(right),
+                                                )
+                                                .map(Right)
+                                            }
+                                            None => FacetStringGroupRevRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                NonZeroU8::new(level.get() - 1).unwrap(),
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Left),
+                                        }
+                                        .map(Right)
+                                    } else {
+                                        match string_bounds {
+                                            Some((left, right)) => FacetStringLevelZeroRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Right),
+                                            None => FacetStringGroupRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                NonZeroU8::new(level.get() - 1).unwrap(),
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Left),
+                                        }
+                                        .map(Left)
                                     };
 
                                     match result {

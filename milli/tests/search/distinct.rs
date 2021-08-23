@@ -32,7 +32,7 @@ macro_rules! test_distinct {
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
             let mut distinct_values = HashSet::new();
-            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true)
+            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true, &[])
                 .into_iter()
                 .filter_map(|d| {
                     if distinct_values.contains(&d.$distinct) {
