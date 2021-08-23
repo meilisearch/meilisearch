@@ -23,5 +23,4 @@ jobs:
           name: getmeili/meilisearch
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          tag_names: true
           buildargs: COMMIT_SHA,COMMIT_DATE
