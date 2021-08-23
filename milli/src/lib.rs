@@ -51,6 +51,7 @@ pub type DocumentId = u32;
 pub type FieldId = u16;
 pub type Position = u32;
 pub type FieldDistribution = BTreeMap<String, u64>;
+pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 2], DocumentId>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(

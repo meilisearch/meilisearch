@@ -8,6 +8,7 @@ use heed::flags::Flags;
 use heed::types::*;
 use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
+use rstar::RTree;
 
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -18,8 +19,8 @@ use crate::heed_codec::facet::{
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
-    FieldIdWordCountCodec, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search,
-    StrLevelPositionCodec, StrStrU8Codec, BEU32,
+    FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
+    Search, StrLevelPositionCodec, StrStrU8Codec, BEU32,
 };
 
 pub mod main_key {
@@ -31,6 +32,7 @@ pub mod main_key {
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
+    pub const GEO_RTREE_KEY: &str = "geo";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -292,6 +294,30 @@ impl Index {
             .main
             .get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, main_key::FIELDS_IDS_MAP_KEY)?
             .unwrap_or_default())
+    }
+
+    /* geo rtree */
+
+    pub(crate) fn put_geo_rtree<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn,
+        rtree: &RTree<GeoPoint>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<RTree<GeoPoint>>>(wtxn, main_key::GEO_RTREE_KEY, rtree)
+    }
+
+    pub(crate) fn delete_geo_rtree(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::GEO_RTREE_KEY)
+    }
+
+    pub fn geo_rtree<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<RTree<GeoPoint>>> {
+        match self
+            .main
+            .get::<_, Str, SerdeBincode<RTree<GeoPoint>>>(rtxn, main_key::GEO_RTREE_KEY)?
+        {
+            Some(rtree) => Ok(Some(rtree)),
+            None => Ok(None),
+        }
     }
 
     /* field distribution */
