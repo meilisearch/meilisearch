@@ -4,12 +4,15 @@ use std::collections::HashMap;
 use chrono::Utc;
 use fst::IntoStreamer;
 use heed::types::ByteSlice;
+use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::ClearDocuments;
-use crate::error::{InternalError, UserError};
-use crate::heed_codec::facet::FacetStringLevelZeroValueCodec;
+use crate::error::{InternalError, SerializationError, UserError};
+use crate::heed_codec::facet::{
+    FacetLevelValueU32Codec, FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
+};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{DocumentId, ExternalDocumentsIds, FieldId, Index, Result, SmallString32, BEU32};
@@ -451,26 +454,61 @@ where
     Ok(())
 }
 
-fn remove_docids_from_facet_field_id_string_docids<'a, C>(
+fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
     wtxn: &'a mut heed::RwTxn,
-    db: &heed::Database<C, FacetStringLevelZeroValueCodec<CboRoaringBitmapCodec>>,
+    db: &heed::Database<C, D>,
     to_remove: &RoaringBitmap,
-) -> heed::Result<()>
-where
-    C: heed::BytesDecode<'a> + heed::BytesEncode<'a>,
-{
-    let mut iter = db.remap_key_type::<ByteSlice>().iter_mut(wtxn)?;
+) -> crate::Result<()> {
+    let db_name = Some(crate::index::db_name::FACET_ID_STRING_DOCIDS);
+    let mut iter = db.remap_types::<ByteSlice, ByteSlice>().iter_mut(wtxn)?;
     while let Some(result) = iter.next() {
-        let (bytes, (original_value, mut docids)) = result?;
-        let previous_len = docids.len();
-        docids -= to_remove;
-        if docids.is_empty() {
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { iter.del_current()? };
-        } else if docids.len() != previous_len {
-            let bytes = bytes.to_owned();
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { iter.put_current(&bytes, &(original_value, docids))? };
+        let (key, val) = result?;
+        match FacetLevelValueU32Codec::bytes_decode(key) {
+            Some(_) => {
+                // If we are able to parse this key it means it is a facet string group
+                // level key. We must then parse the value using the appropriate codec.
+                let (group, mut docids) =
+                    FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
+                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+
+                let previous_len = docids.len();
+                docids -= to_remove;
+                if docids.is_empty() {
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.del_current()? };
+                } else if docids.len() != previous_len {
+                    let key = key.to_owned();
+                    let val = &(group, docids);
+                    let value_bytes =
+                        FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
+                            .ok_or_else(|| SerializationError::Encoding { db_name })?;
+
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.put_current(&key, &value_bytes)? };
+                }
+            }
+            None => {
+                // The key corresponds to a level zero facet string.
+                let (original_value, mut docids) =
+                    FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
+                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+
+                let previous_len = docids.len();
+                docids -= to_remove;
+                if docids.is_empty() {
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.del_current()? };
+                } else if docids.len() != previous_len {
+                    let key = key.to_owned();
+                    let val = &(original_value, docids);
+                    let value_bytes =
+                        FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
+                            .ok_or_else(|| SerializationError::Encoding { db_name })?;
+
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.put_current(&key, &value_bytes)? };
+                }
+            }
         }
     }
 
@@ -505,10 +543,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use big_s::S;
     use heed::EnvOpenOptions;
+    use maplit::hashset;
 
     use super::*;
-    use crate::update::{IndexDocuments, UpdateFormat};
+    use crate::update::{IndexDocuments, Settings, UpdateFormat};
+    use crate::FilterCondition;
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {
@@ -563,6 +604,57 @@ mod tests {
         builder.delete_external_id("0");
         builder.delete_external_id("1");
         builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn delete_documents_with_filterable_attributes() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_primary_key(S("docid"));
+        builder.set_filterable_fields(hashset! { S("label") });
+        builder.execute(|_, _| ()).unwrap();
+
+        let content = &br#"[
+            {"docid":"1_4","label":"sign"},
+            {"docid":"1_5","label":"letter"},
+            {"docid":"1_7","label":"abstract,cartoon,design,pattern"},
+            {"docid":"1_36","label":"drawing,painting,pattern"},
+            {"docid":"1_37","label":"art,drawing,outdoor"},
+            {"docid":"1_38","label":"aquarium,art,drawing"},
+            {"docid":"1_39","label":"abstract"},
+            {"docid":"1_40","label":"cartoon"},
+            {"docid":"1_41","label":"art,drawing"},
+            {"docid":"1_42","label":"art,pattern"},
+            {"docid":"1_43","label":"abstract,art,drawing,pattern"},
+            {"docid":"1_44","label":"drawing"},
+            {"docid":"1_45","label":"art"},
+            {"docid":"1_46","label":"abstract,colorfulness,pattern"},
+            {"docid":"1_47","label":"abstract,pattern"},
+            {"docid":"1_52","label":"abstract,cartoon"},
+            {"docid":"1_57","label":"abstract,drawing,pattern"},
+            {"docid":"1_58","label":"abstract,art,cartoon"},
+            {"docid":"1_68","label":"design"},
+            {"docid":"1_69","label":"geometry"}
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index, 1).unwrap();
+        builder.delete_external_id("1_4");
+        builder.execute().unwrap();
+
+        let filter = FilterCondition::from_str(&wtxn, &index, "label = sign").unwrap();
+        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        assert!(results.documents_ids.is_empty());
 
         wtxn.commit().unwrap();
     }
