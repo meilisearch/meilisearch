@@ -169,7 +169,9 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 
 ## Contributing
 
-Hey! We're glad you're thinking about contributing to MeiliSearch! However, we are currently working on a huge refactor and accepting PRs on this repository wouldn't be productive. We are sorry about this! Be sure we are doing our best so that you can contribute to MeiliSearch again as soon as possible ❤️
+Hey! We're glad you're thinking about contributing to MeiliSearch! Feel free to pick an [issue labeled as `good first issue`](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), and to ask any question you need. Some points might not be clear and we are available to help you!
+
+Also, we recommend following the [CONTRIBUTING](./CONTRIBUTING.md) to create your PR.
 
 ## Core engine and tokenizer
 
