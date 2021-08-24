@@ -57,6 +57,8 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub filterable_attributes: Setting<HashSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub sortable_attributes: Setting<HashSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub ranking_rules: Setting<Vec<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub stop_words: Setting<BTreeSet<String>>,
@@ -75,6 +77,7 @@ impl Settings<Checked> {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
             filterable_attributes: Setting::Reset,
+            sortable_attributes: Setting::Reset,
             ranking_rules: Setting::Reset,
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
@@ -88,6 +91,7 @@ impl Settings<Checked> {
             displayed_attributes,
             searchable_attributes,
             filterable_attributes,
+            sortable_attributes,
             ranking_rules,
             stop_words,
             synonyms,
@@ -99,6 +103,7 @@ impl Settings<Checked> {
             displayed_attributes,
             searchable_attributes,
             filterable_attributes,
+            sortable_attributes,
             ranking_rules,
             stop_words,
             synonyms,
@@ -136,6 +141,7 @@ impl Settings<Unchecked> {
             displayed_attributes,
             searchable_attributes,
             filterable_attributes: self.filterable_attributes,
+            sortable_attributes: self.sortable_attributes,
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
             synonyms: self.synonyms,
@@ -253,6 +259,12 @@ impl Index {
             Setting::NotSet => (),
         }
 
+        match settings.sortable_attributes {
+            Setting::Set(ref facet_types) => builder.set_sortable_fields(facet_types.clone()),
+            Setting::Reset => builder.set_sortable_fields(HashSet::new()),
+            Setting::NotSet => (),
+        }
+
         match settings.ranking_rules {
             Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
             Setting::Reset => builder.reset_criteria(),
@@ -328,6 +340,7 @@ mod test {
             displayed_attributes: Setting::Set(vec![String::from("hello")]),
             searchable_attributes: Setting::Set(vec![String::from("hello")]),
             filterable_attributes: Setting::NotSet,
+            sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
@@ -348,6 +361,7 @@ mod test {
             displayed_attributes: Setting::Set(vec![String::from("*")]),
             searchable_attributes: Setting::Set(vec![String::from("hello"), String::from("*")]),
             filterable_attributes: Setting::NotSet,
+            sortable_attributes: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,

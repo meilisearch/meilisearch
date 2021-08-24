@@ -81,6 +81,13 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/sortable-attributes",
+    std::collections::HashSet<String>,
+    sortable_attributes,
+    "sortableAttributes"
+);
+
+make_setting_route!(
     "/displayed-attributes",
     Vec<String>,
     displayed_attributes,
@@ -132,6 +139,7 @@ macro_rules! generate_configure {
 
 generate_configure!(
     filterable_attributes,
+    sortable_attributes,
     displayed_attributes,
     searchable_attributes,
     distinct_attribute,

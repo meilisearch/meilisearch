@@ -42,10 +42,11 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 7);
+    assert_eq!(settings.keys().len(), 8);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
+    assert_eq!(settings["sortableAttributes"], json!([]));
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
