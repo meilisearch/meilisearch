@@ -6,15 +6,15 @@ use std::path::Path;
 use std::sync::Arc;
 
 use heed::{EnvOpenOptions, RoTxn};
+use milli::update::Setting;
 use milli::{obkv_to_json, FieldId};
-use serde::{de::Deserializer, Deserialize};
 use serde_json::{Map, Value};
 
-use crate::helpers::EnvSizer;
 use error::Result;
-
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Checked, Facets, Settings, Unchecked};
+
+use crate::helpers::EnvSizer;
 
 use self::error::IndexError;
 
@@ -36,14 +36,6 @@ impl Deref for Index {
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
     }
-}
-
-pub fn deserialize_some<'de, T, D>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
 }
 
 impl Index {
@@ -100,13 +92,22 @@ impl Index {
             .collect();
 
         Ok(Settings {
-            displayed_attributes: Some(displayed_attributes),
-            searchable_attributes: Some(searchable_attributes),
-            filterable_attributes: Some(Some(filterable_attributes)),
-            ranking_rules: Some(Some(criteria)),
-            stop_words: Some(Some(stop_words)),
-            distinct_attribute: Some(distinct_field),
-            synonyms: Some(Some(synonyms)),
+            displayed_attributes: match displayed_attributes {
+                Some(attrs) => Setting::Set(attrs),
+                None => Setting::Reset,
+            },
+            searchable_attributes: match searchable_attributes {
+                Some(attrs) => Setting::Set(attrs),
+                None => Setting::Reset,
+            },
+            filterable_attributes: Setting::Set(filterable_attributes),
+            ranking_rules: Setting::Set(criteria),
+            stop_words: Setting::Set(stop_words),
+            distinct_attribute: match distinct_field {
+                Some(field) => Setting::Set(field),
+                None => Setting::Reset,
+            },
+            synonyms: Setting::Set(synonyms),
             _kind: PhantomData,
         })
     }
