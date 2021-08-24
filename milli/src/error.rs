@@ -58,6 +58,7 @@ pub enum UserError {
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
+    InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     InvalidStoreFile,
     MaxDatabaseSizeReached,
     MissingDocumentId { document: Object },
@@ -226,6 +227,15 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 )
             }
             Self::InvalidFilterAttribute(error) => error.fmt(f),
+            Self::InvalidSortableAttribute { field, valid_fields } => {
+                let valid_names =
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
+                write!(
+                    f,
+                    "Attribute {} is not sortable, available sortable attributes are: {}",
+                    field, valid_names
+                )
+            }
             Self::MissingDocumentId { document } => {
                 let json = serde_json::to_string(document).unwrap();
                 write!(f, "document doesn't have an identifier {}", json)
