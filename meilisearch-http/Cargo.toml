@@ -78,20 +78,6 @@ whoami = { version = "1.1.2", optional = true }
 reqwest = { version = "0.11.3", features = ["json", "rustls-tls"], default-features = false, optional = true }
 serdeval = "0.1.0"
 
-[dependencies.sentry]
-default-features = false
-features = [
-    "backtrace",
-    "contexts",
-    "panic",
-    "reqwest",
-    "rustls",
-    "log",
-]
-optional = true
-version = "0.22.0"
-
-
 [dev-dependencies]
 actix-rt = "2.1.0"
 assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
@@ -112,7 +98,7 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-analytics = ["sentry", "whoami", "reqwest"]
+analytics = ["whoami", "reqwest"]
 default = ["analytics", "mini-dashboard"]
 
 [target.'cfg(target_os = "linux")'.dependencies]

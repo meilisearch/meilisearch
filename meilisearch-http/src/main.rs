@@ -14,9 +14,6 @@ use std::sync::Arc;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
-const SENTRY_DSN: &str = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337";
-
 #[actix_web::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
@@ -28,6 +25,8 @@ async fn main() -> Result<(), MainError> {
         log_builder.filter_module("milli", log::LevelFilter::Warn);
     }
 
+    log_builder.init();
+
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
@@ -36,37 +35,8 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-
-            #[cfg(all(not(debug_assertions), feature = "analytics"))]
-            if !opt.no_analytics {
-                let logger =
-                    sentry::integrations::log::SentryLogger::with_dest(log_builder.build());
-                log::set_boxed_logger(Box::new(logger))
-                    .map(|()| log::set_max_level(log::LevelFilter::Info))
-                    .unwrap();
-
-                let sentry = sentry::init(sentry::ClientOptions {
-                    release: sentry::release_name!(),
-                    dsn: Some(SENTRY_DSN.parse()?),
-                    before_send: Some(Arc::new(|event| {
-                        if matches!(event.message, Some(ref msg) if msg.to_lowercase().contains("no space left on device"))
-                        {
-                            None
-                        } else {
-                            Some(event)
-                        }
-                    })),
-                    ..Default::default()
-                });
-                // sentry must stay alive as long as possible
-                std::mem::forget(sentry);
-            } else {
-                log_builder.init();
-            }
         }
-        "development" => {
-            log_builder.init();
-        }
+        "development" => (),
         _ => unreachable!(),
     }
 
