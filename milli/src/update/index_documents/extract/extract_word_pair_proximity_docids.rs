@@ -17,6 +17,7 @@ use crate::{DocumentId, Result};
 ///
 /// Returns a grenad reader with the list of extracted word pairs proximities and
 /// documents ids from the given chunk of docid word positions.
+#[logging_timer::time]
 pub fn extract_word_pair_proximity_docids<R: io::Read>(
     mut docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,

@@ -48,6 +48,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
         self
     }
 
+    #[logging_timer::time("WordsPrefixesFst::{}")]
     pub fn execute(self) -> Result<()> {
         let words_fst = self.index.words_fst(&self.wtxn)?;
 

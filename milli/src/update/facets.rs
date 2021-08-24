@@ -57,6 +57,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         self
     }
 
+    #[logging_timer::time("Facets::{}")]
     pub fn execute(self) -> Result<()> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We get the faceted fields to be able to create the facet levels.

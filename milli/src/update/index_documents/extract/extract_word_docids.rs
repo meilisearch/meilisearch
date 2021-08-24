@@ -14,6 +14,7 @@ use crate::Result;
 ///
 /// Returns a grenad reader with the list of extracted words and
 /// documents ids from the given chunk of docid word positions.
+#[logging_timer::time]
 pub fn extract_word_docids<R: io::Read>(
     mut docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,

@@ -33,6 +33,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         }
     }
 
+    #[logging_timer::time("WordPrefixDocids::{}")]
     pub fn execute(self) -> Result<()> {
         // Clear the word prefix docids database.
         self.index.word_prefix_docids.clear(self.wtxn)?;

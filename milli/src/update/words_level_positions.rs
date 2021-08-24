@@ -57,6 +57,7 @@ impl<'t, 'u, 'i> WordsLevelPositions<'t, 'u, 'i> {
         self
     }
 
+    #[logging_timer::time("WordsLevelPositions::{}")]
     pub fn execute(self) -> Result<()> {
         debug!("Computing and writing the word levels positions docids into LMDB on disk...");
 

@@ -48,6 +48,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         self
     }
 
+    #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
     pub fn execute(self) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 

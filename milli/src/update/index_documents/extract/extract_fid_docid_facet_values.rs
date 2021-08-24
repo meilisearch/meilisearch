@@ -15,6 +15,7 @@ use crate::{DocumentId, FieldId, Result};
 ///
 /// Returns the generated grenad reader containing the docid the fid and the orginal value as key
 /// and the normalized value as value extracted from the given chunk of documents.
+#[logging_timer::time]
 pub fn extract_fid_docid_facet_values<R: io::Read>(
     mut obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,

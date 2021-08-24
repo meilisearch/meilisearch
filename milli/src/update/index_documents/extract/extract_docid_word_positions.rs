@@ -17,6 +17,7 @@ use crate::{FieldId, Result};
 ///
 /// Returns the generated internal documents ids and a grenad reader
 /// with the list of extracted words from the given chunk of documents.
+#[logging_timer::time]
 pub fn extract_docid_word_positions<R: io::Read>(
     mut obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,

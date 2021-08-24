@@ -136,6 +136,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.autogenerate_docids = false;
     }
 
+    #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute<R, F>(self, reader: R, progress_callback: F) -> Result<DocumentAdditionResult>
     where
         R: io::Read,
@@ -181,6 +182,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         Ok(DocumentAdditionResult { nb_documents })
     }
 
+    #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -341,6 +343,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.execute_prefix_databases(progress_callback)
     }
 
+    #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_prefix_databases<F>(self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
