@@ -9,7 +9,6 @@ edition = "2018"
 anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 crossbeam-channel = "0.5.0"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 memmap = "0.7.0"
