@@ -147,6 +147,80 @@ async fn search_with_filter_array_notation() {
 }
 
 #[actix_rt::test]
+async fn search_with_sort_on_numbers() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index
+        .update_settings(json!({"sortableAttributes": ["id"]}))
+        .await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_update_id(1).await;
+
+    index
+        .search(
+            json!({
+                "sort": ["id:asc"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 5);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_with_sort_on_strings() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index
+        .update_settings(json!({"sortableAttributes": ["title"]}))
+        .await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_update_id(1).await;
+
+    index
+        .search(
+            json!({
+                "sort": ["title:desc"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 5);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_with_multiple_sort() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index
+        .update_settings(json!({"sortableAttributes": ["id", "title"]}))
+        .await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_update_id(1).await;
+
+    let (response, code) = index
+        .search_post(json!({
+            "sort": ["id:asc", "title:desc"]
+        }))
+        .await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["hits"].as_array().unwrap().len(), 5);
+}
+
+#[actix_rt::test]
 async fn search_facet_distribution() {
     let server = Server::new().await;
     let index = server.index("test");
