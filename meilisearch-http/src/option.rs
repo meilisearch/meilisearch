@@ -35,7 +35,7 @@ pub struct IndexerOpts {
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
-    #[structopt(long)]
+    #[structopt(long, default_value)]
     pub max_memory: MaxMemory,
 
     /// Size of the linked hash map cache when indexing.
