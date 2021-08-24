@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::{error, fs};
 
 use byte_unit::Byte;
-use grenad::CompressionType;
+use milli::CompressionType;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,

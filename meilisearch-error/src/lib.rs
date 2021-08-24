@@ -63,6 +63,7 @@ pub enum Code {
 
     Facet,
     Filter,
+    Sort,
 
     BadParameter,
     BadRequest,
@@ -116,6 +117,8 @@ impl Code {
             Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
             // error related to filters
             Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
+            // error related to sorts
+            Sort => ErrCode::invalid("invalid_sort", StatusCode::BAD_REQUEST),
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),

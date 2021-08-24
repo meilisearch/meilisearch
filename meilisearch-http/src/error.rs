@@ -103,6 +103,7 @@ impl ErrorCode for MilliError<'_> {
                     UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
+                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
                 }
             }
         }

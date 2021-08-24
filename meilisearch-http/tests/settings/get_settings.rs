@@ -13,7 +13,14 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     map.insert("distinct_attribute", json!(Value::Null));
     map.insert(
         "ranking_rules",
-        json!(["words", "typo", "proximity", "attribute", "exactness"]),
+        json!([
+            "words",
+            "typo",
+            "sort",
+            "proximity",
+            "attribute",
+            "exactness"
+        ]),
     );
     map.insert("stop_words", json!([]));
     map.insert("synonyms", json!({}));
@@ -42,7 +49,14 @@ async fn get_settings() {
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
-        json!(["words", "typo", "proximity", "attribute", "exactness"])
+        json!([
+            "words",
+            "typo",
+            "sort",
+            "proximity",
+            "attribute",
+            "exactness"
+        ])
     );
     assert_eq!(settings["stopWords"], json!([]));
 }
