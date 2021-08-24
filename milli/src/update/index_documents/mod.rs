@@ -222,8 +222,10 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let documents_file = grenad::Reader::new(documents_file)?;
 
         // create LMDB writer channel
-        let (lmdb_writer_sx, lmdb_writer_rx): (Sender<TypedChunk>, Receiver<TypedChunk>) =
-            crossbeam_channel::unbounded();
+        let (lmdb_writer_sx, lmdb_writer_rx): (
+            Sender<Result<TypedChunk>>,
+            Receiver<Result<TypedChunk>>,
+        ) = crossbeam_channel::unbounded();
 
         // get searchable fields for word databases
         let searchable_fields =
@@ -244,23 +246,31 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             };
 
             // split obkv file into several chuncks
-            let mut chunk_iter = grenad_obkv_into_chunks(
+            let chunk_iter = grenad_obkv_into_chunks(
                 documents_file,
                 params.clone(),
                 self.log_every_n,
                 Byte::from_bytes(self.documents_chunk_size.unwrap_or(1024 * 1024 * 128) as u64), // 128MiB
-            )
-            .unwrap();
-            // extract all databases from the chunked obkv douments
-            extract::data_from_obkv_documents(
-                &mut chunk_iter,
-                params,
-                lmdb_writer_sx,
-                searchable_fields,
-                faceted_fields,
-                stop_words,
-            )
-            .unwrap();
+            );
+
+            let result = chunk_iter.map(|chunk_iter| {
+                // extract all databases from the chunked obkv douments
+                extract::data_from_obkv_documents(
+                    chunk_iter,
+                    params,
+                    lmdb_writer_sx.clone(),
+                    searchable_fields,
+                    faceted_fields,
+                    stop_words,
+                )
+            });
+
+            if let Err(e) = result {
+                lmdb_writer_sx.send(Err(e)).unwrap();
+            }
+
+            // needs to be droped to avoid channel waiting lock.
+            drop(lmdb_writer_sx)
         });
 
         // We delete the documents that this document addition replaces. This way we are
@@ -294,7 +304,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
         for typed_chunk in lmdb_writer_rx {
             let (docids, is_merged_database) =
-                write_typed_chunk_into_index(typed_chunk, &self.index, self.wtxn, index_is_empty)?;
+                write_typed_chunk_into_index(typed_chunk?, &self.index, self.wtxn, index_is_empty)?;
             if !docids.is_empty() {
                 final_documents_ids |= docids;
                 let documents_seen_count = final_documents_ids.len();
