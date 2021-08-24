@@ -20,6 +20,7 @@ use std::hash::BuildHasherDefault;
 use std::result::Result as StdResult;
 
 use fxhash::{FxHasher32, FxHasher64};
+pub use grenad::CompressionType;
 use serde_json::{Map, Value};
 
 pub use self::criterion::{default_criteria, AscDesc, Criterion};
