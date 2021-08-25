@@ -141,6 +141,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.sortable_fields = Setting::Set(names);
     }
 
+    pub fn reset_sortable_fields(&mut self) {
+        self.sortable_fields = Setting::Reset;
+    }
+
     pub fn reset_criteria(&mut self) {
         self.criteria = Setting::Reset;
     }
