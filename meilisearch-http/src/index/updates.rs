@@ -5,27 +5,33 @@ use std::num::NonZeroUsize;
 
 use flate2::read::GzDecoder;
 use log::{debug, info, trace};
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::index_controller::UpdateResult;
 
 use super::error::Result;
-use super::{deserialize_some, Index};
+use super::Index;
 
 fn serialize_with_wildcard<S>(
-    field: &Option<Option<Vec<String>>>,
+    field: &Setting<Vec<String>>,
     s: S,
 ) -> std::result::Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
     let wildcard = vec!["*".to_string()];
-    s.serialize_some(&field.as_ref().map(|o| o.as_ref().unwrap_or(&wildcard)))
+    match field {
+        Setting::Set(value) => Some(value),
+        Setting::Reset => Some(&wildcard),
+        Setting::NotSet => None,
+    }
+    .serialize(s)
 }
 
 #[derive(Clone, Default, Debug, Serialize)]
 pub struct Checked;
+
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Unchecked;
 
@@ -36,51 +42,28 @@ pub struct Unchecked;
 pub struct Settings<T> {
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
         serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Setting::is_not_set"
     )]
-    pub displayed_attributes: Option<Option<Vec<String>>>,
+    pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
         serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Setting::is_not_set"
     )]
-    pub searchable_attributes: Option<Option<Vec<String>>>,
+    pub searchable_attributes: Setting<Vec<String>>,
 
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub filterable_attributes: Option<Option<HashSet<String>>>,
-
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub ranking_rules: Option<Option<Vec<String>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub stop_words: Option<Option<BTreeSet<String>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub distinct_attribute: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub filterable_attributes: Setting<HashSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub ranking_rules: Setting<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub stop_words: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub distinct_attribute: Setting<String>,
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
@@ -89,13 +72,13 @@ pub struct Settings<T> {
 impl Settings<Checked> {
     pub fn cleared() -> Settings<Checked> {
         Settings {
-            displayed_attributes: Some(None),
-            searchable_attributes: Some(None),
-            filterable_attributes: Some(None),
-            ranking_rules: Some(None),
-            stop_words: Some(None),
-            synonyms: Some(None),
-            distinct_attribute: Some(None),
+            displayed_attributes: Setting::Reset,
+            searchable_attributes: Setting::Reset,
+            filterable_attributes: Setting::Reset,
+            ranking_rules: Setting::Reset,
+            stop_words: Setting::Reset,
+            synonyms: Setting::Reset,
+            distinct_attribute: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -126,24 +109,24 @@ impl Settings<Checked> {
 }
 
 impl Settings<Unchecked> {
-    pub fn check(mut self) -> Settings<Checked> {
-        let displayed_attributes = match self.displayed_attributes.take() {
-            Some(Some(fields)) => {
+    pub fn check(self) -> Settings<Checked> {
+        let displayed_attributes = match self.displayed_attributes {
+            Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
-                    Some(None)
+                    Setting::Reset
                 } else {
-                    Some(Some(fields))
+                    Setting::Set(fields)
                 }
             }
             otherwise => otherwise,
         };
 
-        let searchable_attributes = match self.searchable_attributes.take() {
-            Some(Some(fields)) => {
+        let searchable_attributes = match self.searchable_attributes {
+            Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
-                    Some(None)
+                    Setting::Reset
                 } else {
-                    Some(Some(fields))
+                    Setting::Set(fields)
                 }
             }
             otherwise => otherwise,
@@ -252,51 +235,48 @@ impl Index {
         // We must use the write transaction of the update here.
         let mut builder = update_builder.settings(txn, self);
 
-        if let Some(ref names) = settings.searchable_attributes {
-            match names {
-                Some(names) => builder.set_searchable_fields(names.clone()),
-                None => builder.reset_searchable_fields(),
-            }
+        match settings.searchable_attributes {
+            Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
+            Setting::Reset => builder.reset_searchable_fields(),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref names) = settings.displayed_attributes {
-            match names {
-                Some(names) => builder.set_displayed_fields(names.clone()),
-                None => builder.reset_displayed_fields(),
-            }
+        match settings.displayed_attributes {
+            Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
+            Setting::Reset => builder.reset_displayed_fields(),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref facet_types) = settings.filterable_attributes {
-            let facet_types = facet_types.clone().unwrap_or_else(HashSet::new);
-            builder.set_filterable_fields(facet_types);
+        match settings.filterable_attributes {
+            Setting::Set(ref facet_types) => builder.set_filterable_fields(facet_types.clone()),
+            Setting::Reset => builder.set_filterable_fields(HashSet::new()),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref criteria) = settings.ranking_rules {
-            match criteria {
-                Some(criteria) => builder.set_criteria(criteria.clone()),
-                None => builder.reset_criteria(),
-            }
+        match settings.ranking_rules {
+            Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
+            Setting::Reset => builder.reset_criteria(),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref stop_words) = settings.stop_words {
-            match stop_words {
-                Some(stop_words) => builder.set_stop_words(stop_words.clone()),
-                None => builder.reset_stop_words(),
-            }
+        match settings.stop_words {
+            Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
+            Setting::Reset => builder.reset_stop_words(),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref synonyms) = settings.synonyms {
-            match synonyms {
-                Some(synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
-                None => builder.reset_synonyms(),
+        match settings.synonyms {
+            Setting::Set(ref synonyms) => {
+                builder.set_synonyms(synonyms.clone().into_iter().collect())
             }
+            Setting::Reset => builder.reset_synonyms(),
+            Setting::NotSet => (),
         }
 
-        if let Some(ref distinct_attribute) = settings.distinct_attribute {
-            match distinct_attribute {
-                Some(attr) => builder.set_distinct_field(attr.clone()),
-                None => builder.reset_distinct_field(),
-            }
+        match settings.distinct_attribute {
+            Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
+            Setting::Reset => builder.reset_distinct_field(),
+            Setting::NotSet => (),
         }
 
         builder.execute(|indexing_step, update_id| {
@@ -345,13 +325,13 @@ mod test {
     fn test_setting_check() {
         // test no changes
         let settings = Settings {
-            displayed_attributes: Some(Some(vec![String::from("hello")])),
-            searchable_attributes: Some(Some(vec![String::from("hello")])),
-            filterable_attributes: None,
-            ranking_rules: None,
-            stop_words: None,
-            synonyms: None,
-            distinct_attribute: None,
+            displayed_attributes: Setting::Set(vec![String::from("hello")]),
+            searchable_attributes: Setting::Set(vec![String::from("hello")]),
+            filterable_attributes: Setting::NotSet,
+            ranking_rules: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            distinct_attribute: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -365,18 +345,18 @@ mod test {
         // test wildcard
         // test no changes
         let settings = Settings {
-            displayed_attributes: Some(Some(vec![String::from("*")])),
-            searchable_attributes: Some(Some(vec![String::from("hello"), String::from("*")])),
-            filterable_attributes: None,
-            ranking_rules: None,
-            stop_words: None,
-            synonyms: None,
-            distinct_attribute: None,
+            displayed_attributes: Setting::Set(vec![String::from("*")]),
+            searchable_attributes: Setting::Set(vec![String::from("hello"), String::from("*")]),
+            filterable_attributes: Setting::NotSet,
+            ranking_rules: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            distinct_attribute: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
         let checked = settings.check();
-        assert_eq!(checked.displayed_attributes, Some(None));
-        assert_eq!(checked.searchable_attributes, Some(None));
+        assert_eq!(checked.displayed_attributes, Setting::Reset);
+        assert_eq!(checked.searchable_attributes, Setting::Reset);
     }
 }

@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use heed::EnvOpenOptions;
 use log::{error, info, warn};
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
-use serde::{Deserialize, Serialize};
+use milli::update::{IndexDocumentsMethod, Setting, UpdateFormat};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata};
 use crate::{
-    index::{deserialize_some, update_handler::UpdateHandler, Index, Unchecked},
+    index::{update_handler::UpdateHandler, Index, Unchecked},
     option::IndexerOpts,
 };
 
@@ -54,6 +54,14 @@ impl MetadataV1 {
 
         Ok(())
     }
+}
+
+pub fn deserialize_some<'de, T, D>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }
 
 // These are the settings used in legacy meilisearch (<v0.21.0).
@@ -134,34 +142,62 @@ fn load_index(
 impl From<Settings> for index_controller::Settings<Unchecked> {
     fn from(settings: Settings) -> Self {
         Self {
-            distinct_attribute: settings.distinct_attribute,
+            distinct_attribute: match settings.distinct_attribute {
+                Some(Some(attr)) => Setting::Set(attr),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
-            displayed_attributes: settings.displayed_attributes.map(|o| o.map(|vec| vec.into_iter().collect())),
-            searchable_attributes: settings.searchable_attributes,
+            displayed_attributes: match settings.displayed_attributes {
+                Some(Some(attrs)) => Setting::Set(attrs.into_iter().collect()),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
+            searchable_attributes: match settings.searchable_attributes {
+                Some(Some(attrs)) => Setting::Set(attrs),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             // we previously had a `Vec<String>` but now we have a `HashMap<String, String>`
             // representing the name of the faceted field + the type of the field. Since the type
             // was not known in the V1 of the dump we are just going to assume everything is a
             // String
-            filterable_attributes: settings.attributes_for_faceting.map(|o| o.map(|vec| vec.into_iter().collect())),
+            filterable_attributes: match settings.attributes_for_faceting {
+                Some(Some(attrs)) => Setting::Set(attrs.into_iter().collect()),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
-            ranking_rules: settings.ranking_rules.map(|o| o.map(|vec| vec.into_iter().filter(|criterion| {
-                match criterion.as_str() {
-                    "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
-                    s if s.starts_with("asc") || s.starts_with("desc") => true,
-                    "wordsPosition" => {
-                        warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
-                        false
+            ranking_rules: match settings.ranking_rules {
+                Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter(|criterion| {
+                    match criterion.as_str() {
+                        "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
+                        s if s.starts_with("asc") || s.starts_with("desc") => true,
+                        "wordsPosition" => {
+                            warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
+                            false
+                        }
+                        s => {
+                            error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
+                            false
+                        }
                     }
-                    s => {
-                        error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
-                        false
-                    }
-                    }
-                }).collect())),
+                }).collect()),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
-            stop_words: settings.stop_words.map(|o| o.map(|vec| vec.into_iter().collect())),
+            stop_words: match settings.stop_words {
+                Some(Some(stop_words)) => Setting::Set(stop_words.into_iter().collect()),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             // we need to convert the old `Vec<String>` into a `BTreeMap<String>`
-            synonyms: settings.synonyms.map(|o| o.map(|vec| vec.into_iter().collect())),
+            synonyms: match settings.synonyms {
+                Some(Some(synonyms)) => Setting::Set(synonyms.into_iter().collect()),
+                Some(None) => Setting::Reset,
+                None => Setting::NotSet
+            },
             _kind: PhantomData,
         }
     }

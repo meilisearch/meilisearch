@@ -13,6 +13,8 @@ macro_rules! make_setting_route {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
 
+            use milli::update::Setting;
+
             use crate::data;
             use crate::error::ResponseError;
             use crate::index::Settings;
@@ -24,7 +26,7 @@ macro_rules! make_setting_route {
             ) -> Result<HttpResponse, ResponseError> {
                 use crate::index::Settings;
                 let settings = Settings {
-                    $attr: Some(None),
+                    $attr: Setting::Reset,
                     ..Default::default()
                 };
                 let update_status = data.update_settings(index_uid.into_inner(), settings, false).await?;
@@ -38,7 +40,10 @@ macro_rules! make_setting_route {
                 body: actix_web::web::Json<Option<$type>>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let settings = Settings {
-                    $attr: Some(body.into_inner()),
+                    $attr: match body.into_inner() {
+                        Some(inner_body) => Setting::Set(inner_body),
+                        None => Setting::Reset
+                    },
                     ..Default::default()
                 };
 
