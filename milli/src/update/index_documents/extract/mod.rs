@@ -51,13 +51,14 @@ pub(crate) fn data_from_obkv_documents(
                 lmdb_writer_sx.clone(),
                 &searchable_fields,
                 &faceted_fields,
+                geo_field_id,
                 &stop_words,
             )
         })
         .collect();
 
     let (
-        (docid_word_positions_chunks),
+        docid_word_positions_chunks,
         (docid_fid_facet_numbers_chunks, docid_fid_facet_strings_chunks),
     ) = result?;
 
@@ -121,16 +122,6 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-facet-number-docids",
     );
 
-    spawn_extraction_task(
-        documents_chunk,
-        indexer.clone(),
-        lmdb_writer_sx.clone(),
-        move |documents, indexer| extract_geo_points(documents, indexer, geo_field_id),
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::GeoPoints,
-        "geo-points",
-    );
-
     Ok(())
 }
 
@@ -181,6 +172,7 @@ fn extract_documents_data(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: &Option<HashSet<FieldId>>,
     faceted_fields: &HashSet<FieldId>,
+    geo_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
@@ -189,6 +181,12 @@ fn extract_documents_data(
     let documents_chunk = documents_chunk.and_then(|c| unsafe { into_clonable_grenad(c) })?;
 
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
+
+    let (documents_chunk_cloned, lmdb_writer_sx_cloned) = (documents_chunk.clone(), lmdb_writer_sx.clone());
+    rayon::spawn(move || {
+        let geo_points = extract_geo_points(documents_chunk_cloned, indexer, geo_field_id).unwrap();
+        lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))).unwrap();
+    });
 
     let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(

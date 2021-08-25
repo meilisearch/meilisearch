@@ -21,19 +21,22 @@ pub fn extract_geo_points<R: io::Read>(
     })?;
 
     // we never encountered any documents with a `_geo` field. We can skip entirely this step
-    if geo_field_id.is_none() {
-        return Ok(writer_into_reader(writer)?);
-    }
-    let geo_field_id = geo_field_id.unwrap();
+    let geo_field_id = match geo_field_id {
+        Some(geo) => geo,
+        None => return Ok(writer_into_reader(writer)?),
+    };
 
     while let Some((docid_bytes, value)) = obkv_documents.next()? {
         let obkv = obkv::KvReader::new(value);
-        let point = obkv.get(geo_field_id).unwrap(); // TODO: TAMO where should we handle this error?
+        let point = match obkv.get(geo_field_id) {
+            Some(point) => point,
+            None => continue,
+        };
         let point: Value = serde_json::from_slice(point).map_err(InternalError::SerdeJson)?;
 
         if let Some((lat, lng)) = point["lat"].as_f64().zip(point["lng"].as_f64()) {
             // this will create an array of 16 bytes (two 8 bytes floats)
-            let bytes: [u8; 16] = concat_arrays![lat.to_le_bytes(), lng.to_le_bytes()];
+            let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else {
             // TAMO: improve the warn

@@ -181,16 +181,16 @@ pub(crate) fn write_typed_chunk_into_index(
         }
         TypedChunk::GeoPoints(mut geo_points) => {
             // TODO: TAMO: we should create the rtree with the `RTree::bulk_load` function
-            let mut rtree = index.geo_rtree(&index.read_txn()?)?.unwrap_or_default();
+            let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
             while let Some((key, value)) = geo_points.next()? {
                 // convert the key back to a u32 (4 bytes)
                 let (key, _) = helpers::try_split_array_at::<u8, 4>(key).unwrap();
-                let key = u32::from_le_bytes(key);
+                let key = u32::from_be_bytes(key);
 
                 // convert the latitude and longitude back to a f64 (8 bytes)
                 let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
                 let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
-                let point = [f64::from_le_bytes(lat), f64::from_le_bytes(lng)];
+                let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
                 rtree.insert(GeoPoint::new(point, key));
             }
             index.put_geo_rtree(wtxn, &rtree)?;
