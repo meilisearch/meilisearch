@@ -380,6 +380,19 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
+        if let Some(mut rtree) = self.index.geo_rtree(self.wtxn)? {
+            let points_to_remove: Vec<_> = rtree
+                .iter()
+                .filter(|&point| self.documents_ids.contains(point.data))
+                .cloned()
+                .collect();
+            points_to_remove.iter().for_each(|point| {
+                rtree.remove(&point);
+            });
+
+            self.index.put_geo_rtree(self.wtxn, &rtree)?;
+        }
+
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_field_id_number_docids(
             self.wtxn,
