@@ -61,7 +61,7 @@ rayon = "1.5.0"
 regex = "1.4.2"
 rustls = "0.19"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.59", features = ["preserve_order"] }
+serde_json = { version = "1.0.66", features = ["preserve_order"] }
 sha2 = "0.9.1"
 siphasher = "0.3.2"
 slice-group-by = "0.2.6"
@@ -77,20 +77,6 @@ pin-project = "1.0.7"
 whoami = { version = "1.1.2", optional = true }
 reqwest = { version = "0.11.3", features = ["json", "rustls-tls"], default-features = false, optional = true }
 serdeval = "0.1.0"
-
-[dependencies.sentry]
-default-features = false
-features = [
-    "backtrace",
-    "contexts",
-    "panic",
-    "reqwest",
-    "rustls",
-    "log",
-]
-optional = true
-version = "0.22.0"
-
 
 [dev-dependencies]
 actix-rt = "2.1.0"
@@ -112,7 +98,7 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-analytics = ["sentry", "whoami", "reqwest"]
+analytics = ["whoami", "reqwest"]
 default = ["analytics", "mini-dashboard"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
