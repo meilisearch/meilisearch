@@ -31,9 +31,9 @@ pub fn extract_geo_points<R: io::Read>(
         let point = obkv.get(geo_field_id).unwrap(); // TODO: TAMO where should we handle this error?
         let point: Value = serde_json::from_slice(point).map_err(InternalError::SerdeJson)?;
 
-        if let Some((lat, long)) = point["lat"].as_f64().zip(point["long"].as_f64()) {
+        if let Some((lat, lng)) = point["lat"].as_f64().zip(point["lng"].as_f64()) {
             // this will create an array of 16 bytes (two 8 bytes floats)
-            let bytes: [u8; 16] = concat_arrays![lat.to_le_bytes(), long.to_le_bytes()];
+            let bytes: [u8; 16] = concat_arrays![lat.to_le_bytes(), lng.to_le_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else {
             // TAMO: improve the warn

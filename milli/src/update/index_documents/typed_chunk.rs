@@ -189,8 +189,8 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 // convert the latitude and longitude back to a f64 (8 bytes)
                 let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
-                let (long, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
-                let point = [f64::from_le_bytes(lat), f64::from_le_bytes(long)];
+                let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
+                let point = [f64::from_le_bytes(lat), f64::from_le_bytes(lng)];
                 rtree.insert(GeoPoint::new(point, key));
             }
             index.put_geo_rtree(wtxn, &rtree)?;
