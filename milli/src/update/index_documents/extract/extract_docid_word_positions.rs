@@ -3,7 +3,8 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::{io, mem, str};
 
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
+use meilisearch_tokenizer::token::SeparatorKind;
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
@@ -61,11 +62,8 @@ pub fn extract_docid_word_positions<R: io::Read>(
                 field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut field_buffer) {
                     let analyzed = analyzer.analyze(field);
-                    let tokens = analyzed
-                        .tokens()
-                        .filter(Token::is_word)
-                        .enumerate()
-                        .take_while(|(i, _)| (*i as u32) < ONE_ATTRIBUTE);
+                    let tokens = process_tokens(analyzed.tokens())
+                        .take_while(|(p, _)| (*p as u32) < ONE_ATTRIBUTE);
 
                     for (index, token) in tokens {
                         let token = token.text().trim();
@@ -133,4 +131,37 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
     } else {
         None
     }
+}
+
+/// take an iterator on tokens and compute their relative position depending on separator kinds
+/// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
+/// else we keep the standart proximity of 1 between words.
+fn process_tokens<'a>(
+    tokens: impl Iterator<Item = Token<'a>>,
+) -> impl Iterator<Item = (usize, Token<'a>)> {
+    tokens
+        .skip_while(|token| token.is_separator().is_some())
+        .scan((0, None), |(offset, prev_kind), token| {
+            match token.kind {
+                TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {
+                    *offset += match *prev_kind {
+                        Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
+                        Some(_) => 1,
+                        None => 0,
+                    };
+                    *prev_kind = Some(token.kind)
+                }
+                TokenKind::Separator(SeparatorKind::Hard) => {
+                    *prev_kind = Some(token.kind);
+                }
+                TokenKind::Separator(SeparatorKind::Soft)
+                    if *prev_kind != Some(TokenKind::Separator(SeparatorKind::Hard)) =>
+                {
+                    *prev_kind = Some(token.kind);
+                }
+                _ => (),
+            }
+            Some((*offset, token))
+        })
+        .filter(|(_, t)| t.is_word())
 }
