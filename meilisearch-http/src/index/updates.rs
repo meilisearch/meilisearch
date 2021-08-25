@@ -55,7 +55,7 @@ pub struct Settings<T> {
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    pub filterable_attributes: Setting<HashSet<String>>,
+    pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -254,7 +254,9 @@ impl Index {
         }
 
         match settings.filterable_attributes {
-            Setting::Set(ref facets) => builder.set_filterable_fields(facets.clone()),
+            Setting::Set(ref facets) => {
+                builder.set_filterable_fields(facets.clone().into_iter().collect())
+            }
             Setting::Reset => builder.reset_filterable_fields(),
             Setting::NotSet => (),
         }

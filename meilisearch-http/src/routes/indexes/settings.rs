@@ -75,7 +75,7 @@ macro_rules! make_setting_route {
 
 make_setting_route!(
     "/filterable-attributes",
-    std::collections::HashSet<String>,
+    std::collections::BTreeSet<String>,
     filterable_attributes,
     "filterableAttributes"
 );
