@@ -16,10 +16,11 @@ neq = {key ~ "!=" ~ value}
 eq = {key ~ "=" ~ value}
 greater = {key ~ ">" ~ value}
 less = {key ~ "<" ~ value}
+geo_radius = {"_geoRadius(" ~ value ~ "," ~ value ~ "," ~ value ~ ")"}
 
 prgm = {SOI ~ expr ~ EOI}
 expr = _{ ( term ~ (operation ~ term)* ) }
-term = { ("(" ~ expr ~ ")") | condition | not }
+term = { ("(" ~ expr ~ ")") | condition | not | geo_radius }
 operation = _{ and | or }
 and = {"AND"}
 or = {"OR"}
