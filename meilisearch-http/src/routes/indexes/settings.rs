@@ -82,7 +82,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/sortable-attributes",
-    std::collections::HashSet<String>,
+    std::collections::BTreeSet<String>,
     sortable_attributes,
     "sortableAttributes"
 );

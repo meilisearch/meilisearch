@@ -57,7 +57,7 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub filterable_attributes: Setting<HashSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    pub sortable_attributes: Setting<HashSet<String>>,
+    pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub ranking_rules: Setting<Vec<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -254,14 +254,19 @@ impl Index {
         }
 
         match settings.filterable_attributes {
-            Setting::Set(ref facet_types) => builder.set_filterable_fields(facet_types.clone()),
-            Setting::Reset => builder.set_filterable_fields(HashSet::new()),
+            Setting::Set(ref facets) => builder.set_filterable_fields(facets.clone()),
+            Setting::Reset => builder.reset_filterable_fields(),
             Setting::NotSet => (),
         }
 
         match settings.sortable_attributes {
-            Setting::Set(ref facet_types) => builder.set_sortable_fields(facet_types.clone()),
-            Setting::Reset => builder.set_sortable_fields(HashSet::new()),
+            Setting::Set(ref fields) => {
+                builder.set_sortable_fields(fields.iter().cloned().collect())
+            }
+            Setting::Reset => {
+                // TODO we must use the reset_sortable_fields in a futur PR.
+                builder.set_sortable_fields(HashSet::new())
+            }
             Setting::NotSet => (),
         }
 
