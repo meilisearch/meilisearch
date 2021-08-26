@@ -32,6 +32,8 @@ pub enum Operator {
     LowerThan(f64),
     LowerThanOrEqual(f64),
     Between(f64, f64),
+    GeoLowerThan([f64; 2], f64),
+    GeoGreaterThan([f64; 2], f64),
 }
 
 impl Operator {
@@ -46,6 +48,8 @@ impl Operator {
             LowerThan(n) => (GreaterThanOrEqual(n), None),
             LowerThanOrEqual(n) => (GreaterThan(n), None),
             Between(n, m) => (LowerThan(n), Some(GreaterThan(m))),
+            GeoLowerThan(point, distance) => (GeoGreaterThan(point, distance), None),
+            GeoGreaterThan(point, distance) => (GeoLowerThan(point, distance), None),
         }
     }
 }
@@ -131,6 +135,7 @@ impl FilterCondition {
                 Rule::leq => Ok(Self::lower_than_or_equal(fim, ff, pair)?),
                 Rule::less => Ok(Self::lower_than(fim, ff, pair)?),
                 Rule::between => Ok(Self::between(fim, ff, pair)?),
+                Rule::geo_radius => Ok(Self::geo_radius(fim, pair)?),
                 Rule::not => Ok(Self::from_pairs(fim, ff, pair.into_inner())?.negate()),
                 Rule::prgm => Self::from_pairs(fim, ff, pair.into_inner()),
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
@@ -154,6 +159,23 @@ impl FilterCondition {
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
             Empty => Empty,
         }
+    }
+
+    fn geo_radius(fields_ids_map: &FieldsIdsMap, item: Pair<Rule>) -> Result<FilterCondition> {
+        let mut items = item.into_inner();
+        let fid = match fields_ids_map.id("_geo") {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
+        let (lat_result, _) = pest_parse(items.next().unwrap());
+        let (lng_result, _) = pest_parse(items.next().unwrap());
+        let lat = lat_result.map_err(UserError::InvalidFilter)?;
+        let lng = lng_result.map_err(UserError::InvalidFilter)?;
+        let point = [lat, lng];
+        let (distance_result, _) = pest_parse(items.next().unwrap());
+        let distance = distance_result.map_err(UserError::InvalidFilter)?;
+
+        Ok(Operator(fid, GeoLowerThan(point, distance)))
     }
 
     fn between(
@@ -440,6 +462,32 @@ impl FilterCondition {
             LowerThan(val) => (Included(f64::MIN), Excluded(*val)),
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
+            GeoLowerThan(point, distance) => {
+                let mut result = RoaringBitmap::new();
+                let rtree = match index.geo_rtree(rtxn)? {
+                    Some(rtree) => rtree,
+                    None => return Ok(result),
+                };
+
+                let iter = rtree
+                    .nearest_neighbor_iter_with_distance_2(point)
+                    .take_while(|(_, dist)| dist <= distance);
+                iter.for_each(|(point, _)| drop(result.insert(point.data)));
+
+                return Ok(result);
+            }
+            GeoGreaterThan(point, distance) => {
+                let result = Self::evaluate_operator(
+                    rtxn,
+                    index,
+                    numbers_db,
+                    strings_db,
+                    field_id,
+                    &GeoLowerThan(point.clone(), *distance),
+                )?;
+                let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
+                return Ok(geo_faceted_doc_ids - result);
+            }
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
