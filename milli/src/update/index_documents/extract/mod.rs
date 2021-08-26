@@ -182,10 +182,13 @@ fn extract_documents_data(
 
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
 
-    let (documents_chunk_cloned, lmdb_writer_sx_cloned) = (documents_chunk.clone(), lmdb_writer_sx.clone());
+    let documents_chunk_cloned = documents_chunk.clone();
+    let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
     rayon::spawn(move || {
-        let geo_points = extract_geo_points(documents_chunk_cloned, indexer, geo_field_id).unwrap();
-        lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))).unwrap();
+        let _ = match extract_geo_points(documents_chunk_cloned, indexer, geo_field_id) {
+            Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
+            Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+        };
     });
 
     let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
