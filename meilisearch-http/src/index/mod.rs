@@ -63,6 +63,8 @@ impl Index {
 
         let filterable_attributes = self.filterable_fields(txn)?.into_iter().collect();
 
+        let sortable_attributes = self.sortable_fields(txn)?.into_iter().collect();
+
         let criteria = self
             .criteria(txn)?
             .into_iter()
@@ -101,6 +103,7 @@ impl Index {
                 None => Setting::Reset,
             },
             filterable_attributes: Setting::Set(filterable_attributes),
+            sortable_attributes: Setting::Set(sortable_attributes),
             ranking_rules: Setting::Set(criteria),
             stop_words: Setting::Set(stop_words),
             distinct_attribute: match distinct_field {

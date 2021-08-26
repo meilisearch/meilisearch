@@ -1,5 +1,3 @@
-use std::collections::{BTreeSet, HashSet};
-
 use actix_web::{web, HttpResponse};
 use log::debug;
 use serde::Deserialize;
@@ -31,6 +29,7 @@ pub struct SearchQueryGet {
     crop_length: usize,
     attributes_to_highlight: Option<String>,
     filter: Option<String>,
+    sort: Option<String>,
     #[serde(default = "Default::default")]
     matches: bool,
     facets_distribution: Option<String>,
@@ -40,19 +39,19 @@ impl From<SearchQueryGet> for SearchQuery {
     fn from(other: SearchQueryGet) -> Self {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect::<BTreeSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect());
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect());
 
         let attributes_to_highlight = other
             .attributes_to_highlight
-            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect());
 
         let facets_distribution = other
             .facets_distribution
-            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect());
 
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
@@ -61,6 +60,10 @@ impl From<SearchQueryGet> for SearchQuery {
             },
             None => None,
         };
+
+        let sort = other
+            .sort
+            .map(|attrs| attrs.split(',').map(String::from).collect());
 
         Self {
             q: other.q,
@@ -71,6 +74,7 @@ impl From<SearchQueryGet> for SearchQuery {
             crop_length: other.crop_length,
             attributes_to_highlight,
             filter,
+            sort,
             matches: other.matches,
             facets_distribution,
         }

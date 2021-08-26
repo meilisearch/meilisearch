@@ -158,15 +158,12 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 Some(None) => Setting::Reset,
                 None => Setting::NotSet
             },
-            // we previously had a `Vec<String>` but now we have a `HashMap<String, String>`
-            // representing the name of the faceted field + the type of the field. Since the type
-            // was not known in the V1 of the dump we are just going to assume everything is a
-            // String
             filterable_attributes: match settings.attributes_for_faceting {
                 Some(Some(attrs)) => Setting::Set(attrs.into_iter().collect()),
                 Some(None) => Setting::Reset,
                 None => Setting::NotSet
             },
+            sortable_attributes: Setting::NotSet,
             // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: match settings.ranking_rules {
                 Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter(|criterion| {

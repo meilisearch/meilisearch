@@ -1,8 +1,8 @@
 use std::fs::File;
 
 use crate::index::Index;
-use grenad::CompressionType;
 use milli::update::UpdateBuilder;
+use milli::CompressionType;
 use rayon::ThreadPool;
 
 use crate::index_controller::UpdateMeta;

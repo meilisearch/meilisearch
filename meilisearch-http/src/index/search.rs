@@ -1,15 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{FieldId, FieldsIdsMap, FilterCondition, MatchingWords};
+use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::index::error::FacetError;
+use crate::index::IndexError;
 
 use super::error::Result;
 use super::Index;
@@ -49,6 +51,7 @@ pub struct SearchQuery {
     #[serde(default = "Default::default")]
     pub matches: bool,
     pub filter: Option<Value>,
+    pub sort: Option<Vec<String>>,
     pub facets_distribution: Option<Vec<String>>,
 }
 
@@ -102,6 +105,15 @@ impl Index {
             if let Some(facets) = parse_filter(filter, self, &rtxn)? {
                 search.filter(facets);
             }
+        }
+
+        if let Some(ref sort) = query.sort {
+            let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
+                Ok(sorts) => sorts,
+                Err(err) => return Err(IndexError::Milli(err.into())),
+            };
+
+            search.sort_criteria(sort);
         }
 
         let milli::SearchResult {
