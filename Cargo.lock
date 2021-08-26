@@ -1585,7 +1585,6 @@ dependencies = [
  "fst",
  "futures",
  "futures-util",
- "grenad",
  "heed",
  "hex",
  "http",
@@ -1676,8 +1675,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.10.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.10.2#879d5e8799836d93f8995810965b6797be4f69d1"
+version = "0.11.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.11.0#c51bb6789cb3fbb6511138374b3443f9116a445c"
 dependencies = [
  "bstr",
  "byteorder",
@@ -1704,7 +1703,6 @@ dependencies = [
  "pest 2.1.3 (git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67)",
  "pest_derive",
  "rayon",
- "regex",
  "roaring",
  "serde",
  "serde_json",
@@ -1712,7 +1710,6 @@ dependencies = [
  "smallstr",
  "smallvec",
  "tempfile",
- "tinytemplate",
  "uuid",
 ]
 
@@ -2514,18 +2511,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.126"
+version = "1.0.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec7505abeacaec74ae4778d9d9328fe5a5d04253220a85c4ee022239fc996d03"
+checksum = "d1f72836d2aa753853178eda473a3b9d8e4eefdaf20523b919677e6de489f8f1"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.126"
+version = "1.0.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "963a7dbc9895aeac7ac90e74f34a5d5261828f79df35cbed41e10189d3804d43"
+checksum = "e57ae87ad533d9a56427558b516d0adac283614e347abf85b0dc0cbbf0a249f3"
 dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.9",
@@ -2935,16 +2932,6 @@ dependencies = [
  "quote 1.0.9",
  "standback",
  "syn 1.0.73",
-]
-
-[[package]]
-name = "tinytemplate"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3dc76004a03cec1c5932bca4cdc2e39aaa798e3f82363dd94f9adf6098c12f"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
