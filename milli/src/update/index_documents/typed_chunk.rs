@@ -95,7 +95,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 // we use the key to construct the words fst.
                 builder.insert(word)?;
             }
-            let fst = builder.into_set().map_data(std::borrow::Cow::Owned).unwrap();
+            let fst = builder.into_set().map_data(std::borrow::Cow::Owned)?;
             let db_fst = index.words_fst(wtxn)?;
 
             // merge new fst with database fst

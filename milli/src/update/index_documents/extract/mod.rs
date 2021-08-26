@@ -147,9 +147,11 @@ fn spawn_extraction_task<FE, FS>(
             Ok(chunks) => {
                 debug!("merge {} database", name);
                 let reader = merge_readers(chunks, merge_fn, indexer);
-                lmdb_writer_sx.send(reader.map(|r| serialize_fn(r))).unwrap();
+                let _ = lmdb_writer_sx.send(reader.map(|r| serialize_fn(r)));
             }
-            Err(e) => lmdb_writer_sx.send(Err(e)).unwrap(),
+            Err(e) => {
+                let _ = lmdb_writer_sx.send(Err(e));
+            }
         })
     });
 }
@@ -173,7 +175,7 @@ fn extract_documents_data(
 )> {
     let documents_chunk = documents_chunk.and_then(|c| unsafe { into_clonable_grenad(c) })?;
 
-    lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone()))).unwrap();
+    let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
 
     let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(
@@ -186,14 +188,14 @@ fn extract_documents_data(
                 )?;
 
                 // send documents_ids to DB writer
-                lmdb_writer_sx.send(Ok(TypedChunk::NewDocumentsIds(documents_ids))).unwrap();
+                let _ = lmdb_writer_sx.send(Ok(TypedChunk::NewDocumentsIds(documents_ids)));
 
                 // send docid_word_positions_chunk to DB writer
                 let docid_word_positions_chunk =
                     unsafe { into_clonable_grenad(docid_word_positions_chunk)? };
-                lmdb_writer_sx
-                    .send(Ok(TypedChunk::DocidWordPositions(docid_word_positions_chunk.clone())))
-                    .unwrap();
+                let _ = lmdb_writer_sx
+                    .send(Ok(TypedChunk::DocidWordPositions(docid_word_positions_chunk.clone())));
+
                 Ok(docid_word_positions_chunk)
             },
             || {
@@ -207,20 +209,18 @@ fn extract_documents_data(
                 // send docid_fid_facet_numbers_chunk to DB writer
                 let docid_fid_facet_numbers_chunk =
                     unsafe { into_clonable_grenad(docid_fid_facet_numbers_chunk)? };
-                lmdb_writer_sx
-                    .send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
-                        docid_fid_facet_numbers_chunk.clone(),
-                    )))
-                    .unwrap();
+
+                let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
+                    docid_fid_facet_numbers_chunk.clone(),
+                )));
 
                 // send docid_fid_facet_strings_chunk to DB writer
                 let docid_fid_facet_strings_chunk =
                     unsafe { into_clonable_grenad(docid_fid_facet_strings_chunk)? };
-                lmdb_writer_sx
-                    .send(Ok(TypedChunk::FieldIdDocidFacetStrings(
-                        docid_fid_facet_strings_chunk.clone(),
-                    )))
-                    .unwrap();
+
+                let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
+                    docid_fid_facet_strings_chunk.clone(),
+                )));
 
                 Ok((docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk))
             },

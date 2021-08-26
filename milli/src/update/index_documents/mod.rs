@@ -268,7 +268,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
 
             if let Err(e) = result {
-                lmdb_writer_sx.send(Err(e)).unwrap();
+                let _ = lmdb_writer_sx.send(Err(e));
             }
 
             // needs to be droped to avoid channel waiting lock.
