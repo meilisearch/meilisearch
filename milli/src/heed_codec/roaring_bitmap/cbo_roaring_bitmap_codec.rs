@@ -52,6 +52,46 @@ impl CboRoaringBitmapCodec {
             RoaringBitmap::deserialize_from(bytes)
         }
     }
+
+    /// Merge serialized CboRoaringBitmaps in a buffer.
+    ///
+    /// if the merged values len is under the threshold,
+    /// values are directly serialized in the buffer;
+    /// else a RoaringBitmap is created from the values and is serialized in the buffer.
+    pub fn merge_into(slices: &[Cow<[u8]>], buffer: &mut Vec<u8>) -> io::Result<()> {
+        let mut roaring = RoaringBitmap::new();
+        let mut vec = Vec::new();
+
+        for bytes in slices {
+            if bytes.len() <= THRESHOLD * size_of::<u32>() {
+                let mut reader = bytes.as_ref();
+                while let Ok(integer) = reader.read_u32::<NativeEndian>() {
+                    vec.push(integer);
+                }
+            } else {
+                roaring |= RoaringBitmap::deserialize_from(bytes.as_ref())?;
+            }
+        }
+
+        if roaring.is_empty() {
+            vec.sort_unstable();
+            vec.dedup();
+
+            if vec.len() <= THRESHOLD {
+                for integer in vec {
+                    buffer.extend_from_slice(&integer.to_ne_bytes());
+                }
+            } else {
+                let roaring = RoaringBitmap::from_sorted_iter(vec.into_iter());
+                roaring.serialize_into(buffer)?;
+            }
+        } else {
+            roaring.extend(vec);
+            roaring.serialize_into(buffer)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl heed::BytesDecode<'_> for CboRoaringBitmapCodec {
@@ -105,5 +145,41 @@ mod tests {
         let bo_size = bytes.len();
 
         assert!(roaring_size > bo_size);
+    }
+
+    #[test]
+    fn merge_cbo_roaring_bitmaps() {
+        let mut buffer = Vec::new();
+
+        let small_data = vec![
+            RoaringBitmap::from_sorted_iter(1..4),
+            RoaringBitmap::from_sorted_iter(2..5),
+            RoaringBitmap::from_sorted_iter(4..6),
+            RoaringBitmap::from_sorted_iter(1..3),
+        ];
+
+        let small_data: Vec<_> =
+            small_data.iter().map(|b| CboRoaringBitmapCodec::bytes_encode(b).unwrap()).collect();
+        CboRoaringBitmapCodec::merge_into(small_data.as_slice(), &mut buffer).unwrap();
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
+        let expected = RoaringBitmap::from_sorted_iter(1..6);
+        assert_eq!(bitmap, expected);
+
+        let medium_data = vec![
+            RoaringBitmap::from_sorted_iter(1..4),
+            RoaringBitmap::from_sorted_iter(2..5),
+            RoaringBitmap::from_sorted_iter(4..8),
+            RoaringBitmap::from_sorted_iter(0..3),
+            RoaringBitmap::from_sorted_iter(7..23),
+        ];
+
+        let medium_data: Vec<_> =
+            medium_data.iter().map(|b| CboRoaringBitmapCodec::bytes_encode(b).unwrap()).collect();
+        buffer.clear();
+        CboRoaringBitmapCodec::merge_into(medium_data.as_slice(), &mut buffer).unwrap();
+
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
+        let expected = RoaringBitmap::from_sorted_iter(0..23);
+        assert_eq!(bitmap, expected);
     }
 }

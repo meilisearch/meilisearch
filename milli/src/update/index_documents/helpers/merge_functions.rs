@@ -120,52 +120,11 @@ pub fn merge_cbo_roaring_bitmaps<'a>(
     _key: &[u8],
     values: &[Cow<'a, [u8]>],
 ) -> Result<Cow<'a, [u8]>> {
-    match values.split_first().unwrap() {
-        (head, []) => Ok(head.clone()),
-        (head, tail) => {
-            let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
-
-            for value in tail {
-                head |= CboRoaringBitmapCodec::deserialize_from(&value[..])?;
-            }
-
-            let mut vec = Vec::new();
-            CboRoaringBitmapCodec::serialize_into(&head, &mut vec);
-            Ok(Cow::from(vec))
-        }
+    if values.len() == 1 {
+        Ok(values[0].clone())
+    } else {
+        let mut vec = Vec::new();
+        CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
+        Ok(Cow::from(vec))
     }
 }
-
-// /// Uses the FacetStringLevelZeroValueCodec to merge the values.
-// pub fn tuple_string_cbo_roaring_bitmap_merge<'a>(
-//     _key: &[u8],
-//     values: &[Cow<[u8]>],
-// ) -> Result<Cow<'a, [u8]>> {
-//     let (head, tail) = values.split_first().unwrap();
-//     let (head_string, mut head_rb) = FacetStringLevelZeroValueCodec::bytes_decode(&head[..])
-//         .ok_or(SerializationError::Decoding { db_name: None })?;
-
-//     for value in tail {
-//         let (_string, rb) = FacetStringLevelZeroValueCodec::bytes_decode(&value[..])
-//             .ok_or(SerializationError::Decoding { db_name: None })?;
-//         head_rb |= rb;
-//     }
-
-//     FacetStringLevelZeroValueCodec::bytes_encode(&(head_string, head_rb))
-//         .map(|cow| cow.into_owned())
-//         .ok_or(SerializationError::Encoding { db_name: None })
-//         .map_err(Into::into)
-// }
-
-// pub fn cbo_roaring_bitmap_merge<'a>(_key: &[u8], values: &[Cow<[u8]>]) -> Result<Cow<'a, [u8]>> {
-//     let (head, tail) = values.split_first().unwrap();
-//     let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
-
-//     for value in tail {
-//         head |= CboRoaringBitmapCodec::deserialize_from(&value[..])?;
-//     }
-
-//     let mut vec = Vec::new();
-//     CboRoaringBitmapCodec::serialize_into(&head, &mut vec);
-//     Ok(vec)
-// }
