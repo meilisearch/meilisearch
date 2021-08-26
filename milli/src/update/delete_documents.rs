@@ -381,6 +381,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         drop(iter);
 
         if let Some(mut rtree) = self.index.geo_rtree(self.wtxn)? {
+            let mut geo_faceted_doc_ids = self.index.geo_faceted_documents_ids(self.wtxn)?;
+
             let points_to_remove: Vec<_> = rtree
                 .iter()
                 .filter(|&point| self.documents_ids.contains(point.data))
@@ -388,9 +390,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 .collect();
             points_to_remove.iter().for_each(|point| {
                 rtree.remove(&point);
+                geo_faceted_doc_ids.remove(point.data);
             });
 
             self.index.put_geo_rtree(self.wtxn, &rtree)?;
+            self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;
         }
 
         // We delete the documents ids that are under the facet field id values.
@@ -555,6 +559,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::hashset;
@@ -726,11 +732,30 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         let rtree = index.geo_rtree(&rtxn).unwrap().unwrap();
+        let geo_faceted_doc_ids = index.geo_faceted_documents_ids(&rtxn).unwrap();
 
         let all_geo_ids = rtree.iter().map(|point| point.data).collect::<Vec<_>>();
-        let all_geo_documents = index.documents(&rtxn, all_geo_ids.iter().copied()).unwrap();
+        let all_geo_documents = index
+            .documents(&rtxn, all_geo_ids.iter().copied())
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<HashSet<_>>();
 
-        for (id, _) in all_geo_documents.iter() {
+        let all_geo_faceted_ids = geo_faceted_doc_ids.iter().collect::<Vec<_>>();
+        let all_geo_faceted_documents = index
+            .documents(&rtxn, all_geo_faceted_ids.iter().copied())
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            all_geo_documents, all_geo_faceted_documents,
+            "There is an inconsistency between the geo_faceted database and the rtree"
+        );
+
+        for id in all_geo_documents.iter() {
             assert!(!ids_to_delete.contains(&id), "The document {} was supposed to be deleted", id);
         }
 

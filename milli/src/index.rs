@@ -32,7 +32,8 @@ pub mod main_key {
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
-    pub const GEO_RTREE_KEY: &str = "geo";
+    pub const GEO_FACETED_DOCUMENTS_IDS_KEY: &str = "geo-faceted-documents-ids";
+    pub const GEO_RTREE_KEY: &str = "geo-rtree";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -317,6 +318,41 @@ impl Index {
         {
             Some(rtree) => Ok(Some(rtree)),
             None => Ok(None),
+        }
+    }
+
+    /* geo faceted */
+
+    /// Writes the documents ids that are faceted with a _geo field
+    pub(crate) fn put_geo_faceted_documents_ids(
+        &self,
+        wtxn: &mut RwTxn,
+        docids: &RoaringBitmap,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, RoaringBitmapCodec>(
+            wtxn,
+            main_key::GEO_FACETED_DOCUMENTS_IDS_KEY,
+            docids,
+        )
+    }
+
+    /// Delete the documents ids that are faceted with a _geo field
+    pub(crate) fn delete_geo_faceted_documents_ids(&self, wtxn: &mut RwTxn) -> heed::Result<()> {
+        self.main.put::<_, Str, RoaringBitmapCodec>(
+            wtxn,
+            main_key::GEO_FACETED_DOCUMENTS_IDS_KEY,
+            &RoaringBitmap::new(),
+        )
+    }
+
+    /// Retrieve all the documents ids that faceted with a _geo field
+    pub fn geo_faceted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
+        match self
+            .main
+            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)?
+        {
+            Some(docids) => Ok(docids),
+            None => Ok(RoaringBitmap::new()),
         }
     }
 

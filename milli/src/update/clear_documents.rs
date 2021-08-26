@@ -49,6 +49,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
+        self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
 
         // We clean all the faceted documents ids.
         let empty = RoaringBitmap::default();
@@ -116,6 +117,7 @@ mod tests {
         assert!(index.documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.field_distribution(&rtxn).unwrap().is_empty());
         assert!(index.geo_rtree(&rtxn).unwrap().is_none());
+        assert!(index.geo_faceted_documents_ids(&rtxn).unwrap().is_empty());
 
         assert!(index.word_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
