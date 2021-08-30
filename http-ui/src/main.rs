@@ -258,6 +258,9 @@ struct Settings {
     filterable_attributes: Setting<HashSet<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    sortable_attributes: Setting<HashSet<String>>,
+
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     criteria: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -445,6 +448,15 @@ async fn main() -> anyhow::Result<()> {
                                 builder.set_filterable_fields(filterable_attributes)
                             }
                             Setting::Reset => builder.reset_filterable_fields(),
+                            Setting::NotSet => (),
+                        }
+
+                        // We transpose the settings JSON struct into a real setting update.
+                        match settings.sortable_attributes {
+                            Setting::Set(sortable_attributes) => {
+                                builder.set_sortable_fields(sortable_attributes)
+                            }
+                            Setting::Reset => builder.reset_sortable_fields(),
                             Setting::NotSet => (),
                         }
 
@@ -1029,6 +1041,7 @@ mod tests {
             displayed_attributes: Setting::Set(vec!["name".to_string()]),
             searchable_attributes: Setting::Set(vec!["age".to_string()]),
             filterable_attributes: Setting::Set(hashset! { "age".to_string() }),
+            sortable_attributes: Setting::Set(hashset! { "age".to_string() }),
             criteria: Setting::Set(vec!["age:asc".to_string()]),
             stop_words: Setting::Set(btreeset! { "and".to_string() }),
             synonyms: Setting::Set(hashmap! { "alex".to_string() => vec!["alexey".to_string()] }),
@@ -1037,7 +1050,7 @@ mod tests {
         assert_tokens(
             &settings,
             &[
-                Token::Struct { name: "Settings", len: 6 },
+                Token::Struct { name: "Settings", len: 7 },
                 Token::Str("displayedAttributes"),
                 Token::Some,
                 Token::Seq { len: Some(1) },
@@ -1048,12 +1061,16 @@ mod tests {
                 Token::Seq { len: Some(1) },
                 Token::Str("age"),
                 Token::SeqEnd,
-                Token::Str("facetedAttributes"),
+                Token::Str("filterableAttributes"),
                 Token::Some,
-                Token::Map { len: Some(1) },
+                Token::Seq { len: Some(1) },
                 Token::Str("age"),
-                Token::Str("integer"),
-                Token::MapEnd,
+                Token::SeqEnd,
+                Token::Str("sortableAttributes"),
+                Token::Some,
+                Token::Seq { len: Some(1) },
+                Token::Str("age"),
+                Token::SeqEnd,
                 Token::Str("criteria"),
                 Token::Some,
                 Token::Seq { len: Some(1) },
@@ -1083,6 +1100,7 @@ mod tests {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
             filterable_attributes: Setting::Reset,
+            sortable_attributes: Setting::Reset,
             criteria: Setting::Reset,
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
@@ -1091,12 +1109,14 @@ mod tests {
         assert_tokens(
             &settings,
             &[
-                Token::Struct { name: "Settings", len: 6 },
+                Token::Struct { name: "Settings", len: 7 },
                 Token::Str("displayedAttributes"),
                 Token::None,
                 Token::Str("searchableAttributes"),
                 Token::None,
-                Token::Str("facetedAttributes"),
+                Token::Str("filterableAttributes"),
+                Token::None,
+                Token::Str("sortableAttributes"),
                 Token::None,
                 Token::Str("criteria"),
                 Token::None,
@@ -1115,6 +1135,7 @@ mod tests {
             displayed_attributes: Setting::NotSet,
             searchable_attributes: Setting::NotSet,
             filterable_attributes: Setting::NotSet,
+            sortable_attributes: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
