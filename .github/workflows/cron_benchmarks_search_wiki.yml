@@ -1,4 +1,4 @@
-name: Benchmarks search wikipedia articles
+name: Benchmarks search wikipedia articles (cron)
 
 on:
   schedule:

@@ -1,4 +1,4 @@
-name: Benchmarks indexing
+name: Benchmarks indexing (cron)
 
 on:
   schedule:

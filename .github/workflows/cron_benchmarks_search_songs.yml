@@ -1,4 +1,4 @@
-name: Benchmarks search songs
+name: Benchmarks search songs (cron)
 
 on:
   schedule:
