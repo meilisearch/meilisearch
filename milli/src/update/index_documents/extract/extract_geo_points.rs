@@ -14,17 +14,11 @@ use crate::{FieldId, InternalError, Result};
 pub fn extract_geo_points<R: io::Read>(
     mut obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    geo_field_id: Option<FieldId>, // faire un grenad vide
+    geo_field_id: FieldId,
 ) -> Result<grenad::Reader<File>> {
     let mut writer = tempfile::tempfile().and_then(|file| {
         create_writer(indexer.chunk_compression_type, indexer.chunk_compression_level, file)
     })?;
-
-    // we never encountered any documents with a `_geo` field. We can skip entirely this step
-    let geo_field_id = match geo_field_id {
-        Some(geo) => geo,
-        None => return Ok(writer_into_reader(writer)?),
-    };
 
     while let Some((docid_bytes, value)) = obkv_documents.next()? {
         let obkv = obkv::KvReader::new(value);
