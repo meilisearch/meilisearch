@@ -29,7 +29,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory,
+        max_memory.map(|m| m / 2),
     );
 
     let mut number_of_documents = 0;
