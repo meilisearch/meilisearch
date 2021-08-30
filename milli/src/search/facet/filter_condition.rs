@@ -463,6 +463,9 @@ impl FilterCondition {
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
             GeoLowerThan(point, distance) => {
+                if index.filterable_fields(rtxn)?.contains("_geo") {
+                    Err(UserError::AttributeLimitReached)?; // TODO: TAMO use a real error
+                }
                 let mut result = RoaringBitmap::new();
                 let rtree = match index.geo_rtree(rtxn)? {
                     Some(rtree) => rtree,
@@ -477,6 +480,9 @@ impl FilterCondition {
                 return Ok(result);
             }
             GeoGreaterThan(point, distance) => {
+                if index.filterable_fields(rtxn)?.contains("_geo") {
+                    Err(UserError::AttributeLimitReached)?; // TODO: TAMO use a real error
+                }
                 let result = Self::evaluate_operator(
                     rtxn,
                     index,

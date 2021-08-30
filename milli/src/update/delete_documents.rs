@@ -687,6 +687,8 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_primary_key(S("id"));
+        builder.set_filterable_fields(hashset!(S("_geo")));
+        builder.set_sortable_fields(hashset!(S("_geo")));
         builder.execute(|_, _| ()).unwrap();
 
         let content = &r#"[
