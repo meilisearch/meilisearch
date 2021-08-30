@@ -104,14 +104,8 @@ async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>
 }
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
-    let commit_sha = match option_env!("COMMIT_SHA") {
-        Some("") | None => env!("VERGEN_GIT_SHA"),
-        Some(commit_sha) => commit_sha,
-    };
-    let commit_date = match option_env!("COMMIT_DATE") {
-        Some("") | None => env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
-        Some(commit_date) => commit_date,
-    };
+    let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
+    let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
     let ascii_name = r#"
 888b     d888          d8b 888 d8b  .d8888b.                                    888

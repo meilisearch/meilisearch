@@ -1,7 +1,9 @@
 use vergen::{vergen, Config};
 
 fn main() {
-    vergen(Config::default()).unwrap();
+    if let Err(e) = vergen(Config::default()) {
+        println!("cargo:warning=vergen: {}", e);
+    }
 
     #[cfg(feature = "mini-dashboard")]
     mini_dashboard::setup_mini_dashboard().expect("Could not load the mini-dashboard assets");
