@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -265,10 +265,7 @@ impl Index {
             Setting::Set(ref fields) => {
                 builder.set_sortable_fields(fields.iter().cloned().collect())
             }
-            Setting::Reset => {
-                // TODO we must use the reset_sortable_fields in a futur PR.
-                builder.set_sortable_fields(HashSet::new())
-            }
+            Setting::Reset => builder.reset_sortable_fields(),
             Setting::NotSet => (),
         }
 
