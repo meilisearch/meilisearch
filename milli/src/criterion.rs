@@ -58,23 +58,83 @@ impl FromStr for Criterion {
                 Err(error) => {
                     Err(UserError::InvalidCriterionName { name: error.to_string() }.into())
                 }
+                Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
+                    Err(UserError::AttributeLimitReached)? // TODO: TAMO: use a real error
+                }
+                Err(error) => Err(error.into()),
             },
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum Member {
+    Field(String),
+    Geo([f64; 2]),
+}
+
+impl FromStr for Member {
+    type Err = UserError;
+
+    fn from_str(text: &str) -> Result<Member, Self::Err> {
+        if text.starts_with("_geoPoint(") {
+            let point =
+                text.strip_prefix("_geoPoint(")
+                    .and_then(|point| point.strip_suffix(")"))
+                    .ok_or_else(|| UserError::InvalidCriterionName { name: text.to_string() })?;
+            let point = point
+                .split(',')
+                .map(|el| el.parse())
+                .collect::<Result<Vec<f64>, _>>()
+                .map_err(|_| UserError::InvalidCriterionName { name: text.to_string() })?;
+            Ok(Member::Geo([point[0], point[1]]))
+        } else {
+            Ok(Member::Field(text.to_string()))
+        }
+    }
+}
+
+impl fmt::Display for Member {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Member::Field(name) => write!(f, "{}", name),
+            Member::Geo([lat, lng]) => write!(f, "_geoPoint({}, {})", lat, lng),
+        }
+    }
+}
+
+impl Member {
+    pub fn field(&self) -> Option<&str> {
+        match self {
+            Member::Field(field) => Some(field),
+            Member::Geo(_) => None,
+        }
+    }
+
+    pub fn geo_point(&self) -> Option<&[f64; 2]> {
+        match self {
+            Member::Geo(point) => Some(point),
+            Member::Field(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum AscDesc {
-    Asc(String),
-    Desc(String),
+    Asc(Member),
+    Desc(Member),
 }
 
 impl AscDesc {
-    pub fn field(&self) -> &str {
+    pub fn member(&self) -> &Member {
         match self {
-            AscDesc::Asc(field) => field,
-            AscDesc::Desc(field) => field,
+            AscDesc::Asc(member) => member,
+            AscDesc::Desc(member) => member,
         }
+    }
+
+    pub fn field(&self) -> Option<&str> {
+        self.member().field()
     }
 }
 
@@ -85,9 +145,9 @@ impl FromStr for AscDesc {
     /// string and let the caller create his own error
     fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
         match text.rsplit_once(':') {
-            Some((field_name, "asc")) => Ok(AscDesc::Asc(field_name.to_string())),
-            Some((field_name, "desc")) => Ok(AscDesc::Desc(field_name.to_string())),
-            _ => Err(UserError::InvalidAscDescSyntax { name: text.to_string() }),
+            Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),
+            Some((left, "desc")) => Ok(AscDesc::Desc(left.parse()?)),
+            _ => Err(UserError::InvalidCriterionName { name: text.to_string() }),
         }
     }
 }

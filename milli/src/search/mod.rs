@@ -148,13 +148,15 @@ impl<'a> Search<'a> {
         if let Some(sort_criteria) = &self.sort_criteria {
             let sortable_fields = self.index.sortable_fields(self.rtxn)?;
             for asc_desc in sort_criteria {
-                let field = asc_desc.field();
-                if !sortable_fields.contains(field) {
-                    return Err(UserError::InvalidSortableAttribute {
-                        field: field.to_string(),
-                        valid_fields: sortable_fields,
+                // we are not supposed to find any geoPoint in the criterion
+                if let Some(field) = asc_desc.field() {
+                    if !sortable_fields.contains(field) {
+                        return Err(UserError::InvalidSortableAttribute {
+                            field: field.to_string(),
+                            valid_fields: sortable_fields,
+                        }
+                        .into());
                     }
-                    .into());
                 }
             }
         }

@@ -12,7 +12,7 @@ use self::r#final::Final;
 use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
-use crate::criterion::AscDesc as AscDescName;
+use crate::criterion::{AscDesc as AscDescName, Member};
 use crate::search::{word_derivations, WordDerivationsCache};
 use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
 
@@ -294,13 +294,13 @@ impl<'t> CriteriaBuilder<'t> {
                                     &self.index,
                                     &self.rtxn,
                                     criterion,
-                                    field.to_string(),
+                                    field.clone(),
                                 )?),
                                 AscDescName::Desc(field) => Box::new(AscDesc::desc(
                                     &self.index,
                                     &self.rtxn,
                                     criterion,
-                                    field.to_string(),
+                                    field.clone(),
                                 )?),
                             };
                         }
@@ -312,10 +312,10 @@ impl<'t> CriteriaBuilder<'t> {
                 Name::Attribute => Box::new(Attribute::new(self, criterion)),
                 Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
                 Name::Asc(field) => {
-                    Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?)
+                    Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, Member::Field(field))?)
                 }
                 Name::Desc(field) => {
-                    Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?)
+                    Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, Member::Field(field))?)
                 }
             };
         }

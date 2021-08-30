@@ -4,12 +4,14 @@ use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
+use rstar::RTree;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
+use crate::criterion::Member;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::{FacetNumberIter, FacetStringIter};
 use crate::search::query_tree::Operation;
-use crate::{FieldId, Index, Result};
+use crate::{FieldId, GeoPoint, Index, Result};
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
@@ -18,10 +20,11 @@ const CANDIDATES_THRESHOLD: u64 = 1000;
 pub struct AscDesc<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
-    field_name: String,
+    member: Member,
     field_id: Option<FieldId>,
     is_ascending: bool,
     query_tree: Option<Operation>,
+    rtree: Option<RTree<GeoPoint>>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
     allowed_candidates: RoaringBitmap,
     bucket_candidates: RoaringBitmap,
@@ -34,29 +37,29 @@ impl<'t> AscDesc<'t> {
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_name: String,
+        member: Member,
     ) -> Result<Self> {
-        Self::new(index, rtxn, parent, field_name, true)
+        Self::new(index, rtxn, parent, member, true)
     }
 
     pub fn desc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_name: String,
+        member: Member,
     ) -> Result<Self> {
-        Self::new(index, rtxn, parent, field_name, false)
+        Self::new(index, rtxn, parent, member, false)
     }
 
     fn new(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_name: String,
+        member: Member,
         is_ascending: bool,
     ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let field_id = fields_ids_map.id(&field_name);
+        let field_id = member.field().and_then(|field| fields_ids_map.id(&field));
         let faceted_candidates = match field_id {
             Some(field_id) => {
                 let number_faceted = index.number_faceted_documents_ids(rtxn, field_id)?;
@@ -65,14 +68,16 @@ impl<'t> AscDesc<'t> {
             }
             None => RoaringBitmap::default(),
         };
+        let rtree = index.geo_rtree(rtxn)?;
 
         Ok(AscDesc {
             index,
             rtxn,
-            field_name,
+            member,
             field_id,
             is_ascending,
             query_tree: None,
+            rtree,
             candidates: Box::new(std::iter::empty()),
             allowed_candidates: RoaringBitmap::new(),
             faceted_candidates,
@@ -92,7 +97,7 @@ impl<'t> Criterion for AscDesc<'t> {
             debug!(
                 "Facet {}({}) iteration",
                 if self.is_ascending { "Asc" } else { "Desc" },
-                self.field_name
+                self.member
             );
 
             match self.candidates.next().transpose()? {
@@ -135,15 +140,31 @@ impl<'t> Criterion for AscDesc<'t> {
                         }
 
                         self.allowed_candidates = &candidates - params.excluded_candidates;
-                        self.candidates = match self.field_id {
-                            Some(field_id) => facet_ordered(
-                                self.index,
-                                self.rtxn,
-                                field_id,
-                                self.is_ascending,
-                                candidates & &self.faceted_candidates,
-                            )?,
-                            None => Box::new(std::iter::empty()),
+
+                        match &self.member {
+                            Member::Field(field_name) => {
+                                self.candidates = match self.field_id {
+                                    Some(field_id) => facet_ordered(
+                                        self.index,
+                                        self.rtxn,
+                                        field_id,
+                                        self.is_ascending,
+                                        candidates & &self.faceted_candidates,
+                                    )?,
+                                    None => Box::new(std::iter::empty()),
+                                }
+                            }
+                            Member::Geo(point) => {
+                                self.candidates = match &self.rtree {
+                                    Some(rtree) => {
+                                        // TODO: TAMO how to remove that?
+                                        let rtree = Box::new(rtree.clone());
+                                        let rtree = Box::leak(rtree);
+                                        geo_point(rtree, candidates, point.clone())?
+                                    }
+                                    None => Box::new(std::iter::empty()),
+                                }
+                            }
                         };
                     }
                     None => return Ok(None),
@@ -161,6 +182,22 @@ impl<'t> Criterion for AscDesc<'t> {
             }
         }
     }
+}
+
+fn geo_point<'t>(
+    rtree: &'t RTree<GeoPoint>,
+    candidates: RoaringBitmap,
+    point: [f64; 2],
+) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
+    Ok(Box::new(
+        rtree
+            .nearest_neighbor_iter_with_distance_2(&point)
+            .filter_map(move |(point, _distance)| {
+                candidates.contains(point.data).then(|| point.data)
+            })
+            .map(|id| std::iter::once(id).collect::<RoaringBitmap>())
+            .map(Ok),
+    ))
 }
 
 /// Returns an iterator over groups of the given candidates in ascending or descending order.
