@@ -84,7 +84,7 @@ impl FromStr for Member {
                     .ok_or_else(|| UserError::InvalidCriterionName { name: text.to_string() })?;
             let point = point
                 .split(',')
-                .map(|el| el.parse())
+                .map(|el| el.trim()).parse()
                 .collect::<Result<Vec<f64>, _>>()
                 .map_err(|_| UserError::InvalidCriterionName { name: text.to_string() })?;
             Ok(Member::Geo([point[0], point[1]]))
