@@ -14,7 +14,7 @@ jobs:
         rust-version: stable
     - name: Install cargo-deb
       run: cargo install cargo-deb
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Build deb package
       run: cargo deb -p meilisearch-http -o target/debian/meilisearch.deb
     - name: Upload debian pkg to release
