@@ -477,7 +477,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             if lmdb_key_valid_size(&key) {
                 writer.insert(&key, &buffer)?;
             } else {
-                warn!("word {:?} is too large to be saved", word);
+                warn!("word {:?} is too large to be saved", word.as_bytes().as_bstr());
             }
         }
 
@@ -515,7 +515,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                 if lmdb_key_valid_size(&key_buffer) {
                     writer.insert(&key_buffer, &data_buffer)?;
                 } else {
-                    warn!("word {:?} is too large to be saved", word);
+                    warn!("word {:?} is too large to be saved", word.as_bytes().as_bstr());
                 }
             }
         }
@@ -542,7 +542,10 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             if lmdb_key_valid_size(&key_buffer) {
                 sorter.insert(&key_buffer, &data)?;
             } else {
-                warn!("facet value {:?} is too large to be saved", original_value);
+                warn!(
+                    "facet value {:?} is too large to be saved",
+                    original_value.as_bytes().as_bstr()
+                );
             }
         }
 
@@ -614,7 +617,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         if lmdb_key_valid_size(&buffer) {
             sorter.insert(&buffer, original_value.as_bytes())?;
         } else {
-            warn!("facet value {:?} is too large to be saved", original_value);
+            warn!("facet value {:?} is too large to be saved", original_value.as_bytes().as_bstr());
         }
 
         Ok(())
@@ -640,7 +643,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
             } else {
-                warn!("word {:?} is too large to be saved", word);
+                warn!("word {:?} is too large to be saved", word.as_bytes().as_bstr());
             }
         }
 
