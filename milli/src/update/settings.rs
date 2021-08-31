@@ -111,6 +111,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    pub fn log_every_n(&mut self, n: usize) {
+        self.log_every_n = Some(n);
+    }
+
     pub fn reset_searchable_fields(&mut self) {
         self.searchable_fields = Setting::Reset;
     }
@@ -501,7 +505,7 @@ mod tests {
 
     use super::*;
     use crate::error::Error;
-    use crate::update::{IndexDocuments, UpdateFormat};
+    use crate::update::IndexDocuments;
     use crate::{Criterion, FilterCondition, SearchResult};
 
     #[test]
@@ -513,9 +517,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"id,name,age\n0,kevin,23\n1,kevina,21\n2,benoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::Csv);
+
+        let content = documents!([
+            { "id": 1, "name": "kevin", "age": 23 },
+            { "id": 2, "name": "kevina", "age": 21},
+            { "id": 3, "name": "benoit", "age": 34 }
+        ]);
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -567,10 +575,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23},
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -611,10 +622,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23},
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -633,10 +647,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23},
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
@@ -678,13 +695,12 @@ mod tests {
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
-        let content = &br#"[
-            { "name": "kevin",  "age": 23 },
+        let content = documents!([
+            { "name": "kevin", "age": 23},
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
-        ]"#[..];
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.update_format(UpdateFormat::Json);
         builder.enable_autogenerate_docids();
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -695,11 +711,19 @@ mod tests {
         assert_eq!(fields_ids, hashset! { S("age") });
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
+        let fidmap = index.fields_ids_map(&rtxn).unwrap();
+        println!("fidmap: {:?}", fidmap);
+        for document in index.all_documents(&rtxn).unwrap() {
+            let document = document.unwrap();
+            let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1)
+                .unwrap();
+            println!("json: {:?}", json);
+        }
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            // The faceted field id is 2u16
-            .prefix_iter(&rtxn, &[0, 2, 0])
+            // The faceted field id is 1u16
+            .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
             .count();
         assert_eq!(count, 3);
@@ -707,25 +731,23 @@ mod tests {
 
         // Index a little more documents with new and current facets values.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &br#"[
-            { "name": "kevin2",  "age": 23 },
+        let content = documents!([
+            { "name": "kevin2", "age": 23},
             { "name": "kevina2", "age": 21 },
-            { "name": "benoit",  "age": 35 }
-        ]"#[..];
+            { "name": "benoit", "age": 35 }
+        ]);
 
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 2);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Json);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 0 and level 0 facet values.
-        // TODO we must support typed CSVs for numbers to be understood.
         let count = index
             .facet_id_f64_docids
             .remap_key_type::<ByteSlice>()
-            .prefix_iter(&rtxn, &[0, 2, 0])
+            .prefix_iter(&rtxn, &[0, 1, 0])
             .unwrap()
             .count();
         assert_eq!(count, 4);
@@ -747,13 +769,12 @@ mod tests {
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
-        let content = &br#"[
-            { "name": "kevin",  "age": 23 },
+        let content = documents!([
+            { "name": "kevin", "age": 23},
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
-        ]"#[..];
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.update_format(UpdateFormat::Json);
         builder.enable_autogenerate_docids();
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -790,7 +811,7 @@ mod tests {
         builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
-        let content = &br#"[
+        let content = documents!([
             { "name": "kevin",  "age": 23 },
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 },
@@ -798,9 +819,8 @@ mod tests {
             { "name": "bertrand", "age": 34 },
             { "name": "bernie", "age": 34 },
             { "name": "ben", "age": 34 }
-        ]"#[..];
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.update_format(UpdateFormat::Json);
         builder.enable_autogenerate_docids();
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -822,10 +842,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23},
+            { "name": "kevina", "age": 21 },
+            { "name": "benoit", "age": 34 }
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -844,10 +867,13 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23, "maxim": "I love dogs" },
+            { "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
+            { "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
         // In the same transaction we provide some stop_words
@@ -915,10 +941,13 @@ mod tests {
 
         // Send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age,maxim\nkevin,23,I love dogs\nkevina,21,Doggos are the best\nbenoit,34,The crepes are really good\n"[..];
+        let content = documents!([
+            { "name": "kevin", "age": 23, "maxim": "I love dogs"},
+            { "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
+            { "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.enable_autogenerate_docids();
-        builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
 
         // In the same transaction provide some synonyms
@@ -1038,7 +1067,7 @@ mod tests {
         assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
 
         // Then index some documents with the "mykey" primary key.
-        let content = &br#"[
+        let content = documents!([
             { "mykey": 1, "name": "kevin",  "age": 23 },
             { "mykey": 2, "name": "kevina", "age": 21 },
             { "mykey": 3, "name": "benoit", "age": 34 },
@@ -1046,9 +1075,8 @@ mod tests {
             { "mykey": 5, "name": "bertrand", "age": 34 },
             { "mykey": 6, "name": "bernie", "age": 34 },
             { "mykey": 7, "name": "ben", "age": 34 }
-        ]"#[..];
+        ]);
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.update_format(UpdateFormat::Json);
         builder.disable_autogenerate_docids();
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1087,7 +1115,7 @@ mod tests {
         builder.set_filterable_fields(hashset! { S("genres") });
         builder.execute(|_, _| ()).unwrap();
 
-        let content = &br#"[
+        let content = documents!([
           {
             "id": 11,
             "title": "Star Wars",
@@ -1105,9 +1133,8 @@ mod tests {
             "poster": "https://image.tmdb.org/t/p/w500/gSuHDeWemA1menrwfMRChnSmMVN.jpg",
             "release_date": 819676800
           }
-        ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.update_format(UpdateFormat::Json);
+        ]);
+        let builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 

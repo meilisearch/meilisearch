@@ -3,6 +3,7 @@ mod update_store;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{create_dir_all, File};
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
@@ -18,8 +19,9 @@ use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
 use heed::EnvOpenOptions;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use milli::documents::DocumentBatchReader;
 use milli::update::UpdateIndexingStep::*;
-use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use milli::{obkv_to_json, CompressionType, FilterCondition, Index, MatchingWords, SearchResult};
 use once_cell::sync::OnceCell;
 use rayon::ThreadPool;
@@ -350,18 +352,11 @@ async fn main() -> anyhow::Result<()> {
             let before_update = Instant::now();
             // we extract the update type and execute the update itself.
             let result: anyhow::Result<()> =
-                match meta {
+                (|| match meta {
                     UpdateMeta::DocumentsAddition { method, format, encoding } => {
                         // We must use the write transaction of the update here.
                         let mut wtxn = index_cloned.write_txn()?;
                         let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
-
-                        match format.as_str() {
-                            "csv" => builder.update_format(UpdateFormat::Csv),
-                            "json" => builder.update_format(UpdateFormat::Json),
-                            "json-stream" => builder.update_format(UpdateFormat::JsonStream),
-                            otherwise => panic!("invalid update format {:?}", otherwise),
-                        };
 
                         match method.as_str() {
                             "replace" => builder
@@ -377,11 +372,18 @@ async fn main() -> anyhow::Result<()> {
                             otherwise => panic!("invalid encoding format {:?}", otherwise),
                         };
 
-                        let result = builder.execute(reader, |indexing_step, update_id| {
+                        let documents = match format.as_str() {
+                            "csv" => documents_from_csv(reader)?,
+                            "json" => documents_from_json(reader)?,
+                            "jsonl" => documents_from_jsonl(reader)?,
+                            otherwise => panic!("invalid update format {:?}", otherwise),
+                        };
+
+                        let documents = DocumentBatchReader::from_reader(Cursor::new(documents))?;
+
+                        let result = builder.execute(documents, |indexing_step, update_id| {
                             let (current, total) = match indexing_step {
-                                TransformFromUserIntoGenericFormat { documents_seen } => {
-                                    (documents_seen, None)
-                                }
+                                RemapDocumentAddition { documents_seen } => (documents_seen, None),
                                 ComputeIdsAndMergeDocuments { documents_seen, total_documents } => {
                                     (documents_seen, Some(total_documents))
                                 }
@@ -482,9 +484,7 @@ async fn main() -> anyhow::Result<()> {
 
                         let result = builder.execute(|indexing_step, update_id| {
                             let (current, total) = match indexing_step {
-                                TransformFromUserIntoGenericFormat { documents_seen } => {
-                                    (documents_seen, None)
-                                }
+                                RemapDocumentAddition { documents_seen } => (documents_seen, None),
                                 ComputeIdsAndMergeDocuments { documents_seen, total_documents } => {
                                     (documents_seen, Some(total_documents))
                                 }
@@ -526,7 +526,7 @@ async fn main() -> anyhow::Result<()> {
                             Err(e) => Err(e.into()),
                         }
                     }
-                };
+                })();
 
             let meta = match result {
                 Ok(()) => {
@@ -842,7 +842,7 @@ async fn main() -> anyhow::Result<()> {
             UpdateStatus<UpdateMeta, UpdateMetaProgress, String>,
         >,
         update_method: Option<String>,
-        update_format: UpdateFormat,
+        format: String,
         encoding: Option<String>,
         mut stream: impl futures::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -861,13 +861,6 @@ async fn main() -> anyhow::Result<()> {
             Some("replace") => String::from("replace"),
             Some("update") => String::from("update"),
             _ => String::from("replace"),
-        };
-
-        let format = match update_format {
-            UpdateFormat::Csv => String::from("csv"),
-            UpdateFormat::Json => String::from("json"),
-            UpdateFormat::JsonStream => String::from("json-stream"),
-            _ => panic!("Unknown update format"),
         };
 
         let meta = UpdateMeta::DocumentsAddition { method, format, encoding };
@@ -893,9 +886,9 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::body::stream())
         .and_then(move |content_type: String, content_encoding, params: QueryUpdate, stream| {
             let format = match content_type.as_str() {
-                "text/csv" => UpdateFormat::Csv,
-                "application/json" => UpdateFormat::Json,
-                "application/x-ndjson" => UpdateFormat::JsonStream,
+                "text/csv" => "csv",
+                "application/json" => "json",
+                "application/x-ndjson" => "jsonl",
                 otherwise => panic!("invalid update format: {}", otherwise),
             };
 
@@ -903,7 +896,7 @@ async fn main() -> anyhow::Result<()> {
                 update_store_cloned.clone(),
                 update_status_sender_cloned.clone(),
                 params.method,
-                format,
+                format.to_string(),
                 content_encoding,
                 stream,
             )
@@ -1029,6 +1022,49 @@ async fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
     warp::serve(routes).run(addr).await;
     Ok(())
+}
+
+fn documents_from_jsonl(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
+    let mut writer = Cursor::new(Vec::new());
+    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+
+    let values = serde_json::Deserializer::from_reader(reader)
+        .into_iter::<serde_json::Map<String, serde_json::Value>>();
+    for document in values {
+        let document = document?;
+        documents.add_documents(document)?;
+    }
+    documents.finish()?;
+
+    Ok(writer.into_inner())
+}
+
+fn documents_from_json(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
+    let mut writer = Cursor::new(Vec::new());
+    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+
+    let json: serde_json::Value = serde_json::from_reader(reader)?;
+    documents.add_documents(json)?;
+    documents.finish()?;
+
+    Ok(writer.into_inner())
+}
+
+fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
+    let mut writer = Cursor::new(Vec::new());
+    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+
+    let mut records = csv::Reader::from_reader(reader);
+    let iter = records.deserialize::<Map<String, Value>>();
+
+    for doc in iter {
+        let doc = doc?;
+        documents.add_documents(doc)?;
+    }
+
+    documents.finish()?;
+
+    Ok(writer.into_inner())
 }
 
 #[cfg(test)]

@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate pest_derive;
 
+#[macro_use]
+pub mod documents;
+
 mod criterion;
 mod error;
 mod external_documents_ids;

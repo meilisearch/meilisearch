@@ -1,0 +1,24 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2018"
+description = "A CLI to interact with a milli index"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+indicatif = "0.16.2"
+serde = "1.0.129"
+serde_json = "1.0.66"
+structopt = "0.3.22"
+milli = { path = "../milli" }
+eyre = "0.6.5"
+color-eyre = "0.5.11"
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
+byte-unit = { version = "4.0.12", features = ["serde"] }
+bimap = "0.6.1"
+csv = "1.1.6"
+stderrlog = "0.5.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemallocator = "0.3.2"

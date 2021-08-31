@@ -1,10 +1,12 @@
 use std::cmp::Reverse;
+use std::io::Cursor;
 
 use big_s::S;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
-use milli::update::{Settings, UpdateBuilder, UpdateFormat};
+use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::update::{Settings, UpdateBuilder};
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
 use rand::Rng;
 use Criterion::*;
@@ -386,31 +388,37 @@ fn criteria_ascdesc() {
     let mut builder = UpdateBuilder::new(0);
     builder.max_memory(10 * 1024 * 1024); // 10MiB
     let mut builder = builder.index_documents(&mut wtxn, &index);
-    builder.update_format(UpdateFormat::Csv);
     builder.enable_autogenerate_docids();
 
-    let content = [
-        vec![S("name,age")],
-        (0..ASC_DESC_CANDIDATES_THRESHOLD + 1)
-            .map(|_| {
-                let mut rng = rand::thread_rng();
+    let mut cursor = Cursor::new(Vec::new());
+    let mut batch_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-                let age = rng.gen::<u32>().to_string();
-                let name = rng
-                    .sample_iter(&rand::distributions::Alphanumeric)
-                    .map(char::from)
-                    .filter(|c| *c >= 'a' && *c <= 'z')
-                    .take(10)
-                    .collect::<String>();
+    (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
+        let mut rng = rand::thread_rng();
 
-                format!("{},{}", name, age)
-            })
-            .collect::<Vec<_>>(),
-    ]
-    .iter()
-    .flatten()
-    .join("\n");
-    builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+        let age = rng.gen::<u32>().to_string();
+        let name = rng
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .map(char::from)
+            .filter(|c| *c >= 'a' && *c <= 'z')
+            .take(10)
+            .collect::<String>();
+
+        let json = serde_json::json!({
+            "name": name,
+            "age": age,
+        });
+
+        batch_builder.add_documents(json).unwrap();
+    });
+
+    batch_builder.finish().unwrap();
+
+    cursor.set_position(0);
+
+    let reader = DocumentBatchReader::from_reader(cursor).unwrap();
+
+    builder.execute(reader, |_, _| ()).unwrap();
 
     wtxn.commit().unwrap();
 
