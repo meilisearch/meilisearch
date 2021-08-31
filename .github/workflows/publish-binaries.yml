@@ -26,7 +26,7 @@ jobs:
     - uses: hecrj/setup-rust-action@master
       with:
         rust-version: stable
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Build
       run: cargo build --release --locked
     - name: Upload binaries to release
@@ -41,7 +41,7 @@ jobs:
     name: Publish for ARMv8
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v1.0.0
+      - uses: actions/checkout@v2
       - uses: uraimo/run-on-arch-action@v1.0.7
         id: runcmd
         with:
