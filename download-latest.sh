@@ -6,7 +6,6 @@ GREEN='\033[32m'
 DEFAULT='\033[0m'
 
 # GLOBALS
-BINARY_NAME='meilisearch'
 GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]
 
 # FUNCTIONS
@@ -127,6 +126,9 @@ get_os() {
     'Linux')
         os='linux'
         ;;
+	'MINGW'*)
+        os='windows'
+        ;;
     *)
         return 1
     esac
@@ -180,7 +182,17 @@ if ! get_archi; then
 fi
 
 echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
-release_file="meilisearch-$os-$archi"
+case "$os" in
+    'windows')
+        release_file="meilisearch-$os-$archi.exe"
+		BINARY_NAME='meilisearch.exe'
+
+        ;;
+	*) 
+		release_file="meilisearch-$os-$archi"
+		BINARY_NAME='meilisearch'
+
+esac
 link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$BINARY_NAME"
