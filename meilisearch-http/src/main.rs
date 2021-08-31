@@ -7,8 +7,6 @@ use structopt::StructOpt;
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 use meilisearch_http::analytics;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
-use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
