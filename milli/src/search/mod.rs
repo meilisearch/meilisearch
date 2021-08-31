@@ -145,8 +145,8 @@ impl<'a> Search<'a> {
 
         // We check that we are allowed to use the sort criteria, we check
         // that they are declared in the sortable fields.
-        let sortable_fields = self.index.sortable_fields(self.rtxn)?;
         if let Some(sort_criteria) = &self.sort_criteria {
+            let sortable_fields = self.index.sortable_fields(self.rtxn)?;
             for asc_desc in sort_criteria {
                 let field = asc_desc.field();
                 if !sortable_fields.contains(field) {
