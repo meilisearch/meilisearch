@@ -28,7 +28,16 @@ impl<'t> Geo<'t> {
         let bucket_candidates = RoaringBitmap::new();
         let rtree = index.geo_rtree(rtxn)?;
 
-        Ok(Self { index, rtxn, parent, candidates, allowed_candidates, bucket_candidates, rtree, point })
+        Ok(Self {
+            index,
+            rtxn,
+            parent,
+            candidates,
+            allowed_candidates,
+            bucket_candidates,
+            rtree,
+            point,
+        })
     }
 }
 
@@ -52,64 +61,55 @@ impl<'t> Criterion for Geo<'t> {
                         bucket_candidates: Some(self.bucket_candidates.clone()),
                     }));
                 }
-                None => {
-                    match self.parent.next(params)? {
-                        Some(CriterionResult {
-                            query_tree,
-                            candidates,
-                            filtered_candidates,
-                            bucket_candidates,
-                        }) => {
-                            let mut candidates = match (&query_tree, candidates) {
-                                (_, Some(candidates)) => candidates,
-                                (Some(qt), None) => {
-                                    let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
-                                    resolve_query_tree(&context, qt, params.wdcache)?
-                                }
-                                // TODO: TAMO: why are we doing this?
-                                (None, None) => self.index.documents_ids(self.rtxn)?,
-                            };
-
-                            if let Some(filtered_candidates) = filtered_candidates {
-                                candidates &= filtered_candidates;
+                None => match self.parent.next(params)? {
+                    Some(CriterionResult {
+                        query_tree,
+                        candidates,
+                        filtered_candidates,
+                        bucket_candidates,
+                    }) => {
+                        let mut candidates = match (&query_tree, candidates) {
+                            (_, Some(candidates)) => candidates,
+                            (Some(qt), None) => {
+                                let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
+                                resolve_query_tree(&context, qt, params.wdcache)?
                             }
+                            (None, None) => self.index.documents_ids(self.rtxn)?,
+                        };
 
-                            match bucket_candidates {
-                                // why not are we keeping elements from the previous bucket?
-                                Some(bucket_candidates) => {
-                                    self.bucket_candidates |= bucket_candidates
-                                }
-                                None => self.bucket_candidates |= &candidates,
-                            }
-
-                            if candidates.is_empty() {
-                                continue;
-                            }
-                            let rtree = Box::new(rtree.clone());
-                            let rtree = Box::leak(rtree);
-
-                            self.allowed_candidates = &candidates - params.excluded_candidates;
-                            self.candidates = geo_point(rtree, self.allowed_candidates.clone(), self.point)?;
+                        if let Some(filtered_candidates) = filtered_candidates {
+                            candidates &= filtered_candidates;
                         }
-                        None => return Ok(None),
+
+                        match bucket_candidates {
+                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
+                            None => self.bucket_candidates |= &candidates,
+                        }
+
+                        if candidates.is_empty() {
+                            continue;
+                        }
+                        self.allowed_candidates = &candidates - params.excluded_candidates;
+                        self.candidates =
+                            geo_point(rtree, self.allowed_candidates.clone(), self.point);
                     }
-                }
+                    None => return Ok(None),
+                },
             }
         }
     }
 }
 
-fn geo_point<'t>(
-    rtree: &'t RTree<GeoPoint>,
+fn geo_point(
+    rtree: &RTree<GeoPoint>,
     candidates: RoaringBitmap,
     point: [f64; 2],
-) -> Result<Box<dyn Iterator<Item = RoaringBitmap> + 't>> {
-    Ok(Box::new(
-        rtree
-            .nearest_neighbor_iter_with_distance_2(&point)
-            .filter_map(move |(point, _distance)| {
-                candidates.contains(point.data).then(|| point.data)
-            })
-            .map(|id| std::iter::once(id).collect::<RoaringBitmap>())
-    ))
+) -> Box<dyn Iterator<Item = RoaringBitmap>> {
+    let results = rtree
+        .nearest_neighbor_iter_with_distance_2(&point)
+        .filter_map(move |(point, _distance)| candidates.contains(point.data).then(|| point.data))
+        .map(|id| std::iter::once(id).collect::<RoaringBitmap>())
+        .collect::<Vec<_>>();
+
+    Box::new(results.into_iter())
 }
