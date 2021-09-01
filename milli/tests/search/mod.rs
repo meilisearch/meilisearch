@@ -6,7 +6,7 @@ use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::update::{Settings, UpdateBuilder, UpdateFormat};
-use milli::{AscDesc, Criterion, DocumentId, Index};
+use milli::{AscDesc, Criterion, DocumentId, Index, Member};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
 
@@ -99,11 +99,11 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.proximity_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Asc(S("tag"))] => {
+                Criterion::Sort if sort_by == [AscDesc::Asc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| d.sort_by_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Desc(S("tag"))] => {
+                Criterion::Sort if sort_by == [AscDesc::Desc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| Reverse(d.sort_by_rank));
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }

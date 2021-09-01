@@ -21,7 +21,7 @@ use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::{Map, Value};
 
-pub use self::criterion::{default_criteria, AscDesc, Criterion};
+pub use self::criterion::{default_criteria, AscDesc, Criterion, Member};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
