@@ -66,7 +66,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read>(
                 }
 
                 // insert  normalized and original facet string in sorter
-                for (normalized, original) in strings {
+                for (normalized, original) in strings.into_iter().filter(|(n, _)| !n.is_empty()) {
                     key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
                     key_buffer.extend_from_slice(normalized.as_bytes());
                     fid_docid_facet_strings_sorter.insert(&key_buffer, original.as_bytes())?;
