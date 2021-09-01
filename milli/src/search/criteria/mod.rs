@@ -18,10 +18,10 @@ use crate::search::{word_derivations, WordDerivationsCache};
 use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
 
 mod asc_desc;
-mod geo;
 mod attribute;
 mod exactness;
 pub mod r#final;
+mod geo;
 mod initial;
 mod proximity;
 mod typo;
@@ -292,25 +292,24 @@ impl<'t> CriteriaBuilder<'t> {
                     Some(ref sort_criteria) => {
                         for asc_desc in sort_criteria {
                             criterion = match asc_desc {
-                                AscDescName::Asc(Member::Field(field)) => {
-                                    Box::new(AscDesc::asc(
-                                        &self.index,
-                                        &self.rtxn,
-                                        criterion,
-                                        field.to_string(),
-                                    )?)
-                                }
-                                AscDescName::Desc(Member::Field(field)) => {
-                                    Box::new(AscDesc::desc(
-                                        &self.index,
-                                        &self.rtxn,
-                                        criterion,
-                                        field.to_string(),
-                                    )?)
-                                }
-                                AscDescName::Asc(Member::Geo(point)) => {
-                                    Box::new(Geo::new(&self.index, &self.rtxn, criterion, point.clone())?)
-                                }
+                                AscDescName::Asc(Member::Field(field)) => Box::new(AscDesc::asc(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    field.to_string(),
+                                )?),
+                                AscDescName::Desc(Member::Field(field)) => Box::new(AscDesc::desc(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    field.to_string(),
+                                )?),
+                                AscDescName::Asc(Member::Geo(point)) => Box::new(Geo::new(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    point.clone(),
+                                )?),
                                 AscDescName::Desc(Member::Geo(_point)) => {
                                     panic!("You can't desc geosort"); // TODO: TAMO: remove this
                                 }
