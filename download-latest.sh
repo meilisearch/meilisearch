@@ -165,7 +165,7 @@ failure_usage() {
     printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution or your architecture yet.'
     echo ''
     echo 'However, you can easily compile the binary from the source files.'
-    echo 'Follow the steps at the page ("Source" tab): https://docs.meilisearch.com/guides/advanced_guides/installation.html'
+    echo 'Follow the steps at the page ("Source" tab): https://docs.meilisearch.com/learn/getting_started/installation.html'
 }
 
 # MAIN
