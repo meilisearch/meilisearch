@@ -1,15 +1,11 @@
-name: Benchmarks
+name: Benchmarks search wikipedia articles (cron)
 
 on:
-  workflow_dispatch:
-    inputs:
-      dataset_name:
-        description: 'The name of the dataset used to benchmark (search_songs, search_wiki or indexing)'
-        required: false
-        default: 'search_songs'
+  schedule:
+    - cron: "30 16 * * FRI" # every friday at 16:30 (it’s snacky snack-time!)
 
 env:
-  BENCH_NAME: ${{ github.event.inputs.dataset_name }}
+  BENCH_NAME: "search_wiki"
 
 jobs:
   benchmarks:

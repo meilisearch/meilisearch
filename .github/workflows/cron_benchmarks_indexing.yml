@@ -1,15 +1,11 @@
-name: Benchmarks
+name: Benchmarks indexing (cron)
 
 on:
-  workflow_dispatch:
-    inputs:
-      dataset_name:
-        description: 'The name of the dataset used to benchmark (search_songs, search_wiki or indexing)'
-        required: false
-        default: 'search_songs'
+  schedule:
+    - cron: "30 0 * * FRI" # every friday at 00:30
 
 env:
-  BENCH_NAME: ${{ github.event.inputs.dataset_name }}
+  BENCH_NAME: "indexing"
 
 jobs:
   benchmarks:
