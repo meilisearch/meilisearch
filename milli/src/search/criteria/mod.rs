@@ -13,10 +13,12 @@ use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use crate::criterion::{AscDesc as AscDescName, Member};
+use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, WordDerivationsCache};
 use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
 
 mod asc_desc;
+mod geo;
 mod attribute;
 mod exactness;
 pub mod r#final;
@@ -290,18 +292,28 @@ impl<'t> CriteriaBuilder<'t> {
                     Some(ref sort_criteria) => {
                         for asc_desc in sort_criteria {
                             criterion = match asc_desc {
-                                AscDescName::Asc(field) => Box::new(AscDesc::asc(
-                                    &self.index,
-                                    &self.rtxn,
-                                    criterion,
-                                    field.clone(),
-                                )?),
-                                AscDescName::Desc(field) => Box::new(AscDesc::desc(
-                                    &self.index,
-                                    &self.rtxn,
-                                    criterion,
-                                    field.clone(),
-                                )?),
+                                AscDescName::Asc(Member::Field(field)) => {
+                                    Box::new(AscDesc::asc(
+                                        &self.index,
+                                        &self.rtxn,
+                                        criterion,
+                                        field.to_string(),
+                                    )?)
+                                }
+                                AscDescName::Desc(Member::Field(field)) => {
+                                    Box::new(AscDesc::desc(
+                                        &self.index,
+                                        &self.rtxn,
+                                        criterion,
+                                        field.to_string(),
+                                    )?)
+                                }
+                                AscDescName::Asc(Member::Geo(point)) => {
+                                    Box::new(Geo::new(&self.index, &self.rtxn, criterion, point.clone())?)
+                                }
+                                AscDescName::Desc(Member::Geo(_point)) => {
+                                    panic!("You can't desc geosort"); // TODO: TAMO: remove this
+                                }
                             };
                         }
                         criterion
@@ -312,10 +324,10 @@ impl<'t> CriteriaBuilder<'t> {
                 Name::Attribute => Box::new(Attribute::new(self, criterion)),
                 Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
                 Name::Asc(field) => {
-                    Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, Member::Field(field))?)
+                    Box::new(AscDesc::asc(&self.index, &self.rtxn, criterion, field)?)
                 }
                 Name::Desc(field) => {
-                    Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, Member::Field(field))?)
+                    Box::new(AscDesc::desc(&self.index, &self.rtxn, criterion, field)?)
                 }
             };
         }
