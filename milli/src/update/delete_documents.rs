@@ -490,7 +490,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
             None => {
                 // The key corresponds to a level zero facet string.
                 let (original_value, mut docids) =
-                    FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
+                    FacetStringLevelZeroValueCodec::bytes_decode(val)
                         .ok_or_else(|| SerializationError::Decoding { db_name })?;
 
                 let previous_len = docids.len();
@@ -501,9 +501,8 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
                 } else if docids.len() != previous_len {
                     let key = key.to_owned();
                     let val = &(original_value, docids);
-                    let value_bytes =
-                        FacetStringLevelZeroValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
-                            .ok_or_else(|| SerializationError::Encoding { db_name })?;
+                    let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
+                        .ok_or_else(|| SerializationError::Encoding { db_name })?;
 
                     // safety: we don't keep references from inside the LMDB database.
                     unsafe { iter.put_current(&key, &value_bytes)? };

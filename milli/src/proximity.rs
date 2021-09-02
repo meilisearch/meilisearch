@@ -2,8 +2,8 @@ use std::cmp;
 
 use crate::{Attribute, Position};
 
-const ONE_ATTRIBUTE: u32 = 1000;
-const MAX_DISTANCE: u32 = 8;
+pub const ONE_ATTRIBUTE: u32 = 1000;
+pub const MAX_DISTANCE: u32 = 8;
 
 pub fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     if lhs <= rhs {

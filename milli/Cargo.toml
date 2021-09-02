@@ -9,12 +9,13 @@ bstr = "0.2.15"
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }
 concat-arrays = "0.1.2"
+crossbeam-channel = "0.5.1"
 csv = "1.1.5"
 either = "1.6.1"
 flate2 = "1.0.20"
 fst = "0.4.5"
 fxhash = "0.2.1"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
+grenad = "0.3.0"
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 human_format = "1.0.3"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
