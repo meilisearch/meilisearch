@@ -281,6 +281,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 log_every_n: self.log_every_n,
                 max_nb_chunks: self.max_nb_chunks,
                 max_memory: self.max_memory,
+                documents_chunk_size: self.documents_chunk_size,
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
                 thread_pool: self.thread_pool,

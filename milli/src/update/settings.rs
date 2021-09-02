@@ -65,6 +65,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) log_every_n: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
+    pub(crate) documents_chunk_size: Option<usize>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
@@ -93,6 +94,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             log_every_n: None,
             max_nb_chunks: None,
             max_memory: None,
+            documents_chunk_size: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             thread_pool: None,
@@ -227,6 +229,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         indexing_builder.log_every_n = self.log_every_n;
         indexing_builder.max_nb_chunks = self.max_nb_chunks;
         indexing_builder.max_memory = self.max_memory;
+        indexing_builder.documents_chunk_size = self.documents_chunk_size;
         indexing_builder.chunk_compression_type = self.chunk_compression_type;
         indexing_builder.chunk_compression_level = self.chunk_compression_level;
         indexing_builder.thread_pool = self.thread_pool;

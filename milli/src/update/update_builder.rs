@@ -7,6 +7,7 @@ use crate::{Index, Result};
 pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
+    pub(crate) documents_chunk_size: Option<usize>,
     pub(crate) max_memory: Option<usize>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
@@ -19,6 +20,7 @@ impl<'a> UpdateBuilder<'a> {
         UpdateBuilder {
             log_every_n: None,
             max_nb_chunks: None,
+            documents_chunk_size: None,
             max_memory: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
@@ -37,6 +39,10 @@ impl<'a> UpdateBuilder<'a> {
 
     pub fn max_memory(&mut self, max_memory: usize) {
         self.max_memory = Some(max_memory);
+    }
+
+    pub fn documents_chunk_size(&mut self, documents_chunk_size: usize) {
+        self.documents_chunk_size = Some(documents_chunk_size);
     }
 
     pub fn chunk_compression_type(&mut self, chunk_compression_type: CompressionType) {
@@ -77,6 +83,7 @@ impl<'a> UpdateBuilder<'a> {
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
+        builder.documents_chunk_size = self.documents_chunk_size;
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.thread_pool = self.thread_pool;
@@ -94,6 +101,7 @@ impl<'a> UpdateBuilder<'a> {
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
         builder.max_memory = self.max_memory;
+        builder.documents_chunk_size = self.documents_chunk_size;
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.thread_pool = self.thread_pool;
