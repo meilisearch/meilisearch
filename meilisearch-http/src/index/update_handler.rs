@@ -1,8 +1,8 @@
 use std::fs::File;
 
 use crate::index::Index;
-use milli::CompressionType;
 use milli::update::UpdateBuilder;
+use milli::CompressionType;
 use rayon::ThreadPool;
 
 use crate::index_controller::UpdateMeta;
@@ -14,7 +14,7 @@ pub struct UpdateHandler {
     chunk_compression_level: Option<u32>,
     thread_pool: ThreadPool,
     log_frequency: usize,
-    max_memory: usize,
+    max_memory: Option<usize>,
     linked_hash_map_size: usize,
     chunk_compression_type: CompressionType,
     chunk_fusing_shrink_size: u64,
@@ -25,12 +25,13 @@ impl UpdateHandler {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(opt.indexing_jobs.unwrap_or(num_cpus::get() / 2))
             .build()?;
+
         Ok(Self {
             max_nb_chunks: opt.max_nb_chunks,
             chunk_compression_level: opt.chunk_compression_level,
             thread_pool,
             log_frequency: opt.log_every_n,
-            max_memory: opt.max_memory.get_bytes() as usize,
+            max_memory: opt.max_memory.map(|m| m.get_bytes() as usize),
             linked_hash_map_size: opt.linked_hash_map_size,
             chunk_compression_type: opt.chunk_compression_type,
             chunk_fusing_shrink_size: opt.chunk_fusing_shrink_size.get_bytes(),
@@ -48,7 +49,9 @@ impl UpdateHandler {
         }
         update_builder.thread_pool(&self.thread_pool);
         update_builder.log_every_n(self.log_frequency);
-        update_builder.max_memory(self.max_memory);
+        if let Some(max_memory) = self.max_memory {
+            update_builder.max_memory(max_memory);
+        }
         update_builder.linked_hash_map_size(self.linked_hash_map_size);
         update_builder.chunk_compression_type(self.chunk_compression_type);
         update_builder.chunk_fusing_shrink_size(self.chunk_fusing_shrink_size);

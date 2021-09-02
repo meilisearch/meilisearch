@@ -76,6 +76,7 @@ pin-project = "1.0.7"
 whoami = { version = "1.1.2", optional = true }
 reqwest = { version = "0.11.3", features = ["json", "rustls-tls"], default-features = false, optional = true }
 serdeval = "0.1.0"
+sysinfo = "0.20.0"
 
 [dev-dependencies]
 actix-rt = "2.1.0"

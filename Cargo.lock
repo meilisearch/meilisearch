@@ -1647,6 +1647,7 @@ dependencies = [
  "siphasher",
  "slice-group-by",
  "structopt",
+ "sysinfo 0.20.0",
  "tar",
  "tempdir",
  "tempfile",
@@ -1739,7 +1740,7 @@ dependencies = [
  "slice-group-by",
  "smallstr",
  "smallvec",
- "sysinfo",
+ "sysinfo 0.19.2",
  "tempfile",
  "uuid",
 ]
@@ -2852,6 +2853,21 @@ dependencies = [
  "cfg-if 1.0.0",
  "core-foundation-sys",
  "doc-comment",
+ "libc",
+ "ntapi",
+ "once_cell",
+ "rayon",
+ "winapi",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0af066e6272f2175c1783cfc2ebf3e2d8dfe2c182b00677fdeccbf8291af83fb"
+dependencies = [
+ "cfg-if 1.0.0",
+ "core-foundation-sys",
  "libc",
  "ntapi",
  "once_cell",

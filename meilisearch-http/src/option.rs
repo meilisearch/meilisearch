@@ -1,5 +1,9 @@
+use byte_unit::ByteError;
+use std::fmt;
 use std::io::{BufReader, Read};
+use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{error, fs};
 
@@ -11,6 +15,7 @@ use rustls::{
     RootCertStore,
 };
 use structopt::StructOpt;
+use sysinfo::{RefreshKind, System, SystemExt};
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct IndexerOpts {
@@ -23,13 +28,15 @@ pub struct IndexerOpts {
     #[structopt(long)]
     pub max_nb_chunks: Option<usize>,
 
-    /// The maximum amount of memory to use for the Grenad buffer. It is recommended
-    /// to use something like 80%-90% of the available memory.
+    /// The maximum amount of memory the indexer will use. It defaults to 2/3
+    /// of the available memory. It is recommended to use something like 80%-90%
+    /// of the available memory, no more.
     ///
-    /// It is automatically split by the number of jobs e.g. if you use 7 jobs
-    /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
-    #[structopt(long, default_value = "7 GiB")]
-    pub max_memory: Byte,
+    /// In case the engine is unable to retrieve the available memory the engine will
+    /// try to use the memory it needs but without real limit, this can lead to
+    /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
+    #[structopt(long)]
+    pub max_memory: MaxMemory,
 
     /// Size of the linked hash map cache when indexing.
     /// The bigger it is, the faster the indexing is but the more memory it takes.
@@ -69,7 +76,7 @@ impl Default for IndexerOpts {
         Self {
             log_every_n: 100_000,
             max_nb_chunks: None,
-            max_memory: Byte::from_str("1GiB").unwrap(),
+            max_memory: MaxMemory::default(),
             linked_hash_map_size: 500,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
@@ -237,6 +244,57 @@ impl Opt {
         } else {
             Ok(None)
         }
+    }
+}
+
+/// A type used to detect the max memory available and use 2/3 of it.
+#[derive(Debug, Clone, Copy)]
+pub struct MaxMemory(Option<Byte>);
+
+impl FromStr for MaxMemory {
+    type Err = ByteError;
+
+    fn from_str(s: &str) -> Result<MaxMemory, ByteError> {
+        Byte::from_str(s).map(Some).map(MaxMemory)
+    }
+}
+
+impl Default for MaxMemory {
+    fn default() -> MaxMemory {
+        MaxMemory(
+            total_memory_bytes()
+                .map(|bytes| bytes * 2 / 3)
+                .map(Byte::from_bytes),
+        )
+    }
+}
+
+impl fmt::Display for MaxMemory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            Some(memory) => write!(f, "{}", memory.get_appropriate_unit(true)),
+            None => f.write_str("unknown"),
+        }
+    }
+}
+
+impl Deref for MaxMemory {
+    type Target = Option<Byte>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Returns the total amount of bytes available or `None` if this system isn't supported.
+fn total_memory_bytes() -> Option<u64> {
+    if System::IS_SUPPORTED {
+        let memory_kind = RefreshKind::new().with_memory();
+        let mut system = System::new_with_specifics(memory_kind);
+        system.refresh_memory();
+        Some(system.total_memory() * 1024) // KiB into bytes
+    } else {
+        None
     }
 }
 
