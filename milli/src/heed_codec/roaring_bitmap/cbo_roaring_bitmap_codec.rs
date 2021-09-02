@@ -55,9 +55,9 @@ impl CboRoaringBitmapCodec {
 
     /// Merge serialized CboRoaringBitmaps in a buffer.
     ///
-    /// if the merged values len is under the threshold,
-    /// values are directly serialized in the buffer;
-    /// else a RoaringBitmap is created from the values and is serialized in the buffer.
+    /// if the merged values length is under the threshold, values are directly
+    /// serialized in the buffer else a RoaringBitmap is created from the
+    /// values and is serialized in the buffer.
     pub fn merge_into(slices: &[Cow<[u8]>], buffer: &mut Vec<u8>) -> io::Result<()> {
         let mut roaring = RoaringBitmap::new();
         let mut vec = Vec::new();

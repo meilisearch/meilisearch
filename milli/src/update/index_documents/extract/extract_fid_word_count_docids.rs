@@ -8,6 +8,8 @@ use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, read_u32_ne_bytes, sorter_into_reader,
     try_split_array_at, GrenadParameters, MergeFn,
 };
+use crate::error::SerializationError;
+use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::proximity::extract_position;
 use crate::{DocumentId, FieldId, Result};
 
@@ -36,7 +38,8 @@ pub fn extract_fid_word_count_docids<R: io::Read>(
     let mut current_document_id = None;
 
     while let Some((key, value)) = docid_word_positions.next()? {
-        let (document_id_bytes, _word_bytes) = try_split_array_at(key).unwrap();
+        let (document_id_bytes, _word_bytes) = try_split_array_at(key)
+            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
         let curr_document_id = *current_document_id.get_or_insert(document_id);

@@ -58,11 +58,12 @@ pub fn extract_fid_docid_facet_values<R: io::Read>(
                 // insert facet numbers in sorter
                 for number in numbers {
                     key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                    let value_bytes = f64_into_bytes(number).unwrap(); // invalid float
-                    key_buffer.extend_from_slice(&value_bytes);
-                    key_buffer.extend_from_slice(&number.to_be_bytes());
+                    if let Some(value_bytes) = f64_into_bytes(number) {
+                        key_buffer.extend_from_slice(&value_bytes);
+                        key_buffer.extend_from_slice(&number.to_be_bytes());
 
-                    fid_docid_facet_numbers_sorter.insert(&key_buffer, ().as_bytes())?;
+                        fid_docid_facet_numbers_sorter.insert(&key_buffer, ().as_bytes())?;
+                    }
                 }
 
                 // insert  normalized and original facet string in sorter

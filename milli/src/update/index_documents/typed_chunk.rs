@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 
 use heed::types::ByteSlice;
@@ -188,8 +189,6 @@ fn merge_roaring_bitmaps(new_value: &[u8], db_value: &[u8], buffer: &mut Vec<u8>
     Ok(serialize_roaring_bitmap(&value, buffer)?)
 }
 
-use std::borrow::Cow;
-
 fn merge_cbo_roaring_bitmaps(
     new_value: &[u8],
     db_value: &[u8],
@@ -199,11 +198,6 @@ fn merge_cbo_roaring_bitmaps(
         &[Cow::Borrowed(db_value), Cow::Borrowed(new_value)],
         buffer,
     )?)
-
-    // let new_value = CboRoaringBitmapCodec::deserialize_from(new_value)?;
-    // let db_value = CboRoaringBitmapCodec::deserialize_from(db_value)?;
-    // let value = new_value | db_value;
-    // Ok(CboRoaringBitmapCodec::serialize_into(&value, buffer))
 }
 
 /// Write provided entries in database using serialize_value function.

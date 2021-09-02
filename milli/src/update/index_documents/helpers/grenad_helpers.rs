@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
 use std::time::Instant;
 
-use byte_unit::Byte;
 use grenad::{CompressionType, MergerIter, Reader, Sorter};
 use heed::types::ByteSlice;
 use log::debug;
@@ -113,6 +112,9 @@ impl Default for GrenadParameters {
 }
 
 impl GrenadParameters {
+    /// This function use the number of threads in the current threadpool to compute the value.
+    /// This should be called inside of a rayon thread pool,
+    /// Otherwise, it will take the global number of threads.
     pub fn max_memory_by_thread(&self) -> Option<usize> {
         self.max_memory.map(|max_memory| max_memory / rayon::current_num_threads())
     }
@@ -128,7 +130,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
     mut reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     log_frequency: Option<usize>,
-    documents_chunk_size: Byte,
+    documents_chunk_size: usize,
 ) -> Result<impl Iterator<Item = Result<grenad::Reader<File>>>> {
     let mut document_count = 0;
     let mut continue_reading = true;
@@ -157,7 +159,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
                 debug!("reached {} chunked documents", document_count);
             }
 
-            if current_chunk_size >= documents_chunk_size.get_bytes() {
+            if current_chunk_size >= documents_chunk_size as u64 {
                 return writer_into_reader(obkv_documents).map(Some);
             }
         }
@@ -170,8 +172,8 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
         let result = transposer().transpose();
         if result.as_ref().map_or(false, |r| r.is_ok()) {
             debug!(
-                "A new chunk of approximately {} has been generated",
-                documents_chunk_size.get_appropriate_unit(true),
+                "A new chunk of approximately {:.2} MiB has been generated",
+                documents_chunk_size as f64 / 1024.0 / 1024.0,
             );
         }
         result

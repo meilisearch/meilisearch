@@ -5,6 +5,7 @@ use std::{marker, str};
 use crate::error::SerializationError;
 use crate::heed_codec::RoaringBitmapCodec;
 use crate::{try_split_array_at, try_split_at, Result};
+
 pub type FacetStringLevelZeroValueCodec = StringValueCodec<RoaringBitmapCodec>;
 
 /// A codec that encodes a string in front of a value.
@@ -22,7 +23,6 @@ where
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let (string, bytes) = decode_prefix_string(bytes)?;
-
         C::bytes_decode(bytes).map(|item| (string, item))
     }
 }
@@ -49,7 +49,6 @@ pub fn decode_prefix_string(value: &[u8]) -> Option<(&str, &[u8])> {
     let original_length = u16::from_be_bytes(original_length_bytes) as usize;
     let (string, bytes) = try_split_at(bytes, original_length)?;
     let string = str::from_utf8(string).ok()?;
-
     Some((string, bytes))
 }
 

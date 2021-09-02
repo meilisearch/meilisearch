@@ -225,5 +225,6 @@ fn extract_documents_data(
                 Ok((docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk))
             },
         );
+
     Ok((docid_word_positions_chunk?, docid_fid_facet_values_chunks?))
 }

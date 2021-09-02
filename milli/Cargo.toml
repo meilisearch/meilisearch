@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 bstr = "0.2.15"
-byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }
 concat-arrays = "0.1.2"

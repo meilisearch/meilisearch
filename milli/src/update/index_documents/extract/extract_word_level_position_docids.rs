@@ -5,7 +5,10 @@ use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, read_u32_ne_bytes, sorter_into_reader,
     try_split_array_at, GrenadParameters,
 };
+use crate::error::SerializationError;
+use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::{DocumentId, Result};
+
 /// Extracts the word positions and the documents ids where this word appear.
 ///
 /// Returns a grenad reader with the list of extracted words at positions and
@@ -27,7 +30,8 @@ pub fn extract_word_level_position_docids<R: io::Read>(
 
     let mut key_buffer = Vec::new();
     while let Some((key, value)) = docid_word_positions.next()? {
-        let (document_id_bytes, word_bytes) = try_split_array_at(key).unwrap();
+        let (document_id_bytes, word_bytes) = try_split_array_at(key)
+            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = DocumentId::from_be_bytes(document_id_bytes);
 
         for position in read_u32_ne_bytes(value) {

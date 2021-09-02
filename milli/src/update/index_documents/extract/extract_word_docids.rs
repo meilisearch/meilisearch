@@ -8,6 +8,8 @@ use super::helpers::{
     create_sorter, merge_roaring_bitmaps, serialize_roaring_bitmap, sorter_into_reader,
     try_split_array_at, GrenadParameters,
 };
+use crate::error::SerializationError;
+use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::Result;
 
 /// Extracts the word and the documents ids where this word appear.
@@ -31,7 +33,8 @@ pub fn extract_word_docids<R: io::Read>(
 
     let mut value_buffer = Vec::new();
     while let Some((key, _value)) = docid_word_positions.next()? {
-        let (document_id_bytes, word_bytes) = try_split_array_at(key).unwrap();
+        let (document_id_bytes, word_bytes) = try_split_array_at(key)
+            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
         let bitmap = RoaringBitmap::from_iter(Some(document_id));

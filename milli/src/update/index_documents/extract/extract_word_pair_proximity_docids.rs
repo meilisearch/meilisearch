@@ -1,15 +1,14 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::fs::File;
-use std::time::{Duration, Instant};
 use std::{cmp, io, mem, str, vec};
-
-use log::debug;
 
 use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, read_u32_ne_bytes, sorter_into_reader,
     try_split_array_at, GrenadParameters, MergeFn,
 };
+use crate::error::SerializationError;
+use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::proximity::{positions_proximity, MAX_DISTANCE};
 use crate::{DocumentId, Result};
 
@@ -32,16 +31,13 @@ pub fn extract_word_pair_proximity_docids<R: io::Read>(
         max_memory.map(|m| m / 2),
     );
 
-    let mut number_of_documents = 0;
-    let mut total_time_aggregation = Duration::default();
-    let mut total_time_grenad_insert = Duration::default();
-
     // This map is assumed to not consume a lot of memory.
     let mut document_word_positions_heap = BinaryHeap::new();
     let mut current_document_id = None;
 
     while let Some((key, value)) = docid_word_positions.next()? {
-        let (document_id_bytes, word_bytes) = try_split_array_at(key).unwrap();
+        let (document_id_bytes, word_bytes) = try_split_array_at(key)
+            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
         let word = str::from_utf8(word_bytes)?;
 
@@ -52,10 +48,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read>(
                 curr_document_id,
                 document_word_positions_heap,
                 &mut word_pair_proximity_docids_sorter,
-                &mut total_time_aggregation,
-                &mut total_time_grenad_insert,
             )?;
-            number_of_documents += 1;
             current_document_id = Some(document_id);
         }
 
@@ -74,17 +67,8 @@ pub fn extract_word_pair_proximity_docids<R: io::Read>(
             document_id,
             document_word_positions_heap,
             &mut word_pair_proximity_docids_sorter,
-            &mut total_time_aggregation,
-            &mut total_time_grenad_insert,
         )?;
     }
-
-    debug!(
-        "Number of documents {}
-        - we took {:02?} to aggregate proximities
-        - we took {:02?} to grenad insert those proximities",
-        number_of_documents, total_time_aggregation, total_time_grenad_insert,
-    );
 
     sorter_into_reader(word_pair_proximity_docids_sorter, indexer)
 }
@@ -97,10 +81,7 @@ fn document_word_positions_into_sorter<'b>(
     document_id: DocumentId,
     mut word_positions_heap: BinaryHeap<PeekedWordPosition<vec::IntoIter<u32>>>,
     word_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,
-    total_time_aggregation: &mut Duration,
-    total_time_grenad_insert: &mut Duration,
 ) -> Result<()> {
-    let before_aggregating = Instant::now();
     let mut word_pair_proximity = HashMap::new();
     let mut ordered_peeked_word_positions = Vec::new();
     while !word_positions_heap.is_empty() {
@@ -152,8 +133,6 @@ fn document_word_positions_into_sorter<'b>(
         }
     }
 
-    *total_time_aggregation += before_aggregating.elapsed();
-
     let mut key_buffer = Vec::new();
     for ((w1, w2), prox) in word_pair_proximity {
         key_buffer.clear();
@@ -162,9 +141,7 @@ fn document_word_positions_into_sorter<'b>(
         key_buffer.extend_from_slice(w2.as_bytes());
         key_buffer.push(prox as u8);
 
-        let before_grenad_insert = Instant::now();
         word_pair_proximity_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
-        *total_time_grenad_insert += before_grenad_insert.elapsed();
     }
 
     Ok(())

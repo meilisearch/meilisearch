@@ -9,7 +9,6 @@ use std::iter::FromIterator;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Instant;
 
-use byte_unit::Byte;
 use chrono::Utc;
 use crossbeam_channel::{Receiver, Sender};
 use grenad::{self, CompressionType};
@@ -252,7 +251,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 documents_file,
                 params.clone(),
                 self.log_every_n,
-                Byte::from_bytes(self.documents_chunk_size.unwrap_or(1024 * 1024 * 128) as u64), // 128MiB
+                self.documents_chunk_size.unwrap_or(1024 * 1024 * 128), // 128MiB
             );
 
             let result = chunk_iter.map(|chunk_iter| {
