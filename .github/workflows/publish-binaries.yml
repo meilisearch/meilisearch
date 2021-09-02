@@ -42,11 +42,13 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
-      - uses: uraimo/run-on-arch-action@v1.0.7
+      - uses: uraimo/run-on-arch-action@v2.1.1
         id: runcmd
         with:
-          architecture: aarch64 # aka ARMv8
-          distribution: ubuntu18.04
+          arch: aarch64 # aka ARMv8
+          distro: ubuntu18.04
+          env: |
+            JEMALLOC_SYS_WITH_LG_PAGE: 16
           run: |
             apt update
             apt install -y curl gcc make
