@@ -5,7 +5,7 @@ use big_s::S;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
-use milli::update::{IndexDocuments, Settings, UpdateBuilder, UpdateFormat};
+use milli::update::{Settings, UpdateBuilder, UpdateFormat};
 use milli::{AscDesc, Criterion, DocumentId, Index};
 use serde::Deserialize;
 use slice_group_by::GroupBy;

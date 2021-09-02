@@ -129,10 +129,8 @@ impl GrenadParameters {
 pub fn grenad_obkv_into_chunks<R: io::Read>(
     mut reader: grenad::Reader<R>,
     indexer: GrenadParameters,
-    log_frequency: Option<usize>,
     documents_chunk_size: usize,
 ) -> Result<impl Iterator<Item = Result<grenad::Reader<File>>>> {
-    let mut document_count = 0;
     let mut continue_reading = true;
 
     let indexer_clone = indexer.clone();
@@ -154,11 +152,6 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
             obkv_documents.insert(document_id, obkv)?;
             current_chunk_size += document_id.len() as u64 + obkv.len() as u64;
 
-            document_count += 1;
-            if log_frequency.map_or(false, |log_frequency| document_count % log_frequency == 0) {
-                debug!("reached {} chunked documents", document_count);
-            }
-
             if current_chunk_size >= documents_chunk_size as u64 {
                 return writer_into_reader(obkv_documents).map(Some);
             }
@@ -168,16 +161,7 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
         writer_into_reader(obkv_documents).map(Some)
     };
 
-    Ok(std::iter::from_fn(move || {
-        let result = transposer().transpose();
-        if result.as_ref().map_or(false, |r| r.is_ok()) {
-            debug!(
-                "A new chunk of approximately {:.2} MiB has been generated",
-                documents_chunk_size as f64 / 1024.0 / 1024.0,
-            );
-        }
-        result
-    }))
+    Ok(std::iter::from_fn(move || transposer().transpose()))
 }
 
 pub fn write_into_lmdb_database(
