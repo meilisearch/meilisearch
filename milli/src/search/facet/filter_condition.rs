@@ -135,7 +135,7 @@ impl FilterCondition {
                 Rule::leq => Ok(Self::lower_than_or_equal(fim, ff, pair)?),
                 Rule::less => Ok(Self::lower_than(fim, ff, pair)?),
                 Rule::between => Ok(Self::between(fim, ff, pair)?),
-                Rule::geo_radius => Ok(Self::geo_radius(fim, pair)?),
+                Rule::geo_radius => Ok(Self::geo_radius(fim, ff, pair)?),
                 Rule::not => Ok(Self::from_pairs(fim, ff, pair.into_inner())?.negate()),
                 Rule::prgm => Self::from_pairs(fim, ff, pair.into_inner()),
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
@@ -161,7 +161,22 @@ impl FilterCondition {
         }
     }
 
-    fn geo_radius(fields_ids_map: &FieldsIdsMap, item: Pair<Rule>) -> Result<FilterCondition> {
+    fn geo_radius(
+        fields_ids_map: &FieldsIdsMap,
+        filterable_fields: &HashSet<String>,
+        item: Pair<Rule>,
+    ) -> Result<FilterCondition> {
+        if !filterable_fields.contains("_geo") {
+            return Err(UserError::InvalidFilterAttribute(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                    "attribute `_geo` is not filterable, available filterable attributes are: {}",
+                    filterable_fields.iter().join(", "),
+                ),
+                },
+                item.as_span(),
+            )))?;
+        }
         let mut items = item.into_inner();
         let fid = match fields_ids_map.id("_geo") {
             Some(fid) => fid,
@@ -463,9 +478,6 @@ impl FilterCondition {
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
             GeoLowerThan(point, distance) => {
-                if index.filterable_fields(rtxn)?.contains("_geo") {
-                    Err(UserError::AttributeLimitReached)?; // TODO: TAMO use a real error
-                }
                 let mut result = RoaringBitmap::new();
                 let rtree = match index.geo_rtree(rtxn)? {
                     Some(rtree) => rtree,
@@ -480,9 +492,6 @@ impl FilterCondition {
                 return Ok(result);
             }
             GeoGreaterThan(point, distance) => {
-                if index.filterable_fields(rtxn)?.contains("_geo") {
-                    Err(UserError::AttributeLimitReached)?; // TODO: TAMO use a real error
-                }
                 let result = Self::evaluate_operator(
                     rtxn,
                     index,
