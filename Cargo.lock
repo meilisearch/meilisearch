@@ -1706,11 +1706,10 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.11.0"
-source = "git+https://github.com/meilisearch/milli.git?branch=plug-new-indexer#4860fd452965d234a11cc8430309bd9782a21bfd"
+version = "0.12.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.12.0#5cbe8793251bbf143434c8a4c4e7195ca6c5f2ac"
 dependencies = [
  "bstr",
- "byte-unit",
  "byteorder",
  "chrono",
  "concat-arrays",
