@@ -12,6 +12,12 @@ use crate::{DocumentId, FieldId};
 
 pub type Object = Map<String, Value>;
 
+const RESERVED_KEYWORD: &[&'static str] = &["_geo", "_geoDistance"];
+
+pub fn is_reserved_keyword(keyword: &str) -> bool {
+    RESERVED_KEYWORD.contains(&keyword)
+}
+
 #[derive(Debug)]
 pub enum Error {
     InternalError(InternalError),
@@ -60,6 +66,9 @@ pub enum UserError {
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidSortName { name: String },
+    InvalidGeoField { document_id: Value, object: Value },
+    InvalidRankingRuleName { name: String },
+    InvalidReservedRankingRuleName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -222,6 +231,15 @@ impl fmt::Display for UserError {
                 write!(f, "invalid asc/desc syntax for {}", name)
             }
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
+            Self::InvalidGeoField { document_id, object } => write!(
+                f,
+                "the document with the id: {} contains an invalid _geo field: {}",
+                document_id, object
+            ),
+            Self::InvalidRankingRuleName { name } => write!(f, "invalid criterion {}", name),
+            Self::InvalidReservedRankingRuleName { name } => {
+                write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
+            }
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(

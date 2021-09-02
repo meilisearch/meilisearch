@@ -180,7 +180,7 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::GeoPoints(mut geo_points) => {
-            // TODO: TAMO: we should create the rtree with the `RTree::bulk_load` function
+            // TODO: we should create the rtree with the `RTree::bulk_load` function
             let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
             let mut doc_ids = index.geo_faceted_documents_ids(wtxn)?;
 

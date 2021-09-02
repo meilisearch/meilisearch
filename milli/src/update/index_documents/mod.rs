@@ -228,6 +228,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             Receiver<Result<TypedChunk>>,
         ) = crossbeam_channel::unbounded();
 
+        // get the primary key field id
+        let primary_key_id = fields_ids_map.id(&primary_key).unwrap(); // TODO: TAMO: is this unwrap 100% valid?
+
         // get searchable fields for word databases
         let searchable_fields =
             self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
@@ -269,6 +272,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     lmdb_writer_sx.clone(),
                     searchable_fields,
                     faceted_fields,
+                    primary_key_id,
                     geo_field_id,
                     stop_words,
                 )

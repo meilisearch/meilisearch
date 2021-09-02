@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, UserError};
+use crate::error::{is_reserved_keyword, Error, UserError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
@@ -50,18 +50,20 @@ impl FromStr for Criterion {
             "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
             text => match AscDesc::from_str(text) {
-                Ok(AscDesc::Asc(field)) => Ok(Criterion::Asc(field)),
-                Ok(AscDesc::Desc(field)) => Ok(Criterion::Desc(field)),
+                Ok(AscDesc::Asc(Member::Field(field))) if is_reserved_keyword(&field) => {
+                    Err(UserError::InvalidReservedRankingRuleName { name: text.to_string() })?
+                }
+                Ok(AscDesc::Asc(Member::Field(field))) => Ok(Criterion::Asc(field)),
+                Ok(AscDesc::Desc(Member::Field(field))) => Ok(Criterion::Desc(field)),
+                Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
+                    Err(UserError::InvalidRankingRuleName { name: text.to_string() })?
+                }
                 Err(UserError::InvalidAscDescSyntax { name }) => {
                     Err(UserError::InvalidCriterionName { name }.into())
                 }
                 Err(error) => {
                     Err(UserError::InvalidCriterionName { name: error.to_string() }.into())
                 }
-                Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
-                    Err(UserError::AttributeLimitReached)? // TODO: TAMO: use a real error
-                }
-                Err(error) => Err(error.into()),
             },
         }
     }
@@ -81,12 +83,12 @@ impl FromStr for Member {
             let point =
                 text.strip_prefix("_geoPoint(")
                     .and_then(|point| point.strip_suffix(")"))
-                    .ok_or_else(|| UserError::InvalidCriterionName { name: text.to_string() })?;
+                    .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })?;
             let point = point
                 .split(',')
                 .map(|el| el.trim().parse())
                 .collect::<Result<Vec<f64>, _>>()
-                .map_err(|_| UserError::InvalidCriterionName { name: text.to_string() })?;
+                .map_err(|_| UserError::InvalidRankingRuleName { name: text.to_string() })?;
             Ok(Member::Geo([point[0], point[1]]))
         } else {
             Ok(Member::Field(text.to_string()))
@@ -147,7 +149,7 @@ impl FromStr for AscDesc {
         match text.rsplit_once(':') {
             Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),
             Some((left, "desc")) => Ok(AscDesc::Desc(left.parse()?)),
-            _ => Err(UserError::InvalidCriterionName { name: text.to_string() }),
+            _ => Err(UserError::InvalidRankingRuleName { name: text.to_string() }),
         }
     }
 }

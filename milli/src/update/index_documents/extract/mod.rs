@@ -39,6 +39,7 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: Option<HashSet<FieldId>>,
     faceted_fields: HashSet<FieldId>,
+    primary_key_id: FieldId,
     geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
 ) -> Result<()> {
@@ -51,6 +52,7 @@ pub(crate) fn data_from_obkv_documents(
                 lmdb_writer_sx.clone(),
                 &searchable_fields,
                 &faceted_fields,
+                primary_key_id,
                 geo_field_id,
                 &stop_words,
             )
@@ -172,6 +174,7 @@ fn extract_documents_data(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: &Option<HashSet<FieldId>>,
     faceted_fields: &HashSet<FieldId>,
+    primary_key_id: FieldId,
     geo_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
 ) -> Result<(
@@ -186,7 +189,12 @@ fn extract_documents_data(
         let documents_chunk_cloned = documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let _ = match extract_geo_points(documents_chunk_cloned, indexer, geo_field_id) {
+            let _ = match extract_geo_points(
+                documents_chunk_cloned,
+                indexer,
+                primary_key_id,
+                geo_field_id,
+            ) {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
             };

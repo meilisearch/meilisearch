@@ -2,11 +2,10 @@ use std::fs::File;
 use std::io;
 
 use concat_arrays::concat_arrays;
-use log::warn;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
-use crate::{FieldId, InternalError, Result};
+use crate::{FieldId, InternalError, Result, UserError};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
@@ -14,6 +13,7 @@ use crate::{FieldId, InternalError, Result};
 pub fn extract_geo_points<R: io::Read>(
     mut obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
+    primary_key_id: FieldId,
     geo_field_id: FieldId,
 ) -> Result<grenad::Reader<File>> {
     let mut writer = tempfile::tempfile().and_then(|file| {
@@ -33,9 +33,10 @@ pub fn extract_geo_points<R: io::Read>(
             let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else {
-            // TAMO: improve the warn
-            warn!("Malformed `_geo` field");
-            continue;
+            let primary_key = obkv.get(primary_key_id).unwrap(); // TODO: TAMO: is this valid?
+            let primary_key =
+                serde_json::from_slice(primary_key).map_err(InternalError::SerdeJson)?;
+            Err(UserError::InvalidGeoField { document_id: primary_key, object: point })?
         }
     }
 
