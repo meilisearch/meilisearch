@@ -1,6 +1,12 @@
+use std::cmp::Reverse;
+
 use big_s::S;
-use milli::update::Settings;
-use milli::{AscDesc, Criterion, Search, SearchResult};
+use heed::EnvOpenOptions;
+use itertools::Itertools;
+use maplit::hashset;
+use milli::update::{Settings, UpdateBuilder, UpdateFormat};
+use milli::{AscDesc, Criterion, Index, Search, SearchResult};
+use rand::Rng;
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -9,6 +15,7 @@ const ALLOW_TYPOS: bool = true;
 const DISALLOW_TYPOS: bool = false;
 const ALLOW_OPTIONAL_WORDS: bool = true;
 const DISALLOW_OPTIONAL_WORDS: bool = false;
+const ASC_DESC_CANDIDATES_THRESHOLD: usize = 1000;
 
 macro_rules! test_criterion {
     ($func:ident, $optional_word:ident, $authorize_typos:ident, $criteria:expr, $sort_criteria:expr) => {
@@ -355,5 +362,95 @@ fn criteria_mixup() {
         let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
 
         assert_eq!(documents_ids, expected_external_ids);
+    }
+}
+
+#[test]
+fn criteria_ascdesc() {
+    let path = tempfile::tempdir().unwrap();
+    let mut options = EnvOpenOptions::new();
+    options.map_size(10 * 1024 * 1024); // 10 MB
+    let index = Index::new(options, &path).unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
+
+    let mut builder = Settings::new(&mut wtxn, &index, 0);
+
+    builder.set_sortable_fields(hashset! {
+        S("name"),
+        S("age"),
+    });
+    builder.execute(|_, _| ()).unwrap();
+
+    // index documents
+    let mut builder = UpdateBuilder::new(0);
+    builder.max_memory(10 * 1024 * 1024); // 10MiB
+    let mut builder = builder.index_documents(&mut wtxn, &index);
+    builder.update_format(UpdateFormat::Csv);
+    builder.enable_autogenerate_docids();
+
+    let content = [
+        vec![S("name,age")],
+        (0..ASC_DESC_CANDIDATES_THRESHOLD + 1)
+            .map(|_| {
+                let mut rng = rand::thread_rng();
+
+                let age = rng.gen::<u32>().to_string();
+                let name = rng
+                    .sample_iter(&rand::distributions::Alphanumeric)
+                    .map(char::from)
+                    .filter(|c| *c >= 'a' && *c <= 'z')
+                    .take(10)
+                    .collect::<String>();
+
+                format!("{},{}", name, age)
+            })
+            .collect::<Vec<_>>(),
+    ]
+    .iter()
+    .flatten()
+    .join("\n");
+    builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+
+    wtxn.commit().unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+    let documents = index.all_documents(&rtxn).unwrap().map(|doc| doc.unwrap()).collect::<Vec<_>>();
+
+    for criterion in [Asc(S("name")), Desc(S("name")), Asc(S("age")), Desc(S("age"))] {
+        eprintln!("Testing with criterion: {:?}", &criterion);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_criteria(vec![criterion.to_string()]);
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let mut rtxn = index.read_txn().unwrap();
+
+        let mut search = Search::new(&mut rtxn, &index);
+        search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
+
+        let SearchResult { documents_ids, .. } = search.execute().unwrap();
+
+        let expected_document_ids = match criterion {
+            Asc(field_name) if field_name == "name" => {
+                documents.iter().sorted_by_key(|(_, obkv)| obkv.get(0).unwrap())
+            }
+            Desc(field_name) if field_name == "name" => {
+                documents.iter().sorted_by_key(|(_, obkv)| Reverse(obkv.get(0).unwrap()))
+            }
+            Asc(field_name) if field_name == "name" => {
+                documents.iter().sorted_by_key(|(_, obkv)| obkv.get(1).unwrap())
+            }
+            Desc(field_name) if field_name == "name" => {
+                documents.iter().sorted_by_key(|(_, obkv)| Reverse(obkv.get(1).unwrap()))
+            }
+            _ => continue,
+        }
+        .map(|(id, _)| *id)
+        .collect::<Vec<_>>();
+
+        assert_eq!(documents_ids, expected_document_ids);
     }
 }
