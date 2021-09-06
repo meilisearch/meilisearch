@@ -798,6 +798,12 @@ mod tests {
         assert_eq!(condition, expected);
 
         // georadius don't have any parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius don't have any parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
         assert!(result.is_err());
         let error = result.unwrap_err();

@@ -9,7 +9,7 @@ char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
 
 // we deliberately choose to allow empty parameters to generate more specific error message later
-parameters ={"(" ~ (value ~ ",")* ~ value? ~ ")"}
+parameters ={("(" ~ (value ~ ",")* ~ value? ~ ")") | ""}
 condition = _{between | eq | greater | less | geq | leq | neq}
 between = {key ~ value ~ "TO" ~ value}
 geq = {key ~ ">=" ~ value}
