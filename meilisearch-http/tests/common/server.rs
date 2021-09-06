@@ -7,7 +7,7 @@ use tempdir::TempDir;
 use urlencoding::encode;
 
 use meilisearch_http::data::Data;
-use meilisearch_http::option::{IndexerOpts, Opt};
+use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
 
 use super::index::Index;
 use super::service::Service;
@@ -90,7 +90,11 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         schedule_snapshot: false,
         snapshot_interval_sec: 0,
         import_dump: None,
-        indexer_options: IndexerOpts::default(),
+        indexer_options: IndexerOpts {
+            // memory has to be unlimited because several meilisearch are running in test context.
+            max_memory: MaxMemory::unlimited(),
+            ..Default::default()
+        },
         log_level: "off".into(),
     }
 }

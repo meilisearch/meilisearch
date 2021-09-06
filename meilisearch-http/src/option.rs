@@ -286,6 +286,12 @@ impl Deref for MaxMemory {
     }
 }
 
+impl MaxMemory {
+    pub fn unlimited() -> Self {
+        Self(None)
+    }
+}
+
 /// Returns the total amount of bytes available or `None` if this system isn't supported.
 fn total_memory_bytes() -> Option<u64> {
     if System::IS_SUPPORTED {
