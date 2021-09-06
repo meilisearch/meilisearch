@@ -595,6 +595,18 @@ fn field_id(
 ) -> StdResult<Option<FieldId>, PestError<Rule>> {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
+    if key.as_rule() == Rule::reserved {
+        return Err(PestError::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!(
+                    "`{}` is a reserved keyword and thus can't be used as a filter expression. Available filterable attributes are: {}",
+                    key.as_str(),
+                    filterable_fields.iter().join(", "),
+                ),
+            },
+            key.as_span(),
+        ));
+    }
 
     if !filterable_fields.contains(key.as_str()) {
         return Err(PestError::new_from_span(
@@ -671,6 +683,13 @@ mod tests {
         let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
+
+        let result = FilterCondition::from_str(&rtxn, &index, "_geo = France");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains(
+            "`_geo` is a reserved keyword and thus can't be used as a filter expression."
+        ));
     }
 
     #[test]

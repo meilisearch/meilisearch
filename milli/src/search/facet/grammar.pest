@@ -1,5 +1,5 @@
-key = _{quoted | word}
-value = _{quoted | word}
+key = _{reserved | quoted | word }
+value = _{quoted | word }
 quoted = _{ (PUSH("'") | PUSH("\"")) ~ string ~ POP  }
 string = {char*}
 word = ${(LETTER | NUMBER | "_" | "-" | ".")+}
@@ -8,8 +8,9 @@ char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
 
+reserved = { "_geo" | "_geoDistance" | "_geoPoint" | ("_geoPoint" ~ parameters) }
 // we deliberately choose to allow empty parameters to generate more specific error message later
-parameters ={("(" ~ (value ~ ",")* ~ value? ~ ")") | ""}
+parameters = {("(" ~ (value ~ ",")* ~ value? ~ ")") | ""}
 condition = _{between | eq | greater | less | geq | leq | neq}
 between = {key ~ value ~ "TO" ~ value}
 geq = {key ~ ">=" ~ value}
