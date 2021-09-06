@@ -182,15 +182,42 @@ impl FilterCondition {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
-        let (lat_result, _) = pest_parse(items.next().unwrap());
-        let (lng_result, _) = pest_parse(items.next().unwrap());
-        let lat = lat_result.map_err(UserError::InvalidFilter)?;
-        let lng = lng_result.map_err(UserError::InvalidFilter)?;
-        let point = [lat, lng];
-        let (distance_result, _) = pest_parse(items.next().unwrap());
-        let distance = distance_result.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, GeoLowerThan(point, distance)))
+        let parameters_item = items.next().unwrap();
+        // We don't need more than 3 parameters, but to handle errors correctly we are still going
+        // to extract the first 4 parameters
+        let param_span = parameters_item.as_span();
+        let parameters = parameters_item
+            .into_inner()
+            .take(4)
+            .map(|param| (param.clone(), param.as_span()))
+            .map(|(param, span)| pest_parse(param).0.map(|arg| (arg, span)))
+            .collect::<StdResult<Vec<(f64, _)>, _>>()
+            .map_err(UserError::InvalidFilter)?;
+        if parameters.len() != 3 {
+            return Err(UserError::InvalidFilter(PestError::new_from_span(
+                        ErrorVariant::CustomError {
+                            message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
+                        },
+                    // we want to point to the last parameters and if there was no parameters we
+                        // point to the parenthesis
+                    parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
+                            )))?;
+        }
+        let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
+        if let Some(span) = (!(-181.0..181.).contains(&lat.0))
+            .then(|| &lat.1)
+            .or((!(-181.0..181.).contains(&lng.0)).then(|| &lng.1))
+        {
+            return Err(UserError::InvalidFilter(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                        "Latitude and longitude must be contained between -180 to 180 degrees."
+                    ),
+                },
+                span.clone(),
+            )))?;
+        }
+        Ok(Operator(fid, GeoLowerThan([lat.0, lng.0], distance)))
     }
 
     fn between(
@@ -724,6 +751,86 @@ mod tests {
             )),
         );
         assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn geo_radius() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        // basic test
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 13.0005, 2000)").unwrap();
+        let expected = Operator(0, GeoLowerThan([12., 13.0005], 2000.));
+        assert_eq!(condition, expected);
+
+        // test the negation of the GeoLowerThan
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "NOT _geoRadius(50, 18, 2000.500)").unwrap();
+        let expected = Operator(0, GeoGreaterThan([50., 18.], 2000.500));
+        assert_eq!(condition, expected);
+
+        // composition of multiple operations
+        let condition = FilterCondition::from_str(
+            &rtxn,
+            &index,
+            "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
+        )
+        .unwrap();
+        let expected = Or(
+            Box::new(And(
+                Box::new(Operator(0, GeoGreaterThan([1., 2.], 300.))),
+                Box::new(Operator(0, GeoLowerThan([1.001, 2.002], 1000.300))),
+            )),
+            Box::new(Operator(1, LowerThanOrEqual(10.))),
+        );
+        assert_eq!(condition, expected);
+
+        // georadius don't have any parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius don't have enough parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius have too many parameters
+        let result =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius have a bad latitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-200, 150, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+
+        // georadius have a bad longitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 181, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
     }
 
     #[test]
