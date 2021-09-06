@@ -458,6 +458,20 @@ name = "bytemuck"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9966d2ab714d0f785dbac0a0396251a35280aeb42413281617d0209ab4898435"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e215f8c2f9f79cb53c8335e687ffd07d5bfcb6fe5fc80723762d0be46e7cc54"
+dependencies = [
+ "proc-macro2 1.0.27",
+ "quote 1.0.9",
+ "syn 1.0.73",
+]
 
 [[package]]
 name = "byteorder"
@@ -629,6 +643,12 @@ dependencies = [
  "time 0.2.27",
  "version_check",
 ]
+
+[[package]]
+name = "core-foundation-sys"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea221b5284a47e40033bf9b66f35f984ec0ea2931eb03505246cd27a963f981b"
 
 [[package]]
 name = "cow-utils"
@@ -1097,13 +1117,14 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "grenad"
-version = "0.1.0"
-source = "git+https://github.com/Kerollmops/grenad.git?rev=3adcb26#3adcb267dcbc590c7da10eb5f887a254865b3dbe"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7824d499230110f4e4a8d4fd3fd4dc15c1347fce5082e4bba82eef17f43e1ed8"
 dependencies = [
+ "bytemuck",
  "byteorder",
  "flate2",
- "log",
- "nix",
+ "lz4_flex",
  "snap",
  "tempfile",
  "zstd",
@@ -1161,8 +1182,8 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.12.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
+version = "0.12.1"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1180,12 +1201,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#8e5dc6d71c8166a8d7d0db059e6e51478942b551"
+source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1535,6 +1556,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5827b976d911b5d2e42b2ccfc7c0d2461a1414e8280436885218762fc529b3f8"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "main_error"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1619,6 +1649,7 @@ dependencies = [
  "siphasher",
  "slice-group-by",
  "structopt",
+ "sysinfo",
  "tar",
  "tempdir",
  "tempfile",
@@ -1675,13 +1706,14 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.11.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.11.0#c51bb6789cb3fbb6511138374b3443f9116a445c"
+version = "0.12.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.12.0#5cbe8793251bbf143434c8a4c4e7195ca6c5f2ac"
 dependencies = [
  "bstr",
  "byteorder",
  "chrono",
  "concat-arrays",
+ "crossbeam-channel",
  "csv",
  "either",
  "flate2",
@@ -1786,18 +1818,6 @@ dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.9",
  "syn 1.0.73",
-]
-
-[[package]]
-name = "nix"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2ccba0cfe4fdf15982d1674c69b1fd80bad427d293849982668dfe454bd61f2"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if 1.0.0",
- "libc",
 ]
 
 [[package]]
@@ -2691,6 +2711,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "stdweb"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2810,6 +2836,21 @@ dependencies = [
  "quote 1.0.9",
  "syn 1.0.73",
  "unicode-xid 0.2.2",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0af066e6272f2175c1783cfc2ebf3e2d8dfe2c182b00677fdeccbf8291af83fb"
+dependencies = [
+ "cfg-if 1.0.0",
+ "core-foundation-sys",
+ "libc",
+ "ntapi",
+ "once_cell",
+ "rayon",
+ "winapi",
 ]
 
 [[package]]
@@ -3051,6 +3092,16 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "twox-hash"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f559b464de2e2bdabcac6a210d12e9b5a5973c251e102c44c585c71d51bd78e"
+dependencies = [
+ "cfg-if 1.0.0",
+ "static_assertions",
+]
 
 [[package]]
 name = "typenum"
