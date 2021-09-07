@@ -504,17 +504,20 @@ impl FilterCondition {
             LowerThan(val) => (Included(f64::MIN), Excluded(*val)),
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
-            GeoLowerThan(point, distance) => {
+            GeoLowerThan(base_point, distance) => {
                 let mut result = RoaringBitmap::new();
                 let rtree = match index.geo_rtree(rtxn)? {
                     Some(rtree) => rtree,
                     None => return Ok(result),
                 };
 
-                let iter = rtree
-                    .nearest_neighbor_iter_with_distance_2(point)
-                    .take_while(|(_, dist)| dist <= distance);
-                iter.for_each(|(point, _)| drop(result.insert(point.data)));
+                rtree
+                    .nearest_neighbor_iter(base_point)
+                    .take_while(|point| {
+                        dbg!(crate::distance_between_two_points(base_point, point.geom()))
+                            < *distance
+                    })
+                    .for_each(|point| drop(result.insert(point.data)));
 
                 return Ok(result);
             }
