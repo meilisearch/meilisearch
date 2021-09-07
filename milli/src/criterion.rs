@@ -12,14 +12,14 @@ pub enum Criterion {
     Words,
     /// Sorted by increasing number of typos.
     Typo,
-    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
-    /// attributes can be used in place of this criterion at query time.
-    Sort,
     /// Sorted by increasing distance between matched query terms.
     Proximity,
     /// Documents with quey words contained in more important
     /// attributes are considered better.
     Attribute,
+    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
+    /// attributes can be used in place of this criterion at query time.
+    Sort,
     /// Sorted by the similarity of the matched words with the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
@@ -45,9 +45,9 @@ impl FromStr for Criterion {
         match text {
             "words" => Ok(Criterion::Words),
             "typo" => Ok(Criterion::Typo),
-            "sort" => Ok(Criterion::Sort),
             "proximity" => Ok(Criterion::Proximity),
             "attribute" => Ok(Criterion::Attribute),
+            "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
             text => match AscDesc::from_str(text) {
                 Ok(AscDesc::Asc(field)) => Ok(Criterion::Asc(field)),
@@ -89,9 +89,9 @@ pub fn default_criteria() -> Vec<Criterion> {
     vec![
         Criterion::Words,
         Criterion::Typo,
-        Criterion::Sort,
         Criterion::Proximity,
         Criterion::Attribute,
+        Criterion::Sort,
         Criterion::Exactness,
     ]
 }
@@ -103,9 +103,9 @@ impl fmt::Display for Criterion {
         match self {
             Words => f.write_str("words"),
             Typo => f.write_str("typo"),
-            Sort => f.write_str("sort"),
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),
+            Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
             Asc(attr) => write!(f, "{}:asc", attr),
             Desc(attr) => write!(f, "{}:desc", attr),
