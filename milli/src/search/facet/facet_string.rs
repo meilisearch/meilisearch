@@ -243,24 +243,27 @@ impl<'t> Iterator for FacetStringGroupRevRange<'t> {
     type Item = heed::Result<((NonZeroU8, u32, u32), (Option<(&'t str, &'t str)>, RoaringBitmap))>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.iter.next() {
-            Some(Ok(((_fid, level, left, right), docids))) => {
-                let must_be_returned = match self.end {
-                    Included(end) => right <= end,
-                    Excluded(end) => right < end,
-                    Unbounded => true,
-                };
-                if must_be_returned {
-                    match docids.decode() {
-                        Ok((bounds, docids)) => Some(Ok(((level, left, right), (bounds, docids)))),
-                        Err(e) => Some(Err(e)),
+        loop {
+            match self.iter.next() {
+                Some(Ok(((_fid, level, left, right), docids))) => {
+                    let must_be_returned = match self.end {
+                        Included(end) => right <= end,
+                        Excluded(end) => right < end,
+                        Unbounded => true,
+                    };
+                    if must_be_returned {
+                        match docids.decode() {
+                            Ok((bounds, docids)) => {
+                                return Some(Ok(((level, left, right), (bounds, docids))))
+                            }
+                            Err(e) => return Some(Err(e)),
+                        }
                     }
-                } else {
-                    None
+                    continue;
                 }
+                Some(Err(e)) => return Some(Err(e)),
+                None => return None,
             }
-            Some(Err(e)) => Some(Err(e)),
-            None => None,
         }
     }
 }
@@ -545,18 +548,18 @@ impl<'t> Iterator for FacetStringIter<'t> {
             // the algorithm less complex to understand.
             let last = match last {
                 Left(ascending) => match ascending {
-                    Left(last) => Left(Left(last)),
-                    Right(last) => Right(Left(last)),
+                    Left(group) => Left(Left(group)),
+                    Right(zero_level) => Right(Left(zero_level)),
                 },
                 Right(descending) => match descending {
-                    Left(last) => Left(Right(last)),
-                    Right(last) => Right(Right(last)),
+                    Left(group) => Left(Right(group)),
+                    Right(zero_level) => Right(Right(zero_level)),
                 },
             };
 
             match last {
-                Left(last) => {
-                    for result in last {
+                Left(group) => {
+                    for result in group {
                         match result {
                             Ok(((level, left, right), (string_bounds, mut docids))) => {
                                 docids &= &*documents_ids;
@@ -566,6 +569,27 @@ impl<'t> Iterator for FacetStringIter<'t> {
                                     }
 
                                     let result = if is_ascending {
+                                        match string_bounds {
+                                            Some((left, right)) => FacetStringLevelZeroRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Right),
+                                            None => FacetStringGroupRange::new(
+                                                self.rtxn,
+                                                self.db,
+                                                self.field_id,
+                                                NonZeroU8::new(level.get() - 1).unwrap(),
+                                                Included(left),
+                                                Included(right),
+                                            )
+                                            .map(Left),
+                                        }
+                                        .map(Left)
+                                    } else {
                                         match string_bounds {
                                             Some((left, right)) => {
                                                 FacetStringLevelZeroRevRange::new(
@@ -588,27 +612,6 @@ impl<'t> Iterator for FacetStringIter<'t> {
                                             .map(Left),
                                         }
                                         .map(Right)
-                                    } else {
-                                        match string_bounds {
-                                            Some((left, right)) => FacetStringLevelZeroRange::new(
-                                                self.rtxn,
-                                                self.db,
-                                                self.field_id,
-                                                Included(left),
-                                                Included(right),
-                                            )
-                                            .map(Right),
-                                            None => FacetStringGroupRange::new(
-                                                self.rtxn,
-                                                self.db,
-                                                self.field_id,
-                                                NonZeroU8::new(level.get() - 1).unwrap(),
-                                                Included(left),
-                                                Included(right),
-                                            )
-                                            .map(Left),
-                                        }
-                                        .map(Left)
                                     };
 
                                     match result {
@@ -624,9 +627,9 @@ impl<'t> Iterator for FacetStringIter<'t> {
                         }
                     }
                 }
-                Right(last) => {
+                Right(zero_level) => {
                     // level zero only
-                    for result in last {
+                    for result in zero_level {
                         match result {
                             Ok((normalized, original, mut docids)) => {
                                 docids &= &*documents_ids;
