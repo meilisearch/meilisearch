@@ -59,6 +59,7 @@ pub enum UserError {
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
+    SortRankingRuleMissing,
     InvalidStoreFile,
     MaxDatabaseSizeReached,
     MissingDocumentId { document: Object },
@@ -236,6 +237,10 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                     field, valid_names
                 )
             }
+            Self::SortRankingRuleMissing => f.write_str(
+                "The sort ranking rule must be specified in the \
+                    ranking rules settings to use the sort parameter at search time",
+            ),
             Self::MissingDocumentId { document } => {
                 let json = serde_json::to_string(document).unwrap();
                 write!(f, "document doesn't have an identifier {}", json)
