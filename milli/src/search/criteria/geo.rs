@@ -106,8 +106,8 @@ fn geo_point(
     point: [f64; 2],
 ) -> Box<dyn Iterator<Item = RoaringBitmap>> {
     let results = rtree
-        .nearest_neighbor_iter_with_distance_2(&point)
-        .filter_map(move |(point, _distance)| candidates.contains(point.data).then(|| point.data))
+        .nearest_neighbor_iter(&point)
+        .filter_map(move |point| candidates.contains(point.data).then(|| point.data))
         .map(|id| std::iter::once(id).collect::<RoaringBitmap>())
         .collect::<Vec<_>>();
 
