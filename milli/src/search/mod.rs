@@ -18,7 +18,7 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
-use crate::criterion::AscDesc;
+use crate::criterion::{AscDesc, Criterion};
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::{DocumentId, Index, Result};
@@ -157,6 +157,14 @@ impl<'a> Search<'a> {
                     .into());
                 }
             }
+        }
+
+        // We check that the sort ranking rule exists and throw an
+        // error if we try to use it and that it doesn't.
+        let sort_ranking_rule_missing = !self.index.criteria(self.rtxn)?.contains(&Criterion::Sort);
+        let empty_sort_criteria = self.sort_criteria.as_ref().map_or(true, |s| s.is_empty());
+        if sort_ranking_rule_missing && !empty_sort_criteria {
+            return Err(UserError::SortRankingRuleMissing.into());
         }
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
