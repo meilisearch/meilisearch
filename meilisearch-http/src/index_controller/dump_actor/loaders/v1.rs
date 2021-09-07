@@ -138,6 +138,20 @@ fn load_index(
     Ok(())
 }
 
+/// Parses the v1 version of the Asc ranking rules `asc(price)`and returns the field name.
+fn asc_ranking_rule(text: &str) -> Option<&str> {
+    text.split_once("asc(")
+        .and_then(|(_, tail)| tail.rsplit_once(")"))
+        .map(|(field, _)| field)
+}
+
+/// Parses the v1 version of the Desc ranking rules `asc(price)`and returns the field name.
+fn desc_ranking_rule(text: &str) -> Option<&str> {
+    text.split_once("desc(")
+        .and_then(|(_, tail)| tail.rsplit_once(")"))
+        .map(|(field, _)| field)
+}
+
 /// we need to **always** be able to convert the old settings to the settings currently being used
 impl From<Settings> for index_controller::Settings<Unchecked> {
     fn from(settings: Settings) -> Self {
@@ -164,19 +178,21 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 None => Setting::NotSet
             },
             sortable_attributes: Setting::NotSet,
-            // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: match settings.ranking_rules {
-                Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter(|criterion| {
+                Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter_map(|criterion| {
                     match criterion.as_str() {
-                        "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
-                        s if s.starts_with("asc") || s.starts_with("desc") => true,
+                        "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
+                        s if s.starts_with("asc") => asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
+                        s if s.starts_with("desc") => desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
                         "wordsPosition" => {
-                            warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
-                            false
+                            warn!("The criteria `attribute` and `wordsPosition` have been merged \
+                                into a single criterion `attribute` so `wordsPositon` will be \
+                                ignored");
+                            None
                         }
                         s => {
                             error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
-                            false
+                            None
                         }
                     }
                 }).collect()),
