@@ -13,6 +13,7 @@ use slice_group_by::GroupBy;
 mod distinct;
 mod filters;
 mod query_criteria;
+mod sort;
 
 pub const TEST_QUERY: &'static str = "hello world america";
 
