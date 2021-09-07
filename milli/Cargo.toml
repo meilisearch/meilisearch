@@ -15,7 +15,7 @@ either = "1.6.1"
 flate2 = "1.0.20"
 fst = "0.4.5"
 fxhash = "0.2.1"
-grenad = "0.3.0"
+grenad = { version = "0.3.0", default-features = false }
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 human_format = "1.0.3"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
