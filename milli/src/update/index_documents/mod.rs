@@ -229,7 +229,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         ) = crossbeam_channel::unbounded();
 
         // get the primary key field id
-        let primary_key_id = fields_ids_map.id(&primary_key).unwrap(); // TODO: TAMO: is this unwrap 100% valid?
+        let primary_key_id = fields_ids_map.id(&primary_key).unwrap();
 
         // get searchable fields for word databases
         let searchable_fields =

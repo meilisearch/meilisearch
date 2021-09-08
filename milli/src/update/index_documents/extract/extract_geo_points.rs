@@ -33,7 +33,8 @@ pub fn extract_geo_points<R: io::Read>(
             let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else {
-            let primary_key = obkv.get(primary_key_id).unwrap(); // TODO: TAMO: is this valid?
+            // All document must have a primary key so we can unwrap safely here
+            let primary_key = obkv.get(primary_key_id).unwrap();
             let primary_key =
                 serde_json::from_slice(primary_key).map_err(InternalError::SerdeJson)?;
             Err(UserError::InvalidGeoField { document_id: primary_key, object: point })?
