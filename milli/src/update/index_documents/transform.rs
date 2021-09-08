@@ -383,6 +383,9 @@ impl Transform<'_, '_> {
         let mut field_distribution = self.index.field_distribution(self.rtxn)?;
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
 
+        // consume sorter, in order to free the internal allocation, before creating a new one.
+        let mut iter = sorter.into_merger_iter()?;
+
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
             |_id, obkvs| {
@@ -404,7 +407,6 @@ impl Transform<'_, '_> {
 
         // While we write into final file we get or generate the internal documents ids.
         let mut documents_count = 0;
-        let mut iter = sorter.into_merger_iter()?;
         while let Some((external_id, update_obkv)) = iter.next()? {
             if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
