@@ -17,7 +17,7 @@ pub use merge_functions::{
 };
 
 pub fn valid_lmdb_key(key: impl AsRef<[u8]>) -> bool {
-    key.as_ref().len() <= 511
+    key.as_ref().len() <= 511 && !key.as_ref().is_empty()
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
