@@ -103,8 +103,8 @@ pub struct IndexerOpt {
     /// chunks during indexing documents.
     ///
     /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
-    #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
-    pub chunk_compression_type: CompressionType,
+    #[structopt(long, possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
+    pub chunk_compression_type: Option<CompressionType>,
 
     /// The level of compression of the chosen algorithm.
     #[structopt(long, requires = "chunk-compression-type")]
@@ -343,7 +343,9 @@ async fn main() -> anyhow::Result<()> {
             update_builder.thread_pool(GLOBAL_THREAD_POOL.get().unwrap());
             update_builder.log_every_n(indexer_opt_cloned.log_every_n);
             update_builder.max_memory(indexer_opt_cloned.max_memory.get_bytes() as usize);
-            update_builder.chunk_compression_type(indexer_opt_cloned.chunk_compression_type);
+            update_builder.chunk_compression_type(
+                indexer_opt_cloned.chunk_compression_type.unwrap_or(CompressionType::None),
+            );
 
             let before_update = Instant::now();
             // we extract the update type and execute the update itself.
