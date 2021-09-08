@@ -93,14 +93,17 @@ impl ErrorCode for MilliError<'_> {
                     | UserError::InvalidDocumentId { .. }
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
+                    | UserError::InvalidAscDescSyntax { .. }
                     | UserError::DocumentLimitReached => Code::Internal,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::InvalidFilterAttribute(_) => Code::Filter,
+                    UserError::InvalidSortName { .. } => Code::Sort,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
                     UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
                     UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
+                    UserError::SortRankingRuleMissing => Code::Sort,
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::Sort,
