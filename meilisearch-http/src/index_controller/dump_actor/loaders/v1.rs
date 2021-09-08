@@ -12,6 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata};
+use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
 use crate::{
     index::{update_handler::UpdateHandler, Index, Unchecked},
     option::IndexerOpts,
@@ -136,20 +137,6 @@ fn load_index(
     // Updates are ignored in dumps V1.
 
     Ok(())
-}
-
-/// Parses the v1 version of the Asc ranking rules `asc(price)`and returns the field name.
-fn asc_ranking_rule(text: &str) -> Option<&str> {
-    text.split_once("asc(")
-        .and_then(|(_, tail)| tail.rsplit_once(")"))
-        .map(|(field, _)| field)
-}
-
-/// Parses the v1 version of the Desc ranking rules `asc(price)`and returns the field name.
-fn desc_ranking_rule(text: &str) -> Option<&str> {
-    text.split_once("desc(")
-        .and_then(|(_, tail)| tail.rsplit_once(")"))
-        .map(|(field, _)| field)
 }
 
 /// we need to **always** be able to convert the old settings to the settings currently being used

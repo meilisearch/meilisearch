@@ -8,7 +8,9 @@ use heed::RoTxn;
 use indexmap::IndexMap;
 use milli::update::{IndexDocumentsMethod, UpdateFormat::JsonStream};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
+use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
 use crate::option::IndexerOpts;
 
 use super::error::Result;
@@ -93,10 +95,22 @@ impl Index {
 
         let meta_path = src.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::open(meta_path)?;
+
+        // We first deserialize the dump meta into a serde_json::Value and change
+        // the custom ranking rules settings from the old format to the new format.
+        let mut meta: Value = serde_json::from_reader(&mut meta_file)?;
+        if let Some(ranking_rules) = meta.pointer_mut("/settings/rankingRules") {
+            convert_custom_ranking_rules(ranking_rules);
+        }
+
+        // Then we serialize it back into a vec to deserialize it
+        // into a `DumpMeta` struct with the newly patched `rankingRules` format.
+        let patched_meta = serde_json::to_vec(&meta)?;
+
         let DumpMeta {
             settings,
             primary_key,
-        } = serde_json::from_reader(&mut meta_file)?;
+        } = serde_json::from_slice(&patched_meta)?;
         let settings = settings.check();
         let index = Self::open(&dst_dir_path, size)?;
         let mut txn = index.write_txn()?;
@@ -130,5 +144,27 @@ impl Index {
         }
 
         Ok(())
+    }
+}
+
+/// Converts the ranking rules from the format `asc(_)`, `desc(_)` to the format `_:asc`, `_:desc`.
+///
+/// This is done for compatibility reasons, and to avoid a new dump version,
+/// since the new syntax was introduced soon after the new dump version.
+fn convert_custom_ranking_rules(ranking_rules: &mut Value) {
+    *ranking_rules = match ranking_rules.take() {
+        Value::Array(values) => values
+            .into_iter()
+            .filter_map(|value| match value {
+                Value::String(s) if s.starts_with("asc") => asc_ranking_rule(&s)
+                    .map(|f| format!("{}:asc", f))
+                    .map(Value::String),
+                Value::String(s) if s.starts_with("desc") => desc_ranking_rule(&s)
+                    .map(|f| format!("{}:desc", f))
+                    .map(Value::String),
+                otherwise => Some(otherwise),
+            })
+            .collect(),
+        otherwise => otherwise,
     }
 }
