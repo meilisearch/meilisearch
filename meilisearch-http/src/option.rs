@@ -38,11 +38,6 @@ pub struct IndexerOpts {
     #[structopt(long, default_value)]
     pub max_memory: MaxMemory,
 
-    /// Size of the linked hash map cache when indexing.
-    /// The bigger it is, the faster the indexing is but the more memory it takes.
-    #[structopt(long, default_value = "500")]
-    pub linked_hash_map_size: usize,
-
     /// The name of the compression algorithm to use when compressing intermediate
     /// Grenad chunks while indexing documents.
     ///
@@ -53,18 +48,6 @@ pub struct IndexerOpts {
     /// The level of compression of the chosen algorithm.
     #[structopt(long, requires = "chunk-compression-type")]
     pub chunk_compression_level: Option<u32>,
-
-    /// The number of bytes to remove from the begining of the chunks while reading/sorting
-    /// or merging them.
-    ///
-    /// File fusing must only be enable on file systems that support the `FALLOC_FL_COLLAPSE_RANGE`,
-    /// (i.e. ext4 and XFS). File fusing will only work if the `enable-chunk-fusing` is set.
-    #[structopt(long, default_value = "4 GiB")]
-    pub chunk_fusing_shrink_size: Byte,
-
-    /// Enable the chunk fusing or not, this reduces the amount of disk space used.
-    #[structopt(long)]
-    pub enable_chunk_fusing: bool,
 
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[structopt(long)]
@@ -77,11 +60,8 @@ impl Default for IndexerOpts {
             log_every_n: 100_000,
             max_nb_chunks: None,
             max_memory: MaxMemory::default(),
-            linked_hash_map_size: 500,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: Byte::from_str("4GiB").unwrap(),
-            enable_chunk_fusing: false,
             indexing_jobs: None,
         }
     }
@@ -283,6 +263,12 @@ impl Deref for MaxMemory {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl MaxMemory {
+    pub fn unlimited() -> Self {
+        Self(None)
     }
 }
 

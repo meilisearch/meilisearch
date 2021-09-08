@@ -110,7 +110,8 @@ impl IndexController {
         std::fs::create_dir_all(&path)?;
 
         let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&path)?;
-        let index_handle = index_actor::IndexActorHandleImpl::new(&path, index_size)?;
+        let index_handle =
+            index_actor::IndexActorHandleImpl::new(&path, index_size, &options.indexer_options)?;
         let update_handle = update_actor::UpdateActorHandleImpl::new(
             index_handle.clone(),
             &path,
