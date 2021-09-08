@@ -67,14 +67,17 @@ pub fn extract_docid_word_positions<R: io::Read>(
 
                     for (index, token) in tokens {
                         let token = token.text().trim();
-                        key_buffer.truncate(mem::size_of::<u32>());
-                        key_buffer.extend_from_slice(token.as_bytes());
+                        if !token.is_empty() {
+                            key_buffer.truncate(mem::size_of::<u32>());
+                            key_buffer.extend_from_slice(token.as_bytes());
 
-                        let position: u32 = index
-                            .try_into()
-                            .map_err(|_| SerializationError::InvalidNumberSerialization)?;
-                        let position = field_id as u32 * ONE_ATTRIBUTE + position;
-                        docid_word_positions_sorter.insert(&key_buffer, &position.to_ne_bytes())?;
+                            let position: u32 = index
+                                .try_into()
+                                .map_err(|_| SerializationError::InvalidNumberSerialization)?;
+                            let position = field_id as u32 * ONE_ATTRIBUTE + position;
+                            docid_word_positions_sorter
+                                .insert(&key_buffer, &position.to_ne_bytes())?;
+                        }
                     }
                 }
             }
