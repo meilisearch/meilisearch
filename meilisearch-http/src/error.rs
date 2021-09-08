@@ -3,8 +3,8 @@ use std::fmt;
 
 use actix_web as aweb;
 use actix_web::body::Body;
-use actix_web::dev::BaseHttpResponseBuilder;
 use actix_web::http::StatusCode;
+use actix_web::HttpResponseBuilder;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
 use milli::UserError;
@@ -43,9 +43,9 @@ where
 }
 
 impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::BaseHttpResponse<Body> {
+    fn error_response(&self) -> aweb::HttpResponse<Body> {
         let json = serde_json::to_vec(self).unwrap();
-        BaseHttpResponseBuilder::new(self.status_code())
+        HttpResponseBuilder::new(self.status_code())
             .content_type("application/json")
             .body(json)
     }
@@ -134,7 +134,7 @@ impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
             PayloadError::Json(err) => match err {
-                JsonPayloadError::Overflow => Code::PayloadTooLarge,
+                JsonPayloadError::Overflow { .. } => Code::PayloadTooLarge,
                 JsonPayloadError::ContentType => Code::UnsupportedMediaType,
                 JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => {
                     Code::PayloadTooLarge

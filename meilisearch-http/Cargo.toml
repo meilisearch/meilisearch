@@ -11,81 +11,79 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [build-dependencies]
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
-anyhow = { version = "*", optional = true }
-cargo_toml = { version = "0.9.0", optional = true }
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
+anyhow = { version = "1.0.43", optional = true }
+cargo_toml = { version = "0.9", optional = true }
 hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.11.3", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
-sha-1 = { version = "0.9.4", optional = true }
-tempfile = { version = "3.1.0", optional = true }
+reqwest = { version = "0.11.4", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+sha-1 = { version = "0.9.8", optional = true }
+tempfile = { version = "3.2.0", optional = true }
 vergen = { version = "5.1.15", default-features = false, features = ["git"] }
-zip = { version = "0.5.12", optional = true }
+zip = { version = "0.5.13", optional = true }
 
 [dependencies]
-actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "2dac1a4"}
-actix-http = { version = "=3.0.0-beta.6" }
-actix-service = "2.0.0"
-actix-web = { version = "=4.0.0-beta.6", features = ["rustls"] }
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "6db8c3e", optional = true }
-anyhow = "1.0.36"
-async-stream = "0.3.0"
-async-trait = "0.1.42"
-arc-swap = "1.2.0"
-byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
-bytes = "0.6.0"
+actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
+actix-web = { version = "4.0.0-beta.9", features = ["rustls"] }
+actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
+anyhow = "1.0.43"
+async-stream = "0.3.2"
+async-trait = "0.1.51"
+arc-swap = "1.3.2"
+byte-unit = { version = "4.0.12", default-features = false, features = ["std"] }
+bytes = "1.1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
-crossbeam-channel = "0.5.0"
+crossbeam-channel = "0.5.1"
 either = "1.6.1"
-env_logger = "0.8.2"
-flate2 = "1.0.19"
-fst = "0.4.5"
-futures = "0.3.7"
-futures-util = "0.3.8"
+env_logger = "0.9.0"
+flate2 = "1.0.21"
+fst = "0.4.7"
+futures = "0.3.17"
+futures-util = "0.3.17"
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
-http = "0.2.1"
-indexmap = { version = "1.3.2", features = ["serde-1"] }
-itertools = "0.10.0"
-log = "0.4.8"
-main_error = "0.1.0"
+http = "0.2.4"
+indexmap = { version = "1.7.0", features = ["serde-1"] }
+itertools = "0.10.1"
+log = "0.4.14"
+main_error = "0.1.1"
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 memmap = "0.7.0"
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.13.1" }
 mime = "0.3.16"
 num_cpus = "1.13.0"
-once_cell = "1.5.2"
-parking_lot = "0.11.1"
-rand = "0.7.3"
-rayon = "1.5.0"
-regex = "1.4.2"
-rustls = "0.19"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.59", features = ["preserve_order"] }
-sha2 = "0.9.1"
-siphasher = "0.3.2"
+once_cell = "1.8.0"
+parking_lot = "0.11.2"
+rand = "0.8.4"
+rayon = "1.5.1"
+regex = "1.5.4"
+rustls = "0.19.1"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = { version = "1.0.67", features = ["preserve_order"] }
+sha2 = "0.9.6"
+siphasher = "0.3.7"
 slice-group-by = "0.2.6"
-structopt = "0.3.20"
-tar = "0.4.29"
-tempfile = "3.1.0"
-thiserror = "1.0.24"
-tokio = { version = "1", features = ["full"] }
-uuid = { version =  "0.8.2", features = ["serde"] }
+structopt = "0.3.23"
+tar = "0.4.37"
+tempfile = "3.2.0"
+thiserror = "1.0.28"
+tokio = { version = "1.11.0", features = ["full"] }
+uuid = { version = "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
 obkv = "0.2.0"
-pin-project = "1.0.7"
-whoami = { version = "1.1.2", optional = true }
-reqwest = { version = "0.11.3", features = ["json", "rustls-tls"], default-features = false, optional = true }
+pin-project = "1.0.8"
+whoami = { version = "1.1.3", optional = true }
+reqwest = { version = "0.11.4", features = ["json", "rustls-tls"], default-features = false, optional = true }
 serdeval = "0.1.0"
-sysinfo = "0.20.0"
+sysinfo = "0.20.2"
 
 [dev-dependencies]
-actix-rt = "2.1.0"
+actix-rt = "2.2.0"
 assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
-mockall = "0.9.1"
+mockall = "0.10.2"
 paste = "1.0.5"
 serde_url_params = "0.2.1"
 tempdir = "0.3.7"
-urlencoding = "1.1.1"
+urlencoding = "2.1.0"
 
 [features]
 mini-dashboard = [

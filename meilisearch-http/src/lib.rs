@@ -43,18 +43,15 @@ pub mod data;
 pub mod error;
 #[macro_use]
 pub mod extractors;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+pub mod analytics;
 pub mod helpers;
 mod index;
 mod index_controller;
 pub mod option;
 pub mod routes;
-
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
-pub mod analytics;
-
-use crate::extractors::authentication::AuthConfig;
-
 pub use self::data::Data;
+use crate::extractors::authentication::AuthConfig;
 pub use option::Opt;
 
 use actix_web::web;
@@ -65,7 +62,7 @@ use extractors::payload::PayloadConfig;
 pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
     let http_payload_size_limit = data.http_payload_size_limit();
     config
-        .data(data.clone())
+        .app_data(web::Data::new(data.clone()))
         .app_data(data)
         .app_data(
             web::JsonConfig::default()
