@@ -5,7 +5,7 @@ use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
 use milli::update::{Settings, UpdateBuilder, UpdateFormat};
-use milli::{AscDesc, Criterion, Index, Search, SearchResult};
+use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
 use rand::Rng;
 use Criterion::*;
 
