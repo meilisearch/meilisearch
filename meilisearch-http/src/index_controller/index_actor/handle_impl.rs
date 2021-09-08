@@ -1,3 +1,4 @@
+use crate::option::IndexerOpts;
 use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};
@@ -148,11 +149,15 @@ impl IndexActorHandle for IndexActorHandleImpl {
 }
 
 impl IndexActorHandleImpl {
-    pub fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
+    pub fn new(
+        path: impl AsRef<Path>,
+        index_size: usize,
+        options: &IndexerOpts,
+    ) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(100);
 
         let store = MapIndexStore::new(path, index_size);
-        let actor = IndexActor::new(receiver, store)?;
+        let actor = IndexActor::new(receiver, store, options)?;
         tokio::task::spawn(actor.run());
         Ok(Self { sender })
     }
