@@ -15,7 +15,7 @@ use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use crate::criterion::{AscDesc as AscDescName, Member};
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, WordDerivationsCache};
-use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
+use crate::{DocumentId, FieldId, Index, Result, TreeLevel, UserError};
 
 mod asc_desc;
 mod attribute;
@@ -311,7 +311,7 @@ impl<'t> CriteriaBuilder<'t> {
                                     point.clone(),
                                 )?),
                                 AscDescName::Desc(Member::Geo(_point)) => {
-                                    panic!("You can't desc geosort"); // TODO: TAMO: remove this
+                                    return Err(UserError::InvalidSortName { name: "Sorting in descending order is currently not supported for the geosearch".to_string() })?
                                 }
                             };
                         }
