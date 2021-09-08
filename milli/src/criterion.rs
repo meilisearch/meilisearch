@@ -52,7 +52,12 @@ impl FromStr for Criterion {
             text => match AscDesc::from_str(text) {
                 Ok(AscDesc::Asc(field)) => Ok(Criterion::Asc(field)),
                 Ok(AscDesc::Desc(field)) => Ok(Criterion::Desc(field)),
-                Err(error) => Err(error.into()),
+                Err(UserError::InvalidAscDescSyntax { name }) => {
+                    Err(UserError::InvalidCriterionName { name }.into())
+                }
+                Err(error) => {
+                    Err(UserError::InvalidCriterionName { name: error.to_string() }.into())
+                }
             },
         }
     }
@@ -76,11 +81,13 @@ impl AscDesc {
 impl FromStr for AscDesc {
     type Err = UserError;
 
+    /// Since we don't know if this was deserialized for a criterion or a sort we just return a
+    /// string and let the caller create his own error
     fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
         match text.rsplit_once(':') {
             Some((field_name, "asc")) => Ok(AscDesc::Asc(field_name.to_string())),
             Some((field_name, "desc")) => Ok(AscDesc::Desc(field_name.to_string())),
-            _ => Err(UserError::InvalidCriterionName { name: text.to_string() }),
+            _ => Err(UserError::InvalidAscDescSyntax { name: text.to_string() }),
         }
     }
 }

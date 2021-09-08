@@ -53,11 +53,13 @@ pub enum UserError {
     AttributeLimitReached,
     Csv(csv::Error),
     DocumentLimitReached,
+    InvalidAscDescSyntax { name: String },
     InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
+    InvalidSortName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -216,6 +218,9 @@ impl fmt::Display for UserError {
                 )
             }
             Self::InvalidFilter(error) => error.fmt(f),
+            Self::InvalidAscDescSyntax { name } => {
+                write!(f, "invalid asc/desc syntax for {}", name)
+            }
             Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
@@ -228,6 +233,9 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 )
             }
             Self::InvalidFilterAttribute(error) => error.fmt(f),
+            Self::InvalidSortName { name } => {
+                write!(f, "Invalid syntax for the sort parameter: {}", name)
+            }
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
