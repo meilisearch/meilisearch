@@ -59,10 +59,10 @@ impl FromStr for Criterion {
                     Err(UserError::InvalidRankingRuleName { name: text.to_string() })?
                 }
                 Err(UserError::InvalidAscDescSyntax { name }) => {
-                    Err(UserError::InvalidCriterionName { name }.into())
+                    Err(UserError::InvalidRankingRuleName { name }.into())
                 }
                 Err(error) => {
-                    Err(UserError::InvalidCriterionName { name: error.to_string() }.into())
+                    Err(UserError::InvalidRankingRuleName { name: error.to_string() }.into())
                 }
             },
         }

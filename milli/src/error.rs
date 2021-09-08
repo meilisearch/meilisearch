@@ -60,7 +60,6 @@ pub enum UserError {
     Csv(csv::Error),
     DocumentLimitReached,
     InvalidAscDescSyntax { name: String },
-    InvalidCriterionName { name: String },
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
@@ -230,7 +229,6 @@ impl fmt::Display for UserError {
             Self::InvalidAscDescSyntax { name } => {
                 write!(f, "invalid asc/desc syntax for {}", name)
             }
-            Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
                 "the document with the id: {} contains an invalid _geo field: {}",
