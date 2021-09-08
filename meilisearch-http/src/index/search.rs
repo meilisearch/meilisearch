@@ -6,7 +6,7 @@ use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords};
+use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, UserError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -110,6 +110,11 @@ impl Index {
         if let Some(ref sort) = query.sort {
             let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
                 Ok(sorts) => sorts,
+                Err(UserError::InvalidAscDescSyntax { name }) => {
+                    return Err(IndexError::Milli(
+                        UserError::InvalidSortName { name }.into(),
+                    ))
+                }
                 Err(err) => return Err(IndexError::Milli(err.into())),
             };
 
