@@ -37,6 +37,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
+        S("_geo"),
     });
     builder.set_sortable_fields(hashset! {
         S("tag"),
@@ -162,6 +163,10 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         if document.asc_desc_rank > filter.parse().unwrap() {
             id = Some(document.id.clone())
         }
+    } else if filter.starts_with("_geoRadius") {
+        id = (document.geo_rank < 100000).then(|| document.id.clone());
+    } else if filter.starts_with("NOT _geoRadius") {
+        id = (document.geo_rank > 1000000).then(|| document.id.clone());
     }
     id
 }
@@ -205,6 +210,7 @@ pub struct TestDocument {
     pub exact_rank: u32,
     pub asc_desc_rank: u32,
     pub sort_by_rank: u32,
+    pub geo_rank: u32,
     pub title: String,
     pub description: String,
     pub tag: String,

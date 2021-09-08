@@ -47,6 +47,11 @@ test_filter!(eq_mix_and_filter, vec![Right("tag=red"), Right("asc_desc_rank=1")]
 test_filter!(eq_string_or_filter, vec![Left(vec!["tag=red", "tag=green"])]);
 test_filter!(eq_mix_or_filter, vec![Left(vec!["tag=red", "asc_desc_rank=1"])]);
 test_filter!(eq_number_or_filter, vec![Left(vec!["asc_desc_rank=3", "asc_desc_rank=1"])]);
+test_filter!(geo_radius, vec![Right("_geoRadius(50.630010347667806, 3.086251829166809, 100000)")]);
+test_filter!(
+    not_geo_radius,
+    vec![Right("NOT _geoRadius(50.630010347667806, 3.086251829166809, 1000000)")]
+);
 test_filter!(eq_complex_filter, vec![Left(vec!["tag=red", "tag=green"]), Right("asc_desc_rank=3")]);
 test_filter!(
     eq_complex_filter_2,
