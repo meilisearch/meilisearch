@@ -43,6 +43,7 @@ heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
+lazy_static = "1.4.0"
 log = "0.4.14"
 main_error = "0.1.1"
 meilisearch-error = { path = "../meilisearch-error" }
