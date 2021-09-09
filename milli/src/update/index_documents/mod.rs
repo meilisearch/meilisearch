@@ -416,6 +416,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let mut builder = WordsLevelPositions::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
+        builder.max_nb_chunks = self.max_nb_chunks;
+        builder.max_memory = self.max_memory;
         if let Some(value) = self.words_positions_level_group_size {
             builder.level_group_size(value);
         }
