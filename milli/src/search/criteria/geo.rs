@@ -45,11 +45,7 @@ impl<'t> Geo<'t> {
 
 impl Criterion for Geo<'_> {
     fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
-        // if there is no rtree we have nothing to returns
-        let rtree = match self.rtree.as_ref() {
-            Some(rtree) => rtree,
-            None => return Ok(None),
-        };
+        let rtree = self.rtree.as_ref();
 
         loop {
             match self.candidates.next() {
@@ -92,8 +88,12 @@ impl Criterion for Geo<'_> {
                             continue;
                         }
                         self.allowed_candidates = &candidates - params.excluded_candidates;
-                        self.candidates =
-                            geo_point(rtree, self.allowed_candidates.clone(), self.point);
+                        self.candidates = match rtree {
+                            Some(rtree) => {
+                                geo_point(rtree, self.allowed_candidates.clone(), self.point)
+                            }
+                            None => Box::new(std::iter::empty()),
+                        };
                     }
                     None => return Ok(None),
                 },

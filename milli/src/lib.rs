@@ -142,8 +142,9 @@ where
     Some((head, tail))
 }
 
-/// Return the distance between two points in meters.
-fn distance_between_two_points(a: &[f64; 2], b: &[f64; 2]) -> f64 {
+/// Return the distance between two points in meters. Each points are composed of two f64,
+/// one latitude and one longitude.
+pub fn distance_between_two_points(a: &[f64; 2], b: &[f64; 2]) -> f64 {
     let a = haversine::Location { latitude: a[0], longitude: a[1] };
     let b = haversine::Location { latitude: b[0], longitude: b[1] };
 
