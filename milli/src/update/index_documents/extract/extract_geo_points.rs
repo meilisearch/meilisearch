@@ -22,11 +22,10 @@ pub fn extract_geo_points<R: io::Read>(
 
     while let Some((docid_bytes, value)) = obkv_documents.next()? {
         let obkv = obkv::KvReader::new(value);
-        let point = match obkv.get(geo_field_id) {
-            Some(point) => point,
+        let point: Value = match obkv.get(geo_field_id) {
+            Some(point) => serde_json::from_slice(point).map_err(InternalError::SerdeJson)?,
             None => continue,
         };
-        let point: Value = serde_json::from_slice(point).map_err(InternalError::SerdeJson)?;
 
         if let Some((lat, lng)) = point["lat"].as_f64().zip(point["lng"].as_f64()) {
             // this will create an array of 16 bytes (two 8 bytes floats)

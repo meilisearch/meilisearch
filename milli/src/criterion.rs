@@ -84,12 +84,16 @@ impl FromStr for Member {
                 text.strip_prefix("_geoPoint(")
                     .and_then(|point| point.strip_suffix(")"))
                     .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })?;
-            let point = point
-                .split(',')
-                .map(|el| el.trim().parse())
-                .collect::<Result<Vec<f64>, _>>()
-                .map_err(|_| UserError::InvalidRankingRuleName { name: text.to_string() })?;
-            Ok(Member::Geo([point[0], point[1]]))
+            let (lat, long) = point
+                .split_once(',')
+                .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })
+                .and_then(|(lat, long)| {
+                    lat.trim()
+                        .parse()
+                        .and_then(|lat| long.trim().parse().map(|long| (lat, long)))
+                        .map_err(|_| UserError::InvalidRankingRuleName { name: text.to_string() })
+                })?;
+            Ok(Member::Geo([lat, long]))
         } else {
             Ok(Member::Field(text.to_string()))
         }
@@ -99,7 +103,7 @@ impl FromStr for Member {
 impl fmt::Display for Member {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Member::Field(name) => write!(f, "{}", name),
+            Member::Field(name) => f.write_str(name),
             Member::Geo([lat, lng]) => write!(f, "_geoPoint({}, {})", lat, lng),
         }
     }

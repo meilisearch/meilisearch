@@ -299,6 +299,7 @@ impl Index {
 
     /* geo rtree */
 
+    /// Writes the provided `rtree` which associates coordinates to documents ids.
     pub(crate) fn put_geo_rtree(
         &self,
         wtxn: &mut RwTxn,
@@ -307,10 +308,12 @@ impl Index {
         self.main.put::<_, Str, SerdeBincode<RTree<GeoPoint>>>(wtxn, main_key::GEO_RTREE_KEY, rtree)
     }
 
+    /// Delete the `rtree` which associates coordinates to documents ids.
     pub(crate) fn delete_geo_rtree(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::GEO_RTREE_KEY)
     }
 
+    /// Returns the `rtree` which associates coordinates to documents ids.
     pub fn geo_rtree<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<RTree<GeoPoint>>> {
         match self
             .main
@@ -323,7 +326,7 @@ impl Index {
 
     /* geo faceted */
 
-    /// Writes the documents ids that are faceted with a _geo field
+    /// Writes the documents ids that are faceted with a _geo field.
     pub(crate) fn put_geo_faceted_documents_ids(
         &self,
         wtxn: &mut RwTxn,
@@ -336,16 +339,12 @@ impl Index {
         )
     }
 
-    /// Delete the documents ids that are faceted with a _geo field
-    pub(crate) fn delete_geo_faceted_documents_ids(&self, wtxn: &mut RwTxn) -> heed::Result<()> {
-        self.main.put::<_, Str, RoaringBitmapCodec>(
-            wtxn,
-            main_key::GEO_FACETED_DOCUMENTS_IDS_KEY,
-            &RoaringBitmap::new(),
-        )
+    /// Delete the documents ids that are faceted with a _geo field.
+    pub(crate) fn delete_geo_faceted_documents_ids(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)
     }
 
-    /// Retrieve all the documents ids that faceted with a _geo field
+    /// Retrieve all the documents ids that faceted with a _geo field.
     pub fn geo_faceted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
         match self
             .main

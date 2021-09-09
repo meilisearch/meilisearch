@@ -311,7 +311,9 @@ impl<'t> CriteriaBuilder<'t> {
                                     point.clone(),
                                 )?),
                                 AscDescName::Desc(Member::Geo(_point)) => {
-                                    return Err(UserError::InvalidSortName { name: "Sorting in descending order is currently not supported for the geosearch".to_string() })?
+                                    return Err(UserError::InvalidSortName {
+                                        name: "Sorting in descending order is currently not supported for the geosearch".to_string(),
+                                    })?
                                 }
                             };
                         }

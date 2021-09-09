@@ -189,12 +189,9 @@ fn extract_documents_data(
         let documents_chunk_cloned = documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let _ = match extract_geo_points(
-                documents_chunk_cloned,
-                indexer,
-                primary_key_id,
-                geo_field_id,
-            ) {
+            let result =
+                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_field_id);
+            let _ = match result {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
             };

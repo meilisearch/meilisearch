@@ -383,15 +383,16 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         if let Some(mut rtree) = self.index.geo_rtree(self.wtxn)? {
             let mut geo_faceted_doc_ids = self.index.geo_faceted_documents_ids(self.wtxn)?;
 
-            let points_to_remove: Vec<_> = rtree
+            let (points_to_remove, docids_to_remove): (Vec<_>, RoaringBitmap) = rtree
                 .iter()
                 .filter(|&point| self.documents_ids.contains(point.data))
                 .cloned()
-                .collect();
+                .map(|point| (point, point.data))
+                .unzip();
             points_to_remove.iter().for_each(|point| {
                 rtree.remove(&point);
-                geo_faceted_doc_ids.remove(point.data);
             });
+            geo_faceted_doc_ids -= docids_to_remove;
 
             self.index.put_geo_rtree(self.wtxn, &rtree)?;
             self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;

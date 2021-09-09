@@ -1,3 +1,5 @@
+use std::iter;
+
 use roaring::RoaringBitmap;
 use rstar::RTree;
 
@@ -23,7 +25,7 @@ impl<'t> Geo<'t> {
         parent: Box<dyn Criterion + 't>,
         point: [f64; 2],
     ) -> Result<Self> {
-        let candidates = Box::new(std::iter::empty());
+        let candidates = Box::new(iter::empty());
         let allowed_candidates = index.geo_faceted_documents_ids(rtxn)?;
         let bucket_candidates = RoaringBitmap::new();
         let rtree = index.geo_rtree(rtxn)?;
@@ -41,7 +43,7 @@ impl<'t> Geo<'t> {
     }
 }
 
-impl<'t> Criterion for Geo<'t> {
+impl Criterion for Geo<'_> {
     fn next(&mut self, params: &mut CriterionParameters) -> Result<Option<CriterionResult>> {
         // if there is no rtree we have nothing to returns
         let rtree = match self.rtree.as_ref() {
@@ -108,7 +110,7 @@ fn geo_point(
     let results = rtree
         .nearest_neighbor_iter(&point)
         .filter_map(move |point| candidates.contains(point.data).then(|| point.data))
-        .map(|id| std::iter::once(id).collect::<RoaringBitmap>())
+        .map(|id| iter::once(id).collect::<RoaringBitmap>())
         .collect::<Vec<_>>();
 
     Box::new(results.into_iter())

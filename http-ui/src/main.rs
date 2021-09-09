@@ -695,7 +695,7 @@ async fn main() -> anyhow::Result<()> {
     struct QueryBody {
         query: Option<String>,
         filters: Option<String>,
-        sorters: Option<String>,
+        sort: Option<String>,
         facet_filters: Option<Vec<UntaggedEither<Vec<String>, String>>>,
         facet_distribution: Option<bool>,
         limit: Option<usize>,
@@ -755,7 +755,7 @@ async fn main() -> anyhow::Result<()> {
                 search.limit(limit);
             }
 
-            if let Some(sort) = query.sorters {
+            if let Some(sort) = query.sort {
                 search.sort_criteria(vec![sort.parse().unwrap()]);
             }
 

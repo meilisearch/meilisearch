@@ -237,12 +237,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // get filterable fields for facet databases
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
         // get the fid of the `_geo` field.
-        let geo_field_id = if let Some(gfid) = self.index.fields_ids_map(self.wtxn)?.id("_geo") {
-            (self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid)
-                || self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid))
-            .then(|| gfid)
-        } else {
-            None
+        let geo_field_id = match self.index.fields_ids_map(self.wtxn)?.id("_geo") {
+            Some(gfid) => {
+                let is_sortable = self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid);
+                let is_filterable = self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid);
+                if is_sortable || is_filterable {
+                    Some(gfid)
+                } else {
+                    None
+                }
+            }
+            None => None,
         };
 
         let stop_words = self.index.stop_words(self.wtxn)?;

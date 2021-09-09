@@ -21,7 +21,9 @@ use crate::error::UserError;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
-use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
+use crate::{
+    distance_between_two_points, CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
@@ -198,10 +200,10 @@ impl FilterCondition {
                         ErrorVariant::CustomError {
                             message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
                         },
-                    // we want to point to the last parameters and if there was no parameters we
+                        // we want to point to the last parameters and if there was no parameters we
                         // point to the parenthesis
-                    parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
-                            )))?;
+                        parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
+            )))?;
         }
         let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
         if let Some(span) = (!(-181.0..181.).contains(&lat.0))
@@ -505,19 +507,18 @@ impl FilterCondition {
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
             GeoLowerThan(base_point, distance) => {
-                let mut result = RoaringBitmap::new();
                 let rtree = match index.geo_rtree(rtxn)? {
                     Some(rtree) => rtree,
-                    None => return Ok(result),
+                    None => return Ok(RoaringBitmap::new()),
                 };
 
-                rtree
+                let result = rtree
                     .nearest_neighbor_iter(base_point)
                     .take_while(|point| {
-                        dbg!(crate::distance_between_two_points(base_point, point.geom()))
-                            < *distance
+                        distance_between_two_points(base_point, point.geom()) < *distance
                     })
-                    .for_each(|point| drop(result.insert(point.data)));
+                    .map(|point| point.data)
+                    .collect();
 
                 return Ok(result);
             }
@@ -600,14 +601,15 @@ fn field_id(
     let key = items.next().unwrap();
     if key.as_rule() == Rule::reserved {
         return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "`{}` is a reserved keyword and thus can't be used as a filter expression. Available filterable attributes are: {}",
+                ErrorVariant::CustomError {
+                    message: format!(
+                                 "`{}` is a reserved keyword and therefore can't be used as a filter expression. \
+                    Available filterable attributes are: {}",
                     key.as_str(),
                     filterable_fields.iter().join(", "),
-                ),
-            },
-            key.as_span(),
+                             ),
+                },
+                key.as_span(),
         ));
     }
 
@@ -691,7 +693,7 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains(
-            "`_geo` is a reserved keyword and thus can't be used as a filter expression."
+            "`_geo` is a reserved keyword and therefore can't be used as a filter expression."
         ));
     }
 
