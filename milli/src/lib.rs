@@ -145,10 +145,10 @@ where
 /// Return the distance between two points in meters. Each points are composed of two f64,
 /// one latitude and one longitude.
 pub fn distance_between_two_points(a: &[f64; 2], b: &[f64; 2]) -> f64 {
-    let a = haversine::Location { latitude: a[0], longitude: a[1] };
-    let b = haversine::Location { latitude: b[0], longitude: b[1] };
+    let a = geoutils::Location::new(a[0], a[1]);
+    let b = geoutils::Location::new(b[0], b[1]);
 
-    haversine::distance(a, b, haversine::Units::Kilometers) * 1000.
+    a.haversine_distance_to(&b).meters()
 }
 
 #[cfg(test)]
