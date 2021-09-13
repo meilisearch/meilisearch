@@ -12,6 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata};
+use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
 use crate::{
     index::{update_handler::UpdateHandler, Index, Unchecked},
     option::IndexerOpts,
@@ -164,19 +165,21 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 None => Setting::NotSet
             },
             sortable_attributes: Setting::NotSet,
-            // we need to convert the old `Vec<String>` into a `BTreeSet<String>`
             ranking_rules: match settings.ranking_rules {
-                Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter(|criterion| {
+                Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter_map(|criterion| {
                     match criterion.as_str() {
-                        "words" | "typo" | "proximity" | "attribute" | "exactness" => true,
-                        s if s.starts_with("asc") || s.starts_with("desc") => true,
+                        "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
+                        s if s.starts_with("asc") => asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
+                        s if s.starts_with("desc") => desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
                         "wordsPosition" => {
-                            warn!("The criteria `attribute` and `wordsPosition` have been merged into a single criterion `attribute` so `wordsPositon` will be ignored");
-                            false
+                            warn!("The criteria `attribute` and `wordsPosition` have been merged \
+                                into a single criterion `attribute` so `wordsPositon` will be \
+                                ignored");
+                            None
                         }
                         s => {
                             error!("Unknown criterion found in the dump: `{}`, it will be ignored", s);
-                            false
+                            None
                         }
                     }
                 }).collect()),

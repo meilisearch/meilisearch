@@ -31,9 +31,12 @@ pub struct IndexActor<S> {
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    pub fn new(receiver: mpsc::Receiver<IndexMsg>, store: S) -> anyhow::Result<Self> {
-        let options = IndexerOpts::default();
-        let update_handler = UpdateHandler::new(&options)?;
+    pub fn new(
+        receiver: mpsc::Receiver<IndexMsg>,
+        store: S,
+        options: &IndexerOpts,
+    ) -> anyhow::Result<Self> {
+        let update_handler = UpdateHandler::new(options)?;
         let update_handler = Arc::new(update_handler);
         let receiver = Some(receiver);
         Ok(Self {

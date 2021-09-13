@@ -16,9 +16,9 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         json!([
             "words",
             "typo",
-            "sort",
             "proximity",
             "attribute",
+            "sort",
             "exactness"
         ]),
     );
@@ -53,9 +53,9 @@ async fn get_settings() {
         json!([
             "words",
             "typo",
-            "sort",
             "proximity",
             "attribute",
+            "sort",
             "exactness"
         ])
     );
