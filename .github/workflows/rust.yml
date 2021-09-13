@@ -23,12 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Cache dependencies
-      uses: actions/cache@v2
-      with:
-        path: |
-          ~/.cargo
-          ./target
-        key: ${{ matrix.os }}-${{ hashFiles('Cargo.lock') }}
+      uses: Swatinem/rust-cache@v1.3.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
@@ -45,19 +40,14 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ matrix.os }}-${{ hashFiles('Cargo.lock') }}
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
           components: clippy
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -69,18 +59,13 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo
-            ./target
-          key: ${{ matrix.os }}-${{ hashFiles('Cargo.lock') }}
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: nightly
           override: true
           components: rustfmt
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
