@@ -40,13 +40,12 @@ All of that on a 39$/month machine with 4cores.
 You can feed the engine with your CSV (comma-seperated, yes) data like this:
 
 ```bash
-printf "name,age\nhello,32\nkiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
+printf "id,name,age\n1,hello,32\n2,kiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
 ```
 
-Here ids will be automatically generated as UUID v4 if they doesn't exist in some or every documents.
-
-Note that it also support JSON and JSON streaming, you can send them to the engine by using
-the `content-type:application/json` and `content-type:application/x-ndjson` headers respectively.
+Don't forget to specify the `id` of the documents. Also Note that it also support JSON and
+JSON streaming, you can send them to the engine by using the `content-type:application/json`
+and `content-type:application/x-ndjson` headers respectively.
 
 ### Querying the engine via the website
 
