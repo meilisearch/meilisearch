@@ -151,7 +151,7 @@ mod test {
     #[actix_rt::test]
     async fn test_normal() {
         let mut rng = rand::thread_rng();
-        let uuids_num: usize = rng.gen_range(5, 10);
+        let uuids_num: usize = rng.gen_range(5..10);
         let uuids = (0..uuids_num)
             .map(|_| Uuid::new_v4())
             .collect::<HashSet<_>>();

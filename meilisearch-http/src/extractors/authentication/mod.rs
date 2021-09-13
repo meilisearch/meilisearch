@@ -145,7 +145,7 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
 
     fn from_request(
         req: &actix_web::HttpRequest,
-        _payload: &mut actix_http::Payload,
+        _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
         match req.app_data::<Self::Config>() {
             Some(config) => match config {

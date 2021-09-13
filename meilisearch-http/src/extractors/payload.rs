@@ -1,7 +1,7 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use actix_http::error::PayloadError;
+use actix_web::error::PayloadError;
 use actix_web::{dev, web, FromRequest, HttpRequest};
 use futures::future::{ready, Ready};
 use futures::Stream;
