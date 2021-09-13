@@ -104,14 +104,18 @@ impl Criterion for Geo<'_> {
 
 fn geo_point(
     rtree: &RTree<GeoPoint>,
-    candidates: RoaringBitmap,
+    mut candidates: RoaringBitmap,
     point: [f64; 2],
 ) -> Box<dyn Iterator<Item = RoaringBitmap>> {
-    let results = rtree
-        .nearest_neighbor_iter(&point)
-        .filter_map(move |point| candidates.contains(point.data).then(|| point.data))
-        .map(|id| iter::once(id).collect::<RoaringBitmap>())
-        .collect::<Vec<_>>();
+    let mut results = Vec::new();
+    for point in rtree.nearest_neighbor_iter(&point) {
+        if candidates.remove(point.data) {
+            results.push(std::iter::once(point.data).collect());
+            if candidates.is_empty() {
+                break;
+            }
+        }
+    }
 
     Box::new(results.into_iter())
 }
