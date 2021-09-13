@@ -15,7 +15,7 @@ use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use crate::criterion::{AscDesc as AscDescName, Member};
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, WordDerivationsCache};
-use crate::{DocumentId, FieldId, Index, Result, TreeLevel, UserError};
+use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
 
 mod asc_desc;
 mod attribute;
@@ -304,17 +304,18 @@ impl<'t> CriteriaBuilder<'t> {
                                     criterion,
                                     field.to_string(),
                                 )?),
-                                AscDescName::Asc(Member::Geo(point)) => Box::new(Geo::new(
+                                AscDescName::Asc(Member::Geo(point)) => Box::new(Geo::asc(
                                     &self.index,
                                     &self.rtxn,
                                     criterion,
                                     point.clone(),
                                 )?),
-                                AscDescName::Desc(Member::Geo(_point)) => {
-                                    return Err(UserError::InvalidSortName {
-                                        name: "sorting in descending order is not supported for the geosearch".to_string(),
-                                    })?
-                                }
+                                AscDescName::Desc(Member::Geo(point)) => Box::new(Geo::desc(
+                                    &self.index,
+                                    &self.rtxn,
+                                    criterion,
+                                    point.clone(),
+                                )?),
                             };
                         }
                         criterion

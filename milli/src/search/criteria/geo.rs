@@ -10,6 +10,7 @@ use crate::{GeoPoint, Index, Result};
 pub struct Geo<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
+    ascending: bool,
     parent: Box<dyn Criterion + 't>,
     candidates: Box<dyn Iterator<Item = RoaringBitmap>>,
     allowed_candidates: RoaringBitmap,
@@ -19,11 +20,30 @@ pub struct Geo<'t> {
 }
 
 impl<'t> Geo<'t> {
-    pub fn new(
+    pub fn asc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn<'t>,
         parent: Box<dyn Criterion + 't>,
         point: [f64; 2],
+    ) -> Result<Self> {
+        Self::new(index, rtxn, parent, point, true)
+    }
+
+    pub fn desc(
+        index: &'t Index,
+        rtxn: &'t heed::RoTxn<'t>,
+        parent: Box<dyn Criterion + 't>,
+        point: [f64; 2],
+    ) -> Result<Self> {
+        Self::new(index, rtxn, parent, point, false)
+    }
+
+    fn new(
+        index: &'t Index,
+        rtxn: &'t heed::RoTxn<'t>,
+        parent: Box<dyn Criterion + 't>,
+        point: [f64; 2],
+        ascending: bool,
     ) -> Result<Self> {
         let candidates = Box::new(iter::empty());
         let allowed_candidates = index.geo_faceted_documents_ids(rtxn)?;
@@ -33,6 +53,7 @@ impl<'t> Geo<'t> {
         Ok(Self {
             index,
             rtxn,
+            ascending,
             parent,
             candidates,
             allowed_candidates,
@@ -89,9 +110,12 @@ impl Criterion for Geo<'_> {
                         }
                         self.allowed_candidates = &candidates - params.excluded_candidates;
                         self.candidates = match rtree {
-                            Some(rtree) => {
-                                geo_point(rtree, self.allowed_candidates.clone(), self.point)
-                            }
+                            Some(rtree) => geo_point(
+                                rtree,
+                                self.allowed_candidates.clone(),
+                                self.point,
+                                self.ascending,
+                            ),
                             None => Box::new(std::iter::empty()),
                         };
                     }
@@ -106,6 +130,7 @@ fn geo_point(
     rtree: &RTree<GeoPoint>,
     mut candidates: RoaringBitmap,
     point: [f64; 2],
+    ascending: bool,
 ) -> Box<dyn Iterator<Item = RoaringBitmap>> {
     let mut results = Vec::new();
     for point in rtree.nearest_neighbor_iter(&point) {
@@ -117,5 +142,9 @@ fn geo_point(
         }
     }
 
-    Box::new(results.into_iter())
+    if ascending {
+        Box::new(results.into_iter())
+    } else {
+        Box::new(results.into_iter().rev())
+    }
 }
