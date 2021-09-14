@@ -4,45 +4,37 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::index_controller::{IndexActorHandle, UpdateStatus};
+use crate::index_controller::{IndexActorHandle, Update, UpdateStatus};
 
 use super::error::Result;
-use super::{PayloadData, UpdateActor, UpdateActorHandle, UpdateMeta, UpdateMsg, UpdateStoreInfo};
+use super::{UpdateActor, UpdateActorHandle, UpdateMsg, UpdateStoreInfo};
 
 #[derive(Clone)]
-pub struct UpdateActorHandleImpl<D> {
-    sender: mpsc::Sender<UpdateMsg<D>>,
+pub struct UpdateActorHandleImpl {
+    sender: mpsc::Sender<UpdateMsg>,
 }
 
-impl<D> UpdateActorHandleImpl<D>
-where
-    D: AsRef<[u8]> + Sized + 'static + Sync + Send,
-{
+impl UpdateActorHandleImpl {
     pub fn new<I>(
         index_handle: I,
         path: impl AsRef<Path>,
         update_store_size: usize,
     ) -> anyhow::Result<Self>
     where
-        I: IndexActorHandle + Clone + Send + Sync + 'static,
+        I: IndexActorHandle + Clone + Sync + Send +'static,
     {
         let path = path.as_ref().to_owned();
         let (sender, receiver) = mpsc::channel(100);
         let actor = UpdateActor::new(update_store_size, receiver, path, index_handle)?;
 
-        tokio::task::spawn(actor.run());
+        tokio::task::spawn_local(actor.run());
 
         Ok(Self { sender })
     }
 }
 
 #[async_trait::async_trait]
-impl<D> UpdateActorHandle for UpdateActorHandleImpl<D>
-where
-    D: AsRef<[u8]> + Sized + 'static + Sync + Send,
-{
-    type Data = D;
-
+impl UpdateActorHandle for UpdateActorHandleImpl {
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::ListUpdates { uuid, ret };
@@ -86,15 +78,13 @@ where
 
     async fn update(
         &self,
-        meta: UpdateMeta,
-        data: mpsc::Receiver<PayloadData<Self::Data>>,
         uuid: Uuid,
+        update: Update,
     ) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Update {
             uuid,
-            data,
-            meta,
+            update,
             ret,
         };
         self.sender.send(msg).await?;

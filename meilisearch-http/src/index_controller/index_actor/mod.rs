@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
@@ -59,7 +58,6 @@ pub trait IndexActorHandle {
         &self,
         uuid: Uuid,
         meta: Processing,
-        data: Option<File>,
     ) -> Result<std::result::Result<Processed, Failed>>;
     async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult>;
     async fn settings(&self, uuid: Uuid) -> Result<Settings<Checked>>;

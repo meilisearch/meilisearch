@@ -25,7 +25,7 @@ zip = { version = "0.5.13", optional = true }
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
 actix-web = { version = "4.0.0-beta.9", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
-anyhow = "1.0.43"
+anyhow = { version = "1.0.43", features = ["backtrace"] }
 async-stream = "0.3.2"
 async-trait = "0.1.51"
 arc-swap = "1.3.2"
@@ -48,7 +48,7 @@ main_error = "0.1.1"
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 memmap = "0.7.0"
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.13.1" }
+milli = { git = "https://github.com/meilisearch/milli.git", rev = "6de1b41" }
 mime = "0.3.16"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
@@ -75,6 +75,7 @@ whoami = { version = "1.1.3", optional = true }
 reqwest = { version = "0.11.4", features = ["json", "rustls-tls"], default-features = false, optional = true }
 serdeval = "0.1.0"
 sysinfo = "0.20.2"
+tokio-stream = "0.1.7"
 
 [dev-dependencies]
 actix-rt = "2.2.0"

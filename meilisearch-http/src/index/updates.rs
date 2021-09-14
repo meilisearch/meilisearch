@@ -1,17 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
-use flate2::read::GzDecoder;
 use log::{debug, info, trace};
-use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder, UpdateFormat};
+use milli::documents::DocumentBatchReader;
+use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use serde::{Deserialize, Serialize, Serializer};
+use uuid::Uuid;
 
 use crate::index_controller::UpdateResult;
 
-use super::error::Result;
 use super::Index;
+use super::error::Result;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -162,31 +162,23 @@ pub struct Facets {
 impl Index {
     pub fn update_documents(
         &self,
-        format: UpdateFormat,
         method: IndexDocumentsMethod,
-        content: Option<impl io::Read>,
+        content_uuid: Uuid,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
         let mut txn = self.write_txn()?;
-        let result = self.update_documents_txn(
-            &mut txn,
-            format,
-            method,
-            content,
-            update_builder,
-            primary_key,
-        )?;
+        let result = self.update_documents_txn(&mut txn, method, content_uuid, update_builder, primary_key)?;
         txn.commit()?;
+
         Ok(result)
     }
 
     pub fn update_documents_txn<'a, 'b>(
         &'a self,
         txn: &mut heed::RwTxn<'a, 'b>,
-        format: UpdateFormat,
         method: IndexDocumentsMethod,
-        content: Option<impl io::Read>,
+        content_uuid: Uuid,
         update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
@@ -199,138 +191,132 @@ impl Index {
             builder.execute(|_, _| ())?;
         }
 
-        let mut builder = update_builder.index_documents(txn, self);
-        builder.update_format(format);
-        builder.index_documents_method(method);
-
         let indexing_callback =
             |indexing_step, update_id| debug!("update {}: {:?}", update_id, indexing_step);
 
-        let gzipped = false;
-        let addition = match content {
-            Some(content) if gzipped => {
-                builder.execute(GzDecoder::new(content), indexing_callback)?
-            }
-            Some(content) => builder.execute(content, indexing_callback)?,
-            None => builder.execute(std::io::empty(), indexing_callback)?,
-        };
+        let content_file = self.update_file_store.get_update(content_uuid).unwrap();
+        let reader = DocumentBatchReader::from_reader(content_file).unwrap();
+
+        let mut builder = update_builder.index_documents(txn, self);
+        builder.index_documents_method(method);
+        let addition = builder.execute(reader, indexing_callback)?;
 
         info!("document addition done: {:?}", addition);
 
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
-        // We must use the write transaction of the update here.
-        let mut wtxn = self.write_txn()?;
-        let builder = update_builder.clear_documents(&mut wtxn, self);
+    //pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
+        //// We must use the write transaction of the update here.
+        //let mut wtxn = self.write_txn()?;
+        //let builder = update_builder.clear_documents(&mut wtxn, self);
 
-        let _count = builder.execute()?;
+        //let _count = builder.execute()?;
 
-        wtxn.commit()
-            .and(Ok(UpdateResult::Other))
-            .map_err(Into::into)
-    }
+        //wtxn.commit()
+            //.and(Ok(UpdateResult::Other))
+            //.map_err(Into::into)
+    //}
 
-    pub fn update_settings_txn<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
-        settings: &Settings<Checked>,
-        update_builder: UpdateBuilder,
-    ) -> Result<UpdateResult> {
-        // We must use the write transaction of the update here.
-        let mut builder = update_builder.settings(txn, self);
+    //pub fn update_settings_txn<'a, 'b>(
+        //&'a self,
+        //txn: &mut heed::RwTxn<'a, 'b>,
+        //settings: &Settings<Checked>,
+        //update_builder: UpdateBuilder,
+    //) -> Result<UpdateResult> {
+        //// We must use the write transaction of the update here.
+        //let mut builder = update_builder.settings(txn, self);
 
-        match settings.searchable_attributes {
-            Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
-            Setting::Reset => builder.reset_searchable_fields(),
-            Setting::NotSet => (),
-        }
+        //match settings.searchable_attributes {
+            //Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
+            //Setting::Reset => builder.reset_searchable_fields(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.displayed_attributes {
-            Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
-            Setting::Reset => builder.reset_displayed_fields(),
-            Setting::NotSet => (),
-        }
+        //match settings.displayed_attributes {
+            //Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
+            //Setting::Reset => builder.reset_displayed_fields(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.filterable_attributes {
-            Setting::Set(ref facets) => {
-                builder.set_filterable_fields(facets.clone().into_iter().collect())
-            }
-            Setting::Reset => builder.reset_filterable_fields(),
-            Setting::NotSet => (),
-        }
+        //match settings.filterable_attributes {
+            //Setting::Set(ref facets) => {
+                //builder.set_filterable_fields(facets.clone().into_iter().collect())
+            //}
+            //Setting::Reset => builder.reset_filterable_fields(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.sortable_attributes {
-            Setting::Set(ref fields) => {
-                builder.set_sortable_fields(fields.iter().cloned().collect())
-            }
-            Setting::Reset => builder.reset_sortable_fields(),
-            Setting::NotSet => (),
-        }
+        //match settings.sortable_attributes {
+            //Setting::Set(ref fields) => {
+                //builder.set_sortable_fields(fields.iter().cloned().collect())
+            //}
+            //Setting::Reset => builder.reset_sortable_fields(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.ranking_rules {
-            Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
-            Setting::Reset => builder.reset_criteria(),
-            Setting::NotSet => (),
-        }
+        //match settings.ranking_rules {
+            //Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
+            //Setting::Reset => builder.reset_criteria(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.stop_words {
-            Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
-            Setting::Reset => builder.reset_stop_words(),
-            Setting::NotSet => (),
-        }
+        //match settings.stop_words {
+            //Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
+            //Setting::Reset => builder.reset_stop_words(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.synonyms {
-            Setting::Set(ref synonyms) => {
-                builder.set_synonyms(synonyms.clone().into_iter().collect())
-            }
-            Setting::Reset => builder.reset_synonyms(),
-            Setting::NotSet => (),
-        }
+        //match settings.synonyms {
+            //Setting::Set(ref synonyms) => {
+                //builder.set_synonyms(synonyms.clone().into_iter().collect())
+            //}
+            //Setting::Reset => builder.reset_synonyms(),
+            //Setting::NotSet => (),
+        //}
 
-        match settings.distinct_attribute {
-            Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
-            Setting::Reset => builder.reset_distinct_field(),
-            Setting::NotSet => (),
-        }
+        //match settings.distinct_attribute {
+            //Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
+            //Setting::Reset => builder.reset_distinct_field(),
+            //Setting::NotSet => (),
+        //}
 
-        builder.execute(|indexing_step, update_id| {
-            debug!("update {}: {:?}", update_id, indexing_step)
-        })?;
+        //builder.execute(|indexing_step, update_id| {
+            //debug!("update {}: {:?}", update_id, indexing_step)
+        //})?;
 
-        Ok(UpdateResult::Other)
-    }
+        //Ok(UpdateResult::Other)
+    //}
 
-    pub fn update_settings(
-        &self,
-        settings: &Settings<Checked>,
-        update_builder: UpdateBuilder,
-    ) -> Result<UpdateResult> {
-        let mut txn = self.write_txn()?;
-        let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
-        txn.commit()?;
-        Ok(result)
-    }
+    //pub fn update_settings(
+        //&self,
+        //settings: &Settings<Checked>,
+        //update_builder: UpdateBuilder,
+    //) -> Result<UpdateResult> {
+        //let mut txn = self.write_txn()?;
+        //let result = self.update_settings_txn(&mut txn, settings, update_builder)?;
+        //txn.commit()?;
+        //Ok(result)
+    //}
 
-    pub fn delete_documents(
-        &self,
-        document_ids: &[String],
-        update_builder: UpdateBuilder,
-    ) -> Result<UpdateResult> {
-        let mut txn = self.write_txn()?;
-        let mut builder = update_builder.delete_documents(&mut txn, self)?;
+    //pub fn delete_documents(
+        //&self,
+        //document_ids: &[String],
+        //update_builder: UpdateBuilder,
+    //) -> Result<UpdateResult> {
+        //let mut txn = self.write_txn()?;
+        //let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
-        // We ignore unexisting document ids
-        document_ids.iter().for_each(|id| {
-            builder.delete_external_id(id);
-        });
+        //// We ignore unexisting document ids
+        //document_ids.iter().for_each(|id| {
+            //builder.delete_external_id(id);
+        //});
 
-        let deleted = builder.execute()?;
-        txn.commit()
-            .and(Ok(UpdateResult::DocumentDeletion { deleted }))
-            .map_err(Into::into)
-    }
+        //let deleted = builder.execute()?;
+        //txn.commit()
+            //.and(Ok(UpdateResult::DocumentDeletion { deleted }))
+            //.map_err(Into::into)
+    //}
 }
 
 #[cfg(test)]

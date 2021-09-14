@@ -5,7 +5,7 @@ use sha2::Digest;
 
 use crate::index::{Checked, Settings};
 use crate::index_controller::{
-    error::Result, DumpInfo, IndexController, IndexMetadata, IndexSettings, IndexStats, Stats,
+    error::Result, DumpInfo, IndexController, IndexMetadata, IndexStats, Stats,
 };
 use crate::option::Opt;
 
@@ -91,19 +91,19 @@ impl Data {
         self.index_controller.get_index(uid).await
     }
 
-    pub async fn create_index(
-        &self,
-        uid: String,
-        primary_key: Option<String>,
-    ) -> Result<IndexMetadata> {
-        let settings = IndexSettings {
-            uid: Some(uid),
-            primary_key,
-        };
+    //pub async fn create_index(
+        //&self,
+        //uid: String,
+        //primary_key: Option<String>,
+    //) -> Result<IndexMetadata> {
+        //let settings = IndexSettings {
+            //uid: Some(uid),
+            //primary_key,
+        //};
 
-        let meta = self.index_controller.create_index(settings).await?;
-        Ok(meta)
-    }
+        //let meta = self.index_controller.create_index(settings).await?;
+        //Ok(meta)
+    //}
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         Ok(self.index_controller.get_index_stats(uid).await?)

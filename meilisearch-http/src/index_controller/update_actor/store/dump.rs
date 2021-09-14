@@ -1,17 +1,17 @@
 use std::{
     collections::HashSet,
     fs::{create_dir_all, File},
-    io::{BufRead, BufReader, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 
-use heed::{EnvOpenOptions, RoTxn};
+use heed::RoTxn;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
 use crate::index_controller::{
-    index_actor::IndexActorHandle, update_actor::store::update_uuid_to_file_path, Enqueued,
+    index_actor::IndexActorHandle,
     UpdateStatus,
 };
 
@@ -67,35 +67,36 @@ impl UpdateStore {
 
     fn dump_pending(
         &self,
-        txn: &RoTxn,
-        uuids: &HashSet<Uuid>,
-        mut file: &mut File,
-        dst_path: impl AsRef<Path>,
+        _txn: &RoTxn,
+        _uuids: &HashSet<Uuid>,
+        _file: &mut File,
+        _dst_path: impl AsRef<Path>,
     ) -> Result<()> {
-        let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
+        todo!()
+        //let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
 
-        for pending in pendings {
-            let ((_, uuid, _), data) = pending?;
-            if uuids.contains(&uuid) {
-                let update = data.decode()?;
+        //for pending in pendings {
+            //let ((_, uuid, _), data) = pending?;
+            //if uuids.contains(&uuid) {
+                //let update = data.decode()?;
 
-                if let Some(ref update_uuid) = update.content {
-                    let src = super::update_uuid_to_file_path(&self.path, *update_uuid);
-                    let dst = super::update_uuid_to_file_path(&dst_path, *update_uuid);
-                    std::fs::copy(src, dst)?;
-                }
+                //if let Some(ref update_uuid) = update.content {
+                    //let src = super::update_uuid_to_file_path(&self.path, *update_uuid);
+                    //let dst = super::update_uuid_to_file_path(&dst_path, *update_uuid);
+                    //std::fs::copy(src, dst)?;
+                //}
 
-                let update_json = UpdateEntry {
-                    uuid,
-                    update: update.into(),
-                };
+                //let update_json = UpdateEntry {
+                    //uuid,
+                    //update: update.into(),
+                //};
 
-                serde_json::to_writer(&mut file, &update_json)?;
-                file.write_all(b"\n")?;
-            }
-        }
+                //serde_json::to_writer(&mut file, &update_json)?;
+                //file.write_all(b"\n")?;
+            //}
+        //}
 
-        Ok(())
+        //Ok(())
     }
 
     fn dump_completed(
@@ -122,52 +123,53 @@ impl UpdateStore {
     }
 
     pub fn load_dump(
-        src: impl AsRef<Path>,
-        dst: impl AsRef<Path>,
-        db_size: usize,
+        _src: impl AsRef<Path>,
+        _dst: impl AsRef<Path>,
+        _db_size: usize,
     ) -> anyhow::Result<()> {
-        let dst_update_path = dst.as_ref().join("updates/");
-        create_dir_all(&dst_update_path)?;
+        todo!()
+        //let dst_update_path = dst.as_ref().join("updates/");
+        //create_dir_all(&dst_update_path)?;
 
-        let mut options = EnvOpenOptions::new();
-        options.map_size(db_size as usize);
-        let (store, _) = UpdateStore::new(options, &dst_update_path)?;
+        //let mut options = EnvOpenOptions::new();
+        //options.map_size(db_size as usize);
+        //let (store, _) = UpdateStore::new(options, &dst_update_path)?;
 
-        let src_update_path = src.as_ref().join("updates");
-        let update_data = File::open(&src_update_path.join("data.jsonl"))?;
-        let mut update_data = BufReader::new(update_data);
+        //let src_update_path = src.as_ref().join("updates");
+        //let update_data = File::open(&src_update_path.join("data.jsonl"))?;
+        //let mut update_data = BufReader::new(update_data);
 
-        std::fs::create_dir_all(dst_update_path.join("update_files/"))?;
+        //std::fs::create_dir_all(dst_update_path.join("update_files/"))?;
 
-        let mut wtxn = store.env.write_txn()?;
-        let mut line = String::new();
-        loop {
-            match update_data.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let UpdateEntry { uuid, update } = serde_json::from_str(&line)?;
-                    store.register_raw_updates(&mut wtxn, &update, uuid)?;
+        //let mut wtxn = store.env.write_txn()?;
+        //let mut line = String::new();
+        //loop {
+            //match update_data.read_line(&mut line) {
+                //Ok(0) => break,
+                //Ok(_) => {
+                    //let UpdateEntry { uuid, update } = serde_json::from_str(&line)?;
+                    //store.register_raw_updates(&mut wtxn, &update, uuid)?;
 
-                    // Copy ascociated update path if it exists
-                    if let UpdateStatus::Enqueued(Enqueued {
-                        content: Some(uuid),
-                        ..
-                    }) = update
-                    {
-                        let src = update_uuid_to_file_path(&src_update_path, uuid);
-                        let dst = update_uuid_to_file_path(&dst_update_path, uuid);
-                        std::fs::copy(src, dst)?;
-                    }
-                }
-                _ => break,
-            }
+                    //// Copy ascociated update path if it exists
+                    //if let UpdateStatus::Enqueued(Enqueued {
+                        //content: Some(uuid),
+                        //..
+                    //}) = update
+                    //{
+                        //let src = update_uuid_to_file_path(&src_update_path, uuid);
+                        //let dst = update_uuid_to_file_path(&dst_update_path, uuid);
+                        //std::fs::copy(src, dst)?;
+                    //}
+                //}
+                //_ => break,
+            //}
 
-            line.clear();
-        }
+            //line.clear();
+        //}
 
-        wtxn.commit()?;
+        //wtxn.commit()?;
 
-        Ok(())
+        //Ok(())
     }
 }
 

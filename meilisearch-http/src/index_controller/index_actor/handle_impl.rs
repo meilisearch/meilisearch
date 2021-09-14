@@ -38,13 +38,11 @@ impl IndexActorHandle for IndexActorHandleImpl {
         &self,
         uuid: Uuid,
         meta: Processing,
-        data: Option<std::fs::File>,
     ) -> Result<std::result::Result<Processed, Failed>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update {
             ret,
             meta,
-            data,
             uuid,
         };
         let _ = self.sender.send(msg).await;
@@ -156,7 +154,7 @@ impl IndexActorHandleImpl {
     ) -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel(100);
 
-        let store = MapIndexStore::new(path, index_size);
+        let store = MapIndexStore::new(&path, index_size);
         let actor = IndexActor::new(receiver, store, options)?;
         tokio::task::spawn(actor.run());
         Ok(Self { sender })

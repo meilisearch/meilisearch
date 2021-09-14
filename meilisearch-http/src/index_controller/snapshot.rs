@@ -1,97 +1,90 @@
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::Path;
 
 use anyhow::bail;
-use log::{error, info, trace};
-use tokio::fs;
-use tokio::task::spawn_blocking;
-use tokio::time::sleep;
 
-use super::update_actor::UpdateActorHandle;
-use super::uuid_resolver::UuidResolverHandle;
 use crate::helpers::compression;
 
-pub struct SnapshotService<U, R> {
-    uuid_resolver_handle: R,
-    update_handle: U,
-    snapshot_period: Duration,
-    snapshot_path: PathBuf,
-    db_name: String,
-}
+//pub struct SnapshotService<U, R> {
+    //uuid_resolver_handle: R,
+    //update_handle: U,
+    //snapshot_period: Duration,
+    //snapshot_path: PathBuf,
+    //db_name: String,
+//}
 
-impl<U, R> SnapshotService<U, R>
-where
-    U: UpdateActorHandle,
-    R: UuidResolverHandle,
-{
-    pub fn new(
-        uuid_resolver_handle: R,
-        update_handle: U,
-        snapshot_period: Duration,
-        snapshot_path: PathBuf,
-        db_name: String,
-    ) -> Self {
-        Self {
-            uuid_resolver_handle,
-            update_handle,
-            snapshot_period,
-            snapshot_path,
-            db_name,
-        }
-    }
+//impl<U, R> SnapshotService<U, R>
+//where
+    //U: UpdateActorHandle,
+    //R: UuidResolverHandle,
+//{
+    //pub fn new(
+        //uuid_resolver_handle: R,
+        //update_handle: U,
+        //snapshot_period: Duration,
+        //snapshot_path: PathBuf,
+        //db_name: String,
+    //) -> Self {
+        //Self {
+            //uuid_resolver_handle,
+            //update_handle,
+            //snapshot_period,
+            //snapshot_path,
+            //db_name,
+        //}
+    //}
 
-    pub async fn run(self) {
-        info!(
-            "Snapshot scheduled every {}s.",
-            self.snapshot_period.as_secs()
-        );
-        loop {
-            if let Err(e) = self.perform_snapshot().await {
-                error!("Error while performing snapshot: {}", e);
-            }
-            sleep(self.snapshot_period).await;
-        }
-    }
+    //pub async fn run(self) {
+        //info!(
+            //"Snapshot scheduled every {}s.",
+            //self.snapshot_period.as_secs()
+        //);
+        //loop {
+            //if let Err(e) = self.perform_snapshot().await {
+                //error!("Error while performing snapshot: {}", e);
+            //}
+            //sleep(self.snapshot_period).await;
+        //}
+    //}
 
-    async fn perform_snapshot(&self) -> anyhow::Result<()> {
-        trace!("Performing snapshot.");
+    //async fn perform_snapshot(&self) -> anyhow::Result<()> {
+        //trace!("Performing snapshot.");
 
-        let snapshot_dir = self.snapshot_path.clone();
-        fs::create_dir_all(&snapshot_dir).await?;
-        let temp_snapshot_dir =
-            spawn_blocking(move || tempfile::tempdir_in(snapshot_dir)).await??;
-        let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
+        //let snapshot_dir = self.snapshot_path.clone();
+        //fs::create_dir_all(&snapshot_dir).await?;
+        //let temp_snapshot_dir =
+            //spawn_blocking(move || tempfile::tempdir_in(snapshot_dir)).await??;
+        //let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
 
-        let uuids = self
-            .uuid_resolver_handle
-            .snapshot(temp_snapshot_path.clone())
-            .await?;
+        //let uuids = self
+            //.uuid_resolver_handle
+            //.snapshot(temp_snapshot_path.clone())
+            //.await?;
 
-        if uuids.is_empty() {
-            return Ok(());
-        }
+        //if uuids.is_empty() {
+            //return Ok(());
+        //}
 
-        self.update_handle
-            .snapshot(uuids, temp_snapshot_path.clone())
-            .await?;
-        let snapshot_dir = self.snapshot_path.clone();
-        let snapshot_path = self
-            .snapshot_path
-            .join(format!("{}.snapshot", self.db_name));
-        let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
-            let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
-            compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
-            temp_snapshot_file.persist(&snapshot_path)?;
-            Ok(snapshot_path)
-        })
-        .await??;
+        //self.update_handle
+            //.snapshot(uuids, temp_snapshot_path.clone())
+            //.await?;
+        //let snapshot_dir = self.snapshot_path.clone();
+        //let snapshot_path = self
+            //.snapshot_path
+            //.join(format!("{}.snapshot", self.db_name));
+        //let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
+            //let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
+            //let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
+            //compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
+            //temp_snapshot_file.persist(&snapshot_path)?;
+            //Ok(snapshot_path)
+        //})
+        //.await??;
 
-        trace!("Created snapshot in {:?}.", snapshot_path);
+        //trace!("Created snapshot in {:?}.", snapshot_path);
 
-        Ok(())
-    }
-}
+        //Ok(())
+    //}
+//}
 
 pub fn load_snapshot(
     db_path: impl AsRef<Path>,

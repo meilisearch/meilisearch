@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
-use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, UpdateFormat};
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     error::ResponseError,
     index::{Settings, Unchecked},
 };
+
+use super::update_actor::RegisterUpdate;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
@@ -21,7 +22,6 @@ pub enum UpdateResult {
 pub enum UpdateMeta {
     DocumentsAddition {
         method: IndexDocumentsMethod,
-        format: UpdateFormat,
         primary_key: Option<String>,
     },
     ClearDocuments,
@@ -35,18 +35,16 @@ pub enum UpdateMeta {
 #[serde(rename_all = "camelCase")]
 pub struct Enqueued {
     pub update_id: u64,
-    pub meta: UpdateMeta,
+    pub meta: RegisterUpdate,
     pub enqueued_at: DateTime<Utc>,
-    pub content: Option<Uuid>,
 }
 
 impl Enqueued {
-    pub fn new(meta: UpdateMeta, update_id: u64, content: Option<Uuid>) -> Self {
+    pub fn new(meta: RegisterUpdate, update_id: u64) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
             update_id,
-            content,
         }
     }
 
@@ -64,7 +62,7 @@ impl Enqueued {
         }
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         &self.meta
     }
 
@@ -87,7 +85,7 @@ impl Processed {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         self.from.meta()
     }
 }
@@ -105,7 +103,7 @@ impl Processing {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         self.from.meta()
     }
 
@@ -139,7 +137,7 @@ impl Aborted {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         self.from.meta()
     }
 }
@@ -158,7 +156,7 @@ impl Failed {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         self.from.meta()
     }
 }
@@ -184,7 +182,7 @@ impl UpdateStatus {
         }
     }
 
-    pub fn meta(&self) -> &UpdateMeta {
+    pub fn meta(&self) -> &RegisterUpdate {
         match self {
             UpdateStatus::Processing(u) => u.meta(),
             UpdateStatus::Enqueued(u) => u.meta(),

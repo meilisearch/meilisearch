@@ -1,17 +1,16 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::error::Result;
-use super::{PayloadData, UpdateMeta, UpdateStatus, UpdateStoreInfo};
+use super::{UpdateStatus, UpdateStoreInfo, Update};
 
-pub enum UpdateMsg<D> {
+pub enum UpdateMsg {
     Update {
         uuid: Uuid,
-        meta: UpdateMeta,
-        data: mpsc::Receiver<PayloadData<D>>,
+        update: Update,
         ret: oneshot::Sender<Result<UpdateStatus>>,
     },
     ListUpdates {

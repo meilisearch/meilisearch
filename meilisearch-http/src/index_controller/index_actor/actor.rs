@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -39,6 +38,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let update_handler = UpdateHandler::new(options)?;
         let update_handler = Arc::new(update_handler);
         let receiver = Some(receiver);
+
         Ok(Self {
             receiver,
             update_handler,
@@ -82,10 +82,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             Update {
                 ret,
                 meta,
-                data,
                 uuid,
             } => {
-                let _ = ret.send(self.handle_update(uuid, meta, data).await);
+                let _ = ret.send(self.handle_update(uuid, meta).await);
             }
             Search { ret, query, uuid } => {
                 let _ = ret.send(self.handle_search(uuid, query).await);
@@ -165,7 +164,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         &self,
         uuid: Uuid,
         meta: Processing,
-        data: Option<File>,
     ) -> Result<std::result::Result<Processed, Failed>> {
         debug!("Processing update {}", meta.id());
         let update_handler = self.update_handler.clone();
@@ -174,7 +172,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             None => self.store.create(uuid, None).await?,
         };
 
-        Ok(spawn_blocking(move || update_handler.handle_update(meta, data, index)).await?)
+        Ok(spawn_blocking(move || update_handler.handle_update(index, meta)).await?)
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {
@@ -230,7 +228,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
         if let Some(index) = index {
             tokio::task::spawn(async move {
-                let index = index.0;
+                let index = index.inner;
                 let store = get_arc_ownership_blocking(index).await;
                 spawn_blocking(move || {
                     store.prepare_for_closing().wait();

@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{error, fs};
+use std::fs;
 
 use byte_unit::Byte;
 use milli::CompressionType;
@@ -184,7 +184,7 @@ pub struct Opt {
 }
 
 impl Opt {
-    pub fn get_ssl_config(&self) -> Result<Option<rustls::ServerConfig>, Box<dyn error::Error>> {
+    pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
             let client_auth = match &self.ssl_auth_path {
                 Some(auth_path) => {
@@ -210,7 +210,7 @@ impl Opt {
             let ocsp = load_ocsp(&self.ssl_ocsp_path)?;
             config
                 .set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
-                .map_err(|_| "bad certificates/private key")?;
+                .map_err(|_| anyhow::anyhow!("bad certificates/private key"))?;
 
             if self.ssl_resumption {
                 config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
@@ -284,25 +284,25 @@ fn total_memory_bytes() -> Option<u64> {
     }
 }
 
-fn load_certs(filename: PathBuf) -> Result<Vec<rustls::Certificate>, Box<dyn error::Error>> {
-    let certfile = fs::File::open(filename).map_err(|_| "cannot open certificate file")?;
+fn load_certs(filename: PathBuf) -> anyhow::Result<Vec<rustls::Certificate>> {
+    let certfile = fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open certificate file"))?;
     let mut reader = BufReader::new(certfile);
-    Ok(certs(&mut reader).map_err(|_| "cannot read certificate file")?)
+    Ok(certs(&mut reader).map_err(|_| anyhow::anyhow!("cannot read certificate file"))?)
 }
 
-fn load_private_key(filename: PathBuf) -> Result<rustls::PrivateKey, Box<dyn error::Error>> {
+fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
     let rsa_keys = {
         let keyfile =
-            fs::File::open(filename.clone()).map_err(|_| "cannot open private key file")?;
+            fs::File::open(filename.clone()).map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
-        rsa_private_keys(&mut reader).map_err(|_| "file contains invalid rsa private key")?
+        rsa_private_keys(&mut reader).map_err(|_| anyhow::anyhow!("file contains invalid rsa private key"))?
     };
 
     let pkcs8_keys = {
-        let keyfile = fs::File::open(filename).map_err(|_| "cannot open private key file")?;
+        let keyfile = fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         pkcs8_private_keys(&mut reader)
-            .map_err(|_| "file contains invalid pkcs8 private key (encrypted keys not supported)")?
+            .map_err(|_| anyhow::anyhow!("file contains invalid pkcs8 private key (encrypted keys not supported)"))?
     };
 
     // prefer to load pkcs8 keys
@@ -314,14 +314,14 @@ fn load_private_key(filename: PathBuf) -> Result<rustls::PrivateKey, Box<dyn err
     }
 }
 
-fn load_ocsp(filename: &Option<PathBuf>) -> Result<Vec<u8>, Box<dyn error::Error>> {
+fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
     let mut ret = Vec::new();
 
     if let Some(ref name) = filename {
         fs::File::open(name)
-            .map_err(|_| "cannot open ocsp file")?
+            .map_err(|_| anyhow::anyhow!("cannot open ocsp file"))?
             .read_to_end(&mut ret)
-            .map_err(|_| "cannot read oscp file")?;
+            .map_err(|_| anyhow::anyhow!("cannot read oscp file"))?;
     }
 
     Ok(ret)

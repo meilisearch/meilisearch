@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use actix_web::web::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
 use super::error::Result;
@@ -32,7 +31,7 @@ impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
         uuid_resolver: crate::index_controller::uuid_resolver::UuidResolverHandleImpl,
-        update: crate::index_controller::update_actor::UpdateActorHandleImpl<Bytes>,
+        update: crate::index_controller::update_actor::UpdateActorHandleImpl,
         index_db_size: usize,
         update_db_size: usize,
     ) -> anyhow::Result<Self> {

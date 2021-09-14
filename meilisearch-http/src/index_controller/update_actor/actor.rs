@@ -1,44 +1,82 @@
 use std::collections::HashSet;
-use std::io::SeekFrom;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use actix_web::error::PayloadError;
 use async_stream::stream;
-use futures::StreamExt;
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use log::trace;
-use serdeval::*;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use milli::documents::DocumentBatchBuilder;
+use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::error::{Result, UpdateActorError};
-use super::{PayloadData, UpdateMsg, UpdateStore, UpdateStoreInfo};
+use super::RegisterUpdate;
+use super::{UpdateMsg, UpdateStore, UpdateStoreInfo, Update};
 use crate::index_controller::index_actor::IndexActorHandle;
-use crate::index_controller::{UpdateMeta, UpdateStatus};
+use crate::index_controller::update_file_store::UpdateFileStore;
+use crate::index_controller::{DocumentAdditionFormat, Payload, UpdateStatus};
 
-pub struct UpdateActor<D, I> {
-    path: PathBuf,
+pub struct UpdateActor<I> {
     store: Arc<UpdateStore>,
-    inbox: Option<mpsc::Receiver<UpdateMsg<D>>>,
+    inbox: Option<mpsc::Receiver<UpdateMsg>>,
+    update_file_store: UpdateFileStore,
     index_handle: I,
     must_exit: Arc<AtomicBool>,
 }
 
-impl<D, I> UpdateActor<D, I>
+struct StreamReader<S> {
+    stream: S,
+    current: Option<Bytes>,
+}
+
+impl<S> StreamReader<S> {
+    fn new(stream: S) -> Self {
+        Self { stream, current: None }
+    }
+
+}
+
+impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Read for StreamReader<S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.current.take() {
+            Some(mut bytes) => {
+                let copied = bytes.split_to(buf.len());
+                buf.copy_from_slice(&copied);
+                if !bytes.is_empty() {
+                    self.current.replace(bytes);
+                }
+                Ok(copied.len())
+            }
+            None => {
+                match tokio::runtime::Handle::current().block_on(self.stream.next()) {
+                    Some(Ok(bytes)) => {
+                        self.current.replace(bytes);
+                        self.read(buf)
+                    },
+                    Some(Err(e)) => Err(io::Error::new(io::ErrorKind::BrokenPipe, e)),
+                    None => return Ok(0),
+                }
+            }
+        }
+    }
+}
+
+impl<I> UpdateActor<I>
 where
-    D: AsRef<[u8]> + Sized + 'static,
-    I: IndexActorHandle + Clone + Send + Sync + 'static,
+    I: IndexActorHandle + Clone + Sync + Send + 'static,
 {
     pub fn new(
         update_db_size: usize,
-        inbox: mpsc::Receiver<UpdateMsg<D>>,
+        inbox: mpsc::Receiver<UpdateMsg>,
         path: impl AsRef<Path>,
         index_handle: I,
     ) -> anyhow::Result<Self> {
-        let path = path.as_ref().join("updates");
-
+        let path = path.as_ref().to_owned();
         std::fs::create_dir_all(&path)?;
 
         let mut options = heed::EnvOpenOptions::new();
@@ -47,14 +85,17 @@ where
         let must_exit = Arc::new(AtomicBool::new(false));
 
         let store = UpdateStore::open(options, &path, index_handle.clone(), must_exit.clone())?;
-        std::fs::create_dir_all(path.join("update_files"))?;
+
         let inbox = Some(inbox);
+
+        let update_file_store =  UpdateFileStore::new(&path).unwrap();
+
         Ok(Self {
-            path,
             store,
             inbox,
             index_handle,
             must_exit,
+            update_file_store
         })
     }
 
@@ -89,11 +130,10 @@ where
                 match msg {
                     Update {
                         uuid,
-                        meta,
-                        data,
+                        update,
                         ret,
                     } => {
-                        let _ = ret.send(self.handle_update(uuid, meta, data).await);
+                        let _ = ret.send(self.handle_update(uuid, update).await);
                     }
                     ListUpdates { uuid, ret } => {
                         let _ = ret.send(self.handle_list_updates(uuid).await);
@@ -120,90 +160,39 @@ where
 
     async fn handle_update(
         &self,
-        uuid: Uuid,
-        meta: UpdateMeta,
-        payload: mpsc::Receiver<PayloadData<D>>,
+        index_uuid: Uuid,
+        update: Update,
     ) -> Result<UpdateStatus> {
-        let file_path = match meta {
-            UpdateMeta::DocumentsAddition { .. } => {
-                let update_file_id = uuid::Uuid::new_v4();
-                let path = self
-                    .path
-                    .join(format!("update_files/update_{}", update_file_id));
-                let mut file = fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .open(&path)
-                    .await?;
+        let registration = match update {
+            Update::DocumentAddition { payload, primary_key, method, format } => {
+                let content_uuid = match format {
+                    DocumentAdditionFormat::Json => self.documents_from_json(payload).await?,
+                };
 
-                async fn write_to_file<D>(
-                    file: &mut fs::File,
-                    mut payload: mpsc::Receiver<PayloadData<D>>,
-                ) -> Result<usize>
-                where
-                    D: AsRef<[u8]> + Sized + 'static,
-                {
-                    let mut file_len = 0;
-
-                    while let Some(bytes) = payload.recv().await {
-                        let bytes = bytes?;
-                        file_len += bytes.as_ref().len();
-                        file.write_all(bytes.as_ref()).await?;
-                    }
-
-                    file.flush().await?;
-
-                    Ok(file_len)
-                }
-
-                let file_len = write_to_file(&mut file, payload).await;
-
-                match file_len {
-                    Ok(len) if len > 0 => {
-                        let file = file.into_std().await;
-                        Some((file, update_file_id))
-                    }
-                    Err(e) => {
-                        fs::remove_file(&path).await?;
-                        return Err(e);
-                    }
-                    _ => {
-                        fs::remove_file(&path).await?;
-                        None
-                    }
-                }
+                RegisterUpdate::DocumentAddition { primary_key, method, content_uuid }
             }
-            _ => None,
         };
 
-        let update_store = self.store.clone();
+        let store = self.store.clone();
+        let status = tokio::task::spawn_blocking(move || store.register_update(index_uuid, registration)).await??;
 
+        Ok(status.into())
+    }
+
+    async fn documents_from_json(&self, payload: Payload) -> Result<Uuid> {
+        let file_store = self.update_file_store.clone();
         tokio::task::spawn_blocking(move || {
-            use std::io::{BufReader, Seek};
+            let (uuid, mut file) = file_store.new_update().unwrap();
+            let mut builder = DocumentBatchBuilder::new(&mut *file).unwrap();
 
-            // If the payload is empty, ignore the check.
-            let update_uuid = if let Some((mut file, uuid)) = file_path {
-                // set the file back to the beginning
-                file.seek(SeekFrom::Start(0))?;
-                // Check that the json payload is valid:
-                let reader = BufReader::new(&mut file);
-                // Validate that the payload is in the correct format.
-                let _: Seq<Map<Str, Any>> = serde_json::from_reader(reader)
-                    .map_err(|e| UpdateActorError::InvalidPayload(Box::new(e)))?;
+            let documents: Vec<Map<String, Value>> = serde_json::from_reader(StreamReader::new(payload))?;
+            builder.add_documents(documents).unwrap();
+            builder.finish().unwrap();
 
-                Some(uuid)
-            } else {
-                None
-            };
+            file.persist();
 
-            // The payload is valid, we can register it to the update store.
-            let status = update_store
-                .register_update(meta, update_uuid, uuid)
-                .map(UpdateStatus::Enqueued)?;
-            Ok(status)
-        })
-        .await?
+            Ok(uuid)
+        }).await?
     }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
@@ -267,4 +256,5 @@ where
 
         Ok(info)
     }
+
 }

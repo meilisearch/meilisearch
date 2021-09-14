@@ -662,7 +662,7 @@ fn parse_filter_array(
         }
     }
 
-    Ok(FilterCondition::from_array(txn, &index.0, ands)?)
+    Ok(FilterCondition::from_array(txn, &index, ands)?)
 }
 
 #[cfg(test)]

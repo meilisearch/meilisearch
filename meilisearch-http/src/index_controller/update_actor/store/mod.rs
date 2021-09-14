@@ -1,7 +1,7 @@
 mod codec;
 pub mod dump;
 
-use std::fs::{copy, create_dir_all, remove_file, File};
+use std::fs::{create_dir_all, remove_file};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -26,9 +26,10 @@ use uuid::Uuid;
 
 use codec::*;
 
+use super::RegisterUpdate;
 use super::error::Result;
-use super::UpdateMeta;
 use crate::helpers::EnvSizer;
+use crate::index_controller::update_files_path;
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
 #[allow(clippy::upper_case_acronyms)]
@@ -116,7 +117,9 @@ impl UpdateStore {
     ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
-        let env = options.open(&path)?;
+        let update_path = path.as_ref().join("updates");
+        std::fs::create_dir_all(&update_path)?;
+        let env = options.open(update_path)?;
         let pending_queue = env.create_database(Some("pending-queue"))?;
         let next_update_id = env.create_database(Some("next-update-id"))?;
         let updates = env.create_database(Some("updates"))?;
@@ -157,7 +160,7 @@ impl UpdateStore {
         // want to close the index.
         let duration = Duration::from_secs(10 * 60); // 10 minutes
         let update_store_weak = Arc::downgrade(&update_store);
-        tokio::task::spawn(async move {
+        tokio::task::spawn_local(async move {
             // Block and wait for something to process with a timeout. The timeout
             // function returns a Result and we must just unlock the loop on Result.
             'outer: while timeout(duration, notification_receiver.recv())
@@ -233,14 +236,12 @@ impl UpdateStore {
     /// into the pending-meta store. Returns the new unique update id.
     pub fn register_update(
         &self,
-        meta: UpdateMeta,
-        content: Option<Uuid>,
         index_uuid: Uuid,
+        update: RegisterUpdate,
     ) -> heed::Result<Enqueued> {
         let mut txn = self.env.write_txn()?;
-
         let (global_id, update_id) = self.next_update_id(&mut txn, index_uuid)?;
-        let meta = Enqueued::new(meta, update_id, content);
+        let meta = Enqueued::new(update, update_id);
 
         self.pending_queue
             .put(&mut txn, &(global_id, index_uuid, update_id), &meta)?;
@@ -254,30 +255,30 @@ impl UpdateStore {
         Ok(meta)
     }
 
-    /// Push already processed update in the UpdateStore without triggering the notification
-    /// process. This is useful for the dumps.
-    pub fn register_raw_updates(
-        &self,
-        wtxn: &mut heed::RwTxn,
-        update: &UpdateStatus,
-        index_uuid: Uuid,
-    ) -> heed::Result<()> {
-        match update {
-            UpdateStatus::Enqueued(enqueued) => {
-                let (global_id, _update_id) = self.next_update_id(wtxn, index_uuid)?;
-                self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
-                    wtxn,
-                    &(global_id, index_uuid, enqueued.id()),
-                    enqueued,
-                )?;
-            }
-            _ => {
-                let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
-            }
-        }
-        Ok(())
-    }
+    // /// Push already processed update in the UpdateStore without triggering the notification
+    // /// process. This is useful for the dumps.
+    //pub fn register_raw_updates(
+        //&self,
+        //wtxn: &mut heed::RwTxn,
+        //update: &UpdateStatus,
+        //index_uuid: Uuid,
+    //) -> heed::Result<()> {
+        //match update {
+            //UpdateStatus::Enqueued(enqueued) => {
+                //let (global_id, _update_id) = self.next_update_id(wtxn, index_uuid)?;
+                //self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
+                    //wtxn,
+                    //&(global_id, index_uuid, enqueued.id()),
+                    //enqueued,
+                //)?;
+            //}
+            //_ => {
+                //let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
+                //self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
+            //}
+        //}
+        //Ok(())
+    //}
 
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
@@ -291,8 +292,7 @@ impl UpdateStore {
         // If there is a pending update we process and only keep
         // a reader while processing it, not a writer.
         match first_meta {
-            Some(((global_id, index_uuid, _), mut pending)) => {
-                let content = pending.content.take();
+            Some(((global_id, index_uuid, _), pending)) => {
                 let processing = pending.processing();
                 // Acquire the state lock and set the current state to processing.
                 // txn must *always* be acquired after state lock, or it will dead lock.
@@ -300,7 +300,7 @@ impl UpdateStore {
                 state.swap(State::Processing(index_uuid, processing.clone()));
 
                 let result =
-                    self.perform_update(content, processing, index_handle, index_uuid, global_id);
+                    self.perform_update(processing, index_handle, index_uuid, global_id);
 
                 state.swap(State::Idle);
 
@@ -312,27 +312,16 @@ impl UpdateStore {
 
     fn perform_update(
         &self,
-        content: Option<Uuid>,
         processing: Processing,
         index_handle: impl IndexActorHandle,
         index_uuid: Uuid,
         global_id: u64,
     ) -> Result<Option<()>> {
-        let content_path = content.map(|uuid| update_uuid_to_file_path(&self.path, uuid));
-        let update_id = processing.id();
-
-        let file = match content_path {
-            Some(ref path) => {
-                let file = File::open(path)?;
-                Some(file)
-            }
-            None => None,
-        };
-
         // Process the pending update using the provided user function.
         let handle = Handle::current();
+        let update_id = processing.id();
         let result =
-            match handle.block_on(index_handle.update(index_uuid, processing.clone(), file)) {
+            match handle.block_on(index_handle.update(index_uuid, processing.clone())) {
                 Ok(result) => result,
                 Err(e) => Err(processing.fail(e.into())),
             };
@@ -353,10 +342,6 @@ impl UpdateStore {
             .put(&mut wtxn, &(index_uuid, update_id), &result)?;
 
         wtxn.commit()?;
-
-        if let Some(ref path) = content_path {
-            remove_file(&path)?;
-        }
 
         Ok(Some(()))
     }
@@ -435,16 +420,16 @@ impl UpdateStore {
     pub fn delete_all(&self, index_uuid: Uuid) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
-        let mut uuids_to_remove = Vec::new();
+        let uuids_to_remove = Vec::new();
 
         let mut pendings = self.pending_queue.iter_mut(&mut txn)?.lazily_decode_data();
 
         while let Some(Ok(((_, uuid, _), pending))) = pendings.next() {
             if uuid == index_uuid {
-                let mut pending = pending.decode()?;
-                if let Some(update_uuid) = pending.content.take() {
-                    uuids_to_remove.push(update_uuid);
-                }
+                let mut _pending = pending.decode()?;
+                //if let Some(update_uuid) = pending.content.take() {
+                    //uuids_to_remove.push(update_uuid);
+                //}
 
                 // Invariant check: we can only delete the current entry when we don't hold
                 // references to it anymore. This must be done after we have retrieved its content.
@@ -486,7 +471,7 @@ impl UpdateStore {
         // them.
         uuids_to_remove
             .iter()
-            .map(|uuid| update_uuid_to_file_path(&self.path, *uuid))
+            .map(|uuid: &Uuid| update_files_path(&self.path).join(uuid.to_string()))
             .for_each(|path| {
                 let _ = remove_file(path);
             });
@@ -521,17 +506,17 @@ impl UpdateStore {
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
         for entry in pendings {
-            let ((_, uuid, _), pending) = entry?;
-            if uuids.contains(&uuid) {
-                if let Enqueued {
-                    content: Some(uuid),
-                    ..
-                } = pending.decode()?
-                {
-                    let path = update_uuid_to_file_path(&self.path, uuid);
-                    copy(path, &update_files_path)?;
-                }
-            }
+            let ((_, _uuid, _), _pending) = entry?;
+            //if uuids.contains(&uuid) {
+                //if let Enqueued {
+                    //content: Some(uuid),
+                    //..
+                //} = pending.decode()?
+                //{
+                    //let path = update_uuid_to_file_path(&self.path, uuid);
+                    //copy(path, &update_files_path)?;
+                //}
+            //}
         }
 
         let path = &path.as_ref().to_path_buf();
@@ -553,18 +538,18 @@ impl UpdateStore {
     }
 
     pub fn get_info(&self) -> Result<UpdateStoreInfo> {
-        let mut size = self.env.size();
+        let size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
-            let (_, pending) = entry?;
-            if let Enqueued {
-                content: Some(uuid),
-                ..
-            } = pending
-            {
-                let path = update_uuid_to_file_path(&self.path, uuid);
-                size += File::open(path)?.metadata()?.len();
-            }
+            let (_, _pending) = entry?;
+            //if let Enqueued {
+                //content: Some(uuid),
+                //..
+            //} = pending
+            //{
+                //let path = update_uuid_to_file_path(&self.path, uuid);
+                //size += File::open(path)?.metadata()?.len();
+            //}
         }
         let processing = match *self.state.read() {
             State::Processing(uuid, _) => Some(uuid),
@@ -573,12 +558,6 @@ impl UpdateStore {
 
         Ok(UpdateStoreInfo { size, processing })
     }
-}
-
-fn update_uuid_to_file_path(root: impl AsRef<Path>, uuid: Uuid) -> PathBuf {
-    root.as_ref()
-        .join(UPDATE_DIR)
-        .join(format!("update_{}", uuid))
 }
 
 #[cfg(test)]

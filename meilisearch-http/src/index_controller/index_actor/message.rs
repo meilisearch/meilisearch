@@ -19,7 +19,6 @@ pub enum IndexMsg {
     Update {
         uuid: Uuid,
         meta: Processing,
-        data: Option<std::fs::File>,
         ret: oneshot::Sender<IndexResult<Result<Processed, Failed>>>,
     },
     Search {

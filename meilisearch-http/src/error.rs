@@ -86,7 +86,6 @@ impl ErrorCode for MilliError<'_> {
             milli::Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
-                    UserError::Csv(_)
                     | UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
                     | UserError::InvalidCriterionName { .. }

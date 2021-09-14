@@ -1,7 +1,6 @@
 use std::env;
 
 use actix_web::HttpServer;
-use main_error::MainError;
 use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
 
@@ -12,10 +11,7 @@ use meilisearch_http::analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[actix_web::main]
-async fn main() -> Result<(), MainError> {
-    let opt = Opt::from_args();
-
+fn setup(opt: &Opt) -> anyhow::Result<()> {
     let mut log_builder = env_logger::Builder::new();
     log_builder.parse_filters(&opt.log_level);
     if opt.log_level == "info" {
@@ -25,13 +21,34 @@ async fn main() -> Result<(), MainError> {
 
     log_builder.init();
 
+    // Set the tempfile directory in the current db path, to avoid cross device references. Also
+    // remove the previous outstanding files found there
+    //
+    // TODO: if two processes open the same db, one might delete the other tmpdir. Need to make
+    // sure that no one is using it before deleting it.
+    let temp_path = opt.db_path.join("tmp");
+    // Ignore error if tempdir doesn't exist
+    let _ = std::fs::remove_dir_all(&temp_path);
+    std::fs::create_dir_all(&temp_path)?;
+    if cfg!(windows) {
+        std::env::set_var("TMP", temp_path);
+    } else {
+        std::env::set_var("TMPDIR", temp_path);
+    }
+
+    Ok(())
+}
+
+#[actix_web::main]
+async fn main() -> anyhow::Result<()> {
+    let opt = Opt::from_args();
+
+    setup(&opt)?;
+
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
-                return Err(
-                    "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
-                        .into(),
-                );
+                anyhow::bail!("In production mode, the environment variable MEILI_MASTER_KEY is mandatory")
             }
         }
         "development" => (),
@@ -54,7 +71,7 @@ async fn main() -> Result<(), MainError> {
     Ok(())
 }
 
-async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_http(data: Data, opt: Opt) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C

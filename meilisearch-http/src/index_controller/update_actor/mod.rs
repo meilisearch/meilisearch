@@ -1,10 +1,11 @@
 use std::{collections::HashSet, path::PathBuf};
 
-use actix_web::error::PayloadError;
-use tokio::sync::mpsc;
+use milli::update::IndexDocumentsMethod;
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 
-use crate::index_controller::{UpdateMeta, UpdateStatus};
+use crate::index_controller::UpdateStatus;
+use super::Update;
 
 use actor::UpdateActor;
 use error::Result;
@@ -19,16 +20,21 @@ mod handle_impl;
 mod message;
 pub mod store;
 
-type PayloadData<D> = std::result::Result<D, PayloadError>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RegisterUpdate {
+    DocumentAddition {
+        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
+        content_uuid: Uuid,
+    }
+}
+
 
 #[cfg(test)]
 use mockall::automock;
 
 #[async_trait::async_trait]
-#[cfg_attr(test, automock(type Data=Vec<u8>;))]
 pub trait UpdateActorHandle {
-    type Data: AsRef<[u8]> + Sized + 'static + Sync + Send;
-
     async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>>;
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus>;
     async fn delete(&self, uuid: Uuid) -> Result<()>;
@@ -37,8 +43,7 @@ pub trait UpdateActorHandle {
     async fn get_info(&self) -> Result<UpdateStoreInfo>;
     async fn update(
         &self,
-        meta: UpdateMeta,
-        data: mpsc::Receiver<PayloadData<Self::Data>>,
         uuid: Uuid,
+        update: Update,
     ) -> Result<UpdateStatus>;
 }

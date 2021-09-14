@@ -15,6 +15,7 @@ pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_
 pub use updates::{Checked, Facets, Settings, Unchecked};
 
 use crate::helpers::EnvSizer;
+use crate::index_controller::update_file_store::UpdateFileStore;
 
 use self::error::IndexError;
 
@@ -28,23 +29,26 @@ mod updates;
 pub type Document = Map<String, Value>;
 
 #[derive(Clone)]
-pub struct Index(pub Arc<milli::Index>);
+pub struct Index {
+    pub inner: Arc<milli::Index>,
+    update_file_store: Arc<UpdateFileStore>,
+}
 
 impl Deref for Index {
     type Target = milli::Index;
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.inner.as_ref()
     }
 }
 
 impl Index {
-    pub fn open(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>, size: usize, update_file_store: Arc<UpdateFileStore>) -> Result<Self> {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
-        let index = milli::Index::new(options, &path)?;
-        Ok(Index(Arc::new(index)))
+        let inner = Arc::new(milli::Index::new(options, &path)?);
+        Ok(Index { inner, update_file_store })
     }
 
     pub fn settings(&self) -> Result<Settings<Checked>> {

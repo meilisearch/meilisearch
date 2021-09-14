@@ -1,11 +1,9 @@
-use std::fs::File;
-
 use crate::index::Index;
 use milli::update::UpdateBuilder;
 use milli::CompressionType;
 use rayon::ThreadPool;
 
-use crate::index_controller::UpdateMeta;
+use crate::index_controller::update_actor::RegisterUpdate;
 use crate::index_controller::{Failed, Processed, Processing};
 use crate::option::IndexerOpts;
 
@@ -54,31 +52,16 @@ impl UpdateHandler {
 
     pub fn handle_update(
         &self,
-        meta: Processing,
-        content: Option<File>,
         index: Index,
+        meta: Processing,
     ) -> Result<Processed, Failed> {
-        use UpdateMeta::*;
-
         let update_id = meta.id();
-
         let update_builder = self.update_builder(update_id);
 
         let result = match meta.meta() {
-            DocumentsAddition {
-                method,
-                format,
-                primary_key,
-            } => index.update_documents(
-                *format,
-                *method,
-                content,
-                update_builder,
-                primary_key.as_deref(),
-            ),
-            ClearDocuments => index.clear_documents(update_builder),
-            DeleteDocuments { ids } => index.delete_documents(ids, update_builder),
-            Settings(settings) => index.update_settings(&settings.clone().check(), update_builder),
+            RegisterUpdate::DocumentAddition { primary_key, content_uuid, method } => {
+                index.update_documents(*method, *content_uuid, update_builder, primary_key.as_deref())
+            }
         };
 
         match result {

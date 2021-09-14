@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::error::{IndexActorError, Result};
 use crate::index::Index;
+use crate::index_controller::update_file_store::UpdateFileStore;
 
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
@@ -24,16 +25,19 @@ pub struct MapIndexStore {
     index_store: AsyncMap<Uuid, Index>,
     path: PathBuf,
     index_size: usize,
+    update_file_store: Arc<UpdateFileStore>,
 }
 
 impl MapIndexStore {
     pub fn new(path: impl AsRef<Path>, index_size: usize) -> Self {
+        let update_file_store = Arc::new(UpdateFileStore::new(path.as_ref()).unwrap());
         let path = path.as_ref().join("indexes/");
         let index_store = Arc::new(RwLock::new(HashMap::new()));
         Self {
             index_store,
             path,
             index_size,
+            update_file_store,
         }
     }
 }
@@ -54,8 +58,9 @@ impl IndexStore for MapIndexStore {
         }
 
         let index_size = self.index_size;
+        let file_store = self.update_file_store.clone();
         let index = spawn_blocking(move || -> Result<Index> {
-            let index = Index::open(path, index_size)?;
+            let index = Index::open(path, index_size, file_store)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
 
@@ -87,7 +92,8 @@ impl IndexStore for MapIndexStore {
                 }
 
                 let index_size = self.index_size;
-                let index = spawn_blocking(move || Index::open(path, index_size)).await??;
+                let file_store = self.update_file_store.clone();
+                let index = spawn_blocking(move || Index::open(path, index_size, file_store)).await??;
                 self.index_store.write().await.insert(uuid, index.clone());
                 Ok(Some(index))
             }

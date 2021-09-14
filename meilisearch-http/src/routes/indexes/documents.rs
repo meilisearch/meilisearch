@@ -1,12 +1,17 @@
+use actix_web::error::PayloadError;
 use actix_web::{web, HttpResponse};
+use actix_web::web::Bytes;
+use futures::{Stream, StreamExt};
 use log::debug;
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
+use milli::update::IndexDocumentsMethod;
 use serde::Deserialize;
-use serde_json::Value;
+//use serde_json::Value;
+use tokio::sync::mpsc;
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
+use crate::index_controller::{DocumentAdditionFormat, Update};
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -31,6 +36,17 @@ macro_rules! guard_content_type {
 
 guard_content_type!(guard_json, "application/json");
 */
+
+/// This is required because Payload is not Sync nor Send
+fn payload_to_stream(mut payload: Payload) -> impl Stream<Item=Result<Bytes, PayloadError>> {
+    let (snd, recv) = mpsc::channel(1);
+    tokio::task::spawn_local(async move {
+        while let Some(data) = payload.next().await {
+            let _ = snd.send(data).await;
+        }
+    });
+    tokio_stream::wrappers::ReceiverStream::new(recv)
+}
 
 fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
     if let Some(_content_type) = head.headers.get("Content-Type") {
@@ -60,14 +76,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::get().to(get_all_documents))
             .route(web::post().guard(guard_json).to(add_documents))
             .route(web::put().guard(guard_json).to(update_documents))
-            .route(web::delete().to(clear_all_documents)),
+            //.route(web::delete().to(clear_all_documents)),
     )
     // this route needs to be before the /documents/{document_id} to match properly
-    .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
+    //.service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
     .service(
         web::resource("/{document_id}")
             .route(web::get().to(get_document))
-            .route(web::delete().to(delete_document)),
+            //.route(web::delete().to(delete_document)),
     );
 }
 
@@ -84,16 +100,16 @@ pub async fn get_document(
     Ok(HttpResponse::Ok().json(document))
 }
 
-pub async fn delete_document(
-    data: GuardedData<Private, Data>,
-    path: web::Path<DocumentParam>,
-) -> Result<HttpResponse, ResponseError> {
-    let update_status = data
-        .delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
-        .await?;
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
-}
+//pub async fn delete_document(
+    //data: GuardedData<Private, Data>,
+    //path: web::Path<DocumentParam>,
+//) -> Result<HttpResponse, ResponseError> {
+    //let update_status = data
+        //.delete_documents(path.index_uid.clone(), vec![path.document_id.clone()])
+        //.await?;
+    //debug!("returns: {:?}", update_status);
+    //Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+//}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -147,14 +163,14 @@ pub async fn add_documents(
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let update = Update::DocumentAddition {
+        payload: Box::new(payload_to_stream(body)),
+        primary_key: params.primary_key.clone(),
+        method: IndexDocumentsMethod::ReplaceDocuments,
+        format: DocumentAdditionFormat::Json,
+    };
     let update_status = data
-        .add_documents(
-            path.into_inner().index_uid,
-            IndexDocumentsMethod::ReplaceDocuments,
-            UpdateFormat::Json,
-            body,
-            params.primary_key.clone(),
-        )
+        .register_update(path.index_uid.as_str(), update)
         .await?;
 
     debug!("returns: {:?}", update_status);
@@ -170,45 +186,45 @@ pub async fn update_documents(
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let update = data
-        .add_documents(
-            path.into_inner().index_uid,
-            IndexDocumentsMethod::UpdateDocuments,
-            UpdateFormat::Json,
-            body,
-            params.primary_key.clone(),
-        )
+    let update = Update::DocumentAddition {
+        payload: Box::new(payload_to_stream(body)),
+        primary_key: params.primary_key.clone(),
+        method: IndexDocumentsMethod::UpdateDocuments,
+        format: DocumentAdditionFormat::Json,
+    };
+    let update_status = data
+        .register_update(path.index_uid.as_str(), update)
         .await?;
 
-    debug!("returns: {:?}", update);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update.id() })))
-}
-
-pub async fn delete_documents(
-    data: GuardedData<Private, Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Vec<Value>>,
-) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", body);
-    let ids = body
-        .iter()
-        .map(|v| {
-            v.as_str()
-                .map(String::from)
-                .unwrap_or_else(|| v.to_string())
-        })
-        .collect();
-
-    let update_status = data.delete_documents(path.index_uid.clone(), ids).await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
 
-pub async fn clear_all_documents(
-    data: GuardedData<Private, Data>,
-    path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
-    let update_status = data.clear_documents(path.index_uid.clone()).await?;
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
-}
+//pub async fn delete_documents(
+    //data: GuardedData<Private, Data>,
+    //path: web::Path<IndexParam>,
+    //body: web::Json<Vec<Value>>,
+//) -> Result<HttpResponse, ResponseError> {
+    //debug!("called with params: {:?}", body);
+    //let ids = body
+        //.iter()
+        //.map(|v| {
+            //v.as_str()
+                //.map(String::from)
+                //.unwrap_or_else(|| v.to_string())
+        //})
+        //.collect();
+
+    //let update_status = data.delete_documents(path.index_uid.clone(), ids).await?;
+    //debug!("returns: {:?}", update_status);
+    //Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+//}
+
+//pub async fn clear_all_documents(
+    //data: GuardedData<Private, Data>,
+    //path: web::Path<IndexParam>,
+//) -> Result<HttpResponse, ResponseError> {
+    //let update_status = data.clear_documents(path.index_uid.clone()).await?;
+    //debug!("returns: {:?}", update_status);
+    //Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+//}

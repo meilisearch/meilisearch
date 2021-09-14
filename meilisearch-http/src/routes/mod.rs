@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{Settings, Unchecked};
-use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
+use crate::index_controller::update_actor::RegisterUpdate;
+use crate::index_controller::{UpdateResult, UpdateStatus};
 use crate::Data;
 
 mod dump;
@@ -50,7 +51,7 @@ impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
         use milli::update::IndexDocumentsMethod::*;
         match other.meta() {
-            UpdateMeta::DocumentsAddition { method, .. } => {
+            RegisterUpdate::DocumentAddition{ method, ..  } => {
                 let number = match other {
                     UpdateStatus::Processed(processed) => match processed.success {
                         UpdateResult::DocumentsAddition(ref addition) => {
@@ -67,13 +68,13 @@ impl From<&UpdateStatus> for UpdateType {
                     _ => unreachable!(),
                 }
             }
-            UpdateMeta::ClearDocuments => UpdateType::ClearAll,
-            UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
-                number: Some(ids.len()),
-            },
-            UpdateMeta::Settings(settings) => UpdateType::Settings {
-                settings: settings.clone(),
-            },
+            //UpdateMeta::ClearDocuments => UpdateType::ClearAll,
+            //UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
+                //number: Some(ids.len()),
+            //},
+            //UpdateMeta::Settings(settings) => UpdateType::Settings {
+                //settings: settings.clone(),
+            //},
         }
     }
 }
