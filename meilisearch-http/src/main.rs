@@ -10,7 +10,7 @@ use meilisearch_http::analytics;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[actix_web::main]
 async fn main() -> Result<(), MainError> {
