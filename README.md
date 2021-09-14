@@ -32,21 +32,20 @@ cargo run --release -- --db my-database.mdb -vvv --indexing-jobs 8
 ### Index your documents
 
 It can index a massive amount of documents in not much time, I already achieved to index:
- - 115m songs (song and artist name) in ~1h and take 107GB on disk.
- - 12m cities (name, timezone and country ID) in 15min and take 10GB on disk.
+ - 115m songs (song and artist name) in \~48min and take 81GiB on disk.
+ - 12m cities (name, timezone and country ID) in \~4min and take 6GiB on disk.
 
-All of that on a 39$/month machine with 4cores.
+These metrics are done on a MacBook Pro with the M1 processor.
 
 You can feed the engine with your CSV (comma-seperated, yes) data like this:
 
 ```bash
-printf "name,age\nhello,32\nkiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
+printf "id,name,age\n1,hello,32\n2,kiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
 ```
 
-Here ids will be automatically generated as UUID v4 if they doesn't exist in some or every documents.
-
-Note that it also support JSON and JSON streaming, you can send them to the engine by using
-the `content-type:application/json` and `content-type:application/x-ndjson` headers respectively.
+Don't forget to specify the `id` of the documents. Also, note that it supports JSON and JSON
+streaming: you can send them to the engine by using the `content-type:application/json` and
+`content-type:application/x-ndjson` headers respectively.
 
 ### Querying the engine via the website
 
