@@ -1,7 +1,6 @@
 ---
 on:
-  pull_request:
-    types: [review_requested, ready_for_review]
+  workflow_dispatch:
 
 name: Execute code coverage
 
