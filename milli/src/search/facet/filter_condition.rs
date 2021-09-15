@@ -4,6 +4,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
+use crate::error::UserError as IError;
 use either::Either;
 use heed::types::DecodeIgnore;
 use itertools::Itertools;
@@ -12,6 +13,17 @@ use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use roaring::RoaringBitmap;
+
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while1},
+    character::complete::{char, multispace0},
+    combinator::map,
+    error::ParseError,
+    multi::many0,
+    sequence::{delimited, preceded, tuple},
+    IResult,
+};
 
 use self::FilterCondition::*;
 use self::Operator::*;
@@ -64,6 +76,156 @@ pub enum FilterCondition {
     Empty,
 }
 
+struct ParseContext<'a> {
+    fields_ids_map: &'a FieldsIdsMap,
+    filterable_fields: &'a HashSet<String>,
+}
+// impl From<std::>
+
+impl<'a> ParseContext<'a> {
+    fn parse_or_nom(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition> {
+        let (input, lhs) = self.parse_and_nom(input)?;
+        let (input, ors) = many0(preceded(tag("OR"), |c| Self::parse_or_nom(self, c)))(input)?;
+        let expr = ors
+            .into_iter()
+            .fold(lhs, |acc, branch| FilterCondition::Or(Box::new(acc), Box::new(branch)));
+        Ok((input, expr))
+    }
+    fn parse_and_nom(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition> {
+        let (input, lhs) = self.parse_not_nom(input)?;
+        let (input, ors) = many0(preceded(tag("AND"), |c| Self::parse_and_nom(self, c)))(input)?;
+        let expr = ors
+            .into_iter()
+            .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
+        Ok((input, expr))
+    }
+
+    fn parse_not_nom(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition> {
+        let r = alt((
+            map(
+                preceded(alt((Self::ws(tag("!")), Self::ws(tag("NOT")))), |c| {
+                    Self::parse_condition_expression(self, c)
+                }),
+                |e| e.negate(),
+            ),
+            |c| Self::parse_condition_expression(self, c),
+        ))(input);
+        return r;
+    }
+
+    fn ws<'b, F: 'b, O, E: ParseError<&'b str>>(
+        inner: F,
+    ) -> impl FnMut(&'b str) -> IResult<&'b str, O, E>
+    where
+        F: Fn(&'b str) -> IResult<&'b str, O, E>,
+    {
+        delimited(multispace0, inner, multispace0)
+    }
+
+    fn parse_simple_condition(
+        &self,
+        input: &'a str,
+    ) -> StdResult<(&'a str, FilterCondition), UserError> {
+        let operator = alt((tag(">"), tag(">="), tag("="), tag("<"), tag("!="), tag("<=")));
+        let (input, (key, op, value)) =
+            match tuple((Self::ws(Self::parse_key), operator, Self::ws(Self::parse_key)))(input) {
+                Ok((input, (key, op, value))) => (input, (key, op, value)),
+                Err(_) => return Err(UserError::InvalidFilterAttributeNom),
+            };
+
+        let fid = match field_id_by_key(self.fields_ids_map, self.filterable_fields, key)? {
+            Some(fid) => fid,
+            None => return Err(UserError::InvalidFilterAttributeNom),
+        };
+        let r = nom_parse::<f64>(value);
+        let k = match op {
+            ">" => Operator(fid, GreaterThan(value.parse::<f64>()?)),
+            "<" => Operator(fid, LowerThan(value.parse::<f64>()?)),
+            "<=" => Operator(fid, LowerThanOrEqual(value.parse::<f64>()?)),
+            ">=" => Operator(fid, GreaterThanOrEqual(value.parse::<f64>()?)),
+            "=" => Operator(fid, Equal(r.0.ok(), value.to_string().to_lowercase())),
+            "!=" => Operator(fid, NotEqual(r.0.ok(), value.to_string().to_lowercase())),
+            _ => unreachable!(),
+        };
+        Ok((input, k))
+    }
+
+    fn parse_range_condition(
+        &'a self,
+        input: &'a str,
+    ) -> StdResult<(&str, FilterCondition), UserError> {
+        let (input, (key, from, _, to)) = match tuple((
+            Self::ws(Self::parse_key),
+            Self::ws(Self::parse_key),
+            tag("TO"),
+            Self::ws(Self::parse_key),
+        ))(input)
+        {
+            Ok((input, (key, from, tag, to))) => (input, (key, from, tag, to)),
+            Err(_) => return Err(UserError::InvalidFilterAttributeNom),
+        };
+        let fid = match field_id_by_key(self.fields_ids_map, self.filterable_fields, key)? {
+            Some(fid) => fid,
+            None => return Err(UserError::InvalidFilterAttributeNom),
+        };
+        let res = Operator(fid, Between(from.parse::<f64>()?, to.parse::<f64>()?));
+        Ok((input, res))
+    }
+
+    fn parse_condition(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition> {
+        let l1 = |c| self.wrap(|c| self.parse_simple_condition(c), c);
+        let l2 = |c| self.wrap(|c| self.parse_range_condition(c), c);
+        let (input, condition) = match alt((l1, l2))(input) {
+            Ok((i, c)) => (i, c),
+            Err(_) => {
+                return Err(nom::Err::Error(nom::error::Error::from_error_kind(
+                    "foo",
+                    nom::error::ErrorKind::Fail,
+                )))
+            }
+        };
+        Ok((input, condition))
+    }
+    fn wrap<F, E>(&'a self, inner: F, input: &'a str) -> IResult<&'a str, FilterCondition>
+    where
+        F: Fn(&'a str) -> StdResult<(&'a str, FilterCondition), E>,
+    {
+        match inner(input) {
+            Ok(e) => Ok(e),
+            Err(_) => {
+                return Err(nom::Err::Error(nom::error::Error::from_error_kind(
+                    "foo",
+                    nom::error::ErrorKind::Fail,
+                )))
+            }
+        }
+    }
+
+    fn parse_condition_expression(&'a self, input: &'a str) -> IResult<&str, FilterCondition> {
+        return alt((
+            delimited(
+                Self::ws(char('(')),
+                |c| Self::parse_expression(self, c),
+                Self::ws(char(')')),
+            ),
+            |c| Self::parse_condition(self, c),
+        ))(input);
+    }
+
+    fn parse_key(input: &str) -> IResult<&str, &str> {
+        let key = |input| take_while1(Self::is_key_component)(input);
+        alt((key, delimited(char('"'), key, char('"'))))(input)
+    }
+    fn is_key_component(c: char) -> bool {
+        c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
+    }
+
+    pub fn parse_expression(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition> {
+        self.parse_or_nom(input)
+    }
+}
+
+//for nom
 impl FilterCondition {
     pub fn from_array<I, J, A, B>(
         rtxn: &heed::RoTxn,
@@ -109,8 +271,72 @@ impl FilterCondition {
 
         Ok(ands)
     }
-
     pub fn from_str(
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        expression: &str,
+    ) -> Result<FilterCondition> {
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let filterable_fields = index.filterable_fields(rtxn)?;
+        let ctx =
+            ParseContext { fields_ids_map: &fields_ids_map, filterable_fields: &filterable_fields };
+        match ctx.parse_expression(expression) {
+            Ok((_, fc)) => Ok(fc),
+            Err(e) => {
+                println!("{:?}", e);
+                unreachable!()
+            }
+        }
+    }
+}
+
+impl FilterCondition {
+    pub fn from_array_pest<I, J, A, B>(
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        array: I,
+    ) -> Result<Option<FilterCondition>>
+    where
+        I: IntoIterator<Item = Either<J, B>>,
+        J: IntoIterator<Item = A>,
+        A: AsRef<str>,
+        B: AsRef<str>,
+    {
+        let mut ands = None;
+
+        for either in array {
+            match either {
+                Either::Left(array) => {
+                    let mut ors = None;
+                    for rule in array {
+                        let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
+                        ors = match ors.take() {
+                            Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
+                            None => Some(condition),
+                        };
+                    }
+
+                    if let Some(rule) = ors {
+                        ands = match ands.take() {
+                            Some(ands) => Some(And(Box::new(ands), Box::new(rule))),
+                            None => Some(rule),
+                        };
+                    }
+                }
+                Either::Right(rule) => {
+                    let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
+                    ands = match ands.take() {
+                        Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
+                        None => Some(condition),
+                    };
+                }
+            }
+        }
+
+        Ok(ands)
+    }
+
+    pub fn from_str_pest(
         rtxn: &heed::RoTxn,
         index: &Index,
         expression: &str,
@@ -586,6 +812,19 @@ impl FilterCondition {
     }
 }
 
+fn field_id_by_key(
+    fields_ids_map: &FieldsIdsMap,
+    filterable_fields: &HashSet<String>,
+    key: &str,
+) -> StdResult<Option<FieldId>, IError> {
+    // lexing ensures that we at least have a key
+    if !filterable_fields.contains(key) {
+        return StdResult::Err(UserError::InvalidFilterAttributeNom);
+    }
+
+    Ok(fields_ids_map.id(key))
+}
+
 /// Retrieve the field id base on the pest value.
 ///
 /// Returns an error if the given value is not filterable.
@@ -638,6 +877,19 @@ fn field_id(
     }
 
     Ok(fields_ids_map.id(key.as_str()))
+}
+
+fn nom_parse<T>(input: &str) -> (StdResult<T, UserError>, String)
+where
+    T: FromStr,
+    T::Err: ToString,
+{
+    let result = match input.parse::<T>() {
+        Ok(value) => Ok(value),
+        Err(e) => Err(UserError::InvalidFilterValue),
+    };
+
+    (result, input.to_string())
 }
 
 /// Tries to parse the pest pair into the type `T` specified, always returns
