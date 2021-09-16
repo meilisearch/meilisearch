@@ -64,6 +64,7 @@ pub enum UserError {
     InvalidGeoField { document_id: Value, object: Value },
     InvalidFilterAttributeNom,
     InvalidFilterValue,
+    InvalidFilterNom { input: String },
     InvalidSortName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
@@ -83,11 +84,6 @@ impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         // TODO must be improved and more precise
         Error::IoError(error)
-    }
-}
-impl From<std::num::ParseFloatError> for UserError {
-    fn from(_: std::num::ParseFloatError) -> UserError {
-        UserError::InvalidFilterValue
     }
 }
 
@@ -217,8 +213,7 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             //TODO
-            Self::InvalidFilterAttributeNom => f.write_str("parser error "),
-            Self::InvalidFilterValue => f.write_str("parser error "),
+            Self::InvalidFilterNom { input } => write!(f, "parser error {}", input),
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
