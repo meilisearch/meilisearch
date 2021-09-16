@@ -17,21 +17,9 @@ if [[ "$?" -ne 0 ]]; then
     exit 1
 fi
 
-if [[ $# -ne 2 ]]
-  then
-    echo 'Need 2 arguments.'
-    echo 'Usage: '
-    echo '  $ ./compare.sh old new'
-    echo 'Ex:'
-    echo '  $ ./compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json'
-    exit 1
-fi
-
-old_file="$1"
-new_file="$2"
 s3_url='https://milli-benchmarks.fra1.digitaloceanspaces.com/critcmp_results'
 
-for file in $old_file $new_file
+for file in $@
 do
     file_s3_url="$s3_url/$file"
     file_local_path="/tmp/$file"
@@ -45,6 +33,12 @@ do
     fi
 done
 
-# Print the diff changes between the old and new benchmarks
-# by only displaying the lines that have a diff of more than 5%.
-critcmp --threshold 5 "/tmp/$old_file" "/tmp/$new_file"
+path_list=$(echo " $@" | sed 's/ / \/tmp\//g')
+
+if [[ ${#@} -gt 1 ]]; then
+    # Print the diff changes between the old and new benchmarks
+    # by only displaying the lines that have a diff of more than 5%.
+    critcmp --threshold 5 $path_list
+else
+    critcmp $path_list
+fi
