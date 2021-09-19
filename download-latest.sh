@@ -143,7 +143,7 @@ get_archi() {
     'x86_64' | 'amd64' | 'arm64')
         archi='amd64'
         ;;
-    'aarch64')
+    'aarch64' | 'arm64')
         archi='armv8'
         ;;
     *)
