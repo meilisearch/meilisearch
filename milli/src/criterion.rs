@@ -76,23 +76,29 @@ impl FromStr for Member {
     type Err = UserError;
 
     fn from_str(text: &str) -> Result<Member, Self::Err> {
-        if let Some(point) = text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(")"))
-        {
-            let (lat, long) = point
-                .split_once(',')
-                .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })
-                .and_then(|(lat, long)| {
-                    lat.trim()
-                        .parse()
-                        .and_then(|lat| long.trim().parse().map(|long| (lat, long)))
-                        .map_err(|_| UserError::InvalidRankingRuleName { name: text.to_string() })
-                })?;
-            Ok(Member::Geo([lat, long]))
-        } else {
-            if is_reserved_keyword(text) {
-                return Err(UserError::InvalidReservedRankingRuleName { name: text.to_string() })?;
+        match text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(")")) {
+            Some(point) => {
+                let (lat, long) = point
+                    .split_once(',')
+                    .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })
+                    .and_then(|(lat, long)| {
+                        lat.trim()
+                            .parse()
+                            .and_then(|lat| long.trim().parse().map(|long| (lat, long)))
+                            .map_err(|_| UserError::InvalidRankingRuleName {
+                                name: text.to_string(),
+                            })
+                    })?;
+                Ok(Member::Geo([lat, long]))
             }
-            Ok(Member::Field(text.to_string()))
+            None => {
+                if is_reserved_keyword(text) {
+                    return Err(UserError::InvalidReservedRankingRuleName {
+                        name: text.to_string(),
+                    })?;
+                }
+                Ok(Member::Field(text.to_string()))
+            }
         }
     }
 }
