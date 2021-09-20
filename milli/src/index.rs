@@ -344,7 +344,7 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)
     }
 
-    /// Retrieve all the documents ids that faceted with a _geo field.
+    /// Retrieve all the documents ids that are faceted with a _geo field.
     pub fn geo_faceted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
         match self
             .main
