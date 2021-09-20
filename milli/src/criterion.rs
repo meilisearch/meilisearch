@@ -50,9 +50,6 @@ impl FromStr for Criterion {
             "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
             text => match AscDesc::from_str(text) {
-                Ok(AscDesc::Asc(Member::Field(field))) if is_reserved_keyword(&field) => {
-                    Err(UserError::InvalidReservedRankingRuleName { name: text.to_string() })?
-                }
                 Ok(AscDesc::Asc(Member::Field(field))) => Ok(Criterion::Asc(field)),
                 Ok(AscDesc::Desc(Member::Field(field))) => Ok(Criterion::Desc(field)),
                 Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
@@ -79,11 +76,8 @@ impl FromStr for Member {
     type Err = UserError;
 
     fn from_str(text: &str) -> Result<Member, Self::Err> {
-        if text.starts_with("_geoPoint(") {
-            let point =
-                text.strip_prefix("_geoPoint(")
-                    .and_then(|point| point.strip_suffix(")"))
-                    .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })?;
+        if let Some(point) = text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(")"))
+        {
             let (lat, long) = point
                 .split_once(',')
                 .ok_or_else(|| UserError::InvalidRankingRuleName { name: text.to_string() })
@@ -95,6 +89,9 @@ impl FromStr for Member {
                 })?;
             Ok(Member::Geo([lat, long]))
         } else {
+            if is_reserved_keyword(text) {
+                return Err(UserError::InvalidReservedRankingRuleName { name: text.to_string() })?;
+            }
             Ok(Member::Field(text.to_string()))
         }
     }
@@ -182,6 +179,66 @@ impl fmt::Display for Criterion {
             Exactness => f.write_str("exactness"),
             Asc(attr) => write!(f, "{}:asc", attr),
             Desc(attr) => write!(f, "{}:desc", attr),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_asc_desc() {
+        use big_s::S;
+        use AscDesc::*;
+        use Member::*;
+
+        let valid_req = [
+            ("truc:asc", Asc(Field(S("truc")))),
+            ("bidule:desc", Desc(Field(S("bidule")))),
+            ("a-b:desc", Desc(Field(S("a-b")))),
+            ("a:b:desc", Desc(Field(S("a:b")))),
+            ("a12:asc", Asc(Field(S("a12")))),
+            ("42:asc", Asc(Field(S("42")))),
+            ("_geoPoint(42, 59):asc", Asc(Geo([42., 59.]))),
+            ("_geoPoint(42.459, 59):desc", Desc(Geo([42.459, 59.]))),
+            ("_geoPoint(42, 59.895):desc", Desc(Geo([42., 59.895]))),
+            ("_geoPoint(42, 59.895):desc", Desc(Geo([42., 59.895]))),
+            ("_geoPoint(42.0002, 59.895):desc", Desc(Geo([42.0002, 59.895]))),
+            ("_geoPoint(42., 59.):desc", Desc(Geo([42., 59.]))),
+            ("truc(12, 13):desc", Desc(Field(S("truc(12, 13)")))),
+        ];
+
+        for (req, expected) in valid_req {
+            let res = req.parse();
+            assert!(res.is_ok(), "Failed to parse `{}`, was expecting `{:?}`", req, expected);
+            assert_eq!(expected, res.unwrap());
+        }
+
+        let invalid_req = [
+            "truc:machin",
+            "truc:deesc",
+            "truc:asc:deesc",
+            "42desc",
+            "_geoPoint:asc",
+            "_geoDistance:asc",
+            "_geoPoint(42.12 , 59.598)",
+            "_geoPoint(42.12 , 59.598):deesc",
+            "_geoPoint(42.12 , 59.598):machin",
+            "_geoPoint(42.12 , 59.598):asc:aasc",
+            "_geoPoint(42,12 , 59,598):desc",
+            "_geoPoint(35, 85, 75):asc",
+            "_geoPoint(18):asc",
+        ];
+
+        for req in invalid_req {
+            let res = req.parse::<AscDesc>();
+            assert!(
+                res.is_err(),
+                "Should no be able to parse `{}`, was expecting an error but instead got: `{:?}`",
+                req,
+                res,
+            );
         }
     }
 }

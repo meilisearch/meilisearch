@@ -13,7 +13,7 @@ use crate::{DocumentId, FieldId};
 pub type Object = Map<String, Value>;
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    ["_geo", "_geoDistance"].contains(&keyword)
+    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius"].contains(&keyword)
 }
 
 #[derive(Debug)]
