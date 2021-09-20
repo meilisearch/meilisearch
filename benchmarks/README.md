@@ -109,7 +109,7 @@ It was generated with the following command:
 xsv sample --seed 42 500000 wiki-articles.csv -o smol-wiki-articles.csv
 ```
 
-_[Download the `smol-wiki` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-wiki.csv.gz)._
+_[Download the `smol-wiki` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-wiki-articles.csv.gz)._
 
 ### Movies
 
@@ -120,7 +120,7 @@ _[Download the `movies` dataset](https://docs.meilisearch.com/movies.json)._
 
 ### All Countries
 
-`smol-all-countries` is a subset of the [`all-countries.csv` dataset]()
+`smol-all-countries` is a subset of the [`all-countries.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/all-countries.csv.gz)
 It has been converted to jsonlines and then edited so it matches our format for the `_geo` field.
 
 It was generated with the following command:
