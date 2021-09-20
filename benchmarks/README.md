@@ -54,7 +54,7 @@ MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the code is com
 
 ## Comparison between benchmarks
 
-The benchmark reports we push are generated with `critcmp`. Thus, we use `critcmp` to generate comparison results between 2 benchmarks.
+The benchmark reports we push are generated with `critcmp`. Thus, we use `critcmp` to show the result of a benchmark, or compare results between multiple benchmarks.
 
 We provide a script to download and display the comparison report.
 
@@ -71,12 +71,18 @@ List the available file in the DO Space:
 ```bash
 songs_main_09a4321.json
 songs_geosearch_24ec456.json
+search_songs_main_cb45a10b.json
 ```
 
 Run the comparison script:
 
 ```bash
+# we get the result of ONE benchmark, this give you an idea of how much time an operation took
+./benchmarks/scripts/compare.sh son songs_geosearch_24ec456.json
+# we compare two benchmarks
 ./benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
+# we compare three benchmarks
+./benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json search_songs_main_cb45a10b.json
 ```
 
 ## Datasets
