@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
         tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
     }
 
-    print_launch_resume(&opt, &data);
+    print_launch_resume(&opt);
 
     run_http(data, opt).await?;
 
@@ -73,7 +73,8 @@ async fn main() -> anyhow::Result<()> {
 
 async fn run_http(data: Data, opt: Opt) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
-    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
+    let opt_clone = opt.clone();
+    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C
         .disable_signals();
 
@@ -83,12 +84,12 @@ async fn run_http(data: Data, opt: Opt) -> anyhow::Result<()> {
             .run()
             .await?;
     } else {
-        http_server.bind(opt.http_addr)?.run().await?;
+        http_server.bind(&opt.http_addr)?.run().await?;
     }
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, data: &Data) {
+pub fn print_launch_resume(opt: &Opt) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -133,7 +134,7 @@ Anonymous telemetry:   \"Enabled\""
 
     eprintln!();
 
-    if data.api_keys().master.is_some() {
+    if opt.master_key.is_some() {
         eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \

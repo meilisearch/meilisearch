@@ -58,11 +58,41 @@ use actix_web::web;
 
 use extractors::authentication::policies::*;
 use extractors::payload::PayloadConfig;
+use sha2::Digest;
 
-pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
-    let http_payload_size_limit = data.http_payload_size_limit();
+#[derive(Clone)]
+pub struct ApiKeys {
+    pub public: Option<String>,
+    pub private: Option<String>,
+    pub master: Option<String>,
+}
+
+impl ApiKeys {
+    pub fn generate_missing_api_keys(&mut self) {
+        if let Some(master_key) = &self.master {
+            if self.private.is_none() {
+                let key = format!("{}-private", master_key);
+                let sha = sha2::Sha256::digest(key.as_bytes());
+                self.private = Some(format!("{:x}", sha));
+            }
+            if self.public.is_none() {
+                let key = format!("{}-public", master_key);
+                let sha = sha2::Sha256::digest(key.as_bytes());
+                self.public = Some(format!("{:x}", sha));
+            }
+        }
+    }
+}
+
+pub fn configure_data(
+    config: &mut web::ServiceConfig,
+    data: Data,
+    opt: &Opt,
+    ) {
+    let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(web::Data::new(data.clone()))
+        // TODO!: Why are we passing the data with two different things?
         .app_data(data)
         .app_data(
             web::JsonConfig::default()
@@ -77,8 +107,15 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
         );
 }
 
-pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
-    let keys = data.api_keys();
+pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
+    let mut keys = ApiKeys {
+        master: opts.master_key.clone(),
+        private: None,
+        public: None,
+        };
+
+        keys.generate_missing_api_keys();
+
     let auth_config = if let Some(ref master_key) = keys.master {
         let private_key = keys.private.as_ref().unwrap();
         let public_key = keys.public.as_ref().unwrap();
@@ -94,7 +131,8 @@ pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
         AuthConfig::NoAuth
     };
 
-    config.app_data(auth_config);
+    config.app_data(auth_config)
+            .app_data(keys);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -138,7 +176,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 
 #[macro_export]
 macro_rules! create_app {
-    ($data:expr, $enable_frontend:expr) => {{
+    ($data:expr, $enable_frontend:expr, $opt:expr) => {{
         use actix_cors::Cors;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
@@ -147,8 +185,8 @@ macro_rules! create_app {
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()
-            .configure(|s| configure_data(s, $data.clone()))
-            .configure(|s| configure_auth(s, &$data))
+            .configure(|s| configure_data(s, $data.clone(), &$opt))
+            .configure(|s| configure_auth(s, &$opt))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
             .wrap(

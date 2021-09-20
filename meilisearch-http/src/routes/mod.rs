@@ -10,7 +10,7 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::index::{Settings, Unchecked};
 use crate::index_controller::update_actor::RegisterUpdate;
 use crate::index_controller::{UpdateResult, UpdateStatus};
-use crate::Data;
+use crate::{ApiKeys, Data};
 
 mod dump;
 mod indexes;
@@ -262,8 +262,8 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-pub async fn list_keys(data: GuardedData<Admin, Data>) -> HttpResponse {
-    let api_keys = data.api_keys.clone();
+pub async fn list_keys(data: GuardedData<Admin, ApiKeys>) -> HttpResponse {
+    let api_keys = (*data).clone();
     HttpResponse::Ok().json(&KeysResponse {
         private: api_keys.private,
         public: api_keys.public,

@@ -1,8 +1,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use sha2::Digest;
-
 use crate::index::{Checked, Settings};
 use crate::index_controller::{
     error::Result, DumpInfo, IndexController, IndexMetadata, IndexStats, Stats,
@@ -27,32 +25,7 @@ impl Deref for Data {
 
 pub struct DataInner {
     pub index_controller: IndexController,
-    pub api_keys: ApiKeys,
-    options: Opt,
-}
-
-#[derive(Clone)]
-pub struct ApiKeys {
-    pub public: Option<String>,
-    pub private: Option<String>,
-    pub master: Option<String>,
-}
-
-impl ApiKeys {
-    pub fn generate_missing_api_keys(&mut self) {
-        if let Some(master_key) = &self.master {
-            if self.private.is_none() {
-                let key = format!("{}-private", master_key);
-                let sha = sha2::Sha256::digest(key.as_bytes());
-                self.private = Some(format!("{:x}", sha));
-            }
-            if self.public.is_none() {
-                let key = format!("{}-public", master_key);
-                let sha = sha2::Sha256::digest(key.as_bytes());
-                self.public = Some(format!("{:x}", sha));
-            }
-        }
-    }
+    //pub api_keys: ApiKeys,
 }
 
 impl Data {
@@ -61,18 +34,8 @@ impl Data {
 
         let index_controller = IndexController::new(&path, &options)?;
 
-        let mut api_keys = ApiKeys {
-            master: options.clone().master_key,
-            private: None,
-            public: None,
-        };
-
-        api_keys.generate_missing_api_keys();
-
         let inner = DataInner {
             index_controller,
-            api_keys,
-            options,
         };
         let inner = Arc::new(inner);
 
@@ -119,15 +82,5 @@ impl Data {
 
     pub async fn dump_status(&self, uid: String) -> Result<DumpInfo> {
         Ok(self.index_controller.dump_info(uid).await?)
-    }
-
-    #[inline]
-    pub fn http_payload_size_limit(&self) -> usize {
-        self.options.http_payload_size_limit.get_bytes() as usize
-    }
-
-    #[inline]
-    pub fn api_keys(&self) -> &ApiKeys {
-        &self.api_keys
     }
 }
