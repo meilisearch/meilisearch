@@ -1,6 +1,6 @@
 [package]
 name = "helpers"
-version = "0.13.1"
+version = "0.14.0"
 authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
 
