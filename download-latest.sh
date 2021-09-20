@@ -140,10 +140,10 @@ get_os() {
 get_archi() {
     architecture=$(uname -m)
     case "$architecture" in
-    'x86_64' | 'amd64')
+    'x86_64' | 'amd64' | 'arm64')
         archi='amd64'
         ;;
-    'aarch64' | 'arm64')
+    'aarch64')
         archi='armv8'
         ;;
     *)
