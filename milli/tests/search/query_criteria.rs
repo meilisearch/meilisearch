@@ -5,7 +5,7 @@ use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
 use milli::update::{Settings, UpdateBuilder, UpdateFormat};
-use milli::{AscDesc, Criterion, Index, Search, SearchResult};
+use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
 use rand::Rng;
 use Criterion::*;
 
@@ -163,28 +163,28 @@ test_criterion!(
     DISALLOW_OPTIONAL_WORDS,
     ALLOW_TYPOS,
     vec![Sort],
-    vec![AscDesc::Asc(S("tag"))]
+    vec![AscDesc::Asc(Member::Field(S("tag")))]
 );
 test_criterion!(
     sort_by_asc_disallow_typo,
     DISALLOW_OPTIONAL_WORDS,
     DISALLOW_TYPOS,
     vec![Sort],
-    vec![AscDesc::Asc(S("tag"))]
+    vec![AscDesc::Asc(Member::Field(S("tag")))]
 );
 test_criterion!(
     sort_by_desc_allow_typo,
     DISALLOW_OPTIONAL_WORDS,
     ALLOW_TYPOS,
     vec![Sort],
-    vec![AscDesc::Desc(S("tag"))]
+    vec![AscDesc::Desc(Member::Field(S("tag")))]
 );
 test_criterion!(
     sort_by_desc_disallow_typo,
     DISALLOW_OPTIONAL_WORDS,
     DISALLOW_TYPOS,
     vec![Sort],
-    vec![AscDesc::Desc(S("tag"))]
+    vec![AscDesc::Desc(Member::Field(S("tag")))]
 );
 test_criterion!(
     default_criteria_order,

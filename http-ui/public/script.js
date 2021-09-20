@@ -60,7 +60,13 @@ $('#query, #filters').on('input', function () {
 
             const content = document.createElement('div');
             content.classList.add("content");
-            content.innerHTML = element[prop];
+            
+            // Stringify Objects and Arrays to avoid [Object object]
+            if (typeof element[prop] === 'object' && element[prop] !== null) {
+              content.innerHTML = JSON.stringify(element[prop]);
+            }  else {
+              content.innerHTML = element[prop];
+            }
 
             field.appendChild(attribute);
             field.appendChild(content);

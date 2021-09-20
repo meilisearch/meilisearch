@@ -3,6 +3,7 @@ mod extract_facet_number_docids;
 mod extract_facet_string_docids;
 mod extract_fid_docid_facet_values;
 mod extract_fid_word_count_docids;
+mod extract_geo_points;
 mod extract_word_docids;
 mod extract_word_level_position_docids;
 mod extract_word_pair_proximity_docids;
@@ -19,6 +20,7 @@ use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
+use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_level_position_docids::extract_word_level_position_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
@@ -37,6 +39,8 @@ pub(crate) fn data_from_obkv_documents(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: Option<HashSet<FieldId>>,
     faceted_fields: HashSet<FieldId>,
+    primary_key_id: FieldId,
+    geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
@@ -48,6 +52,8 @@ pub(crate) fn data_from_obkv_documents(
                 lmdb_writer_sx.clone(),
                 &searchable_fields,
                 &faceted_fields,
+                primary_key_id,
+                geo_field_id,
                 &stop_words,
             )
         })
@@ -168,6 +174,8 @@ fn extract_documents_data(
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: &Option<HashSet<FieldId>>,
     faceted_fields: &HashSet<FieldId>,
+    primary_key_id: FieldId,
+    geo_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
@@ -176,6 +184,19 @@ fn extract_documents_data(
     let documents_chunk = documents_chunk.and_then(|c| unsafe { into_clonable_grenad(c) })?;
 
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
+
+    if let Some(geo_field_id) = geo_field_id {
+        let documents_chunk_cloned = documents_chunk.clone();
+        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            let result =
+                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_field_id);
+            let _ = match result {
+                Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
+                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+            };
+        });
+    }
 
     let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(

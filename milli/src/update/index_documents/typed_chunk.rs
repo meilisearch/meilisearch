@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::convert::TryInto;
 use std::fs::File;
 
 use heed::types::ByteSlice;
@@ -6,11 +7,12 @@ use heed::{BytesDecode, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, valid_lmdb_key, CursorClonableMmap,
+    self, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, valid_lmdb_key,
+    CursorClonableMmap,
 };
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
 use crate::update::index_documents::helpers::into_clonable_grenad;
-use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, Index, Result};
+use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result};
 
 pub(crate) enum TypedChunk {
     DocidWordPositions(grenad::Reader<CursorClonableMmap>),
@@ -24,6 +26,7 @@ pub(crate) enum TypedChunk {
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
+    GeoPoints(grenad::Reader<File>),
 }
 
 /// Write typed chunk in the corresponding LMDB database of the provided index.
@@ -176,6 +179,24 @@ pub(crate) fn write_typed_chunk_into_index(
                 },
             )?;
             is_merged_database = true;
+        }
+        TypedChunk::GeoPoints(mut geo_points) => {
+            let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
+            let mut geo_faceted_docids = index.geo_faceted_documents_ids(wtxn)?;
+
+            while let Some((key, value)) = geo_points.next()? {
+                // convert the key back to a u32 (4 bytes)
+                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+                // convert the latitude and longitude back to a f64 (8 bytes)
+                let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
+                let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
+                let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
+                rtree.insert(GeoPoint::new(point, docid));
+                geo_faceted_docids.insert(docid);
+            }
+            index.put_geo_rtree(wtxn, &rtree)?;
+            index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
         }
     }
 

@@ -380,6 +380,24 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
+        if let Some(mut rtree) = self.index.geo_rtree(self.wtxn)? {
+            let mut geo_faceted_doc_ids = self.index.geo_faceted_documents_ids(self.wtxn)?;
+
+            let (points_to_remove, docids_to_remove): (Vec<_>, RoaringBitmap) = rtree
+                .iter()
+                .filter(|&point| self.documents_ids.contains(point.data))
+                .cloned()
+                .map(|point| (point, point.data))
+                .unzip();
+            points_to_remove.iter().for_each(|point| {
+                rtree.remove(&point);
+            });
+            geo_faceted_doc_ids -= docids_to_remove;
+
+            self.index.put_geo_rtree(self.wtxn, &rtree)?;
+            self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;
+        }
+
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_field_id_number_docids(
             self.wtxn,
@@ -542,6 +560,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::hashset;
@@ -656,5 +676,96 @@ mod tests {
         assert!(results.documents_ids.is_empty());
 
         wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn delete_documents_with_geo_points() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_primary_key(S("id"));
+        builder.set_filterable_fields(hashset!(S("_geo")));
+        builder.set_sortable_fields(hashset!(S("_geo")));
+        builder.execute(|_, _| ()).unwrap();
+
+        let content = &r#"[
+            {"id":"1","city":"Lille",             "_geo": { "lat": 50.629973371633746, "lng": 3.0569447399419570 } },
+            {"id":"2","city":"Mons-en-Barœul",    "_geo": { "lat": 50.641586120121050, "lng": 3.1106593480348670 } },
+            {"id":"3","city":"Hellemmes",         "_geo": { "lat": 50.631220965518080, "lng": 3.1106399673339933 } },
+            {"id":"4","city":"Villeneuve-d'Ascq", "_geo": { "lat": 50.622468098014565, "lng": 3.1476425513437140 } },
+            {"id":"5","city":"Hem",               "_geo": { "lat": 50.655250871381355, "lng": 3.1897297266244130 } },
+            {"id":"6","city":"Roubaix",           "_geo": { "lat": 50.692473451896710, "lng": 3.1763326737747650 } },
+            {"id":"7","city":"Tourcoing",         "_geo": { "lat": 50.726397466736480, "lng": 3.1541653659578670 } },
+            {"id":"8","city":"Mouscron",          "_geo": { "lat": 50.745325554908610, "lng": 3.2206407854429853 } },
+            {"id":"9","city":"Tournai",           "_geo": { "lat": 50.605342528602630, "lng": 3.3758586941351414 } },
+            {"id":"10","city":"Ghent",            "_geo": { "lat": 51.053777403679035, "lng": 3.6957733119926930 } },
+            {"id":"11","city":"Brussels",         "_geo": { "lat": 50.846640974544690, "lng": 4.3370663564281840 } },
+            {"id":"12","city":"Charleroi",        "_geo": { "lat": 50.409570138889480, "lng": 4.4347354315085520 } },
+            {"id":"13","city":"Mons",             "_geo": { "lat": 50.450294178855420, "lng": 3.9623722870904690 } },
+            {"id":"14","city":"Valenciennes",     "_geo": { "lat": 50.351817774473545, "lng": 3.5326283646928800 } },
+            {"id":"15","city":"Arras",            "_geo": { "lat": 50.284487528579950, "lng": 2.7637515844478160 } },
+            {"id":"16","city":"Cambrai",          "_geo": { "lat": 50.179340577906700, "lng": 3.2189409952502930 } },
+            {"id":"17","city":"Bapaume",          "_geo": { "lat": 50.111276127236400, "lng": 2.8547894666083120 } },
+            {"id":"18","city":"Amiens",           "_geo": { "lat": 49.931472529669996, "lng": 2.2710499758317080 } },
+            {"id":"19","city":"Compiègne",        "_geo": { "lat": 49.444980887725656, "lng": 2.7913841281529015 } },
+            {"id":"20","city":"Paris",            "_geo": { "lat": 48.902100060895480, "lng": 2.3708400867406930 } }
+        ]"#[..];
+        let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
+
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+
+        let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
+        let ids_to_delete: Vec<u32> = external_ids_to_delete
+            .iter()
+            .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
+            .collect();
+
+        // Delete some documents.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index, 1).unwrap();
+        external_ids_to_delete.iter().for_each(|id| drop(builder.delete_external_id(id)));
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let rtree = index.geo_rtree(&rtxn).unwrap().unwrap();
+        let geo_faceted_doc_ids = index.geo_faceted_documents_ids(&rtxn).unwrap();
+
+        let all_geo_ids = rtree.iter().map(|point| point.data).collect::<Vec<_>>();
+        let all_geo_documents = index
+            .documents(&rtxn, all_geo_ids.iter().copied())
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<HashSet<_>>();
+
+        let all_geo_faceted_ids = geo_faceted_doc_ids.iter().collect::<Vec<_>>();
+        let all_geo_faceted_documents = index
+            .documents(&rtxn, all_geo_faceted_ids.iter().copied())
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            all_geo_documents, all_geo_faceted_documents,
+            "There is an inconsistency between the geo_faceted database and the rtree"
+        );
+
+        for id in all_geo_documents.iter() {
+            assert!(!ids_to_delete.contains(&id), "The document {} was supposed to be deleted", id);
+        }
+
+        assert_eq!(
+            all_geo_ids.len(),
+            all_geo_documents.len(),
+            "We deleted documents that were not supposed to be deleted"
+        );
     }
 }

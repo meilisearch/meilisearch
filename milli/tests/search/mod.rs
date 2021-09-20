@@ -6,7 +6,7 @@ use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::update::{Settings, UpdateBuilder, UpdateFormat};
-use milli::{AscDesc, Criterion, DocumentId, Index};
+use milli::{AscDesc, Criterion, DocumentId, Index, Member};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
 
@@ -37,6 +37,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
+        S("_geo"),
     });
     builder.set_sortable_fields(hashset! {
         S("tag"),
@@ -99,11 +100,11 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.proximity_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Asc(S("tag"))] => {
+                Criterion::Sort if sort_by == [AscDesc::Asc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| d.sort_by_rank);
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }
-                Criterion::Sort if sort_by == [AscDesc::Desc(S("tag"))] => {
+                Criterion::Sort if sort_by == [AscDesc::Desc(Member::Field(S("tag")))] => {
                     group.sort_by_key(|d| Reverse(d.sort_by_rank));
                     new_groups.extend(group.linear_group_by_key(|d| d.sort_by_rank).map(Vec::from));
                 }
@@ -162,6 +163,10 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         if document.asc_desc_rank > filter.parse().unwrap() {
             id = Some(document.id.clone())
         }
+    } else if filter.starts_with("_geoRadius") {
+        id = (document.geo_rank < 100000).then(|| document.id.clone());
+    } else if filter.starts_with("NOT _geoRadius") {
+        id = (document.geo_rank > 1000000).then(|| document.id.clone());
     }
     id
 }
@@ -205,6 +210,7 @@ pub struct TestDocument {
     pub exact_rank: u32,
     pub asc_desc_rank: u32,
     pub sort_by_rank: u32,
+    pub geo_rank: u32,
     pub title: String,
     pub description: String,
     pub tag: String,

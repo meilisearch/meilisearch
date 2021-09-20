@@ -1,6 +1,6 @@
 use big_s::S;
 use milli::Criterion::{Attribute, Exactness, Proximity, Typo, Words};
-use milli::{AscDesc, Error, Search, UserError};
+use milli::{AscDesc, Error, Member, Search, UserError};
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
@@ -16,7 +16,7 @@ fn sort_ranking_rule_missing() {
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
     search.authorize_typos(true);
     search.optional_words(true);
-    search.sort_criteria(vec![AscDesc::Asc(S("tag"))]);
+    search.sort_criteria(vec![AscDesc::Asc(Member::Field(S("tag")))]);
 
     let result = search.execute();
     assert!(matches!(result, Err(Error::UserError(UserError::SortRankingRuleMissing))));

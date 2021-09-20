@@ -21,7 +21,7 @@ use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::{Map, Value};
 
-pub use self::criterion::{default_criteria, AscDesc, Criterion};
+pub use self::criterion::{default_criteria, AscDesc, Criterion, Member};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
@@ -51,6 +51,7 @@ pub type DocumentId = u32;
 pub type FieldId = u16;
 pub type Position = u32;
 pub type FieldDistribution = BTreeMap<String, u64>;
+pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 2], DocumentId>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
@@ -139,6 +140,15 @@ where
     let (head, tail) = try_split_at(slice, N)?;
     let head = head.try_into().ok()?;
     Some((head, tail))
+}
+
+/// Return the distance between two points in meters. Each points are composed of two f64,
+/// one latitude and one longitude.
+pub fn distance_between_two_points(a: &[f64; 2], b: &[f64; 2]) -> f64 {
+    let a = geoutils::Location::new(a[0], a[1]);
+    let b = geoutils::Location::new(b[0], b[1]);
+
+    a.haversine_distance_to(&b).meters()
 }
 
 #[cfg(test)]

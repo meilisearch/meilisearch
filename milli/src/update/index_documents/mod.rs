@@ -228,11 +228,27 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             Receiver<Result<TypedChunk>>,
         ) = crossbeam_channel::unbounded();
 
+        // get the primary key field id
+        let primary_key_id = fields_ids_map.id(&primary_key).unwrap();
+
         // get searchable fields for word databases
         let searchable_fields =
             self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
         // get filterable fields for facet databases
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
+        // get the fid of the `_geo` field.
+        let geo_field_id = match self.index.fields_ids_map(self.wtxn)?.id("_geo") {
+            Some(gfid) => {
+                let is_sortable = self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid);
+                let is_filterable = self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid);
+                if is_sortable || is_filterable {
+                    Some(gfid)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
 
         let stop_words = self.index.stop_words(self.wtxn)?;
         // let stop_words = stop_words.as_ref();
@@ -261,6 +277,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     lmdb_writer_sx.clone(),
                     searchable_fields,
                     faceted_fields,
+                    primary_key_id,
+                    geo_field_id,
                     stop_words,
                 )
             });
@@ -876,12 +894,12 @@ mod tests {
         // First we send 3 documents with an id for only one of them.
         let mut wtxn = index.write_txn().unwrap();
         let documents = &r#"[
-          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5 },
+          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
           { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
           { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
           { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
           { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
-          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams" }
+          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
@@ -917,7 +935,7 @@ mod tests {
             { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
             { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
             { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
-            { "objectId": 30,  "title": "Hamlet" }
+            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
@@ -934,7 +952,7 @@ mod tests {
         assert!(external_documents_ids.get("30").is_none());
 
         let content = &br#"[
-            { "objectId": 30, "title": "Hamlet" }
+            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
@@ -944,7 +962,7 @@ mod tests {
         assert!(external_documents_ids.get("30").is_some());
 
         let content = &br#"[
-            { "objectId": 30, "title": "Hamlet" }
+            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);

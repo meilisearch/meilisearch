@@ -48,6 +48,8 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
+        self.index.delete_geo_rtree(self.wtxn)?;
+        self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
 
         // We clean all the faceted documents ids.
         let empty = RoaringBitmap::default();
@@ -93,7 +95,7 @@ mod tests {
         let content = &br#"[
             { "id": 0, "name": "kevin", "age": 20 },
             { "id": 1, "name": "kevina" },
-            { "id": 2, "name": "benoit", "country": "France" }
+            { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
@@ -107,13 +109,15 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 4);
+        assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 5);
 
         assert!(index.words_fst(&rtxn).unwrap().is_empty());
         assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
         assert!(index.external_documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.documents_ids(&rtxn).unwrap().is_empty());
         assert!(index.field_distribution(&rtxn).unwrap().is_empty());
+        assert!(index.geo_rtree(&rtxn).unwrap().is_none());
+        assert!(index.geo_faceted_documents_ids(&rtxn).unwrap().is_empty());
 
         assert!(index.word_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());

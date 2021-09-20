@@ -21,7 +21,9 @@ use crate::error::UserError;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
-use crate::{CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result};
+use crate::{
+    distance_between_two_points, CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
@@ -32,6 +34,8 @@ pub enum Operator {
     LowerThan(f64),
     LowerThanOrEqual(f64),
     Between(f64, f64),
+    GeoLowerThan([f64; 2], f64),
+    GeoGreaterThan([f64; 2], f64),
 }
 
 impl Operator {
@@ -46,6 +50,8 @@ impl Operator {
             LowerThan(n) => (GreaterThanOrEqual(n), None),
             LowerThanOrEqual(n) => (GreaterThan(n), None),
             Between(n, m) => (LowerThan(n), Some(GreaterThan(m))),
+            GeoLowerThan(point, distance) => (GeoGreaterThan(point, distance), None),
+            GeoGreaterThan(point, distance) => (GeoLowerThan(point, distance), None),
         }
     }
 }
@@ -131,6 +137,7 @@ impl FilterCondition {
                 Rule::leq => Ok(Self::lower_than_or_equal(fim, ff, pair)?),
                 Rule::less => Ok(Self::lower_than(fim, ff, pair)?),
                 Rule::between => Ok(Self::between(fim, ff, pair)?),
+                Rule::geo_radius => Ok(Self::geo_radius(fim, ff, pair)?),
                 Rule::not => Ok(Self::from_pairs(fim, ff, pair.into_inner())?.negate()),
                 Rule::prgm => Self::from_pairs(fim, ff, pair.into_inner()),
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
@@ -154,6 +161,65 @@ impl FilterCondition {
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
             Empty => Empty,
         }
+    }
+
+    fn geo_radius(
+        fields_ids_map: &FieldsIdsMap,
+        filterable_fields: &HashSet<String>,
+        item: Pair<Rule>,
+    ) -> Result<FilterCondition> {
+        if !filterable_fields.contains("_geo") {
+            return Err(UserError::InvalidFilterAttribute(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                    "attribute `_geo` is not filterable, available filterable attributes are: {}",
+                    filterable_fields.iter().join(", "),
+                ),
+                },
+                item.as_span(),
+            )))?;
+        }
+        let mut items = item.into_inner();
+        let fid = match fields_ids_map.id("_geo") {
+            Some(fid) => fid,
+            None => return Ok(Empty),
+        };
+        let parameters_item = items.next().unwrap();
+        // We don't need more than 3 parameters, but to handle errors correctly we are still going
+        // to extract the first 4 parameters
+        let param_span = parameters_item.as_span();
+        let parameters = parameters_item
+            .into_inner()
+            .take(4)
+            .map(|param| (param.clone(), param.as_span()))
+            .map(|(param, span)| pest_parse(param).0.map(|arg| (arg, span)))
+            .collect::<StdResult<Vec<(f64, _)>, _>>()
+            .map_err(UserError::InvalidFilter)?;
+        if parameters.len() != 3 {
+            return Err(UserError::InvalidFilter(PestError::new_from_span(
+                        ErrorVariant::CustomError {
+                            message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
+                        },
+                        // we want to point to the last parameters and if there was no parameters we
+                        // point to the parenthesis
+                        parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
+            )))?;
+        }
+        let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
+        if let Some(span) = (!(-181.0..181.).contains(&lat.0))
+            .then(|| &lat.1)
+            .or((!(-181.0..181.).contains(&lng.0)).then(|| &lng.1))
+        {
+            return Err(UserError::InvalidFilter(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                        "Latitude and longitude must be contained between -180 to 180 degrees."
+                    ),
+                },
+                span.clone(),
+            )))?;
+        }
+        Ok(Operator(fid, GeoLowerThan([lat.0, lng.0], distance)))
     }
 
     fn between(
@@ -440,6 +506,34 @@ impl FilterCondition {
             LowerThan(val) => (Included(f64::MIN), Excluded(*val)),
             LowerThanOrEqual(val) => (Included(f64::MIN), Included(*val)),
             Between(left, right) => (Included(*left), Included(*right)),
+            GeoLowerThan(base_point, distance) => {
+                let rtree = match index.geo_rtree(rtxn)? {
+                    Some(rtree) => rtree,
+                    None => return Ok(RoaringBitmap::new()),
+                };
+
+                let result = rtree
+                    .nearest_neighbor_iter(base_point)
+                    .take_while(|point| {
+                        distance_between_two_points(base_point, point.geom()) < *distance
+                    })
+                    .map(|point| point.data)
+                    .collect();
+
+                return Ok(result);
+            }
+            GeoGreaterThan(point, distance) => {
+                let result = Self::evaluate_operator(
+                    rtxn,
+                    index,
+                    numbers_db,
+                    strings_db,
+                    field_id,
+                    &GeoLowerThan(point.clone(), *distance),
+                )?;
+                let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
+                return Ok(geo_faceted_doc_ids - result);
+            }
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
@@ -505,6 +599,19 @@ fn field_id(
 ) -> StdResult<Option<FieldId>, PestError<Rule>> {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
+    if key.as_rule() == Rule::reserved {
+        return Err(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!(
+                                 "`{}` is a reserved keyword and therefore can't be used as a filter expression. \
+                    Available filterable attributes are: {}",
+                    key.as_str(),
+                    filterable_fields.iter().join(", "),
+                             ),
+                },
+                key.as_span(),
+        ));
+    }
 
     if !filterable_fields.contains(key.as_str()) {
         return Err(PestError::new_from_span(
@@ -581,6 +688,13 @@ mod tests {
         let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
+
+        let result = FilterCondition::from_str(&rtxn, &index, "_geo = France");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains(
+            "`_geo` is a reserved keyword and therefore can't be used as a filter expression."
+        ));
     }
 
     #[test]
@@ -661,6 +775,92 @@ mod tests {
             )),
         );
         assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn geo_radius() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        // basic test
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 13.0005, 2000)").unwrap();
+        let expected = Operator(0, GeoLowerThan([12., 13.0005], 2000.));
+        assert_eq!(condition, expected);
+
+        // test the negation of the GeoLowerThan
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "NOT _geoRadius(50, 18, 2000.500)").unwrap();
+        let expected = Operator(0, GeoGreaterThan([50., 18.], 2000.500));
+        assert_eq!(condition, expected);
+
+        // composition of multiple operations
+        let condition = FilterCondition::from_str(
+            &rtxn,
+            &index,
+            "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
+        )
+        .unwrap();
+        let expected = Or(
+            Box::new(And(
+                Box::new(Operator(0, GeoGreaterThan([1., 2.], 300.))),
+                Box::new(Operator(0, GeoLowerThan([1.001, 2.002], 1000.300))),
+            )),
+            Box::new(Operator(1, LowerThanOrEqual(10.))),
+        );
+        assert_eq!(condition, expected);
+
+        // georadius don't have any parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius don't have any parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius don't have enough parameters
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius have too many parameters
+        let result =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+
+        // georadius have a bad latitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-200, 150, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+
+        // georadius have a bad longitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 181, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
     }
 
     #[test]

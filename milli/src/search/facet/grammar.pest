@@ -1,5 +1,5 @@
-key = _{quoted | word}
-value = _{quoted | word}
+key = _{reserved | quoted | word }
+value = _{quoted | word }
 quoted = _{ (PUSH("'") | PUSH("\"")) ~ string ~ POP  }
 string = {char*}
 word = ${(LETTER | NUMBER | "_" | "-" | ".")+}
@@ -8,6 +8,9 @@ char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
 
+reserved = { "_geo" | "_geoDistance" | "_geoPoint" | ("_geoPoint" ~ parameters) }
+// we deliberately choose to allow empty parameters to generate more specific error message later
+parameters = {("(" ~ (value ~ ",")* ~ value? ~ ")") | ""}
 condition = _{between | eq | greater | less | geq | leq | neq}
 between = {key ~ value ~ "TO" ~ value}
 geq = {key ~ ">=" ~ value}
@@ -16,10 +19,11 @@ neq = {key ~ "!=" ~ value}
 eq = {key ~ "=" ~ value}
 greater = {key ~ ">" ~ value}
 less = {key ~ "<" ~ value}
+geo_radius = {"_geoRadius" ~ parameters }
 
 prgm = {SOI ~ expr ~ EOI}
 expr = _{ ( term ~ (operation ~ term)* ) }
-term = { ("(" ~ expr ~ ")") | condition | not }
+term = { ("(" ~ expr ~ ")") | condition | not | geo_radius }
 operation = _{ and | or }
 and = {"AND"}
 or = {"OR"}
