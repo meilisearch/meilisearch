@@ -89,7 +89,6 @@ impl ErrorCode for MilliError<'_> {
                     UserError::Csv(_)
                     | UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidCriterionName { .. }
                     | UserError::InvalidDocumentId { .. }
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
@@ -107,6 +106,10 @@ impl ErrorCode for MilliError<'_> {
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::Sort,
+
+                    UserError::InvalidRankingRuleName { .. } => Code::BadRequest,
+                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::InvalidReservedRankingRuleName { .. } => Code::BadRequest,
                 }
             }
         }

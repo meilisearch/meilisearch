@@ -69,6 +69,7 @@ pub enum Code {
     BadRequest,
     DocumentNotFound,
     Internal,
+    InvalidGeoField,
     InvalidToken,
     MissingAuthorizationHeader,
     NotFound,
@@ -124,6 +125,9 @@ impl Code {
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidGeoField => {
+                ErrCode::authentication("invalid_geo_field", StatusCode::BAD_REQUEST)
+            }
             InvalidToken => ErrCode::authentication("invalid_token", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
