@@ -277,12 +277,69 @@ fn indexing_movies_default(c: &mut Criterion) {
     });
 }
 
+fn indexing_geo(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(10);
+    group.bench_function("Indexing geo_point", |b| {
+        b.iter_with_setup(
+            move || {
+                let index = setup_index();
+
+                let update_builder = UpdateBuilder::new(0);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.settings(&mut wtxn, &index);
+
+                builder.set_primary_key("geonameid".to_owned());
+                let displayed_fields =
+                    ["geonameid", "name", "asciiname", "alternatenames", "_geo", "population"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["name", "alternatenames", "elevation"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let filterable_fields =
+                    ["_geo", "population", "elevation"].iter().map(|s| s.to_string()).collect();
+                builder.set_filterable_fields(filterable_fields);
+
+                let sortable_fields =
+                    ["_geo", "population", "elevation"].iter().map(|s| s.to_string()).collect();
+                builder.set_sortable_fields(sortable_fields);
+
+                builder.execute(|_, _| ()).unwrap();
+                wtxn.commit().unwrap();
+                index
+            },
+            move |index| {
+                let update_builder = UpdateBuilder::new(0);
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+
+                builder.update_format(UpdateFormat::JsonStream);
+                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
+                let reader = File::open(datasets_paths::SMOL_ALL_COUNTRIES).expect(&format!(
+                    "could not find the dataset in: {}",
+                    datasets_paths::SMOL_ALL_COUNTRIES
+                ));
+                builder.execute(reader, |_, _| ()).unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 criterion_group!(
     benches,
     indexing_songs_default,
     indexing_songs_without_faceted_numbers,
     indexing_songs_without_faceted_fields,
     indexing_wiki,
-    indexing_movies_default
+    indexing_movies_default,
+    indexing_geo
 );
 criterion_main!(benches);

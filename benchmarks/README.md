@@ -36,7 +36,7 @@ To run all the benchmarks (~5h):
 cargo bench
 ```
 
-To run only the `songs` (~1h), `wiki` (~3h) or `indexing` (~4h) benchmark:
+To run only the `search_songs` (~1h), `search_wiki` (~3h), `search_geo` (~20m) or `indexing` (~2h) benchmark:
 
 ```bash
 cargo bench --bench <dataset name>
@@ -47,7 +47,7 @@ If you don't want to download the datasets every time you update something on th
 
 ```bash
 mkdir ~/datasets
-MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the three datasets are downloaded
+MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench search_songs # the four datasets are downloaded
 touch build.rs
 MILLI_BENCH_DATASETS_PATH=~/datasets cargo bench --bench songs # the code is compiled again but the datasets are not downloaded
 ```
@@ -87,14 +87,15 @@ Run the comparison script:
 
 ## Datasets
 
-The benchmarks are available for the following datasets:
-- `songs`
-- `wiki`
+The benchmarks uses the following datasets:
+- `smol-songs`
+- `smol-wiki`
 - `movies`
+- `smol-all-countries`
 
 ### Songs
 
-`songs` is a subset of the [`songs.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/songs.csv.gz).
+`smol-songs` is a subset of the [`songs.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/songs.csv.gz).
 
 It was generated with this command:
 
@@ -102,11 +103,11 @@ It was generated with this command:
 xsv sample --seed 42 1000000 songs.csv -o smol-songs.csv
 ```
 
-_[Download the generated `songs` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-songs.csv.gz)._
+_[Download the generated `smol-songs` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-songs.csv.gz)._
 
 ### Wiki
 
-`wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/wiki-articles.csv.gz).
+`smol-wiki` is a subset of the [`wikipedia-articles.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/wiki-articles.csv.gz).
 
 It was generated with the following command:
 
@@ -114,9 +115,24 @@ It was generated with the following command:
 xsv sample --seed 42 500000 wiki-articles.csv -o smol-wiki-articles.csv
 ```
 
+_[Download the `smol-wiki` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-wiki-articles.csv.gz)._
+
 ### Movies
 
 `movies` is a really small dataset we uses as our example in the [getting started](https://docs.meilisearch.com/learn/getting_started/)
 
 _[Download the `movies` dataset](https://docs.meilisearch.com/movies.json)._
+
+
+### All Countries
+
+`smol-all-countries` is a subset of the [`all-countries.csv` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/all-countries.csv.gz)
+It has been converted to jsonlines and then edited so it matches our format for the `_geo` field.
+
+It was generated with the following command:
+```bash
+bat all-countries.csv.gz | gunzip | xsv sample --seed 42 1000000 | csv2json-lite | sd '"latitude":"(.*?)","longitude":"(.*?)"' '"_geo": { "lat": $1, "lng": $2 }' | sd '\[|\]|,$' '' | gzip > smol-all-countries.jsonl.gz
+```
+
+_[Download the `smol-all-countries` dataset](https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets/smol-all-countries.jsonl.gz)._
 

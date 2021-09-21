@@ -13,6 +13,7 @@ const BASE_URL: &str = "https://milli-benchmarks.fra1.digitaloceanspaces.com/dat
 const DATASET_SONGS: (&str, &str) = ("smol-songs", "csv");
 const DATASET_WIKI: (&str, &str) = ("smol-wiki-articles", "csv");
 const DATASET_MOVIES: (&str, &str) = ("movies", "json");
+const DATASET_GEO: (&str, &str) = ("smol-all-countries", "jsonl");
 
 /// The name of the environment variable used to select the path
 /// of the directory containing the datasets
@@ -32,7 +33,7 @@ fn main() -> anyhow::Result<()> {
     )?;
     writeln!(manifest_paths_file)?;
 
-    for (dataset, extension) in [DATASET_SONGS, DATASET_WIKI, DATASET_MOVIES] {
+    for (dataset, extension) in [DATASET_SONGS, DATASET_WIKI, DATASET_MOVIES, DATASET_GEO] {
         let out_path = out_dir.join(dataset);
         let out_file = out_path.with_extension(extension);
 

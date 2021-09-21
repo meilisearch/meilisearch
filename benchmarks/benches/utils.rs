@@ -12,6 +12,8 @@ pub struct Conf<'a> {
     pub database_name: &'a str,
     /// the dataset to be used, it must be an uncompressed csv
     pub dataset: &'a str,
+    /// The format of the dataset
+    pub dataset_format: UpdateFormat,
     pub group_name: &'a str,
     pub queries: &'a [&'a str],
     /// here you can change which criterion are used and in which order.
@@ -21,6 +23,7 @@ pub struct Conf<'a> {
     /// the last chance to configure your database as you want
     pub configure: fn(&mut Settings),
     pub filter: Option<&'a str>,
+    pub sort: Option<Vec<&'a str>>,
     /// enable or disable the optional words on the query
     pub optional_words: bool,
     /// primary key, if there is None we'll auto-generate docids for every documents
@@ -30,12 +33,14 @@ pub struct Conf<'a> {
 impl Conf<'_> {
     pub const BASE: Self = Conf {
         database_name: "benches.mmdb",
+        dataset_format: UpdateFormat::Csv,
         dataset: "",
         group_name: "",
         queries: &[],
         criterion: None,
         configure: |_| (),
         filter: None,
+        sort: None,
         optional_words: true,
         primary_key: None,
     };
@@ -82,7 +87,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     if let None = conf.primary_key {
         builder.enable_autogenerate_docids();
     }
-    builder.update_format(UpdateFormat::Csv);
+    builder.update_format(conf.dataset_format);
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
     let reader = File::open(conf.dataset)
         .expect(&format!("could not find the dataset in: {}", conf.dataset));
@@ -109,6 +114,10 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     if let Some(filter) = conf.filter {
                         let filter = FilterCondition::from_str(&rtxn, &index, filter).unwrap();
                         search.filter(filter);
+                    }
+                    if let Some(sort) = &conf.sort {
+                        let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
+                        search.sort_criteria(sort);
                     }
                     let _ids = search.execute().unwrap();
                 });
