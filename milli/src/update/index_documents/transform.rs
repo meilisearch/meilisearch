@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::iter::Peekable;
-use std::result::Result as StdResult;
 use std::time::Instant;
 
 use grenad::CompressionType;
+use itertools::Itertools;
 use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
@@ -15,7 +15,8 @@ use super::helpers::{
     create_sorter, create_writer, keep_latest_obkv, merge_obkvs, merge_two_obkvs, MergeFn,
 };
 use super::IndexDocumentsMethod;
-use crate::error::{InternalError, UserError};
+use crate::documents::{DocumentBatchReader, DocumentsBatchIndex};
+use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{ExternalDocumentsIds, FieldDistribution, FieldId, FieldsIdsMap, Index, Result, BEU32};
@@ -51,89 +52,62 @@ pub struct Transform<'t, 'i> {
     pub autogenerate_docids: bool,
 }
 
-fn is_primary_key(field: impl AsRef<str>) -> bool {
-    field.as_ref().to_lowercase().contains(DEFAULT_PRIMARY_KEY_NAME)
+/// Create a mapping between the field ids found in the document batch and the one that were
+/// already present in the index.
+///
+/// If new fields are present in the addition, they are added to the index field ids map.
+fn create_fields_mapping(
+    index_field_map: &mut FieldsIdsMap,
+    batch_field_map: &DocumentsBatchIndex,
+) -> Result<HashMap<FieldId, FieldId>> {
+    batch_field_map
+        .iter()
+        // we sort by id here to ensure a deterministic mapping of the fields, that preserves
+        // the original ordering.
+        .sorted_by_key(|(&id, _)| id)
+        .map(|(field, name)| match index_field_map.id(&name) {
+            Some(id) => Ok((*field, id)),
+            None => index_field_map
+                .insert(&name)
+                .ok_or(Error::UserError(UserError::AttributeLimitReached))
+                .map(|id| (*field, id)),
+        })
+        .collect()
+}
+
+fn find_primary_key(index: &bimap::BiHashMap<u16, String>) -> Option<&str> {
+    index
+        .right_values()
+        .find(|v| v.to_lowercase().contains(DEFAULT_PRIMARY_KEY_NAME))
+        .map(String::as_str)
 }
 
 impl Transform<'_, '_> {
-    pub fn output_from_json<R, F>(self, reader: R, progress_callback: F) -> Result<TransformOutput>
-    where
-        R: Read,
-        F: Fn(UpdateIndexingStep) + Sync,
-    {
-        self.output_from_generic_json(reader, false, progress_callback)
-    }
-
-    pub fn output_from_json_stream<R, F>(
+    pub fn read_documents<R, F>(
         self,
-        reader: R,
+        mut reader: DocumentBatchReader<R>,
         progress_callback: F,
     ) -> Result<TransformOutput>
     where
-        R: Read,
+        R: Read + Seek,
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        self.output_from_generic_json(reader, true, progress_callback)
-    }
-
-    fn output_from_generic_json<R, F>(
-        self,
-        reader: R,
-        is_stream: bool,
-        progress_callback: F,
-    ) -> Result<TransformOutput>
-    where
-        R: Read,
-        F: Fn(UpdateIndexingStep) + Sync,
-    {
+        let fields_index = reader.index();
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
+        let mapping = create_fields_mapping(&mut fields_ids_map, fields_index)?;
 
-        // Deserialize the whole batch of documents in memory.
-        let mut documents: Peekable<
-            Box<dyn Iterator<Item = serde_json::Result<Map<String, Value>>>>,
-        > = if is_stream {
-            let iter = serde_json::Deserializer::from_reader(reader).into_iter();
-            let iter = Box::new(iter) as Box<dyn Iterator<Item = _>>;
-            iter.peekable()
-        } else {
-            let vec: Vec<_> = serde_json::from_reader(reader).map_err(UserError::SerdeJson)?;
-            let iter = vec.into_iter().map(Ok);
-            let iter = Box::new(iter) as Box<dyn Iterator<Item = _>>;
-            iter.peekable()
-        };
+        let alternative_name = self
+            .index
+            .primary_key(self.rtxn)?
+            .or_else(|| find_primary_key(fields_index))
+            .map(String::from);
 
-        // We extract the primary key from the first document in
-        // the batch if it hasn't already been defined in the index
-        let first = match documents.peek().map(StdResult::as_ref).transpose() {
-            Ok(first) => first,
-            Err(_) => {
-                let error = documents.next().unwrap().unwrap_err();
-                return Err(UserError::SerdeJson(error).into());
-            }
-        };
-
-        let alternative_name =
-            first.and_then(|doc| doc.keys().find(|f| is_primary_key(f)).cloned());
-        let (primary_key_id, primary_key) = compute_primary_key_pair(
+        let (primary_key_id, primary_key_name) = compute_primary_key_pair(
             self.index.primary_key(self.rtxn)?,
             &mut fields_ids_map,
             alternative_name,
             self.autogenerate_docids,
         )?;
-
-        if documents.peek().is_none() {
-            return Ok(TransformOutput {
-                primary_key,
-                fields_ids_map,
-                field_distribution: self.index.field_distribution(self.rtxn)?,
-                external_documents_ids: ExternalDocumentsIds::default(),
-                new_documents_ids: RoaringBitmap::new(),
-                replaced_documents_ids: RoaringBitmap::new(),
-                documents_count: 0,
-                documents_file: tempfile::tempfile()?,
-            });
-        }
 
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
@@ -151,204 +125,103 @@ impl Transform<'_, '_> {
             self.max_memory,
         );
 
-        let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
-        let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut documents_count = 0;
-
-        for result in documents {
-            let document = result.map_err(UserError::SerdeJson)?;
-
+        let mut external_id_buffer = Vec::new();
+        let mut field_buffer: Vec<(u16, &[u8])> = Vec::new();
+        while let Some((addition_index, document)) = reader.next_document_with_index()? {
+            let mut field_buffer_cache = drop_and_reuse(field_buffer);
             if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
-                progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+                progress_callback(UpdateIndexingStep::RemapDocumentAddition {
                     documents_seen: documents_count,
                 });
             }
 
-            obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
-
-            // We prepare the fields ids map with the documents keys.
-            for (key, _value) in &document {
-                fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached)?;
+            for (k, v) in document.iter() {
+                let mapped_id = *mapping.get(&k).unwrap();
+                field_buffer_cache.push((mapped_id, v));
             }
 
-            // We retrieve the user id from the document based on the primary key name,
-            // if the document id isn't present we generate a uuid.
-            let external_id = match document.get(&primary_key) {
-                Some(value) => match value {
-                    Value::String(string) => Cow::Borrowed(string.as_str()),
-                    Value::Number(number) => Cow::Owned(number.to_string()),
-                    content => {
-                        return Err(
-                            UserError::InvalidDocumentId { document_id: content.clone() }.into()
-                        )
+            // We need to make sure that every document has a primary key. After we have remapped
+            // all the fields in the document, we try to find the primary key value. If we can find
+            // it, transform it into a string and validate it, and then update it in the
+            // document. If none is found, and we were told to generate missing document ids, then
+            // we create the missing field, and update the new document.
+            let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+            let external_id =
+                match field_buffer_cache.iter_mut().find(|(id, _)| *id == primary_key_id) {
+                    Some((_, bytes)) => {
+                        let value = match serde_json::from_slice(bytes).unwrap() {
+                            Value::String(string) => match validate_document_id(&string) {
+                                Some(s) if s.len() == string.len() => string,
+                                Some(s) => s.to_string(),
+                                None => {
+                                    return Err(UserError::InvalidDocumentId {
+                                        document_id: Value::String(string),
+                                    }
+                                    .into())
+                                }
+                            },
+                            Value::Number(number) => number.to_string(),
+                            content => {
+                                return Err(UserError::InvalidDocumentId {
+                                    document_id: content.clone(),
+                                }
+                                .into())
+                            }
+                        };
+                        serde_json::to_writer(&mut external_id_buffer, &value).unwrap();
+                        *bytes = &external_id_buffer;
+                        Cow::Owned(value)
                     }
-                },
-                None => {
-                    if !self.autogenerate_docids {
-                        return Err(UserError::MissingDocumentId { document }.into());
-                    }
-                    let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
-                    Cow::Borrowed(uuid)
-                }
-            };
+                    None => {
+                        if !self.autogenerate_docids {
+                            let mut json = Map::new();
+                            for (key, value) in document.iter() {
+                                let key = addition_index.get_by_left(&key).cloned();
+                                let value = serde_json::from_slice::<Value>(&value).ok();
 
-            // We iterate in the fields ids ordered.
-            for (field_id, name) in fields_ids_map.iter() {
-                json_buffer.clear();
+                                if let Some((k, v)) = key.zip(value) {
+                                    json.insert(k, v);
+                                }
+                            }
 
-                // We try to extract the value from the document and if we don't find anything
-                // and this should be the document id we return the one we generated.
-                if let Some(value) = document.get(name) {
-                    // We serialize the attribute values.
-                    serde_json::to_writer(&mut json_buffer, value)
-                        .map_err(InternalError::SerdeJson)?;
-                    writer.insert(field_id, &json_buffer)?;
-                }
-                // We validate the document id [a-zA-Z0-9\-_].
-                if field_id == primary_key_id && validate_document_id(&external_id).is_none() {
-                    return Err(UserError::InvalidDocumentId {
-                        document_id: Value::from(external_id),
+                            return Err(UserError::MissingDocumentId { document: json }.into());
+                        }
+
+                        let uuid =
+                            uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
+                        serde_json::to_writer(&mut external_id_buffer, &uuid).unwrap();
+                        field_buffer_cache.push((primary_key_id, &external_id_buffer));
+                        Cow::Borrowed(&*uuid)
                     }
-                    .into());
-                }
+                };
+
+            // Insertion in a obkv need to be done with keys ordered. For now they are ordered
+            // according to the document addition key order, so we sort it according to the
+            // fieldids map keys order.
+            field_buffer_cache.sort_unstable_by(|(f1, _), (f2, _)| f1.cmp(&f2));
+
+            // The last step is to build the new obkv document, and insert it in the sorter.
+            let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
+            for (k, v) in field_buffer_cache.iter() {
+                writer.insert(*k, v)?;
             }
 
             // We use the extracted/generated user id as the key for this document.
-            sorter.insert(external_id.as_bytes(), &obkv_buffer)?;
+            sorter.insert(&external_id.as_ref().as_bytes(), &obkv_buffer)?;
             documents_count += 1;
-        }
 
-        progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
-            documents_seen: documents_count,
-        });
-
-        // Now that we have a valid sorter that contains the user id and the obkv we
-        // give it to the last transforming function which returns the TransformOutput.
-        self.output_from_sorter(
-            sorter,
-            primary_key,
-            fields_ids_map,
-            documents_count,
-            external_documents_ids,
-            progress_callback,
-        )
-    }
-
-    pub fn output_from_csv<R, F>(self, reader: R, progress_callback: F) -> Result<TransformOutput>
-    where
-        R: Read,
-        F: Fn(UpdateIndexingStep) + Sync,
-    {
-        let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
-
-        let mut csv = csv::Reader::from_reader(reader);
-        let headers = csv.headers().map_err(UserError::Csv)?;
-
-        let mut fields_ids = Vec::new();
-        // Generate the new fields ids based on the current fields ids and this CSV headers.
-        for (i, header) in headers.iter().enumerate() {
-            let id = fields_ids_map.insert(header).ok_or(UserError::AttributeLimitReached)?;
-            fields_ids.push((id, i));
-        }
-
-        // Extract the position of the primary key in the current headers, None if not found.
-        let primary_key_pos = match self.index.primary_key(self.rtxn)? {
-            Some(primary_key) => {
-                // The primary key is known so we must find the position in the CSV headers.
-                headers.iter().position(|h| h == primary_key)
-            }
-            None => headers.iter().position(is_primary_key),
-        };
-
-        // Returns the field id in the fields ids map, create an "id" field
-        // in case it is not in the current headers.
-        let alternative_name = primary_key_pos.map(|pos| headers[pos].to_string());
-        let (primary_key_id, primary_key_name) = compute_primary_key_pair(
-            self.index.primary_key(self.rtxn)?,
-            &mut fields_ids_map,
-            alternative_name,
-            self.autogenerate_docids,
-        )?;
-
-        // The primary key field is not present in the header, so we need to create it.
-        if primary_key_pos.is_none() {
-            fields_ids.push((primary_key_id, usize::max_value()));
-        }
-
-        // We sort the fields ids by the fields ids map id, this way we are sure to iterate over
-        // the records fields in the fields ids map order and correctly generate the obkv.
-        fields_ids.sort_unstable_by_key(|(field_id, _)| *field_id);
-
-        // We initialize the sorter with the user indexing settings.
-        let mut sorter = create_sorter(
-            keep_latest_obkv,
-            self.chunk_compression_type,
-            self.chunk_compression_level,
-            self.max_nb_chunks,
-            self.max_memory,
-        );
-
-        // We write into the sorter to merge and deduplicate the documents
-        // based on the external ids.
-        let mut json_buffer = Vec::new();
-        let mut obkv_buffer = Vec::new();
-        let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
-        let mut documents_count = 0;
-
-        let mut record = csv::StringRecord::new();
-        while csv.read_record(&mut record).map_err(UserError::Csv)? {
-            obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
-
-            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
-                progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
-                    documents_seen: documents_count,
-                });
-            }
-
-            // We extract the user id if we know where it is or generate an UUID V4 otherwise.
-            let external_id = match primary_key_pos {
-                Some(pos) => {
-                    let external_id = &record[pos];
-                    // We validate the document id [a-zA-Z0-9\-_].
-                    match validate_document_id(&external_id) {
-                        Some(valid) => valid,
-                        None => {
-                            return Err(UserError::InvalidDocumentId {
-                                document_id: Value::from(external_id),
-                            }
-                            .into())
-                        }
-                    }
-                }
-                None => uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer),
-            };
-
-            // When the primary_key_field_id is found in the fields ids list
-            // we return the generated document id instead of the record field.
-            let iter = fields_ids.iter().map(|(fi, i)| {
-                let field = if *fi == primary_key_id { external_id } else { &record[*i] };
-                (fi, field)
+            progress_callback(UpdateIndexingStep::RemapDocumentAddition {
+                documents_seen: documents_count,
             });
 
-            // We retrieve the field id based on the fields ids map fields ids order.
-            for (field_id, field) in iter {
-                // We serialize the attribute values as JSON strings.
-                json_buffer.clear();
-                serde_json::to_writer(&mut json_buffer, &field)
-                    .map_err(InternalError::SerdeJson)?;
-                writer.insert(*field_id, &json_buffer)?;
-            }
-
-            // We use the extracted/generated user id as the key for this document.
-            sorter.insert(external_id, &obkv_buffer)?;
-            documents_count += 1;
+            obkv_buffer.clear();
+            field_buffer = drop_and_reuse(field_buffer_cache);
+            external_id_buffer.clear();
         }
 
-        progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+        progress_callback(UpdateIndexingStep::RemapDocumentAddition {
             documents_seen: documents_count,
         });
 
@@ -359,7 +232,6 @@ impl Transform<'_, '_> {
             primary_key_name,
             fields_ids_map,
             documents_count,
-            external_documents_ids,
             progress_callback,
         )
     }
@@ -373,12 +245,12 @@ impl Transform<'_, '_> {
         primary_key: String,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
-        mut external_documents_ids: ExternalDocumentsIds<'_>,
         progress_callback: F,
     ) -> Result<TransformOutput>
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
+        let mut external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let mut field_distribution = self.index.field_distribution(self.rtxn)?;
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
@@ -608,6 +480,17 @@ fn validate_document_id(document_id: &str) -> Option<&str> {
         !id.is_empty()
             && id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
     })
+}
+
+/// Drops all the value of type `U` in vec, and reuses the allocation to create a `Vec<T>`.
+///
+/// The size and alignment of T and U must match.
+fn drop_and_reuse<U, T>(mut vec: Vec<U>) -> Vec<T> {
+    debug_assert_eq!(std::mem::align_of::<U>(), std::mem::align_of::<T>());
+    debug_assert_eq!(std::mem::size_of::<U>(), std::mem::size_of::<T>());
+    vec.clear();
+    debug_assert!(vec.is_empty());
+    vec.into_iter().map(|_| unreachable!()).collect()
 }
 
 #[cfg(test)]

@@ -55,7 +55,6 @@ pub enum FieldIdMapMissingEntry {
 #[derive(Debug)]
 pub enum UserError {
     AttributeLimitReached,
-    Csv(csv::Error),
     DocumentLimitReached,
     InvalidAscDescSyntax { name: String },
     InvalidDocumentId { document_id: Value },
@@ -212,7 +211,6 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
-            Self::Csv(error) => error.fmt(f),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
                 let name_list =

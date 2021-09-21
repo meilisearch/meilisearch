@@ -5,12 +5,13 @@ authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
 [dependencies]
+bimap = { version = "0.6.1", features = ["serde"] }
+bincode = "1.3.3"
 bstr = "0.2.15"
 byteorder = "1.4.2"
 chrono = { version = "0.4.19", features = ["serde"] }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.1"
-csv = "1.1.5"
 either = "1.6.1"
 flate2 = "1.0.20"
 fst = "0.4.5"

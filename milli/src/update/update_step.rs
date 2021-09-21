@@ -2,10 +2,9 @@ use UpdateIndexingStep::*;
 
 #[derive(Debug, Clone, Copy)]
 pub enum UpdateIndexingStep {
-    /// Transform from the original user given format (CSV, JSON, JSON lines)
-    /// into a generic format based on the obkv and grenad crates. This step also
-    /// deduplicate potential documents in this batch update by merging or replacing them.
-    TransformFromUserIntoGenericFormat { documents_seen: usize },
+    /// Remap document addition fields the one present in the database, adding new fields in to the
+    /// schema on the go.
+    RemapDocumentAddition { documents_seen: usize },
 
     /// This step check the external document id, computes the internal ids and merge
     /// the documents that are already present in the database.
@@ -23,7 +22,7 @@ pub enum UpdateIndexingStep {
 impl UpdateIndexingStep {
     pub const fn step(&self) -> usize {
         match self {
-            TransformFromUserIntoGenericFormat { .. } => 0,
+            RemapDocumentAddition { .. } => 0,
             ComputeIdsAndMergeDocuments { .. } => 1,
             IndexDocuments { .. } => 2,
             MergeDataIntoFinalDatabase { .. } => 3,

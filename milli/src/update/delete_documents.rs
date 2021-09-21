@@ -567,7 +567,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::update::{IndexDocuments, Settings, UpdateFormat};
+    use crate::update::{IndexDocuments, Settings};
     use crate::FilterCondition;
 
     #[test]
@@ -578,13 +578,12 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = &br#"[
+        let content = documents!([
             { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
             { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
             { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
-        ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::Json);
+        ]);
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.execute(content, |_, _| ()).unwrap();
 
         // delete those documents, ids are synchronous therefore 0, 1, and 2.
@@ -609,13 +608,12 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = &br#"[
+        let content = documents!([
             { "mysuperid": 0, "name": "kevin" },
             { "mysuperid": 1, "name": "kevina" },
             { "mysuperid": 2, "name": "benoit" }
-        ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::Json);
+        ]);
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.execute(content, |_, _| ()).unwrap();
 
         // Delete not all of the documents but some of them.
@@ -640,7 +638,7 @@ mod tests {
         builder.set_filterable_fields(hashset! { S("label") });
         builder.execute(|_, _| ()).unwrap();
 
-        let content = &br#"[
+        let content = documents!([
             {"docid":"1_4","label":"sign"},
             {"docid":"1_5","label":"letter"},
             {"docid":"1_7","label":"abstract,cartoon,design,pattern"},
@@ -661,9 +659,8 @@ mod tests {
             {"docid":"1_58","label":"abstract,art,cartoon"},
             {"docid":"1_68","label":"design"},
             {"docid":"1_69","label":"geometry"}
-        ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::Json);
+        ]);
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.execute(content, |_, _| ()).unwrap();
 
         // Delete not all of the documents but some of them.
@@ -692,7 +689,7 @@ mod tests {
         builder.set_sortable_fields(hashset!(S("_geo")));
         builder.execute(|_, _| ()).unwrap();
 
-        let content = &r#"[
+        let content = documents!([
             {"id":"1","city":"Lille",             "_geo": { "lat": 50.629973371633746, "lng": 3.0569447399419570 } },
             {"id":"2","city":"Mons-en-Barœul",    "_geo": { "lat": 50.641586120121050, "lng": 3.1106593480348670 } },
             {"id":"3","city":"Hellemmes",         "_geo": { "lat": 50.631220965518080, "lng": 3.1106399673339933 } },
@@ -713,12 +710,10 @@ mod tests {
             {"id":"18","city":"Amiens",           "_geo": { "lat": 49.931472529669996, "lng": 2.2710499758317080 } },
             {"id":"19","city":"Compiègne",        "_geo": { "lat": 49.444980887725656, "lng": 2.7913841281529015 } },
             {"id":"20","city":"Paris",            "_geo": { "lat": 48.902100060895480, "lng": 2.3708400867406930 } }
-        ]"#[..];
+        ]);
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
 
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.update_format(UpdateFormat::Json);
-        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+        IndexDocuments::new(&mut wtxn, &index, 0).execute(content, |_, _| ()).unwrap();
 
         let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids_to_delete

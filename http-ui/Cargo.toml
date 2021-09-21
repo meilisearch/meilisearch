@@ -37,6 +37,8 @@ fst = "0.4.5"
 
 # Temporary fix for bitvec, remove once fixed. (https://github.com/bitvecto-rs/bitvec/issues/105)
 funty = "=1.1"
+bimap = "0.6.1"
+csv = "1.1.6"
 
 [dev-dependencies]
 maplit = "1.0.2"
