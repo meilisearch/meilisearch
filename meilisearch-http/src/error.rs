@@ -55,18 +55,6 @@ impl aweb::error::ResponseError for ResponseError {
     }
 }
 
-macro_rules! internal_error {
-    ($target:ty : $($other:path), *) => {
-        $(
-            impl From<$other> for $target {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
-    }
-}
-
 #[derive(Debug)]
 pub struct MilliError<'a>(pub &'a milli::Error);
 

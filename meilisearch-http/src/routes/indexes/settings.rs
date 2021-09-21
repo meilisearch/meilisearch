@@ -148,7 +148,7 @@
 //);
 
 //pub async fn update_all(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //index_uid: web::Path<String>,
     //body: web::Json<Settings<Unchecked>>,
 //) -> Result<HttpResponse, ResponseError> {
@@ -162,7 +162,7 @@
 //}
 
 //pub async fn get_all(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //index_uid: web::Path<String>,
 //) -> Result<HttpResponse, ResponseError> {
     //let settings = data.settings(index_uid.into_inner()).await?;
@@ -171,7 +171,7 @@
 //}
 
 //pub async fn delete_all(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //index_uid: web::Path<String>,
 //) -> Result<HttpResponse, ResponseError> {
     //let settings = Settings::cleared();

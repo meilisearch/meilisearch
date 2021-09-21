@@ -5,12 +5,12 @@ use chrono::{DateTime, Utc};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
+use meilisearch_lib::{MeiliSearch, UpdateResult, UpdateStatus, RegisterUpdate};
+use meilisearch_lib::index::{Settings, Unchecked};
+
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::index::{Settings, Unchecked};
-use crate::index_controller::update_actor::RegisterUpdate;
-use crate::index_controller::{UpdateResult, UpdateStatus};
-use crate::{ApiKeys, Data};
+use crate::ApiKeys;
 
 mod dump;
 mod indexes;
@@ -187,15 +187,17 @@ impl From<UpdateStatus> for UpdateStatusResponse {
                 let duration = Duration::from_millis(duration as u64).as_secs_f64();
 
                 let update_id = failed.id();
-                let response = failed.error;
+                let processed_at = failed.failed_at;
+                let enqueued_at = failed.from.from.enqueued_at;
+                let response = failed.into();
 
                 let content = FailedUpdateResult {
                     update_id,
                     update_type,
                     response,
                     duration,
-                    enqueued_at: failed.from.from.enqueued_at,
-                    processed_at: failed.failed_at,
+                    enqueued_at,
+                    processed_at,
                 };
                 UpdateStatusResponse::Failed { content }
             }
@@ -230,7 +232,7 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
-async fn get_stats(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+async fn get_stats(data: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
     let response = data.get_all_stats().await?;
 
     debug!("returns: {:?}", response);
@@ -245,7 +247,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
+async fn get_version(_data: GuardedData<Private, MeiliSearch>) -> HttpResponse {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -288,7 +290,7 @@ mod test {
     macro_rules! impl_is_policy {
         ($($param:ident)*) => {
             impl<Policy, Func, $($param,)* Res> Is<Policy, (($($param,)*), Res)> for Func
-                where Func: Fn(GuardedData<Policy, Data>, $($param,)*) -> Res {}
+                where Func: Fn(GuardedData<Policy, MeiliSearch>, $($param,)*) -> Res {}
 
         };
     }

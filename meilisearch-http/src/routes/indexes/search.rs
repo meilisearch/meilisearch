@@ -1,13 +1,13 @@
 use actix_web::{web, HttpResponse};
 use log::debug;
+use meilisearch_lib::MeiliSearch;
+use  meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
-use crate::Data;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -82,7 +82,7 @@ impl From<SearchQueryGet> for SearchQuery {
 }
 
 pub async fn search_with_url_query(
-    data: GuardedData<Public, Data>,
+    data: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -99,7 +99,7 @@ pub async fn search_with_url_query(
 }
 
 pub async fn search_with_post(
-    data: GuardedData<Public, Data>,
+    data: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {

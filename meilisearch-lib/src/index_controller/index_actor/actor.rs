@@ -16,7 +16,7 @@ use crate::index::{
 use crate::index_controller::{
     get_arc_ownership_blocking, Failed, IndexStats, Processed, Processing,
 };
-use crate::option::IndexerOpts;
+use crate::options::IndexerOpts;
 
 use super::error::{IndexActorError, Result};
 use super::{IndexMeta, IndexMsg, IndexSettings, IndexStore};
@@ -29,7 +29,9 @@ pub struct IndexActor<S> {
     store: S,
 }
 
-impl<S: IndexStore + Sync + Send> IndexActor<S> {
+impl<S> IndexActor<S>
+where S: IndexStore + Sync + Send,
+{
     pub fn new(
         receiver: mpsc::Receiver<IndexMsg>,
         store: S,

@@ -18,7 +18,7 @@ pub use message::DumpMsg;
 
 use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::{helpers::compression, option::IndexerOpts};
+use crate::options::IndexerOpts;
 use error::Result;
 
 mod actor;
@@ -112,7 +112,7 @@ pub fn load_dump(
     let tmp_src = tempfile::tempdir_in(".")?;
     let tmp_src_path = tmp_src.path();
 
-    compression::from_tar_gz(&src_path, tmp_src_path)?;
+    crate::from_tar_gz(&src_path, tmp_src_path)?;
 
     let meta_path = tmp_src_path.join(META_FILE_NAME);
     let mut meta_file = File::open(&meta_path)?;
@@ -162,6 +162,7 @@ impl<U, P> DumpTask<U, P>
 where
     U: UuidResolverHandle + Send + Sync + Clone + 'static,
     P: UpdateActorHandle + Send + Sync + Clone + 'static,
+
 {
     async fn run(self) -> Result<()> {
         trace!("Performing dump.");
@@ -186,7 +187,7 @@ where
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
-            compression::to_tar_gz(temp_dump_path, temp_dump_file.path())
+            crate::to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 
             let dump_path = self.path.join(self.uid).with_extension("dump");

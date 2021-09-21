@@ -1,4 +1,4 @@
-use crate::option::IndexerOpts;
+use crate::options::IndexerOpts;
 use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};

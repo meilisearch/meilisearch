@@ -14,7 +14,7 @@ use error::Result;
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Checked, Facets, Settings, Unchecked};
 
-use crate::helpers::EnvSizer;
+use crate::EnvSizer;
 use crate::index_controller::update_file_store::UpdateFileStore;
 
 use self::error::IndexError;

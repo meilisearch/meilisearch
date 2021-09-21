@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{error::UuidResolverError, Result, UUID_STORE_SIZE};
-use crate::helpers::EnvSizer;
+use crate::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
 struct DumpEntry {

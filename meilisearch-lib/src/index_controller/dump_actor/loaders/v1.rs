@@ -11,7 +11,7 @@ use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata}
 use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
 use crate::{
     index::Unchecked,
-    option::IndexerOpts,
+    options::IndexerOpts,
 };
 
 #[derive(Serialize, Deserialize, Debug)]

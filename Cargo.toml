@@ -2,6 +2,7 @@
 members = [
     "meilisearch-http",
     "meilisearch-error",
+    "meilisearch-lib",
 ]
 
 [profile.release]

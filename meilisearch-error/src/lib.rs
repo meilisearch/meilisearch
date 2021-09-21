@@ -1,6 +1,7 @@
 use std::fmt;
 
 use actix_http::http::StatusCode;
+use serde::{Serialize, Deserialize};
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
@@ -45,6 +46,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Code {
     // index related error
     CreateIndex,

@@ -6,7 +6,7 @@ use heed::RoTxn;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::option::IndexerOpts;
+use crate::options::IndexerOpts;
 
 use super::error::Result;
 use super::{Index, Settings, Unchecked};

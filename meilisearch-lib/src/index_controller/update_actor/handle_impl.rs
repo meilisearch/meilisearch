@@ -41,6 +41,7 @@ impl UpdateActorHandle for UpdateActorHandleImpl {
         self.sender.send(msg).await?;
         receiver.await?
     }
+
     async fn update_status(&self, uuid: Uuid, id: u64) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::GetUpdate { uuid, id, ret };

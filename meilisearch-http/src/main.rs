@@ -1,7 +1,8 @@
 use std::env;
 
 use actix_web::HttpServer;
-use meilisearch_http::{create_app, Data, Opt};
+use meilisearch_http::{create_app, Opt};
+use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
@@ -39,6 +40,26 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
+    let mut meilisearch = MeiliSearch::builder();
+    meilisearch
+        .set_max_index_size(opt.max_index_size.get_bytes() as usize)
+        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
+        .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
+        .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
+        .set_dump_dst(opt.dumps_dir.clone())
+        .set_snapshot_dir(opt.snapshot_dir.clone());
+
+    if let Some(ref path) = opt.import_snapshot {
+        meilisearch.set_import_snapshot(path.clone());
+    }
+    if let Some(ref path) = opt.import_dump {
+        meilisearch.set_dump_src(path.clone());
+    }
+
+    meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
+}
+
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
@@ -55,23 +76,23 @@ async fn main() -> anyhow::Result<()> {
         _ => unreachable!(),
     }
 
-    let data = Data::new(opt.clone())?;
+    let meilisearch = setup_meilisearch(&opt)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
-        let analytics_data = data.clone();
+        let analytics_data = meilisearch.clone();
         let analytics_opt = opt.clone();
         tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
     }
 
     print_launch_resume(&opt);
 
-    run_http(data, opt).await?;
+    run_http(meilisearch, opt).await?;
 
     Ok(())
 }
 
-async fn run_http(data: Data, opt: Opt) -> anyhow::Result<()> {
+async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone))

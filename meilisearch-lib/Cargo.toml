@@ -1,25 +1,9 @@
 [package]
-authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
-description = "MeiliSearch HTTP server"
+name = "meilisearch-lib"
+version = "0.1.0"
 edition = "2018"
-license = "MIT"
-name = "meilisearch-http"
-version = "0.22.0"
 
-[[bin]]
-name = "meilisearch"
-path = "src/main.rs"
-
-[build-dependencies]
-actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
-anyhow = { version = "1.0.43", optional = true }
-cargo_toml = { version = "0.9", optional = true }
-hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.11.4", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
-sha-1 = { version = "0.9.8", optional = true }
-tempfile = { version = "3.2.0", optional = true }
-vergen = { version = "5.1.15", default-features = false, features = ["git"] }
-zip = { version = "0.5.13", optional = true }
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
@@ -45,7 +29,6 @@ indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
 log = "0.4.14"
 main_error = "0.1.1"
-meilisearch-lib = { path = "../meilisearch-lib" }
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 memmap = "0.7.0"
@@ -77,6 +60,7 @@ reqwest = { version = "0.11.4", features = ["json", "rustls-tls"], default-featu
 serdeval = "0.1.0"
 sysinfo = "0.20.2"
 tokio-stream = "0.1.7"
+erased-serde = "0.3.16"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
@@ -86,24 +70,3 @@ paste = "1.0.5"
 serde_url_params = "0.2.1"
 tempdir = "0.3.7"
 urlencoding = "2.1.0"
-
-[features]
-mini-dashboard = [
-    "actix-web-static-files",
-    "anyhow",
-    "cargo_toml",
-    "hex",
-    "reqwest",
-    "sha-1",
-    "tempfile",
-    "zip",
-]
-analytics = ["whoami", "reqwest"]
-default = ["analytics", "mini-dashboard"]
-
-[target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
-
-[package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.4/build.zip"
-sha1 = "750e8a8e56cfa61fbf9ead14b08a5f17ad3f3d37"

@@ -873,6 +873,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "erased-serde"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3de9ad4541d99dc22b59134e7ff8dc3d6c988c89ecd7324bf10a8362b07a2afa"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1571,6 +1580,7 @@ name = "meilisearch-error"
 version = "0.22.0"
 dependencies = [
  "actix-http",
+ "serde",
 ]
 
 [[package]]
@@ -1606,6 +1616,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-error",
+ "meilisearch-lib",
  "meilisearch-tokenizer",
  "memmap",
  "milli",
@@ -1644,6 +1655,74 @@ dependencies = [
  "walkdir",
  "whoami",
  "zip",
+]
+
+[[package]]
+name = "meilisearch-lib"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-rt",
+ "actix-web",
+ "actix-web-static-files",
+ "anyhow",
+ "arc-swap",
+ "assert-json-diff",
+ "async-stream",
+ "async-trait",
+ "byte-unit",
+ "bytes",
+ "chrono",
+ "crossbeam-channel",
+ "either",
+ "env_logger",
+ "erased-serde",
+ "flate2",
+ "fst",
+ "futures",
+ "futures-util",
+ "heed",
+ "http",
+ "indexmap",
+ "itertools",
+ "log",
+ "main_error",
+ "meilisearch-error",
+ "meilisearch-tokenizer",
+ "memmap",
+ "milli",
+ "mime",
+ "mockall",
+ "num_cpus",
+ "obkv",
+ "once_cell",
+ "parking_lot",
+ "paste",
+ "pin-project",
+ "rand 0.8.4",
+ "rayon",
+ "regex",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serde_url_params",
+ "serdeval",
+ "sha2",
+ "siphasher",
+ "slice-group-by",
+ "structopt",
+ "sysinfo",
+ "tar",
+ "tempdir",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "urlencoding",
+ "uuid",
+ "walkdir",
+ "whoami",
 ]
 
 [[package]]

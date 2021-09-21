@@ -22,8 +22,8 @@ use update_actor::UpdateActorHandle;
 pub use updates::*;
 use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
 
+use crate::options::IndexerOpts;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
-use crate::option::Opt;
 use error::Result;
 
 use self::dump_actor::load_dump;
@@ -99,45 +99,58 @@ pub enum Update {
     }
 }
 
-impl IndexController {
-    pub fn new(path: impl AsRef<Path>, options: &Opt) -> anyhow::Result<Self> {
-        let index_size = options.max_index_size.get_bytes() as usize;
-        let update_store_size = options.max_index_size.get_bytes() as usize;
+#[derive(Default, Debug)]
+pub struct IndexControllerBuilder {
+    max_index_size: Option<usize>,
+    max_update_store_size: Option<usize>,
+    snapshot_dir: Option<PathBuf>,
+    import_snapshot: Option<PathBuf>,
+    ignore_snapshot_if_db_exists: bool,
+    ignore_missing_snapshot: bool,
+    dump_src: Option<PathBuf>,
+    dump_dst: Option<PathBuf>,
+}
 
-        if let Some(ref path) = options.import_snapshot {
+impl IndexControllerBuilder {
+    pub fn build(self, db_path: impl AsRef<Path>, indexer_options: IndexerOpts) -> anyhow::Result<IndexController> {
+        let index_size = self.max_index_size.ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
+        let update_store_size = self.max_index_size.ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
+
+        if let Some(ref path) = self.import_snapshot {
             info!("Loading from snapshot {:?}", path);
             load_snapshot(
-                &options.db_path,
+                db_path.as_ref(),
                 path,
-                options.ignore_snapshot_if_db_exists,
-                options.ignore_missing_snapshot,
+                self.ignore_snapshot_if_db_exists,
+                self.ignore_missing_snapshot,
             )?;
-        } else if let Some(ref src_path) = options.import_dump {
+        } else if let Some(ref src_path) = self.dump_src {
             load_dump(
-                &options.db_path,
+                db_path.as_ref(),
                 src_path,
-                options.max_index_size.get_bytes() as usize,
-                options.max_udb_size.get_bytes() as usize,
-                &options.indexer_options,
+                index_size,
+                update_store_size,
+                &indexer_options,
             )?;
         }
 
-        std::fs::create_dir_all(&path)?;
+        std::fs::create_dir_all(db_path.as_ref())?;
 
-        let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&path)?;
+        let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&db_path)?;
         let index_handle =
-            index_actor::IndexActorHandleImpl::new(&path, index_size, &options.indexer_options)?;
+            index_actor::IndexActorHandleImpl::new(&db_path, index_size, &indexer_options)?;
         let update_handle = update_actor::UpdateActorHandleImpl::new(
             index_handle.clone(),
-            &path,
+            &db_path,
             update_store_size,
         )?;
+
         let dump_handle = dump_actor::DumpActorHandleImpl::new(
-            &options.dumps_dir,
+            &self.dump_dst.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?,
             uuid_resolver.clone(),
             update_handle.clone(),
-            options.max_index_size.get_bytes() as usize,
-            options.max_udb_size.get_bytes() as usize,
+            index_size,
+            update_store_size,
         )?;
 
         //if options.schedule_snapshot {
@@ -156,12 +169,65 @@ impl IndexController {
             //tokio::task::spawn(snapshot_service.run());
         //}
 
-        Ok(Self {
+        Ok(IndexController {
             uuid_resolver,
             index_handle,
             update_handle,
             dump_handle,
         })
+    }
+
+    /// Set the index controller builder's max update store size.
+    pub fn set_max_update_store_size(&mut self, max_update_store_size: usize) -> &mut Self {
+        self.max_update_store_size.replace(max_update_store_size);
+        self
+    }
+
+    pub fn set_max_index_size(&mut self, size: usize) -> &mut Self {
+        self.max_index_size.replace(size);
+        self
+    }
+
+    /// Set the index controller builder's snapshot path.
+    pub fn set_snapshot_dir(&mut self, snapshot_dir: PathBuf) -> &mut Self {
+        self.snapshot_dir.replace(snapshot_dir);
+        self
+    }
+
+    /// Set the index controller builder's ignore snapshot if db exists.
+    pub fn set_ignore_snapshot_if_db_exists(&mut self, ignore_snapshot_if_db_exists: bool) -> &mut Self {
+        self.ignore_snapshot_if_db_exists = ignore_snapshot_if_db_exists;
+        self
+    }
+
+    /// Set the index controller builder's ignore missing snapshot.
+    pub fn set_ignore_missing_snapshot(&mut self, ignore_missing_snapshot: bool) -> &mut Self {
+        self.ignore_missing_snapshot = ignore_missing_snapshot;
+        self
+    }
+
+    /// Set the index controller builder's dump src.
+    pub fn set_dump_src(&mut self, dump_src: PathBuf) -> &mut Self {
+        self.dump_src.replace(dump_src);
+        self
+    }
+
+    /// Set the index controller builder's dump dst.
+    pub fn set_dump_dst(&mut self, dump_dst: PathBuf) -> &mut Self {
+        self.dump_dst.replace(dump_dst);
+        self
+    }
+
+    /// Set the index controller builder's import snapshot.
+    pub fn set_import_snapshot(&mut self, import_snapshot: PathBuf) -> &mut Self {
+        self.import_snapshot.replace(import_snapshot);
+        self
+    }
+}
+
+impl IndexController {
+    pub fn builder() -> IndexControllerBuilder {
+        IndexControllerBuilder::default()
     }
 
     pub async fn register_update(&self, uid: &str, update: Update) -> Result<UpdateStatus> {

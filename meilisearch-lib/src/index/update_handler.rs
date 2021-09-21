@@ -5,7 +5,7 @@ use rayon::ThreadPool;
 
 use crate::index_controller::update_actor::RegisterUpdate;
 use crate::index_controller::{Failed, Processed, Processing};
-use crate::option::IndexerOpts;
+use crate::options::IndexerOpts;
 
 pub struct UpdateHandler {
     max_nb_chunks: Option<usize>,
@@ -66,7 +66,7 @@ impl UpdateHandler {
 
         match result {
             Ok(result) => Ok(meta.process(result)),
-            Err(e) => Err(meta.fail(e.into())),
+            Err(e) => Err(meta.fail(e)),
         }
     }
 }

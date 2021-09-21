@@ -3,6 +3,8 @@ use actix_web::{web, HttpResponse};
 use actix_web::web::Bytes;
 use futures::{Stream, StreamExt};
 use log::debug;
+use meilisearch_lib::MeiliSearch;
+use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use milli::update::IndexDocumentsMethod;
 use serde::Deserialize;
 //use serde_json::Value;
@@ -11,9 +13,7 @@ use tokio::sync::mpsc;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
-use crate::index_controller::{DocumentAdditionFormat, Update};
 use crate::routes::IndexParam;
-use crate::Data;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
@@ -88,20 +88,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn get_document(
-    data: GuardedData<Public, Data>,
+    data: GuardedData<Public, MeiliSearch>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
     let document = data
-        .retrieve_document(index, id, None as Option<Vec<String>>)
+        .document(index, id, None as Option<Vec<String>>)
         .await?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
 
 //pub async fn delete_document(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //path: web::Path<DocumentParam>,
 //) -> Result<HttpResponse, ResponseError> {
     //let update_status = data
@@ -120,7 +120,7 @@ pub struct BrowseQuery {
 }
 
 pub async fn get_all_documents(
-    data: GuardedData<Public, Data>,
+    data: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -137,7 +137,7 @@ pub async fn get_all_documents(
     });
 
     let documents = data
-        .retrieve_documents(
+        .documents(
             path.index_uid.clone(),
             params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
             params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
@@ -157,7 +157,7 @@ pub struct UpdateDocumentsQuery {
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
 pub async fn add_documents(
-    data: GuardedData<Private, Data>,
+    data: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -180,7 +180,7 @@ pub async fn add_documents(
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
 pub async fn update_documents(
-    data: GuardedData<Private, Data>,
+    data: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -201,7 +201,7 @@ pub async fn update_documents(
 }
 
 //pub async fn delete_documents(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //path: web::Path<IndexParam>,
     //body: web::Json<Vec<Value>>,
 //) -> Result<HttpResponse, ResponseError> {
@@ -221,7 +221,7 @@ pub async fn update_documents(
 //}
 
 //pub async fn clear_all_documents(
-    //data: GuardedData<Private, Data>,
+    //data: GuardedData<Private, MeiliSearch>,
     //path: web::Path<IndexParam>,
 //) -> Result<HttpResponse, ResponseError> {
     //let update_status = data.clear_documents(path.index_uid.clone()).await?;

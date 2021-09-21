@@ -38,7 +38,6 @@
 //! Most of the routes use [extractors] to handle the authentication.
 
 #![allow(rustdoc::private_intra_doc_links)]
-pub mod data;
 #[macro_use]
 pub mod error;
 #[macro_use]
@@ -46,11 +45,8 @@ pub mod extractors;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 pub mod helpers;
-mod index;
-mod index_controller;
 pub mod option;
 pub mod routes;
-pub use self::data::Data;
 use crate::extractors::authentication::AuthConfig;
 pub use option::Opt;
 
@@ -58,6 +54,7 @@ use actix_web::web;
 
 use extractors::authentication::policies::*;
 use extractors::payload::PayloadConfig;
+use meilisearch_lib::MeiliSearch;
 use sha2::Digest;
 
 #[derive(Clone)]
@@ -86,14 +83,14 @@ impl ApiKeys {
 
 pub fn configure_data(
     config: &mut web::ServiceConfig,
-    data: Data,
+    data: MeiliSearch,
     opt: &Opt,
     ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
-        .app_data(web::Data::new(data.clone()))
-        // TODO!: Why are we passing the data with two different things?
         .app_data(data)
+        // TODO!: Why are we passing the data with two different things?
+        //.app_data(data)
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)

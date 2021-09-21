@@ -2,8 +2,6 @@ use std::path::Path;
 
 use anyhow::bail;
 
-use crate::helpers::compression;
-
 //pub struct SnapshotService<U, R> {
     //uuid_resolver_handle: R,
     //update_handle: U,
@@ -93,7 +91,7 @@ pub fn load_snapshot(
     ignore_missing_snapshot: bool,
 ) -> anyhow::Result<()> {
     if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
-        match compression::from_tar_gz(snapshot_path, &db_path) {
+        match crate::from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),
             Err(e) => {
                 // clean created db folder

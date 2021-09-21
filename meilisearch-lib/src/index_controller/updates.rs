@@ -1,11 +1,12 @@
+use std::{error::Error, fmt::Display};
+
 use chrono::{DateTime, Utc};
+
+use meilisearch_error::{Code, ErrorCode};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    error::ResponseError,
-    index::{Settings, Unchecked},
-};
+use crate::index::{Settings, Unchecked};
 
 use super::update_actor::RegisterUpdate;
 
@@ -115,10 +116,13 @@ impl Processing {
         }
     }
 
-    pub fn fail(self, error: ResponseError) -> Failed {
+    pub fn fail(self, error: impl ErrorCode) -> Failed {
+        let msg = error.to_string();
+        let code = error.error_code();
         Failed {
             from: self,
-            error,
+            msg,
+            code,
             failed_at: Utc::now(),
         }
     }
@@ -147,8 +151,23 @@ impl Aborted {
 pub struct Failed {
     #[serde(flatten)]
     pub from: Processing,
-    pub error: ResponseError,
+    pub msg: String,
+    pub code: Code,
     pub failed_at: DateTime<Utc>,
+}
+
+impl Display for Failed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.msg.fmt(f)
+    }
+}
+
+impl Error for Failed { }
+
+impl ErrorCode for Failed {
+    fn error_code(&self) -> Code {
+        self.code
+    }
 }
 
 impl Failed {

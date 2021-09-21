@@ -28,7 +28,7 @@ use codec::*;
 
 use super::RegisterUpdate;
 use super::error::Result;
-use crate::helpers::EnvSizer;
+use crate::EnvSizer;
 use crate::index_controller::update_files_path;
 use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
 
@@ -323,7 +323,7 @@ impl UpdateStore {
         let result =
             match handle.block_on(index_handle.update(index_uuid, processing.clone())) {
                 Ok(result) => result,
-                Err(e) => Err(processing.fail(e.into())),
+                Err(e) => Err(processing.fail(e)),
             };
 
         // Once the pending update have been successfully processed

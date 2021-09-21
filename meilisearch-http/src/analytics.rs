@@ -4,8 +4,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use log::debug;
 use serde::Serialize;
 use siphasher::sip::SipHasher;
+use meilisearch_lib::MeiliSearch;
 
-use crate::Data;
 use crate::Opt;
 
 const AMPLITUDE_API_KEY: &str = "f7fba398780e06d8fe6666a9be7e3d47";
@@ -18,8 +18,8 @@ struct EventProperties {
 }
 
 impl EventProperties {
-    async fn from(data: Data) -> anyhow::Result<EventProperties> {
-        let stats = data.index_controller.get_all_stats().await?;
+    async fn from(data: MeiliSearch) -> anyhow::Result<EventProperties> {
+        let stats = data.get_all_stats().await?;
 
         let database_size = stats.database_size;
         let last_update_timestamp = stats.last_update.map(|u| u.timestamp());
@@ -62,7 +62,7 @@ struct AmplitudeRequest<'a> {
     events: Vec<Event<'a>>,
 }
 
-pub async fn analytics_sender(data: Data, opt: Opt) {
+pub async fn analytics_sender(data: MeiliSearch, opt: Opt) {
     let username = whoami::username();
     let hostname = whoami::hostname();
     let platform = whoami::platform();
