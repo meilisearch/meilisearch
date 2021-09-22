@@ -3,9 +3,10 @@ use std::time::Duration;
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
+use meilisearch_lib::index_controller::updates::status::{UpdateResult, UpdateStatus};
 use serde::{Deserialize, Serialize};
 
-use meilisearch_lib::{MeiliSearch, UpdateResult, UpdateStatus, RegisterUpdate};
+use meilisearch_lib::{MeiliSearch, RegisterUpdate};
 use meilisearch_lib::index::{Settings, Unchecked};
 
 use crate::error::ResponseError;

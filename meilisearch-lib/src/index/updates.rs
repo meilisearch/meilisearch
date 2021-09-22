@@ -35,6 +35,9 @@ pub struct Checked;
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Unchecked;
 
+/// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
+/// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
+/// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]

@@ -27,19 +27,19 @@ use self::store::{UpdateStore, UpdateStoreInfo};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
+use super::indexes::IndexHandlerSender;
 use super::{DocumentAdditionFormat, Payload, Update};
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
-type IndexSender = mpsc::Sender<()>;
 
 pub fn create_update_handler(
-    index_sender: IndexSender,
+    index_sender: IndexHandlerSender,
     db_path: impl AsRef<Path>,
     update_store_size: usize,
 ) -> anyhow::Result<UpdateSender> {
     let path = db_path.as_ref().to_owned();
     let (sender, receiver) = mpsc::channel(100);
-    let actor = UpdateHandler::new(update_store_size, receiver, path, index_sender)?;
+    let actor = UpdateLoop::new(update_store_size, receiver, path, index_sender)?;
 
     tokio::task::spawn_local(actor.run());
 
@@ -96,20 +96,20 @@ impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Rea
     }
 }
 
-pub struct UpdateHandler {
+pub struct UpdateLoop {
     store: Arc<UpdateStore>,
     inbox: Option<mpsc::Receiver<UpdateMsg>>,
     update_file_store: UpdateFileStore,
-    index_handle: IndexSender,
+    index_handle: IndexHandlerSender,
     must_exit: Arc<AtomicBool>,
 }
 
-impl UpdateHandler {
+impl UpdateLoop {
     pub fn new(
         update_db_size: usize,
         inbox: mpsc::Receiver<UpdateMsg>,
         path: impl AsRef<Path>,
-        index_handle: IndexSender,
+        index_handle: IndexHandlerSender,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned();
         std::fs::create_dir_all(&path)?;

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use meilisearch_error::{Code, ErrorCode};
 
 use crate::{error::MilliError, index::error::IndexError};
@@ -18,6 +20,20 @@ pub enum IndexActorError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
     Milli(#[from] milli::Error),
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for IndexActorError
+where T: Send + Sync + 'static + fmt::Debug
+{
+    fn from(other: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self::Internal(Box::new(other))
+    }
+}
+
+impl From<tokio::sync::oneshot::error::RecvError> for IndexActorError {
+    fn from(other: tokio::sync::oneshot::error::RecvError) -> Self {
+        Self::Internal(Box::new(other))
+    }
 }
 
 macro_rules! internal_error {

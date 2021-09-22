@@ -8,36 +8,38 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use log::info;
-use milli::FieldDistribution;
 use milli::update::IndexDocumentsMethod;
+use milli::FieldDistribution;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use dump_actor::DumpActorHandle;
 pub use dump_actor::{DumpInfo, DumpStatus};
-use index_actor::IndexActorHandle;
 use snapshot::load_snapshot;
 use uuid_resolver::error::UuidResolverError;
 
-use crate::options::IndexerOpts;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
+use crate::options::IndexerOpts;
 use error::Result;
 
 use self::dump_actor::load_dump;
-use self::updates::UpdateMsg;
+use self::indexes::IndexMsg;
 use self::updates::status::UpdateStatus;
+use self::updates::UpdateMsg;
 use self::uuid_resolver::UuidResolverMsg;
 
 mod dump_actor;
 pub mod error;
-pub mod index_actor;
+pub mod indexes;
 mod snapshot;
+pub mod update_file_store;
 pub mod updates;
 mod uuid_resolver;
-pub mod update_file_store;
 
-pub type Payload = Box<dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin>;
+pub type Payload = Box<
+    dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
+>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +49,7 @@ pub struct IndexMetadata {
     pub uid: String,
     name: String,
     #[serde(flatten)]
-    pub meta: index_actor::IndexMeta,
+    pub meta: indexes::IndexMeta,
 }
 
 #[derive(Clone, Debug)]
@@ -72,15 +74,15 @@ pub struct IndexStats {
 #[derive(Clone)]
 pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverSender,
-    index_handle: index_actor::IndexActorHandleImpl,
+    index_handle: indexes::IndexHandlerSender,
     update_handle: updates::UpdateSender,
     dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
+#[derive(Debug)]
 pub enum DocumentAdditionFormat {
     Json,
 }
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -90,13 +92,16 @@ pub struct Stats {
     pub indexes: BTreeMap<String, IndexStats>,
 }
 
+#[derive(derivative::Derivative)]
+#[derivative(Debug)]
 pub enum Update {
     DocumentAddition {
+        #[derivative(Debug="ignore")]
         payload: Payload,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
         format: DocumentAdditionFormat,
-    }
+    },
 }
 
 #[derive(Default, Debug)]
@@ -112,9 +117,17 @@ pub struct IndexControllerBuilder {
 }
 
 impl IndexControllerBuilder {
-    pub fn build(self, db_path: impl AsRef<Path>, indexer_options: IndexerOpts) -> anyhow::Result<IndexController> {
-        let index_size = self.max_index_size.ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
-        let update_store_size = self.max_index_size.ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
+    pub fn build(
+        self,
+        db_path: impl AsRef<Path>,
+        indexer_options: IndexerOpts,
+    ) -> anyhow::Result<IndexController> {
+        let index_size = self
+            .max_index_size
+            .ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
+        let update_store_size = self
+            .max_index_size
+            .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
         if let Some(ref path) = self.import_snapshot {
             info!("Loading from snapshot {:?}", path);
@@ -137,18 +150,15 @@ impl IndexControllerBuilder {
         std::fs::create_dir_all(db_path.as_ref())?;
 
         let uuid_resolver = uuid_resolver::create_uuid_resolver(&db_path)?;
-        let index_handle =
-            index_actor::IndexActorHandleImpl::new(&db_path, index_size, &indexer_options)?;
+        let index_handle = indexes::create_indexes_handler(&db_path, index_size, &indexer_options)?;
 
         #[allow(unreachable_code)]
-        let update_handle = updates::create_update_handler(
-            todo!(),
-            &db_path,
-            update_store_size,
-        )?;
+        let update_handle = updates::create_update_handler(index_handle.clone(), &db_path, update_store_size)?;
 
         let dump_handle = dump_actor::DumpActorHandleImpl::new(
-            &self.dump_dst.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?,
+            &self
+                .dump_dst
+                .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?,
             uuid_resolver.clone(),
             update_handle.clone(),
             index_size,
@@ -156,19 +166,19 @@ impl IndexControllerBuilder {
         )?;
 
         //if options.schedule_snapshot {
-            //let snapshot_service = SnapshotService::new(
-                //uuid_resolver.clone(),
-                //update_handle.clone(),
-                //Duration::from_secs(options.snapshot_interval_sec),
-                //options.snapshot_dir.clone(),
-                //options
-                    //.db_path
-                    //.file_name()
-                    //.map(|n| n.to_owned().into_string().expect("invalid path"))
-                    //.unwrap_or_else(|| String::from("data.ms")),
-            //);
+        //let snapshot_service = SnapshotService::new(
+        //uuid_resolver.clone(),
+        //update_handle.clone(),
+        //Duration::from_secs(options.snapshot_interval_sec),
+        //options.snapshot_dir.clone(),
+        //options
+        //.db_path
+        //.file_name()
+        //.map(|n| n.to_owned().into_string().expect("invalid path"))
+        //.unwrap_or_else(|| String::from("data.ms")),
+        //);
 
-            //tokio::task::spawn(snapshot_service.run());
+        //tokio::task::spawn(snapshot_service.run());
         //}
 
         Ok(IndexController {
@@ -197,7 +207,10 @@ impl IndexControllerBuilder {
     }
 
     /// Set the index controller builder's ignore snapshot if db exists.
-    pub fn set_ignore_snapshot_if_db_exists(&mut self, ignore_snapshot_if_db_exists: bool) -> &mut Self {
+    pub fn set_ignore_snapshot_if_db_exists(
+        &mut self,
+        ignore_snapshot_if_db_exists: bool,
+    ) -> &mut Self {
         self.ignore_snapshot_if_db_exists = ignore_snapshot_if_db_exists;
         self
     }
@@ -238,12 +251,12 @@ impl IndexController {
             Ok(uuid) => {
                 let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
                 Ok(update_result)
-            },
+            }
             Err(UuidResolverError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
                 let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
                 // ignore if index creation fails now, since it may already have been created
-                let _ = self.index_handle.create_index(uuid, None).await;
+                let _ = IndexMsg::create_index(&self.index_handle, uuid, None).await?;
                 UuidResolverMsg::insert(&self.uuid_resolver, uuid, name).await?;
 
                 Ok(update_result)
@@ -253,128 +266,128 @@ impl IndexController {
     }
 
     //pub async fn add_documents(
-        //&self,
-        //uid: String,
-        //method: milli::update::IndexDocumentsMethod,
-        //payload: Payload,
-        //primary_key: Option<String>,
+    //&self,
+    //uid: String,
+    //method: milli::update::IndexDocumentsMethod,
+    //payload: Payload,
+    //primary_key: Option<String>,
     //) -> Result<UpdateStatus> {
-        //let perform_update = |uuid| async move {
-            //let meta = UpdateMeta::DocumentsAddition {
-                //method,
-                //primary_key,
-            //};
-            //let (sender, receiver) = mpsc::channel(10);
+    //let perform_update = |uuid| async move {
+    //let meta = UpdateMeta::DocumentsAddition {
+    //method,
+    //primary_key,
+    //};
+    //let (sender, receiver) = mpsc::channel(10);
 
-            //// It is necessary to spawn a local task to send the payload to the update handle to
-            //// prevent dead_locking between the update_handle::update that waits for the update to be
-            //// registered and the update_actor that waits for the the payload to be sent to it.
-            //tokio::task::spawn_local(async move {
-                //payload
-                    //.for_each(|r| async {
-                        //let _ = sender.send(r).await;
-                    //})
-                    //.await
-            //});
+    //// It is necessary to spawn a local task to send the payload to the update handle to
+    //// prevent dead_locking between the update_handle::update that waits for the update to be
+    //// registered and the update_actor that waits for the the payload to be sent to it.
+    //tokio::task::spawn_local(async move {
+    //payload
+    //.for_each(|r| async {
+    //let _ = sender.send(r).await;
+    //})
+    //.await
+    //});
 
-            //// This must be done *AFTER* spawning the task.
-            //self.update_handle.update(meta, receiver, uuid).await
-        //};
+    //// This must be done *AFTER* spawning the task.
+    //self.update_handle.update(meta, receiver, uuid).await
+    //};
 
-        //match self.uuid_resolver.get(uid).await {
-            //Ok(uuid) => Ok(perform_update(uuid).await?),
-            //Err(UuidResolverError::UnexistingIndex(name)) => {
-                //let uuid = Uuid::new_v4();
-                //let status = perform_update(uuid).await?;
-                //// ignore if index creation fails now, since it may already have been created
-                //let _ = self.index_handle.create_index(uuid, None).await;
-                //self.uuid_resolver.insert(name, uuid).await?;
-                //Ok(status)
-            //}
-            //Err(e) => Err(e.into()),
-        //}
+    //match self.uuid_resolver.get(uid).await {
+    //Ok(uuid) => Ok(perform_update(uuid).await?),
+    //Err(UuidResolverError::UnexistingIndex(name)) => {
+    //let uuid = Uuid::new_v4();
+    //let status = perform_update(uuid).await?;
+    //// ignore if index creation fails now, since it may already have been created
+    //let _ = self.index_handle.create_index(uuid, None).await;
+    //self.uuid_resolver.insert(name, uuid).await?;
+    //Ok(status)
+    //}
+    //Err(e) => Err(e.into()),
+    //}
     //}
 
     //pub async fn clear_documents(&self, uid: String) -> Result<UpdateStatus> {
-        //let uuid = self.uuid_resolver.get(uid).await?;
-        //let meta = UpdateMeta::ClearDocuments;
-        //let (_, receiver) = mpsc::channel(1);
-        //let status = self.update_handle.update(meta, receiver, uuid).await?;
-        //Ok(status)
+    //let uuid = self.uuid_resolver.get(uid).await?;
+    //let meta = UpdateMeta::ClearDocuments;
+    //let (_, receiver) = mpsc::channel(1);
+    //let status = self.update_handle.update(meta, receiver, uuid).await?;
+    //Ok(status)
     //}
 
     //pub async fn delete_documents(
-        //&self,
-        //uid: String,
-        //documents: Vec<String>,
+    //&self,
+    //uid: String,
+    //documents: Vec<String>,
     //) -> Result<UpdateStatus> {
-        //let uuid = self.uuid_resolver.get(uid).await?;
-        //let meta = UpdateMeta::DeleteDocuments { ids: documents };
-        //let (_, receiver) = mpsc::channel(1);
-        //let status = self.update_handle.update(meta, receiver, uuid).await?;
-        //Ok(status)
+    //let uuid = self.uuid_resolver.get(uid).await?;
+    //let meta = UpdateMeta::DeleteDocuments { ids: documents };
+    //let (_, receiver) = mpsc::channel(1);
+    //let status = self.update_handle.update(meta, receiver, uuid).await?;
+    //Ok(status)
     //}
 
     //pub async fn update_settings(
-        //&self,
-        //uid: String,
-        //settings: Settings<Checked>,
-        //create: bool,
+    //&self,
+    //uid: String,
+    //settings: Settings<Checked>,
+    //create: bool,
     //) -> Result<UpdateStatus> {
-        //let perform_udpate = |uuid| async move {
-            //let meta = UpdateMeta::Settings(settings.into_unchecked());
-            //// Nothing so send, drop the sender right away, as not to block the update actor.
-            //let (_, receiver) = mpsc::channel(1);
-            //self.update_handle.update(meta, receiver, uuid).await
-        //};
+    //let perform_udpate = |uuid| async move {
+    //let meta = UpdateMeta::Settings(settings.into_unchecked());
+    //// Nothing so send, drop the sender right away, as not to block the update actor.
+    //let (_, receiver) = mpsc::channel(1);
+    //self.update_handle.update(meta, receiver, uuid).await
+    //};
 
-        //match self.uuid_resolver.get(uid).await {
-            //Ok(uuid) => Ok(perform_udpate(uuid).await?),
-            //Err(UuidResolverError::UnexistingIndex(name)) if create => {
-                //let uuid = Uuid::new_v4();
-                //let status = perform_udpate(uuid).await?;
-                //// ignore if index creation fails now, since it may already have been created
-                //let _ = self.index_handle.create_index(uuid, None).await;
-                //self.uuid_resolver.insert(name, uuid).await?;
-                //Ok(status)
-            //}
-            //Err(e) => Err(e.into()),
-        //}
+    //match self.uuid_resolver.get(uid).await {
+    //Ok(uuid) => Ok(perform_udpate(uuid).await?),
+    //Err(UuidResolverError::UnexistingIndex(name)) if create => {
+    //let uuid = Uuid::new_v4();
+    //let status = perform_udpate(uuid).await?;
+    //// ignore if index creation fails now, since it may already have been created
+    //let _ = self.index_handle.create_index(uuid, None).await;
+    //self.uuid_resolver.insert(name, uuid).await?;
+    //Ok(status)
+    //}
+    //Err(e) => Err(e.into()),
+    //}
     //}
 
     //pub async fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata> {
-        //let IndexSettings { uid, primary_key } = index_settings;
-        //let uid = uid.ok_or(IndexControllerError::MissingUid)?;
-        //let uuid = Uuid::new_v4();
-        //let meta = self.index_handle.create_index(uuid, primary_key).await?;
-        //self.uuid_resolver.insert(uid.clone(), uuid).await?;
-        //let meta = IndexMetadata {
-            //uuid,
-            //name: uid.clone(),
-            //uid,
-            //meta,
-        //};
+    //let IndexSettings { uid, primary_key } = index_settings;
+    //let uid = uid.ok_or(IndexControllerError::MissingUid)?;
+    //let uuid = Uuid::new_v4();
+    //let meta = self.index_handle.create_index(uuid, primary_key).await?;
+    //self.uuid_resolver.insert(uid.clone(), uuid).await?;
+    //let meta = IndexMetadata {
+    //uuid,
+    //name: uid.clone(),
+    //uid,
+    //meta,
+    //};
 
-        //Ok(meta)
+    //Ok(meta)
     //}
 
     //pub async fn delete_index(&self, uid: String) -> Result<()> {
-        //let uuid = self.uuid_resolver.delete(uid).await?;
+    //let uuid = self.uuid_resolver.delete(uid).await?;
 
-        //// We remove the index from the resolver synchronously, and effectively perform the index
-        //// deletion as a background task.
-        //let update_handle = self.update_handle.clone();
-        //let index_handle = self.index_handle.clone();
-        //tokio::spawn(async move {
-            //if let Err(e) = update_handle.delete(uuid).await {
-                //error!("Error while deleting index: {}", e);
-            //}
-            //if let Err(e) = index_handle.delete(uuid).await {
-                //error!("Error while deleting index: {}", e);
-            //}
-        //});
+    //// We remove the index from the resolver synchronously, and effectively perform the index
+    //// deletion as a background task.
+    //let update_handle = self.update_handle.clone();
+    //let index_handle = self.index_handle.clone();
+    //tokio::spawn(async move {
+    //if let Err(e) = update_handle.delete(uuid).await {
+    //error!("Error while deleting index: {}", e);
+    //}
+    //if let Err(e) = index_handle.delete(uuid).await {
+    //error!("Error while deleting index: {}", e);
+    //}
+    //});
 
-        //Ok(())
+    //Ok(())
     //}
 
     pub async fn update_status(&self, uid: String, id: u64) -> Result<UpdateStatus> {
@@ -393,7 +406,7 @@ impl IndexController {
         let uuids = UuidResolverMsg::list(&self.uuid_resolver).await?;
         let mut ret = Vec::new();
         for (uid, uuid) in uuids {
-            let meta = self.index_handle.get_index_meta(uuid).await?;
+            let meta = IndexMsg::index_meta(&self.index_handle, uuid).await?;
             let meta = IndexMetadata {
                 uuid,
                 name: uid.clone(),
@@ -408,7 +421,7 @@ impl IndexController {
 
     pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let settings = self.index_handle.settings(uuid).await?;
+        let settings = IndexMsg::settings(&self.index_handle, uuid).await?;
         Ok(settings)
     }
 
@@ -420,10 +433,14 @@ impl IndexController {
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Vec<Document>> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let documents = self
-            .index_handle
-            .documents(uuid, offset, limit, attributes_to_retrieve)
-            .await?;
+        let documents = IndexMsg::documents(
+            &self.index_handle,
+            uuid,
+            offset,
+            limit,
+            attributes_to_retrieve,
+        )
+        .await?;
         Ok(documents)
     }
 
@@ -434,10 +451,7 @@ impl IndexController {
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Document> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let document = self
-            .index_handle
-            .document(uuid, doc_id, attributes_to_retrieve)
-            .await?;
+        let document = IndexMsg::document(&self.index_handle, uuid, attributes_to_retrieve, doc_id).await?;
         Ok(document)
     }
 
@@ -451,7 +465,7 @@ impl IndexController {
         }
 
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.clone()).await?;
-        let meta = self.index_handle.update_index(uuid, index_settings).await?;
+        let meta = IndexMsg::update_index(&self.index_handle, uuid, index_settings).await?;
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),
@@ -463,13 +477,13 @@ impl IndexController {
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> Result<SearchResult> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let result = self.index_handle.search(uuid, query).await?;
+        let result = IndexMsg::search(&self.index_handle, uuid, query).await?;
         Ok(result)
     }
 
     pub async fn get_index(&self, uid: String) -> Result<IndexMetadata> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.clone()).await?;
-        let meta = self.index_handle.get_index_meta(uuid).await?;
+        let meta = IndexMsg::index_meta(&self.index_handle, uuid).await?;
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),
@@ -487,7 +501,7 @@ impl IndexController {
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let update_infos = UpdateMsg::get_info(&self.update_handle).await?;
-        let mut stats = self.index_handle.get_index_stats(uuid).await?;
+        let mut stats = IndexMsg::index_stats(&self.index_handle, uuid).await?;
         // Check if the currently indexing update is from out index.
         stats.is_indexing = Some(Some(uuid) == update_infos.processing);
         Ok(stats)
@@ -500,7 +514,7 @@ impl IndexController {
         let mut indexes = BTreeMap::new();
 
         for index in self.list_indexes().await? {
-            let mut index_stats = self.index_handle.get_index_stats(index.uuid).await?;
+            let mut index_stats = IndexMsg::index_stats(&self.index_handle, index.uuid).await?;
             database_size += index_stats.size;
 
             last_update = last_update.map_or(Some(index.meta.updated_at), |last| {

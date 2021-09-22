@@ -6,7 +6,7 @@ use meilisearch_error::ErrorCode;
 use crate::index::error::IndexError;
 
 use super::dump_actor::error::DumpActorError;
-use super::index_actor::error::IndexActorError;
+use super::indexes::error::IndexActorError;
 use super::updates::error::UpdateActorError;
 use super::uuid_resolver::error::UuidResolverError;
 

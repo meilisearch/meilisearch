@@ -61,6 +61,7 @@ serdeval = "0.1.0"
 sysinfo = "0.20.2"
 tokio-stream = "0.1.7"
 erased-serde = "0.3.16"
+derivative = "2.2.0"
 
 [dev-dependencies]
 actix-rt = "2.2.0"

@@ -1,8 +1,9 @@
+use std::fmt;
 use std::error::Error;
 
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index_controller::index_actor::error::IndexActorError;
+use crate::index_controller::indexes::error::IndexActorError;
 
 pub type Result<T> = std::result::Result<T, UpdateActorError>;
 
@@ -25,15 +26,17 @@ pub enum UpdateActorError {
     PayloadError(#[from] actix_web::error::PayloadError),
 }
 
-impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateActorError {
-    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
-        Self::FatalUpdateStoreError
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateActorError
+where T: Sync + Send + 'static + fmt::Debug
+{
+    fn from(other: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self::Internal(Box::new(other))
     }
 }
 
 impl From<tokio::sync::oneshot::error::RecvError> for UpdateActorError {
-    fn from(_: tokio::sync::oneshot::error::RecvError) -> Self {
-        Self::FatalUpdateStoreError
+    fn from(other: tokio::sync::oneshot::error::RecvError) -> Self {
+        Self::Internal(Box::new(other))
     }
 }
 

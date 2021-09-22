@@ -7,6 +7,7 @@ use uuid::Uuid;
 use super::error::Result;
 use super::{Update, UpdateStatus, UpdateStoreInfo};
 
+#[derive(Debug)]
 pub enum UpdateMsg {
     Update {
         uuid: Uuid,

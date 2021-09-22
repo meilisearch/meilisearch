@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_stream::stream;
@@ -8,21 +8,73 @@ use log::debug;
 use milli::update::UpdateBuilder;
 use tokio::task::spawn_blocking;
 use tokio::{fs, sync::mpsc};
-use uuid::Uuid;
 
-use crate::index::{
-    update_handler::UpdateHandler, Checked, Document, SearchQuery, SearchResult, Settings,
-};
-use crate::index_controller::{
-    get_arc_ownership_blocking, IndexStats,
-};
+use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::updates::status::{Failed, Processed, Processing};
+use crate::index_controller::{get_arc_ownership_blocking, IndexStats};
 use crate::options::IndexerOpts;
 
-use super::error::{IndexActorError, Result};
-use super::{IndexMeta, IndexMsg, IndexSettings, IndexStore};
-
 pub const CONCURRENT_INDEX_MSG: usize = 10;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+pub use message::IndexMsg;
+
+use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
+use error::Result;
+
+use self::error::IndexActorError;
+use self::store::{IndexStore, MapIndexStore};
+
+use super::IndexSettings;
+
+pub mod error;
+mod message;
+mod store;
+
+pub type IndexHandlerSender = mpsc::Sender<IndexMsg>;
+
+pub fn create_indexes_handler(
+    db_path: impl AsRef<Path>,
+    index_size: usize,
+    indexer_options: &IndexerOpts,
+) -> anyhow::Result<IndexHandlerSender> {
+    let (sender, receiver) = mpsc::channel(100);
+    let store = MapIndexStore::new(&db_path, index_size);
+    let actor = IndexActor::new(receiver, store, indexer_options)?;
+
+    tokio::task::spawn(actor.run());
+
+    Ok(sender)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexMeta {
+    created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub primary_key: Option<String>,
+}
+
+impl IndexMeta {
+    fn new(index: &Index) -> Result<Self> {
+        let txn = index.read_txn()?;
+        Self::new_txn(index, &txn)
+    }
+
+    fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
+        let created_at = index.created_at(txn)?;
+        let updated_at = index.updated_at(txn)?;
+        let primary_key = index.primary_key(txn)?.map(String::from);
+        Ok(Self {
+            created_at,
+            updated_at,
+            primary_key,
+        })
+    }
+}
 
 pub struct IndexActor<S> {
     receiver: Option<mpsc::Receiver<IndexMsg>>,
@@ -31,15 +83,15 @@ pub struct IndexActor<S> {
 }
 
 impl<S> IndexActor<S>
-where S: IndexStore + Sync + Send,
+where
+    S: IndexStore + Sync + Send,
 {
     pub fn new(
         receiver: mpsc::Receiver<IndexMsg>,
         store: S,
         options: &IndexerOpts,
     ) -> anyhow::Result<Self> {
-        let update_handler = UpdateHandler::new(options)?;
-        let update_handler = Arc::new(update_handler);
+        let update_handler = Arc::new(UpdateHandler::new(options)?);
         let receiver = Some(receiver);
 
         Ok(Self {
@@ -82,11 +134,7 @@ where S: IndexStore + Sync + Send,
             } => {
                 let _ = ret.send(self.handle_create_index(uuid, primary_key).await);
             }
-            Update {
-                ret,
-                meta,
-                uuid,
-            } => {
+            Update { ret, meta, uuid } => {
                 let _ = ret.send(self.handle_update(uuid, meta).await);
             }
             Search { ret, query, uuid } => {
@@ -348,5 +396,88 @@ where S: IndexStore + Sync + Send,
             })
         })
         .await?
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use super::*;
+
+    #[async_trait::async_trait]
+    /// Useful for passing around an `Arc<MockIndexActorHandle>` in tests.
+    impl IndexActorHandle for Arc<MockIndexActorHandle> {
+        async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
+            self.as_ref().create_index(uuid, primary_key).await
+        }
+
+        async fn update(
+            &self,
+            uuid: Uuid,
+            meta: Processing,
+            data: Option<std::fs::File>,
+        ) -> Result<std::result::Result<Processed, Failed>> {
+            self.as_ref().update(uuid, meta, data).await
+        }
+
+        async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
+            self.as_ref().search(uuid, query).await
+        }
+
+        async fn settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {
+            self.as_ref().settings(uuid).await
+        }
+
+        async fn documents(
+            &self,
+            uuid: Uuid,
+            offset: usize,
+            limit: usize,
+            attributes_to_retrieve: Option<Vec<String>>,
+        ) -> Result<Vec<Document>> {
+            self.as_ref()
+                .documents(uuid, offset, limit, attributes_to_retrieve)
+                .await
+        }
+
+        async fn document(
+            &self,
+            uuid: Uuid,
+            doc_id: String,
+            attributes_to_retrieve: Option<Vec<String>>,
+        ) -> Result<Document> {
+            self.as_ref()
+                .document(uuid, doc_id, attributes_to_retrieve)
+                .await
+        }
+
+        async fn delete(&self, uuid: Uuid) -> Result<()> {
+            self.as_ref().delete(uuid).await
+        }
+
+        async fn get_index_meta(&self, uuid: Uuid) -> Result<IndexMeta> {
+            self.as_ref().get_index_meta(uuid).await
+        }
+
+        async fn update_index(
+            &self,
+            uuid: Uuid,
+            index_settings: IndexSettings,
+        ) -> Result<IndexMeta> {
+            self.as_ref().update_index(uuid, index_settings).await
+        }
+
+        async fn snapshot(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+            self.as_ref().snapshot(uuid, path).await
+        }
+
+        async fn dump(&self, uuid: Uuid, path: PathBuf) -> Result<()> {
+            self.as_ref().dump(uuid, path).await
+        }
+
+        async fn get_index_stats(&self, uuid: Uuid) -> Result<IndexStats> {
+            self.as_ref().get_index_stats(uuid).await
+        }
     }
 }
