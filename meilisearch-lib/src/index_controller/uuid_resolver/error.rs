@@ -1,4 +1,8 @@
+use std::fmt;
+
 use meilisearch_error::{Code, ErrorCode};
+use tokio::sync::mpsc::error::SendError as MpscSendError;
+use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
 
 pub type Result<T> = std::result::Result<T, UuidResolverError>;
 
@@ -21,6 +25,18 @@ internal_error!(
     tokio::task::JoinError,
     serde_json::Error
 );
+
+impl<T: Sync + Send + 'static + fmt::Debug> From<MpscSendError<T>> for UuidResolverError {
+    fn from(other: MpscSendError<T>) -> Self {
+        Self::Internal(Box::new(other))
+    }
+}
+
+impl From<OneshotRecvError> for UuidResolverError {
+    fn from(other: OneshotRecvError) -> Self {
+        Self::Internal(Box::new(other))
+    }
+}
 
 impl ErrorCode for UuidResolverError {
     fn error_code(&self) -> Code {

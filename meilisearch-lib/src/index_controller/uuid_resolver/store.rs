@@ -8,7 +8,8 @@ use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{error::UuidResolverError, Result, UUID_STORE_SIZE};
+use super::UUID_STORE_SIZE;
+use super::error::{UuidResolverError, Result};
 use crate::EnvSizer;
 
 #[derive(Serialize, Deserialize)]

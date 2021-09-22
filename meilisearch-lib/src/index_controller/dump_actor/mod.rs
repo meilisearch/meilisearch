@@ -16,8 +16,10 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 
-use super::{update_actor::UpdateActorHandle, uuid_resolver::UuidResolverHandle};
+use super::update_actor::UpdateActorHandle;
+use super::uuid_resolver::UuidResolverSender;
 use crate::index_controller::dump_actor::error::DumpActorError;
+use crate::index_controller::uuid_resolver::UuidResolverMsg;
 use crate::options::IndexerOpts;
 use error::Result;
 
@@ -149,18 +151,17 @@ pub fn load_dump(
     Ok(())
 }
 
-struct DumpTask<U, P> {
+struct DumpTask<P> {
     path: PathBuf,
-    uuid_resolver: U,
+    uuid_resolver: UuidResolverSender,
     update_handle: P,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
 }
 
-impl<U, P> DumpTask<U, P>
+impl<P> DumpTask<P>
 where
-    U: UuidResolverHandle + Send + Sync + Clone + 'static,
     P: UpdateActorHandle + Send + Sync + Clone + 'static,
 
 {
@@ -179,7 +180,7 @@ where
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
 
-        let uuids = self.uuid_resolver.dump(temp_dump_path.clone()).await?;
+        let uuids = UuidResolverMsg::dump(&self.uuid_resolver, temp_dump_path.clone()).await?;
 
         self.update_handle
             .dump(uuids, temp_dump_path.clone())

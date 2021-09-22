@@ -5,7 +5,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 
 use crate::index::Index;
-use crate::index_controller::{update_actor::UpdateStore, uuid_resolver::HeedUuidStore};
+use crate::index_controller::{update_actor::UpdateStore, uuid_resolver::store::HeedUuidStore};
 use crate::options::IndexerOpts;
 
 #[derive(Serialize, Deserialize, Debug)]

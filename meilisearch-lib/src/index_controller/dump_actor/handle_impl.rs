@@ -2,6 +2,8 @@ use std::path::Path;
 
 use tokio::sync::{mpsc, oneshot};
 
+use crate::index_controller::uuid_resolver::UuidResolverSender;
+
 use super::error::Result;
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
 
@@ -30,7 +32,7 @@ impl DumpActorHandle for DumpActorHandleImpl {
 impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
-        uuid_resolver: crate::index_controller::uuid_resolver::UuidResolverHandleImpl,
+        uuid_resolver: UuidResolverSender,
         update: crate::index_controller::update_actor::UpdateActorHandleImpl,
         index_db_size: usize,
         update_db_size: usize,

@@ -20,13 +20,14 @@ use index_actor::IndexActorHandle;
 use snapshot::load_snapshot;
 use update_actor::UpdateActorHandle;
 pub use updates::*;
-use uuid_resolver::{error::UuidResolverError, UuidResolverHandle};
+use uuid_resolver::error::UuidResolverError;
 
 use crate::options::IndexerOpts;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use error::Result;
 
 use self::dump_actor::load_dump;
+use self::uuid_resolver::UuidResolverMsg;
 
 mod dump_actor;
 pub mod error;
@@ -71,7 +72,7 @@ pub struct IndexStats {
 
 #[derive(Clone)]
 pub struct IndexController {
-    uuid_resolver: uuid_resolver::UuidResolverHandleImpl,
+    uuid_resolver: uuid_resolver::UuidResolverSender,
     index_handle: index_actor::IndexActorHandleImpl,
     update_handle: update_actor::UpdateActorHandleImpl,
     dump_handle: dump_actor::DumpActorHandleImpl,
@@ -136,7 +137,7 @@ impl IndexControllerBuilder {
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
-        let uuid_resolver = uuid_resolver::UuidResolverHandleImpl::new(&db_path)?;
+        let uuid_resolver = uuid_resolver::create_uuid_resolver(&db_path)?;
         let index_handle =
             index_actor::IndexActorHandleImpl::new(&db_path, index_size, &indexer_options)?;
         let update_handle = update_actor::UpdateActorHandleImpl::new(
@@ -231,7 +232,8 @@ impl IndexController {
     }
 
     pub async fn register_update(&self, uid: &str, update: Update) -> Result<UpdateStatus> {
-        match self.uuid_resolver.get(uid.to_string()).await {
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.to_string()).await;
+        match uuid {
             Ok(uuid) => {
                 let update_result = self.update_handle.update(uuid, update).await?;
                 Ok(update_result)
@@ -241,7 +243,8 @@ impl IndexController {
                 let update_result = self.update_handle.update(uuid, update).await?;
                 // ignore if index creation fails now, since it may already have been created
                 let _ = self.index_handle.create_index(uuid, None).await;
-                self.uuid_resolver.insert(name, uuid).await?;
+                UuidResolverMsg::insert(&self.uuid_resolver, uuid, name).await?;
+
                 Ok(update_result)
             }
             Err(e) => Err(e.into()),
@@ -374,22 +377,20 @@ impl IndexController {
     //}
 
     pub async fn update_status(&self, uid: String, id: u64) -> Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.get(uid).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let result = self.update_handle.update_status(uuid, id).await?;
         Ok(result)
     }
 
     pub async fn all_update_status(&self, uid: String) -> Result<Vec<UpdateStatus>> {
-        let uuid = self.uuid_resolver.get(uid).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let result = self.update_handle.get_all_updates_status(uuid).await?;
         Ok(result)
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {
-        let uuids = self.uuid_resolver.list().await?;
-
+        let uuids = UuidResolverMsg::list(&self.uuid_resolver).await?;
         let mut ret = Vec::new();
-
         for (uid, uuid) in uuids {
             let meta = self.index_handle.get_index_meta(uuid).await?;
             let meta = IndexMetadata {
@@ -405,7 +406,7 @@ impl IndexController {
     }
 
     pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
     }
@@ -417,7 +418,7 @@ impl IndexController {
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Vec<Document>> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let documents = self
             .index_handle
             .documents(uuid, offset, limit, attributes_to_retrieve)
@@ -431,7 +432,7 @@ impl IndexController {
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Document> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let document = self
             .index_handle
             .document(uuid, doc_id, attributes_to_retrieve)
@@ -448,7 +449,7 @@ impl IndexController {
             index_settings.uid.take();
         }
 
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.clone()).await?;
         let meta = self.index_handle.update_index(uuid, index_settings).await?;
         let meta = IndexMetadata {
             uuid,
@@ -460,13 +461,13 @@ impl IndexController {
     }
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> Result<SearchResult> {
-        let uuid = self.uuid_resolver.get(uid).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
 
     pub async fn get_index(&self, uid: String) -> Result<IndexMetadata> {
-        let uuid = self.uuid_resolver.get(uid.clone()).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.clone()).await?;
         let meta = self.index_handle.get_index_meta(uuid).await?;
         let meta = IndexMetadata {
             uuid,
@@ -478,11 +479,12 @@ impl IndexController {
     }
 
     pub async fn get_uuids_size(&self) -> Result<u64> {
-        Ok(self.uuid_resolver.get_size().await?)
+        let size = UuidResolverMsg::get_size(&self.uuid_resolver).await?;
+        Ok(size)
     }
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
-        let uuid = self.uuid_resolver.get(uid).await?;
+        let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
         let update_infos = self.update_handle.get_info().await?;
         let mut stats = self.index_handle.get_index_stats(uuid).await?;
         // Check if the currently indexing update is from out index.

@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use meilisearch_error::Code;
 use meilisearch_error::ErrorCode;
 
@@ -24,6 +26,8 @@ pub enum IndexControllerError {
     DumpActor(#[from] DumpActorError),
     #[error("{0}")]
     IndexError(#[from] IndexError),
+    #[error("Internal error: {0}")]
+    Internal(Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl ErrorCode for IndexControllerError {
@@ -35,6 +39,7 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::UpdateActor(e) => e.error_code(),
             IndexControllerError::DumpActor(e) => e.error_code(),
             IndexControllerError::IndexError(e) => e.error_code(),
+            IndexControllerError::Internal(_) => Code::Internal,
         }
     }
 }

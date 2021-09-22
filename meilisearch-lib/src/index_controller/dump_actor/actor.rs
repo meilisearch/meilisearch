@@ -8,17 +8,17 @@ use futures::{lock::Mutex, stream::StreamExt};
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use update_actor::UpdateActorHandle;
-use uuid_resolver::UuidResolverHandle;
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
-use crate::index_controller::{update_actor, uuid_resolver};
+use crate::index_controller::uuid_resolver::UuidResolverSender;
+use crate::index_controller::update_actor;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
-pub struct DumpActor<UuidResolver, Update> {
+pub struct DumpActor<Update> {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
-    uuid_resolver: UuidResolver,
+    uuid_resolver: UuidResolverSender,
     update: Update,
     dump_path: PathBuf,
     lock: Arc<Mutex<()>>,
@@ -32,14 +32,13 @@ fn generate_uid() -> String {
     Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
 }
 
-impl<UuidResolver, Update> DumpActor<UuidResolver, Update>
+impl<Update> DumpActor<Update>
 where
-    UuidResolver: UuidResolverHandle + Send + Sync + Clone + 'static,
     Update: UpdateActorHandle + Send + Sync + Clone + 'static,
 {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
-        uuid_resolver: UuidResolver,
+        uuid_resolver: UuidResolverSender,
         update: Update,
         dump_path: impl AsRef<Path>,
         index_db_size: usize,

@@ -7,7 +7,8 @@ use milli::update::Setting;
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
-use crate::index_controller::{self, uuid_resolver::HeedUuidStore, IndexMetadata};
+use crate::index_controller::uuid_resolver::store::HeedUuidStore;
+use crate::index_controller::{self, IndexMetadata};
 use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
 use crate::{
     index::Unchecked,
