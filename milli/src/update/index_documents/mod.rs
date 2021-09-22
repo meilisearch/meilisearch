@@ -885,6 +885,44 @@ mod tests {
     }
 
     #[test]
+    fn index_more_than_1000_positions_in_a_field() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(50 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let mut big_object = HashMap::new();
+        big_object.insert(S("id"), "wow");
+        let content: String =
+            (0..=u16::MAX).into_iter().map(|p| p.to_string()).reduce(|a, b| a + " " + &b).unwrap();
+        big_object.insert("content".to_string(), &content);
+
+        let mut cursor = Cursor::new(Vec::new());
+
+        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+        builder.add_documents(big_object).unwrap();
+        builder.finish().unwrap();
+        cursor.set_position(0);
+        let content = DocumentBatchReader::from_reader(cursor).unwrap();
+
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        wtxn.commit().unwrap();
+
+        let mut rtxn = index.read_txn().unwrap();
+
+        assert!(index.word_docids.get(&mut rtxn, "0").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "64").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "256").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "1024").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "32768").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "65535").unwrap().is_some());
+    }
+
+    #[test]
     fn index_documents_with_zeroes() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();

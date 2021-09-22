@@ -1,8 +1,7 @@
 use std::cmp;
 
-use crate::{Attribute, Position};
+use crate::{relative_from_absolute_position, Position};
 
-pub const ONE_ATTRIBUTE: u32 = 1000;
 pub const MAX_DISTANCE: u32 = 8;
 
 pub fn index_proximity(lhs: u32, rhs: u32) -> u32 {
@@ -14,17 +13,13 @@ pub fn index_proximity(lhs: u32, rhs: u32) -> u32 {
 }
 
 pub fn positions_proximity(lhs: Position, rhs: Position) -> u32 {
-    let (lhs_attr, lhs_index) = extract_position(lhs);
-    let (rhs_attr, rhs_index) = extract_position(rhs);
+    let (lhs_attr, lhs_index) = relative_from_absolute_position(lhs);
+    let (rhs_attr, rhs_index) = relative_from_absolute_position(rhs);
     if lhs_attr != rhs_attr {
         MAX_DISTANCE
     } else {
-        index_proximity(lhs_index, rhs_index)
+        index_proximity(lhs_index as u32, rhs_index as u32)
     }
-}
-
-pub fn extract_position(position: Position) -> (Attribute, Position) {
-    (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
 pub fn path_proximity(path: &[Position]) -> u32 {

@@ -10,8 +10,7 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::proximity::extract_position;
-use crate::{DocumentId, FieldId, Result};
+use crate::{relative_from_absolute_position, DocumentId, FieldId, Result};
 
 /// Extracts the field id word count and the documents ids where
 /// this field id with this amount of words appear.
@@ -53,8 +52,8 @@ pub fn extract_fid_word_count_docids<R: io::Read>(
         }
 
         for position in read_u32_ne_bytes(value) {
-            let (field_id, position) = extract_position(position);
-            let word_count = position + 1;
+            let (field_id, position) = relative_from_absolute_position(position);
+            let word_count = position as u32 + 1;
 
             let value = document_fid_wordcount.entry(field_id as FieldId).or_insert(0);
             *value = cmp::max(*value, word_count);
