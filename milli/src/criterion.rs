@@ -4,7 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::{AscDesc, AscDescError, Member, UserError};
+use crate::{AscDesc, Member, UserError};
 
 #[derive(Debug)]
 pub enum CriterionError {
@@ -38,6 +38,12 @@ impl fmt::Display for CriterionError {
                 )
             }
         }
+    }
+}
+
+impl From<CriterionError> for Error {
+    fn from(error: CriterionError) -> Self {
+        Self::UserError(UserError::CriterionError(error))
     }
 }
 
@@ -85,32 +91,14 @@ impl FromStr for Criterion {
             "attribute" => Ok(Criterion::Attribute),
             "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
-            text => match AscDesc::from_str(text) {
-                Ok(AscDesc::Asc(Member::Field(field))) => Ok(Criterion::Asc(field)),
-                Ok(AscDesc::Desc(Member::Field(field))) => Ok(Criterion::Desc(field)),
-                Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
+            text => match AscDesc::from_str(text)? {
+                AscDesc::Asc(Member::Field(field)) => Ok(Criterion::Asc(field)),
+                AscDesc::Desc(Member::Field(field)) => Ok(Criterion::Desc(field)),
+                AscDesc::Asc(Member::Geo(_)) | AscDesc::Desc(Member::Geo(_)) => {
                     Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
-                }
-                Err(AscDescError::InvalidSyntax { name }) => {
-                    Err(CriterionError::InvalidName { name })?
-                }
-                Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoPoint") => {
-                    Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
-                }
-                Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoRadius") => {
-                    Err(CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() })?
-                }
-                Err(AscDescError::ReservedKeyword { name }) => {
-                    Err(CriterionError::ReservedName { name })?
                 }
             },
         }
-    }
-}
-
-impl From<CriterionError> for Error {
-    fn from(error: CriterionError) -> Self {
-        Self::UserError(UserError::CriterionError(error))
     }
 }
 
