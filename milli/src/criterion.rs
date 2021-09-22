@@ -4,7 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, UserError};
-use crate::{AscDesc, Member};
+use crate::{AscDesc, AscDescError, Member};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
@@ -58,30 +58,23 @@ impl FromStr for Criterion {
                         name: "_geoPoint".to_string(),
                     })?
                 }
-                Err(UserError::InvalidAscDescSyntax { name }) => {
+                Err(AscDescError::InvalidSyntax { name }) => {
                     Err(UserError::InvalidRankingRuleName { name })?
                 }
-                Err(UserError::InvalidReservedAscDescSyntax { name })
-                    if name.starts_with("_geoPoint") =>
-                {
+                Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoPoint") => {
                     Err(UserError::InvalidReservedRankingRuleNameSort {
                         name: "_geoPoint".to_string(),
                     }
                     .into())
                 }
-                Err(UserError::InvalidReservedAscDescSyntax { name })
-                    if name.starts_with("_geoRadius") =>
-                {
+                Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoRadius") => {
                     Err(UserError::InvalidReservedRankingRuleNameFilter {
                         name: "_geoRadius".to_string(),
                     }
                     .into())
                 }
-                Err(UserError::InvalidReservedAscDescSyntax { name }) => {
+                Err(AscDescError::ReservedKeyword { name }) => {
                     Err(UserError::InvalidReservedRankingRuleName { name }.into())
-                }
-                Err(error) => {
-                    Err(UserError::InvalidRankingRuleName { name: error.to_string() }.into())
                 }
             },
         }

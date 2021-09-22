@@ -56,8 +56,6 @@ pub enum FieldIdMapMissingEntry {
 pub enum UserError {
     AttributeLimitReached,
     DocumentLimitReached,
-    InvalidAscDescSyntax { name: String },
-    InvalidReservedAscDescSyntax { name: String },
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
@@ -226,22 +224,12 @@ impl fmt::Display for UserError {
                 )
             }
             Self::InvalidFilter(error) => error.fmt(f),
-            Self::InvalidAscDescSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}", name)
-            }
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
             Self::InvalidRankingRuleName { name } => write!(f, "invalid ranking rule {}", name),
-            Self::InvalidReservedAscDescSyntax { name } => {
-                write!(
-                    f,
-                    "{} is a reserved keyword and thus can't be used as a asc/desc rule",
-                    name
-                )
-            }
             Self::InvalidReservedRankingRuleName { name } => {
                 write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
             }
