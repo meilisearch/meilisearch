@@ -201,6 +201,7 @@ impl UpdateLoop {
             } => {
                 let content_uuid = match format {
                     DocumentAdditionFormat::Json => self.documents_from_json(payload).await?,
+                    DocumentAdditionFormat::Csv => self.documents_from_csv(payload).await?,
                 };
 
                 RegisterUpdate::DocumentAddition {

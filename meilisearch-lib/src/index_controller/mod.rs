@@ -69,6 +69,7 @@ pub struct IndexController {
 #[derive(Debug)]
 pub enum DocumentAdditionFormat {
     Json,
+    Csv,
 }
 
 #[derive(Serialize, Debug)]
