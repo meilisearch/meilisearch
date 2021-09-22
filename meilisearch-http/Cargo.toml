@@ -23,7 +23,7 @@ zip = { version = "0.5.13", optional = true }
 
 [dependencies]
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
-actix-web = { version = "4.0.0-beta.9", features = ["rustls"] }
+actix-web = { version = "4.0.0-beta.9", default-features = false, features = ["rustls", "compress-brotli"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
 anyhow = "1.0.43"
 async-stream = "0.3.2"
