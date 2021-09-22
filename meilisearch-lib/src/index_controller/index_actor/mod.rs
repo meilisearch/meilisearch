@@ -13,10 +13,9 @@ use message::IndexMsg;
 use store::{IndexStore, MapIndexStore};
 
 use crate::index::{Checked, Document, Index, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{Failed, IndexStats, Processed, Processing};
 use error::Result;
 
-use super::IndexSettings;
+use super::{IndexSettings, IndexStats, updates::status::{Failed, Processed, Processing}};
 
 mod actor;
 pub mod error;

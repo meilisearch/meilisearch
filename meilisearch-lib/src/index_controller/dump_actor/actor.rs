@@ -7,19 +7,18 @@ use chrono::Utc;
 use futures::{lock::Mutex, stream::StreamExt};
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot, RwLock};
-use update_actor::UpdateActorHandle;
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
 use crate::index_controller::uuid_resolver::UuidResolverSender;
-use crate::index_controller::update_actor;
+use crate::index_controller::updates::UpdateSender;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
-pub struct DumpActor<Update> {
+pub struct DumpActor {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
     uuid_resolver: UuidResolverSender,
-    update: Update,
+    update: UpdateSender,
     dump_path: PathBuf,
     lock: Arc<Mutex<()>>,
     dump_infos: Arc<RwLock<HashMap<String, DumpInfo>>>,
@@ -32,14 +31,11 @@ fn generate_uid() -> String {
     Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
 }
 
-impl<Update> DumpActor<Update>
-where
-    Update: UpdateActorHandle + Send + Sync + Clone + 'static,
-{
+impl DumpActor {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
         uuid_resolver: UuidResolverSender,
-        update: Update,
+        update: UpdateSender,
         dump_path: impl AsRef<Path>,
         index_db_size: usize,
         update_db_size: usize,

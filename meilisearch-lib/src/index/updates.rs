@@ -8,7 +8,7 @@ use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::index_controller::UpdateResult;
+use crate::index_controller::updates::status::UpdateResult;
 
 use super::Index;
 use super::error::Result;

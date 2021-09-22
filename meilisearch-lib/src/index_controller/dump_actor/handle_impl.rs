@@ -33,7 +33,7 @@ impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
         uuid_resolver: UuidResolverSender,
-        update: crate::index_controller::update_actor::UpdateActorHandleImpl,
+        update: crate::index_controller::updates::UpdateSender,
         index_db_size: usize,
         update_db_size: usize,
     ) -> anyhow::Result<Self> {

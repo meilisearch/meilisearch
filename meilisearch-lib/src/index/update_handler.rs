@@ -3,8 +3,8 @@ use milli::update::UpdateBuilder;
 use milli::CompressionType;
 use rayon::ThreadPool;
 
-use crate::index_controller::update_actor::RegisterUpdate;
-use crate::index_controller::{Failed, Processed, Processing};
+use crate::index_controller::updates::RegisterUpdate;
+use crate::index_controller::updates::status::{Failed, Processed, Processing};
 use crate::options::IndexerOpts;
 
 pub struct UpdateHandler {

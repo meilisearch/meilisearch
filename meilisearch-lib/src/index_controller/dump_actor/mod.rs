@@ -16,9 +16,10 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 
-use super::update_actor::UpdateActorHandle;
+use super::updates::UpdateSender;
 use super::uuid_resolver::UuidResolverSender;
 use crate::index_controller::dump_actor::error::DumpActorError;
+use crate::index_controller::updates::UpdateMsg;
 use crate::index_controller::uuid_resolver::UuidResolverMsg;
 use crate::options::IndexerOpts;
 use error::Result;
@@ -151,20 +152,16 @@ pub fn load_dump(
     Ok(())
 }
 
-struct DumpTask<P> {
+struct DumpTask {
     path: PathBuf,
     uuid_resolver: UuidResolverSender,
-    update_handle: P,
+    update_handle: UpdateSender,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
 }
 
-impl<P> DumpTask<P>
-where
-    P: UpdateActorHandle + Send + Sync + Clone + 'static,
-
-{
+impl DumpTask {
     async fn run(self) -> Result<()> {
         trace!("Performing dump.");
 
@@ -182,9 +179,7 @@ where
 
         let uuids = UuidResolverMsg::dump(&self.uuid_resolver, temp_dump_path.clone()).await?;
 
-        self.update_handle
-            .dump(uuids, temp_dump_path.clone())
-            .await?;
+        UpdateMsg::dump(&self.update_handle, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;

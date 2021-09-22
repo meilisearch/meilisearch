@@ -6,9 +6,7 @@ use meilisearch_error::{Code, ErrorCode};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 
-use crate::index::{Settings, Unchecked};
-
-use super::update_actor::RegisterUpdate;
+use crate::{RegisterUpdate, index::{Settings, Unchecked}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {

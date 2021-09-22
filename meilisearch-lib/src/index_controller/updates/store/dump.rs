@@ -10,10 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
-use crate::index_controller::{
-    index_actor::IndexActorHandle,
-    UpdateStatus,
-};
+use crate::index_controller::{updates::{IndexSender, status::UpdateStatus}};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -26,7 +23,7 @@ impl UpdateStore {
         &self,
         uuids: &HashSet<Uuid>,
         path: PathBuf,
-        handle: impl IndexActorHandle,
+        handle: IndexSender,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
@@ -175,11 +172,12 @@ impl UpdateStore {
 
 async fn dump_indexes(
     uuids: &HashSet<Uuid>,
-    handle: impl IndexActorHandle,
+    handle: IndexSender,
     path: impl AsRef<Path>,
 ) -> Result<()> {
     for uuid in uuids {
-        handle.dump(*uuid, path.as_ref().to_owned()).await?;
+        //handle.dump(*uuid, path.as_ref().to_owned()).await?;
+        todo!()
     }
 
     Ok(())

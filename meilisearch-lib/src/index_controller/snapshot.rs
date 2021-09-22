@@ -132,7 +132,7 @@ mod test {
 
     use super::*;
     use crate::index_controller::index_actor::MockIndexActorHandle;
-    use crate::index_controller::update_actor::{
+    use crate::index_controller::updates::{
         error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
     };
     use crate::index_controller::uuid_resolver::{

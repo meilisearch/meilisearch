@@ -1,3 +1,8 @@
+pub mod error;
+mod message;
+pub mod status;
+pub mod store;
+
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -10,25 +15,47 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use log::trace;
 use milli::documents::DocumentBatchBuilder;
+use milli::update::IndexDocumentsMethod;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use super::error::{Result, UpdateActorError};
-use super::RegisterUpdate;
-use super::{UpdateMsg, UpdateStore, UpdateStoreInfo, Update};
-use crate::index_controller::index_actor::IndexActorHandle;
+use self::error::{Result, UpdateActorError};
+pub use self::message::UpdateMsg;
+use self::store::{UpdateStore, UpdateStoreInfo};
 use crate::index_controller::update_file_store::UpdateFileStore;
-use crate::index_controller::{DocumentAdditionFormat, Payload, UpdateStatus};
+use status::UpdateStatus;
 
-pub struct UpdateActor<I> {
-    store: Arc<UpdateStore>,
-    inbox: Option<mpsc::Receiver<UpdateMsg>>,
-    update_file_store: UpdateFileStore,
-    index_handle: I,
-    must_exit: Arc<AtomicBool>,
+use super::{DocumentAdditionFormat, Payload, Update};
+
+pub type UpdateSender = mpsc::Sender<UpdateMsg>;
+type IndexSender = mpsc::Sender<()>;
+
+pub fn create_update_handler(
+    index_sender: IndexSender,
+    db_path: impl AsRef<Path>,
+    update_store_size: usize,
+) -> anyhow::Result<UpdateSender> {
+    let path = db_path.as_ref().to_owned();
+    let (sender, receiver) = mpsc::channel(100);
+    let actor = UpdateHandler::new(update_store_size, receiver, path, index_sender)?;
+
+    tokio::task::spawn_local(actor.run());
+
+    Ok(sender)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RegisterUpdate {
+    DocumentAddition {
+        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
+        content_uuid: Uuid,
+    },
+}
+
+/// A wrapper type to implement read on a `Stream<Result<Bytes, Error>>`.
 struct StreamReader<S> {
     stream: S,
     current: Option<Bytes>,
@@ -36,13 +63,18 @@ struct StreamReader<S> {
 
 impl<S> StreamReader<S> {
     fn new(stream: S) -> Self {
-        Self { stream, current: None }
+        Self {
+            stream,
+            current: None,
+        }
     }
-
 }
 
-impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Read for StreamReader<S> {
+impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Read
+    for StreamReader<S>
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // TODO: optimize buf filling
         match self.current.take() {
             Some(mut bytes) => {
                 let copied = bytes.split_to(buf.len());
@@ -52,29 +84,32 @@ impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Rea
                 }
                 Ok(copied.len())
             }
-            None => {
-                match tokio::runtime::Handle::current().block_on(self.stream.next()) {
-                    Some(Ok(bytes)) => {
-                        self.current.replace(bytes);
-                        self.read(buf)
-                    },
-                    Some(Err(e)) => Err(io::Error::new(io::ErrorKind::BrokenPipe, e)),
-                    None => return Ok(0),
+            None => match tokio::runtime::Handle::current().block_on(self.stream.next()) {
+                Some(Ok(bytes)) => {
+                    self.current.replace(bytes);
+                    self.read(buf)
                 }
-            }
+                Some(Err(e)) => Err(io::Error::new(io::ErrorKind::BrokenPipe, e)),
+                None => return Ok(0),
+            },
         }
     }
 }
 
-impl<I> UpdateActor<I>
-where
-    I: IndexActorHandle + Clone + Sync + Send + 'static,
-{
+pub struct UpdateHandler {
+    store: Arc<UpdateStore>,
+    inbox: Option<mpsc::Receiver<UpdateMsg>>,
+    update_file_store: UpdateFileStore,
+    index_handle: IndexSender,
+    must_exit: Arc<AtomicBool>,
+}
+
+impl UpdateHandler {
     pub fn new(
         update_db_size: usize,
         inbox: mpsc::Receiver<UpdateMsg>,
         path: impl AsRef<Path>,
-        index_handle: I,
+        index_handle: IndexSender,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned();
         std::fs::create_dir_all(&path)?;
@@ -88,14 +123,14 @@ where
 
         let inbox = Some(inbox);
 
-        let update_file_store =  UpdateFileStore::new(&path).unwrap();
+        let update_file_store = UpdateFileStore::new(&path).unwrap();
 
         Ok(Self {
             store,
             inbox,
             index_handle,
             must_exit,
-            update_file_store
+            update_file_store,
         })
     }
 
@@ -128,11 +163,7 @@ where
         stream
             .for_each_concurrent(Some(10), |msg| async {
                 match msg {
-                    Update {
-                        uuid,
-                        update,
-                        ret,
-                    } => {
+                    Update { uuid, update, ret } => {
                         let _ = ret.send(self.handle_update(uuid, update).await);
                     }
                     ListUpdates { uuid, ret } => {
@@ -158,23 +189,30 @@ where
             .await;
     }
 
-    async fn handle_update(
-        &self,
-        index_uuid: Uuid,
-        update: Update,
-    ) -> Result<UpdateStatus> {
+    async fn handle_update(&self, index_uuid: Uuid, update: Update) -> Result<UpdateStatus> {
         let registration = match update {
-            Update::DocumentAddition { payload, primary_key, method, format } => {
+            Update::DocumentAddition {
+                payload,
+                primary_key,
+                method,
+                format,
+            } => {
                 let content_uuid = match format {
                     DocumentAdditionFormat::Json => self.documents_from_json(payload).await?,
                 };
 
-                RegisterUpdate::DocumentAddition { primary_key, method, content_uuid }
+                RegisterUpdate::DocumentAddition {
+                    primary_key,
+                    method,
+                    content_uuid,
+                }
             }
         };
 
         let store = self.store.clone();
-        let status = tokio::task::spawn_blocking(move || store.register_update(index_uuid, registration)).await??;
+        let status =
+            tokio::task::spawn_blocking(move || store.register_update(index_uuid, registration))
+                .await??;
 
         Ok(status.into())
     }
@@ -185,14 +223,16 @@ where
             let (uuid, mut file) = file_store.new_update().unwrap();
             let mut builder = DocumentBatchBuilder::new(&mut *file).unwrap();
 
-            let documents: Vec<Map<String, Value>> = serde_json::from_reader(StreamReader::new(payload))?;
+            let documents: Vec<Map<String, Value>> =
+                serde_json::from_reader(StreamReader::new(payload))?;
             builder.add_documents(documents).unwrap();
             builder.finish().unwrap();
 
             file.persist();
 
             Ok(uuid)
-        }).await?
+        })
+        .await?
     }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
@@ -256,5 +296,4 @@ where
 
         Ok(info)
     }
-
 }

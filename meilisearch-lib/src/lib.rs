@@ -5,7 +5,7 @@ pub mod options;
 pub mod index;
 pub mod index_controller;
 
-pub use index_controller::{UpdateResult, UpdateStatus, IndexController as MeiliSearch, update_actor::RegisterUpdate};
+pub use index_controller::{IndexController as MeiliSearch, updates::RegisterUpdate};
 
 use walkdir::WalkDir;
 

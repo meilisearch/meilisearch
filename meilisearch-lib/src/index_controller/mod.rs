@@ -18,8 +18,6 @@ use dump_actor::DumpActorHandle;
 pub use dump_actor::{DumpInfo, DumpStatus};
 use index_actor::IndexActorHandle;
 use snapshot::load_snapshot;
-use update_actor::UpdateActorHandle;
-pub use updates::*;
 use uuid_resolver::error::UuidResolverError;
 
 use crate::options::IndexerOpts;
@@ -27,14 +25,15 @@ use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
 use error::Result;
 
 use self::dump_actor::load_dump;
+use self::updates::UpdateMsg;
+use self::updates::status::UpdateStatus;
 use self::uuid_resolver::UuidResolverMsg;
 
 mod dump_actor;
 pub mod error;
 pub mod index_actor;
 mod snapshot;
-pub mod update_actor;
-mod updates;
+pub mod updates;
 mod uuid_resolver;
 pub mod update_file_store;
 
@@ -74,7 +73,7 @@ pub struct IndexStats {
 pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverSender,
     index_handle: index_actor::IndexActorHandleImpl,
-    update_handle: update_actor::UpdateActorHandleImpl,
+    update_handle: updates::UpdateSender,
     dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
@@ -140,8 +139,10 @@ impl IndexControllerBuilder {
         let uuid_resolver = uuid_resolver::create_uuid_resolver(&db_path)?;
         let index_handle =
             index_actor::IndexActorHandleImpl::new(&db_path, index_size, &indexer_options)?;
-        let update_handle = update_actor::UpdateActorHandleImpl::new(
-            index_handle.clone(),
+
+        #[allow(unreachable_code)]
+        let update_handle = updates::create_update_handler(
+            todo!(),
             &db_path,
             update_store_size,
         )?;
@@ -235,12 +236,12 @@ impl IndexController {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid.to_string()).await;
         match uuid {
             Ok(uuid) => {
-                let update_result = self.update_handle.update(uuid, update).await?;
+                let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
                 Ok(update_result)
             },
             Err(UuidResolverError::UnexistingIndex(name)) => {
                 let uuid = Uuid::new_v4();
-                let update_result = self.update_handle.update(uuid, update).await?;
+                let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
                 // ignore if index creation fails now, since it may already have been created
                 let _ = self.index_handle.create_index(uuid, None).await;
                 UuidResolverMsg::insert(&self.uuid_resolver, uuid, name).await?;
@@ -378,13 +379,13 @@ impl IndexController {
 
     pub async fn update_status(&self, uid: String, id: u64) -> Result<UpdateStatus> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let result = self.update_handle.update_status(uuid, id).await?;
+        let result = UpdateMsg::get_update(&self.update_handle, uuid, id).await?;
         Ok(result)
     }
 
     pub async fn all_update_status(&self, uid: String) -> Result<Vec<UpdateStatus>> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let result = self.update_handle.get_all_updates_status(uuid).await?;
+        let result = UpdateMsg::list_updates(&self.update_handle, uuid).await?;
         Ok(result)
     }
 
@@ -485,7 +486,7 @@ impl IndexController {
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let uuid = UuidResolverMsg::get(&self.uuid_resolver, uid).await?;
-        let update_infos = self.update_handle.get_info().await?;
+        let update_infos = UpdateMsg::get_info(&self.update_handle).await?;
         let mut stats = self.index_handle.get_index_stats(uuid).await?;
         // Check if the currently indexing update is from out index.
         stats.is_indexing = Some(Some(uuid) == update_infos.processing);
@@ -493,7 +494,7 @@ impl IndexController {
     }
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
-        let update_infos = self.update_handle.get_info().await?;
+        let update_infos = UpdateMsg::get_info(&self.update_handle).await?;
         let mut database_size = self.get_uuids_size().await? + update_infos.size;
         let mut last_update: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();

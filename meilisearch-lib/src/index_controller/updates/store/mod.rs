@@ -28,9 +28,10 @@ use codec::*;
 
 use super::RegisterUpdate;
 use super::error::Result;
+use super::status::{Enqueued, Processing};
 use crate::EnvSizer;
 use crate::index_controller::update_files_path;
-use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*, IndexActorHandle};
+use crate::index_controller::{index_actor::CONCURRENT_INDEX_MSG, updates::*};
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
@@ -145,7 +146,7 @@ impl UpdateStore {
     pub fn open(
         options: EnvOpenOptions,
         path: impl AsRef<Path>,
-        index_handle: impl IndexActorHandle + Clone + Sync + Send + 'static,
+        index_handle: IndexSender,
         must_exit: Arc<AtomicBool>,
     ) -> anyhow::Result<Arc<Self>> {
         let (update_store, mut notification_receiver) = Self::new(options, path)?;
@@ -283,7 +284,7 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(&self, index_handle: impl IndexActorHandle) -> Result<Option<()>> {
+    fn process_pending_update(&self, index_handle: IndexSender) -> Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -313,7 +314,7 @@ impl UpdateStore {
     fn perform_update(
         &self,
         processing: Processing,
-        index_handle: impl IndexActorHandle,
+        index_handle: IndexSender,
         index_uuid: Uuid,
         global_id: u64,
     ) -> Result<Option<()>> {
@@ -321,7 +322,7 @@ impl UpdateStore {
         let handle = Handle::current();
         let update_id = processing.id();
         let result =
-            match handle.block_on(index_handle.update(index_uuid, processing.clone())) {
+            match handle.block_on(/*index_handle.update(index_uuid, processing.clone())*/ todo!()) {
                 Ok(result) => result,
                 Err(e) => Err(processing.fail(e)),
             };
@@ -483,7 +484,7 @@ impl UpdateStore {
         &self,
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
-        handle: impl IndexActorHandle + Clone,
+        handle: IndexSender,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
@@ -524,7 +525,7 @@ impl UpdateStore {
         // Perform the snapshot of each index concurently. Only a third of the capabilities of
         // the index actor at a time not to put too much pressure on the index actor
         let mut stream = futures::stream::iter(uuids.iter())
-            .map(move |uuid| handle.snapshot(*uuid, path.clone()))
+            .map(move |uuid| todo!() /*handle.snapshot(*uuid, path.clone())*/)
             .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
 
         Handle::current().block_on(async {

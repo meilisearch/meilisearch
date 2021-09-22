@@ -14,8 +14,9 @@ use crate::index::{
     update_handler::UpdateHandler, Checked, Document, SearchQuery, SearchResult, Settings,
 };
 use crate::index_controller::{
-    get_arc_ownership_blocking, Failed, IndexStats, Processed, Processing,
+    get_arc_ownership_blocking, IndexStats,
 };
+use crate::index_controller::updates::status::{Failed, Processed, Processing};
 use crate::options::IndexerOpts;
 
 use super::error::{IndexActorError, Result};

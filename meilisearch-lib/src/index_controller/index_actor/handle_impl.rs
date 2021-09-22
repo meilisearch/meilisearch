@@ -1,4 +1,4 @@
-use crate::options::IndexerOpts;
+use crate::{index_controller::updates::status::{Failed, Processed, Processing}, options::IndexerOpts};
 use std::path::{Path, PathBuf};
 
 use tokio::sync::{mpsc, oneshot};
@@ -6,11 +6,10 @@ use uuid::Uuid;
 
 use crate::{
     index::Checked,
-    index_controller::{IndexSettings, IndexStats, Processing},
+    index_controller::{IndexSettings, IndexStats},
 };
 use crate::{
     index::{Document, SearchQuery, SearchResult, Settings},
-    index_controller::{Failed, Processed},
 };
 
 use super::error::Result;

@@ -7,7 +7,7 @@ use crate::index::error::IndexError;
 
 use super::dump_actor::error::DumpActorError;
 use super::index_actor::error::IndexActorError;
-use super::update_actor::error::UpdateActorError;
+use super::updates::error::UpdateActorError;
 use super::uuid_resolver::error::UuidResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;

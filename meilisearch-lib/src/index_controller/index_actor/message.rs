@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use super::error::Result as IndexResult;
 use crate::index::{Checked, Document, SearchQuery, SearchResult, Settings};
-use crate::index_controller::{Failed, IndexStats, Processed, Processing};
+use crate::index_controller::IndexStats;
+use crate::index_controller::updates::status::{Failed, Processed, Processing};
 
 use super::{IndexMeta, IndexSettings};
 
