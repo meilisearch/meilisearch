@@ -210,7 +210,7 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
-            Self::CriterionError(error) => f.write_str(&error.to_string()),
+            Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
                 let name_list =

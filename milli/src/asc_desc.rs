@@ -1,4 +1,4 @@
-//! This module provide the `AscDesc` type and define a all the errors related to this type
+//! This module provides the `AscDesc` type and defines all the errors related to this type.
 
 use std::fmt;
 use std::str::FromStr;
@@ -43,7 +43,7 @@ impl From<AscDescError> for CriterionError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
                 CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() }
             }
-            AscDescError::ReservedKeyword { name } => (CriterionError::ReservedName { name }),
+            AscDescError::ReservedKeyword { name } => CriterionError::ReservedName { name },
         }
     }
 }
@@ -129,7 +129,7 @@ impl FromStr for AscDesc {
     type Err = AscDescError;
 
     /// Since we don't know if this was deserialized for a criterion or a sort we just return a
-    /// string and let the caller create his own error
+    /// string and let the caller create his own error.
     fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
         match text.rsplit_once(':') {
             Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),

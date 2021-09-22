@@ -24,17 +24,17 @@ impl fmt::Display for CriterionError {
             Self::ReservedNameForSort { name } => {
                 write!(
                     f,
-                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
-{0} can only be used for sorting at search time",
-                    name
+                    "{} is a reserved keyword and thus can't be used as a ranking rule. \
+{} can only be used for sorting at search time",
+                    name, name
                 )
             }
             Self::ReservedNameForFilter { name } => {
                 write!(
                     f,
-                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
-{0} can only be used for filtering at search time",
-                    name
+                    "{} is a reserved keyword and thus can't be used as a ranking rule. \
+{} can only be used for filtering at search time",
+                    name, name
                 )
             }
         }
