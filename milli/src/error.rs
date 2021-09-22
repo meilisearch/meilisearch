@@ -8,7 +8,7 @@ use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
 use crate::search::ParserRule;
-use crate::{DocumentId, FieldId};
+use crate::{CriterionError, DocumentId, FieldId};
 
 pub type Object = Map<String, Value>;
 
@@ -55,16 +55,15 @@ pub enum FieldIdMapMissingEntry {
 #[derive(Debug)]
 pub enum UserError {
     AttributeLimitReached,
+    CriterionError(CriterionError),
     DocumentLimitReached,
-    InvalidAscDescSyntax { name: String },
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidSortName { name: String },
+    InvalidReservedSortName { name: String },
     InvalidGeoField { document_id: Value, object: Value },
-    InvalidRankingRuleName { name: String },
-    InvalidReservedRankingRuleName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -211,6 +210,7 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
+            Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
                 let name_list =
@@ -222,17 +222,17 @@ impl fmt::Display for UserError {
                 )
             }
             Self::InvalidFilter(error) => error.fmt(f),
-            Self::InvalidAscDescSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}", name)
-            }
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
-            Self::InvalidRankingRuleName { name } => write!(f, "invalid criterion {}", name),
-            Self::InvalidReservedRankingRuleName { name } => {
-                write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
+            Self::InvalidReservedSortName { name } => {
+                write!(
+                    f,
+                    "{} is a reserved keyword and thus can't be used as a sort expression",
+                    name
+                )
             }
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();

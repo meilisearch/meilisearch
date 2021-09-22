@@ -18,10 +18,9 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
-use crate::criterion::{AscDesc, Criterion};
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
-use crate::{DocumentId, Index, Result};
+use crate::{AscDesc, Criterion, DocumentId, Index, Member, Result};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -148,15 +147,20 @@ impl<'a> Search<'a> {
         if let Some(sort_criteria) = &self.sort_criteria {
             let sortable_fields = self.index.sortable_fields(self.rtxn)?;
             for asc_desc in sort_criteria {
-                // we are not supposed to find any geoPoint in the criterion
-                if let Some(field) = asc_desc.field() {
-                    if !sortable_fields.contains(field) {
+                match asc_desc.member() {
+                    Member::Field(ref field) if !sortable_fields.contains(field) => {
                         return Err(UserError::InvalidSortableAttribute {
                             field: field.to_string(),
                             valid_fields: sortable_fields,
-                        }
-                        .into());
+                        })?
                     }
+                    Member::Geo(_) if !sortable_fields.contains("_geo") => {
+                        return Err(UserError::InvalidSortableAttribute {
+                            field: "_geo".to_string(),
+                            valid_fields: sortable_fields,
+                        })?
+                    }
+                    _ => (),
                 }
             }
         }

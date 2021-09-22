@@ -4,6 +4,7 @@ extern crate pest_derive;
 #[macro_use]
 pub mod documents;
 
+mod asc_desc;
 mod criterion;
 mod error;
 mod external_documents_ids;
@@ -24,7 +25,8 @@ use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::{Map, Value};
 
-pub use self::criterion::{default_criteria, AscDesc, Criterion, Member};
+pub use self::asc_desc::{AscDesc, AscDescError, Member};
+pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
