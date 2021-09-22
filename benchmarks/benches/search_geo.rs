@@ -2,7 +2,7 @@ mod datasets_paths;
 mod utils;
 
 use criterion::{criterion_group, criterion_main};
-use milli::update::{Settings, UpdateFormat};
+use milli::update::Settings;
 use utils::Conf;
 
 #[cfg(target_os = "linux")]
@@ -33,7 +33,7 @@ fn base_conf(builder: &mut Settings) {
 #[rustfmt::skip]
 const BASE_CONF: Conf = Conf {
     dataset: datasets_paths::SMOL_ALL_COUNTRIES,
-    dataset_format: UpdateFormat::JsonStream,
+    dataset_format: "jsonl",
     queries: &[
         "",
     ],
