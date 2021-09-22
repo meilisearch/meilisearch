@@ -12,10 +12,9 @@ use self::r#final::Final;
 use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
-use crate::criterion::{AscDesc as AscDescName, Member};
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, WordDerivationsCache};
-use crate::{DocumentId, FieldId, Index, Result, TreeLevel};
+use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result, TreeLevel};
 
 mod asc_desc;
 mod attribute;

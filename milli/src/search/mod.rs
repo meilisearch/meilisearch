@@ -18,10 +18,9 @@ pub(crate) use self::facet::ParserRule;
 pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
-use crate::criterion::{AscDesc, Criterion};
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
-use crate::{DocumentId, Index, Result};
+use crate::{AscDesc, Criterion, DocumentId, Index, Result};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
