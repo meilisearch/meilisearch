@@ -6,6 +6,9 @@ publish = false
 
 [dependencies]
 milli = { path = "../milli" }
+anyhow = "1.0"
+serde_json = { version = "1.0.62", features = ["preserve_order"] }
+csv = "1.1.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"

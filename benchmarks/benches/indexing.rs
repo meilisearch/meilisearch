@@ -1,11 +1,12 @@
 mod datasets_paths;
+mod utils;
 
-use std::fs::{create_dir_all, remove_dir_all, File};
+use std::fs::{create_dir_all, remove_dir_all};
 use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use heed::EnvOpenOptions;
-use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
+use milli::update::UpdateBuilder;
 use milli::Index;
 
 #[cfg(target_os = "linux")]
@@ -67,15 +68,10 @@ fn indexing_songs_default(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::Csv);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::SMOL_SONGS).expect(&format!(
-                    "could not find the dataset in: {}",
-                    datasets_paths::SMOL_SONGS
-                ));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                builder.execute(documents, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -118,15 +114,10 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::Csv);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::SMOL_SONGS).expect(&format!(
-                    "could not find the dataset in: {}",
-                    datasets_paths::SMOL_SONGS
-                ));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                builder.execute(documents, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -165,15 +156,10 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::Csv);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::SMOL_SONGS).expect(&format!(
-                    "could not find the dataset in: {}",
-                    datasets_paths::SMOL_SONGS
-                ));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                builder.execute(documents, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -211,15 +197,10 @@ fn indexing_wiki(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::Csv);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::SMOL_WIKI_ARTICLES).expect(&format!(
-                    "could not find the dataset in: {}",
-                    datasets_paths::SMOL_SONGS
-                ));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                builder.execute(documents, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -262,13 +243,10 @@ fn indexing_movies_default(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::Json);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::MOVIES)
-                    .expect(&format!("could not find the dataset in: {}", datasets_paths::MOVIES));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                builder.execute(documents, |_, _| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -316,15 +294,11 @@ fn indexing_geo(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                let builder = update_builder.index_documents(&mut wtxn, &index);
 
-                builder.update_format(UpdateFormat::JsonStream);
-                builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-                let reader = File::open(datasets_paths::SMOL_ALL_COUNTRIES).expect(&format!(
-                    "could not find the dataset in: {}",
-                    datasets_paths::SMOL_ALL_COUNTRIES
-                ));
-                builder.execute(reader, |_, _| ()).unwrap();
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                builder.execute(documents, |_, _| ()).unwrap();
+
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
