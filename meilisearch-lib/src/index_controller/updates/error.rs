@@ -19,6 +19,8 @@ pub enum UpdateLoopError {
     )]
     FatalUpdateStoreError,
     #[error("{0}")]
+    MalformedPayload(Box<dyn Error + Send + Sync + 'static>),
+    #[error("{0}")]
     InvalidPayload(Box<dyn Error + Send + Sync + 'static>),
     #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
@@ -48,12 +50,13 @@ internal_error!(
 impl ErrorCode for UpdateLoopError {
     fn error_code(&self) -> Code {
         match self {
-            UpdateLoopError::UnexistingUpdate(_) => Code::NotFound,
-            UpdateLoopError::Internal(_) => Code::Internal,
-            //UpdateLoopError::IndexActor(e) => e.error_code(),
-            UpdateLoopError::FatalUpdateStoreError => Code::Internal,
-            UpdateLoopError::InvalidPayload(_) => Code::BadRequest,
-            UpdateLoopError::PayloadError(error) => match error {
+            Self::UnexistingUpdate(_) => Code::NotFound,
+            Self::Internal(_) => Code::Internal,
+            //Self::IndexActor(e) => e.error_code(),
+            Self::FatalUpdateStoreError => Code::Internal,
+            Self::InvalidPayload(_) => Code::BadRequest,
+            Self::MalformedPayload(_) => Code::BadRequest,
+            Self::PayloadError(error) => match error {
                 actix_web::error::PayloadError::Overflow => Code::PayloadTooLarge,
                 _ => Code::Internal,
             },

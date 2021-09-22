@@ -16,6 +16,7 @@ arc-swap = "1.3.2"
 byte-unit = { version = "4.0.12", default-features = false, features = ["std"] }
 bytes = "1.1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
+csv = "1.1.6"
 crossbeam-channel = "0.5.1"
 either = "1.6.1"
 env_logger = "0.9.0"

@@ -1,8 +1,10 @@
+mod csv_documents_iter;
 pub mod error;
 mod message;
 pub mod status;
 pub mod store;
 
+use crate::index_controller::updates::csv_documents_iter::CsvDocumentIter;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -229,6 +231,26 @@ impl UpdateLoop {
             let documents: Vec<Map<String, Value>> =
                 serde_json::from_reader(StreamReader::new(payload))?;
             builder.add_documents(documents).unwrap();
+            builder.finish().unwrap();
+
+            file.persist();
+
+            Ok(uuid)
+        })
+        .await?
+    }
+
+    async fn documents_from_csv(&self, payload: Payload) -> Result<Uuid> {
+        let file_store = self.update_file_store.clone();
+        tokio::task::spawn_blocking(move || {
+            let (uuid, mut file) = file_store.new_update().unwrap();
+            let mut builder = DocumentBatchBuilder::new(&mut *file).unwrap();
+
+            let iter = CsvDocumentIter::from_reader(StreamReader::new(payload))?;
+            for doc in iter {
+                let doc = doc?;
+                builder.add_documents(doc).unwrap();
+            }
             builder.finish().unwrap();
 
             file.persist();
