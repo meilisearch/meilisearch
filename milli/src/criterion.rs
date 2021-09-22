@@ -156,7 +156,7 @@ impl FromStr for AscDesc {
         match text.rsplit_once(':') {
             Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),
             Some((left, "desc")) => Ok(AscDesc::Desc(left.parse()?)),
-            _ => Err(UserError::InvalidRankingRuleName { name: text.to_string() }),
+            _ => Err(UserError::InvalidAscDescSyntax { name: text.to_string() }),
         }
     }
 }
