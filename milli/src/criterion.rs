@@ -3,8 +3,43 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, UserError};
-use crate::{AscDesc, AscDescError, Member};
+use crate::error::Error;
+use crate::{AscDesc, AscDescError, Member, UserError};
+
+#[derive(Debug)]
+pub enum CriterionError {
+    InvalidName { name: String },
+    ReservedName { name: String },
+    ReservedNameForSort { name: String },
+    ReservedNameForFilter { name: String },
+}
+
+impl fmt::Display for CriterionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidName { name } => write!(f, "invalid ranking rule {}", name),
+            Self::ReservedName { name } => {
+                write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
+            }
+            Self::ReservedNameForSort { name } => {
+                write!(
+                    f,
+                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
+{0} can only be used for sorting at search time",
+                    name
+                )
+            }
+            Self::ReservedNameForFilter { name } => {
+                write!(
+                    f,
+                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
+{0} can only be used for filtering at search time",
+                    name
+                )
+            }
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
@@ -40,7 +75,7 @@ impl Criterion {
 }
 
 impl FromStr for Criterion {
-    type Err = Error;
+    type Err = CriterionError;
 
     fn from_str(text: &str) -> Result<Criterion, Self::Err> {
         match text {
@@ -54,30 +89,28 @@ impl FromStr for Criterion {
                 Ok(AscDesc::Asc(Member::Field(field))) => Ok(Criterion::Asc(field)),
                 Ok(AscDesc::Desc(Member::Field(field))) => Ok(Criterion::Desc(field)),
                 Ok(AscDesc::Asc(Member::Geo(_))) | Ok(AscDesc::Desc(Member::Geo(_))) => {
-                    Err(UserError::InvalidReservedRankingRuleNameSort {
-                        name: "_geoPoint".to_string(),
-                    })?
+                    Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
                 }
                 Err(AscDescError::InvalidSyntax { name }) => {
-                    Err(UserError::InvalidRankingRuleName { name })?
+                    Err(CriterionError::InvalidName { name })?
                 }
                 Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoPoint") => {
-                    Err(UserError::InvalidReservedRankingRuleNameSort {
-                        name: "_geoPoint".to_string(),
-                    }
-                    .into())
+                    Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
                 }
                 Err(AscDescError::ReservedKeyword { name }) if name.starts_with("_geoRadius") => {
-                    Err(UserError::InvalidReservedRankingRuleNameFilter {
-                        name: "_geoRadius".to_string(),
-                    }
-                    .into())
+                    Err(CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() })?
                 }
                 Err(AscDescError::ReservedKeyword { name }) => {
-                    Err(UserError::InvalidReservedRankingRuleName { name }.into())
+                    Err(CriterionError::ReservedName { name })?
                 }
             },
         }
+    }
+}
+
+impl From<CriterionError> for Error {
+    fn from(error: CriterionError) -> Self {
+        Self::UserError(UserError::CriterionError(error))
     }
 }
 
@@ -112,7 +145,7 @@ impl fmt::Display for Criterion {
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use UserError::*;
+    use CriterionError::*;
 
     use super::*;
 
@@ -146,24 +179,21 @@ mod tests {
         }
 
         let invalid_criteria = [
-            ("words suffix", InvalidRankingRuleName { name: S("words suffix") }),
-            ("prefix typo", InvalidRankingRuleName { name: S("prefix typo") }),
-            ("proximity attribute", InvalidRankingRuleName { name: S("proximity attribute") }),
-            ("price", InvalidRankingRuleName { name: S("price") }),
-            ("asc:price", InvalidRankingRuleName { name: S("asc:price") }),
-            ("price:deesc", InvalidRankingRuleName { name: S("price:deesc") }),
-            ("price:aasc", InvalidRankingRuleName { name: S("price:aasc") }),
-            ("price:asc and desc", InvalidRankingRuleName { name: S("price:asc and desc") }),
-            ("price:asc:truc", InvalidRankingRuleName { name: S("price:asc:truc") }),
-            ("_geo:asc", InvalidReservedRankingRuleName { name: S("_geo") }),
-            ("_geoDistance:asc", InvalidReservedRankingRuleName { name: S("_geoDistance") }),
-            ("_geoPoint:asc", InvalidReservedRankingRuleNameSort { name: S("_geoPoint") }),
-            ("_geoPoint(42, 75):asc", InvalidReservedRankingRuleNameSort { name: S("_geoPoint") }),
-            ("_geoRadius:asc", InvalidReservedRankingRuleNameFilter { name: S("_geoRadius") }),
-            (
-                "_geoRadius(42, 75, 59):asc",
-                InvalidReservedRankingRuleNameFilter { name: S("_geoRadius") },
-            ),
+            ("words suffix", InvalidName { name: S("words suffix") }),
+            ("prefix typo", InvalidName { name: S("prefix typo") }),
+            ("proximity attribute", InvalidName { name: S("proximity attribute") }),
+            ("price", InvalidName { name: S("price") }),
+            ("asc:price", InvalidName { name: S("asc:price") }),
+            ("price:deesc", InvalidName { name: S("price:deesc") }),
+            ("price:aasc", InvalidName { name: S("price:aasc") }),
+            ("price:asc and desc", InvalidName { name: S("price:asc and desc") }),
+            ("price:asc:truc", InvalidName { name: S("price:asc:truc") }),
+            ("_geo:asc", ReservedName { name: S("_geo") }),
+            ("_geoDistance:asc", ReservedName { name: S("_geoDistance") }),
+            ("_geoPoint:asc", ReservedNameForSort { name: S("_geoPoint") }),
+            ("_geoPoint(42, 75):asc", ReservedNameForSort { name: S("_geoPoint") }),
+            ("_geoRadius:asc", ReservedNameForFilter { name: S("_geoRadius") }),
+            ("_geoRadius(42, 75, 59):asc", ReservedNameForFilter { name: S("_geoRadius") }),
         ];
 
         for (input, expected) in invalid_criteria {

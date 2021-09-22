@@ -8,7 +8,7 @@ use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
 use crate::search::ParserRule;
-use crate::{DocumentId, FieldId};
+use crate::{CriterionError, DocumentId, FieldId};
 
 pub type Object = Map<String, Value>;
 
@@ -55,6 +55,7 @@ pub enum FieldIdMapMissingEntry {
 #[derive(Debug)]
 pub enum UserError {
     AttributeLimitReached,
+    CriterionError(CriterionError),
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
@@ -63,10 +64,6 @@ pub enum UserError {
     InvalidSortName { name: String },
     InvalidReservedSortName { name: String },
     InvalidGeoField { document_id: Value, object: Value },
-    InvalidRankingRuleName { name: String },
-    InvalidReservedRankingRuleName { name: String },
-    InvalidReservedRankingRuleNameSort { name: String },
-    InvalidReservedRankingRuleNameFilter { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -213,6 +210,7 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
+            Self::CriterionError(error) => f.write_str(&error.to_string()),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
                 let name_list =
@@ -229,26 +227,6 @@ impl fmt::Display for UserError {
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
-            Self::InvalidRankingRuleName { name } => write!(f, "invalid ranking rule {}", name),
-            Self::InvalidReservedRankingRuleName { name } => {
-                write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
-            }
-            Self::InvalidReservedRankingRuleNameSort { name } => {
-                write!(
-                    f,
-                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
-{0} can only be used for sorting at search time",
-                    name
-                )
-            }
-            Self::InvalidReservedRankingRuleNameFilter { name } => {
-                write!(
-                    f,
-                    "{0} is a reserved keyword and thus can't be used as a ranking rule. \
-{0} can only be used for filtering at search time",
-                    name
-                )
-            }
             Self::InvalidReservedSortName { name } => {
                 write!(
                     f,

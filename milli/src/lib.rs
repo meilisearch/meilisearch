@@ -26,7 +26,7 @@ pub use grenad::CompressionType;
 use serde_json::{Map, Value};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member};
-pub use self::criterion::{default_criteria, Criterion};
+pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
