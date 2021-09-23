@@ -927,4 +927,58 @@ mod tests {
 
         wtxn.commit().unwrap();
     }
+
+    #[test]
+    fn index_2_times_documents_split_by_zero_document_indexation() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let content = documents!([
+            {"id": 0, "name": "Kerollmops", "score": 78},
+            {"id": 1, "name": "ManyTheFish", "score": 75},
+            {"id": 2, "name": "Ferdi", "score": 39},
+            {"id": 3, "name": "Tommy", "score": 33}
+        ]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 4 document now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 4);
+
+        let content = documents!([]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 4 document now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 4);
+
+        let content = documents!([
+            {"id": 0, "name": "Kerollmops", "score": 78},
+            {"id": 1, "name": "ManyTheFish", "score": 75},
+            {"id": 2, "name": "Ferdi", "score": 39},
+            {"id": 3, "name": "Tommy", "score": 33}
+        ]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index, 2);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 4 document now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 4);
+    }
 }
