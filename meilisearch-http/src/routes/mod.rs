@@ -72,10 +72,10 @@ impl From<&UpdateStatus> for UpdateType {
             RegisterUpdate::Settings(settings) => UpdateType::Settings {
                 settings: settings.clone(),
             },
-            //UpdateMeta::ClearDocuments => UpdateType::ClearAll,
-            //UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
-                //number: Some(ids.len()),
-            //},
+            RegisterUpdate::ClearDocuments => UpdateType::ClearAll,
+            RegisterUpdate::DeleteDocuments(ids) => UpdateType::DocumentsDeletion {
+                number: Some(ids.len()),
+            },
         }
     }
 }

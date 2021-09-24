@@ -177,6 +177,22 @@ impl Index {
                     let settings = settings.clone().check();
                     self.update_settings(&mut txn, &settings, update_builder)
                 },
+                RegisterUpdate::ClearDocuments => {
+                    let builder = update_builder.clear_documents(&mut txn, self);
+                    let _count = builder.execute()?;
+                    Ok(UpdateResult::Other)
+                },
+                RegisterUpdate::DeleteDocuments(ids) => {
+                    let mut builder = update_builder.delete_documents(&mut txn, self)?;
+
+                    // We ignore unexisting document ids
+                    ids.iter().for_each(|id| {
+                        builder.delete_external_id(id);
+                    });
+
+                    let deleted = builder.execute()?;
+                    Ok(UpdateResult::DocumentDeletion { deleted })
+                }
             };
             txn.commit()?;
             result
@@ -240,18 +256,6 @@ impl Index {
 
         Ok(UpdateResult::DocumentsAddition(addition))
     }
-
-    //pub fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
-        //// We must use the write transaction of the update here.
-        //let mut wtxn = self.write_txn()?;
-        //let builder = update_builder.clear_documents(&mut wtxn, self);
-
-        //let _count = builder.execute()?;
-
-        //wtxn.commit()
-            //.and(Ok(UpdateResult::Other))
-            //.map_err(Into::into)
-    //}
 
     fn update_settings<'a, 'b>(
         &'a self,
@@ -322,25 +326,6 @@ impl Index {
 
         Ok(UpdateResult::Other)
     }
-
-    //pub fn delete_documents(
-        //&self,
-        //document_ids: &[String],
-        //update_builder: UpdateBuilder,
-    //) -> Result<UpdateResult> {
-        //let mut txn = self.write_txn()?;
-        //let mut builder = update_builder.delete_documents(&mut txn, self)?;
-
-        //// We ignore unexisting document ids
-        //document_ids.iter().for_each(|id| {
-            //builder.delete_external_id(id);
-        //});
-
-        //let deleted = builder.execute()?;
-        //txn.commit()
-            //.and(Ok(UpdateResult::DocumentDeletion { deleted }))
-            //.map_err(Into::into)
-    //}
 }
 
 #[cfg(test)]

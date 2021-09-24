@@ -95,6 +95,8 @@ pub struct Stats {
 #[derive(derivative::Derivative)]
 #[derivative(Debug)]
 pub enum Update {
+    DeleteDocuments(Vec<String>),
+    ClearDocuments,
     Settings(Settings<Unchecked>),
     DocumentAddition {
         #[derivative(Debug="ignore")]
