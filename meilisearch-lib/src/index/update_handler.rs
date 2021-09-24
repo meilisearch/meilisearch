@@ -52,7 +52,7 @@ impl UpdateHandler {
 
     pub fn handle_update(
         &self,
-        index: Index,
+        index: &Index,
         meta: Processing,
     ) -> Result<Processed, Failed> {
         let update_id = meta.id();

@@ -8,10 +8,11 @@ use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use super::error::{IndexActorError, Result};
+use super::error::{IndexResolverError, Result};
 use crate::index::Index;
 use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::update_file_store::UpdateFileStore;
+use crate::options::IndexerOpts;
 
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
@@ -31,17 +32,18 @@ pub struct MapIndexStore {
 }
 
 impl MapIndexStore {
-    pub fn new(path: impl AsRef<Path>, index_size: usize, update_handler: Arc<UpdateHandler>) -> Self {
+    pub fn new(path: impl AsRef<Path>, index_size: usize, indexer_opts: &IndexerOpts) -> anyhow::Result<Self> {
+        let update_handler = Arc::new(UpdateHandler::new(indexer_opts)?);
         let update_file_store = Arc::new(UpdateFileStore::new(path.as_ref()).unwrap());
         let path = path.as_ref().join("indexes/");
         let index_store = Arc::new(RwLock::new(HashMap::new()));
-        Self {
+        Ok(Self {
             index_store,
             path,
             index_size,
             update_file_store,
             update_handler,
-        }
+        })
     }
 }
 
@@ -57,7 +59,7 @@ impl IndexStore for MapIndexStore {
         }
         let path = self.path.join(format!("index-{}", uuid));
         if path.exists() {
-            return Err(IndexActorError::IndexAlreadyExists);
+            return Err(IndexResolverError::IndexAlreadyExists);
         }
 
         let index_size = self.index_size;
@@ -97,7 +99,8 @@ impl IndexStore for MapIndexStore {
 
                 let index_size = self.index_size;
                 let file_store = self.update_file_store.clone();
-                let index = spawn_blocking(move || Index::open(path, index_size, file_store)).await??;
+                let update_handler = self.update_handler.clone();
+                let index = spawn_blocking(move || Index::open(path, index_size, file_store, uuid, update_handler)).await??;
                 self.index_store.write().await.insert(uuid, index.clone());
                 Ok(Some(index))
             }

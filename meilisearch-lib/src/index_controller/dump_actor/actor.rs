@@ -10,14 +10,14 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
-use crate::index_controller::uuid_resolver::UuidResolverSender;
+use crate::index_controller::index_resolver::HardStateIndexResolver;
 use crate::index_controller::updates::UpdateSender;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
 pub struct DumpActor {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
-    uuid_resolver: UuidResolverSender,
+    index_resolver: Arc<HardStateIndexResolver>,
     update: UpdateSender,
     dump_path: PathBuf,
     lock: Arc<Mutex<()>>,
@@ -34,7 +34,7 @@ fn generate_uid() -> String {
 impl DumpActor {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
-        uuid_resolver: UuidResolverSender,
+        index_resolver: Arc<HardStateIndexResolver>,
         update: UpdateSender,
         dump_path: impl AsRef<Path>,
         index_db_size: usize,
@@ -44,7 +44,7 @@ impl DumpActor {
         let lock = Arc::new(Mutex::new(()));
         Self {
             inbox: Some(inbox),
-            uuid_resolver,
+            index_resolver,
             update,
             dump_path: dump_path.as_ref().into(),
             dump_infos,
@@ -113,7 +113,7 @@ impl DumpActor {
 
         let task = DumpTask {
             path: self.dump_path.clone(),
-            uuid_resolver: self.uuid_resolver.clone(),
+            index_resolver: self.index_resolver.clone(),
             update_handle: self.update.clone(),
             uid: uid.clone(),
             update_db_size: self.update_db_size,

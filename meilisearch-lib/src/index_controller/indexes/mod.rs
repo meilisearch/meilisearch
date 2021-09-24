@@ -42,7 +42,7 @@ pub fn create_indexes_handler(
     indexer_options: &IndexerOpts,
 ) -> anyhow::Result<IndexHandlerSender> {
     let (sender, receiver) = mpsc::channel(100);
-    let store = MapIndexStore::new(&db_path, index_size);
+    let store = MapIndexStore::new(&db_path, index_size, indexer_options);
     let actor = IndexActor::new(receiver, store, indexer_options)?;
 
     tokio::task::spawn(actor.run());
@@ -59,7 +59,7 @@ pub struct IndexMeta {
 }
 
 impl IndexMeta {
-    fn new(index: &Index) -> Result<Self> {
+    pub fn new(index: &Index) -> Result<Self> {
         let txn = index.read_txn()?;
         Self::new_txn(index, &txn)
     }
@@ -223,7 +223,7 @@ where
             None => self.store.create(uuid, None).await?,
         };
 
-        Ok(spawn_blocking(move || update_handler.handle_update(index, meta)).await?)
+        Ok(spawn_blocking(move || update_handler.handle_update(&index, meta)).await?)
     }
 
     async fn handle_settings(&self, uuid: Uuid) -> Result<Settings<Checked>> {

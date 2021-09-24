@@ -21,25 +21,25 @@ use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use self::error::{Result, UpdateActorError};
+use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
-use super::indexes::IndexHandlerSender;
+use super::index_resolver::HardStateIndexResolver;
 use super::{DocumentAdditionFormat, Payload, Update};
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
 
 pub fn create_update_handler(
-    index_sender: IndexHandlerSender,
+    index_resolver: Arc<HardStateIndexResolver>,
     db_path: impl AsRef<Path>,
     update_store_size: usize,
 ) -> anyhow::Result<UpdateSender> {
     let path = db_path.as_ref().to_owned();
     let (sender, receiver) = mpsc::channel(100);
-    let actor = UpdateLoop::new(update_store_size, receiver, path, index_sender)?;
+    let actor = UpdateLoop::new(update_store_size, receiver, path, index_resolver)?;
 
     tokio::task::spawn_local(actor.run());
 
@@ -100,7 +100,7 @@ pub struct UpdateLoop {
     store: Arc<UpdateStore>,
     inbox: Option<mpsc::Receiver<UpdateMsg>>,
     update_file_store: UpdateFileStore,
-    index_handle: IndexHandlerSender,
+    index_resolver: Arc<HardStateIndexResolver>,
     must_exit: Arc<AtomicBool>,
 }
 
@@ -109,7 +109,7 @@ impl UpdateLoop {
         update_db_size: usize,
         inbox: mpsc::Receiver<UpdateMsg>,
         path: impl AsRef<Path>,
-        index_handle: IndexHandlerSender,
+        index_resolver: Arc<HardStateIndexResolver>,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned();
         std::fs::create_dir_all(&path)?;
@@ -119,7 +119,7 @@ impl UpdateLoop {
 
         let must_exit = Arc::new(AtomicBool::new(false));
 
-        let store = UpdateStore::open(options, &path, index_handle.clone(), must_exit.clone())?;
+        let store = UpdateStore::open(options, &path, index_resolver.clone(), must_exit.clone())?;
 
         let inbox = Some(inbox);
 
@@ -128,9 +128,9 @@ impl UpdateLoop {
         Ok(Self {
             store,
             inbox,
-            index_handle,
             must_exit,
             update_file_store,
+            index_resolver,
         })
     }
 
@@ -249,7 +249,7 @@ impl UpdateLoop {
         tokio::task::spawn_blocking(move || {
             let result = store
                 .meta(uuid, id)?
-                .ok_or(UpdateActorError::UnexistingUpdate(id))?;
+                .ok_or(UpdateLoopError::UnexistingUpdate(id))?;
             Ok(result)
         })
         .await?
@@ -263,18 +263,19 @@ impl UpdateLoop {
         Ok(())
     }
 
-    async fn handle_snapshot(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
-        let index_handle = self.index_handle.clone();
-        let update_store = self.store.clone();
+    async fn handle_snapshot(&self, _uuids: HashSet<Uuid>,_pathh: PathBuf) -> Result<()> {
+        todo!()
+        //let index_handle = self.index_resolver.clone();
+        //let update_store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || update_store.snapshot(&uuids, &path, index_handle))
-            .await??;
+        //tokio::task::spawn_blocking(move || update_store.snapshot(&uuids, &path, index_handle))
+            //.await??;
 
-        Ok(())
+        //Ok(())
     }
 
     async fn handle_dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
-        let index_handle = self.index_handle.clone();
+        let index_handle = self.index_resolver.clone();
         let update_store = self.store.clone();
 
         tokio::task::spawn_blocking(move || -> Result<()> {

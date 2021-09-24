@@ -5,19 +5,23 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use heed::{EnvOpenOptions, RoTxn};
 use milli::update::Setting;
-use milli::{obkv_to_json, FieldId};
+use milli::{FieldDistribution, FieldId, obkv_to_json};
 use serde_json::{Map, Value};
+use serde::{Serialize, Deserialize};
 
 use error::Result;
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{Checked, Facets, Settings, Unchecked};
+use uuid::Uuid;
 
 use crate::EnvSizer;
 use crate::index_controller::update_file_store::UpdateFileStore;
 
 use self::error::IndexError;
+use self::update_handler::UpdateHandler;
 
 pub mod error;
 pub mod update_handler;
@@ -28,10 +32,51 @@ mod updates;
 
 pub type Document = Map<String, Value>;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexMeta {
+    created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub primary_key: Option<String>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexStats {
+    #[serde(skip)]
+    pub size: u64,
+    pub number_of_documents: u64,
+    /// Whether the current index is performing an update. It is initially `None` when the
+    /// index returns it, since it is the `UpdateStore` that knows what index is currently indexing. It is
+    /// later set to either true or false, we we retrieve the information from the `UpdateStore`
+    pub is_indexing: Option<bool>,
+    pub field_distribution: FieldDistribution,
+}
+
+impl IndexMeta {
+    pub fn new(index: &Index) -> Result<Self> {
+        let txn = index.read_txn()?;
+        Self::new_txn(index, &txn)
+    }
+
+    fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
+        let created_at = index.created_at(txn)?;
+        let updated_at = index.updated_at(txn)?;
+        let primary_key = index.primary_key(txn)?.map(String::from);
+        Ok(Self {
+            created_at,
+            updated_at,
+            primary_key,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Index {
+    pub uuid: Uuid,
     pub inner: Arc<milli::Index>,
     update_file_store: Arc<UpdateFileStore>,
+    update_handler: Arc<UpdateHandler>,
 }
 
 impl Deref for Index {
@@ -43,14 +88,28 @@ impl Deref for Index {
 }
 
 impl Index {
-    pub fn open(path: impl AsRef<Path>, size: usize, update_file_store: Arc<UpdateFileStore>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>, size: usize, update_file_store: Arc<UpdateFileStore>, uuid: Uuid, update_handler: Arc<UpdateHandler>) -> Result<Self> {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         let inner = Arc::new(milli::Index::new(options, &path)?);
-        Ok(Index { inner, update_file_store })
+        Ok(Index { inner, update_file_store, uuid, update_handler })
     }
 
+    pub fn stats(&self) -> Result<IndexStats> {
+        let rtxn = self.read_txn()?;
+
+        Ok(IndexStats {
+            size: self.size(),
+            number_of_documents: self.number_of_documents(&rtxn)?,
+            is_indexing: None,
+            field_distribution: self.field_distribution(&rtxn)?,
+        })
+    }
+
+    pub fn meta(&self) -> Result<IndexMeta> {
+        IndexMeta::new(self)
+    }
     pub fn settings(&self) -> Result<Settings<Checked>> {
         let txn = self.read_txn()?;
         self.settings_txn(&txn)

@@ -1,7 +1,7 @@
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index_controller::updates::error::UpdateActorError;
-use crate::index_controller::uuid_resolver::error::UuidResolverError;
+use crate::index_controller::index_resolver::error::IndexResolverError;
+use crate::index_controller::updates::error::UpdateLoopError;
 
 pub type Result<T> = std::result::Result<T, DumpActorError>;
 
@@ -14,9 +14,9 @@ pub enum DumpActorError {
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
-    UuidResolver(#[from] UuidResolverError),
+    IndexResolver(#[from] IndexResolverError),
     #[error("{0}")]
-    UpdateActor(#[from] UpdateActorError),
+    UpdateLoop(#[from] UpdateLoopError),
 }
 
 macro_rules! internal_error {
@@ -45,8 +45,8 @@ impl ErrorCode for DumpActorError {
             DumpActorError::DumpAlreadyRunning => Code::DumpAlreadyInProgress,
             DumpActorError::DumpDoesNotExist(_) => Code::NotFound,
             DumpActorError::Internal(_) => Code::Internal,
-            DumpActorError::UuidResolver(e) => e.error_code(),
-            DumpActorError::UpdateActor(e) => e.error_code(),
+            DumpActorError::IndexResolver(e) => e.error_code(),
+            DumpActorError::UpdateLoop(e) => e.error_code(),
         }
     }
 }

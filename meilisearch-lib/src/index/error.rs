@@ -17,6 +17,8 @@ pub enum IndexError {
     Facet(#[from] FacetError),
     #[error("{0}")]
     Milli(#[from] milli::Error),
+    #[error("A primary key is already present. It's impossible to update it")]
+    ExistingPrimaryKey,
 }
 
 internal_error!(
@@ -33,6 +35,7 @@ impl ErrorCode for IndexError {
             IndexError::DocumentNotFound(_) => Code::DocumentNotFound,
             IndexError::Facet(e) => e.error_code(),
             IndexError::Milli(e) => MilliError(e).error_code(),
+            IndexError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,
         }
     }
 }

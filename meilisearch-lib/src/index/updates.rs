@@ -8,10 +8,10 @@ use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::index_controller::updates::status::UpdateResult;
+use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
 
-use super::Index;
-use super::error::Result;
+use super::{Index, IndexMeta};
+use super::error::{IndexError, Result};
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -163,6 +163,31 @@ pub struct Facets {
 }
 
 impl Index {
+    pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
+        self.update_handler.handle_update(self, update)
+    }
+
+    pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
+        match primary_key {
+            Some(primary_key) => {
+                let mut txn = self.write_txn()?;
+                if self.primary_key(&txn)?.is_some() {
+                    return Err(IndexError::ExistingPrimaryKey);
+                }
+                let mut builder = UpdateBuilder::new(0).settings(&mut txn, self);
+                builder.set_primary_key(primary_key);
+                builder.execute(|_, _| ())?;
+                let meta = IndexMeta::new_txn(self, &txn)?;
+                txn.commit()?;
+                Ok(meta)
+            }
+            None => {
+                let meta = IndexMeta::new(self)?;
+                Ok(meta)
+            }
+        }
+    }
+
     pub fn update_documents(
         &self,
         method: IndexDocumentsMethod,

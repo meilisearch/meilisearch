@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -16,11 +17,10 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 
+use super::index_resolver::HardStateIndexResolver;
 use super::updates::UpdateSender;
-use super::uuid_resolver::UuidResolverSender;
 use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::index_controller::updates::UpdateMsg;
-use crate::index_controller::uuid_resolver::UuidResolverMsg;
 use crate::options::IndexerOpts;
 use error::Result;
 
@@ -154,7 +154,7 @@ pub fn load_dump(
 
 struct DumpTask {
     path: PathBuf,
-    uuid_resolver: UuidResolverSender,
+    index_resolver: Arc<HardStateIndexResolver>,
     update_handle: UpdateSender,
     uid: String,
     update_db_size: usize,
@@ -177,9 +177,9 @@ impl DumpTask {
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
 
-        let uuids = UuidResolverMsg::dump(&self.uuid_resolver, temp_dump_path.clone()).await?;
+        let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        UpdateMsg::dump(&self.update_handle, uuids, temp_dump_path.clone()).await?;
+        UpdateMsg::dump(&self.update_handle, uuids.into_iter().collect(), temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;

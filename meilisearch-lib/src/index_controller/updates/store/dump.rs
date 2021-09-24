@@ -1,16 +1,11 @@
-use std::{
-    collections::HashSet,
-    fs::{create_dir_all, File},
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, fs::{create_dir_all, File}, io::Write, path::{Path, PathBuf}, sync::Arc};
 
 use heed::RoTxn;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
-use crate::index_controller::{indexes::{IndexHandlerSender, IndexMsg}, updates::{status::UpdateStatus}};
+use crate::index_controller::{index_resolver::HardStateIndexResolver, updates::status::UpdateStatus};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -23,7 +18,7 @@ impl UpdateStore {
         &self,
         uuids: &HashSet<Uuid>,
         path: PathBuf,
-        handle: IndexHandlerSender,
+        handle: Arc<HardStateIndexResolver>,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
@@ -171,13 +166,14 @@ impl UpdateStore {
 }
 
 async fn dump_indexes(
-    uuids: &HashSet<Uuid>,
-    handle: IndexHandlerSender,
-    path: impl AsRef<Path>,
+    _uuids: &HashSet<Uuid>,
+    _handle: Arc<HardStateIndexResolver>,
+    _path: impl AsRef<Path>,
 ) -> Result<()> {
-    for uuid in uuids {
-        IndexMsg::dump(&handle, *uuid, path.as_ref().to_owned()).await?;
-    }
+    todo!()
+    //for uuid in uuids {
+        //IndexMsg::dump(&handle, *uuid, path.as_ref().to_owned()).await?;
+    //}
 
-    Ok(())
+    //Ok(())
 }

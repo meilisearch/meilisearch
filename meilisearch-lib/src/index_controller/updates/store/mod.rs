@@ -12,7 +12,6 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use futures::StreamExt;
 use heed::types::{ByteSlice, OwnedType, SerdeJson};
 use heed::zerocopy::U64;
 use heed::{CompactionOption, Database, Env, EnvOpenOptions};
@@ -30,7 +29,6 @@ use super::RegisterUpdate;
 use super::error::Result;
 use super::status::{Enqueued, Processing};
 use crate::EnvSizer;
-use crate::index_controller::indexes::{CONCURRENT_INDEX_MSG, IndexHandlerSender, IndexMsg};
 use crate::index_controller::update_files_path;
 use crate::index_controller::updates::*;
 
@@ -148,7 +146,7 @@ impl UpdateStore {
     pub fn open(
         options: EnvOpenOptions,
         path: impl AsRef<Path>,
-        index_handle: IndexHandlerSender,
+        index_resolver: Arc<HardStateIndexResolver>,
         must_exit: Arc<AtomicBool>,
     ) -> anyhow::Result<Arc<Self>> {
         let (update_store, mut notification_receiver) = Self::new(options, path)?;
@@ -173,7 +171,7 @@ impl UpdateStore {
                 loop {
                     match update_store_weak.upgrade() {
                         Some(update_store) => {
-                            let handler = index_handle.clone();
+                            let handler = index_resolver.clone();
                             let res = tokio::task::spawn_blocking(move || {
                                 update_store.process_pending_update(handler)
                             })
@@ -286,7 +284,7 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(&self, index_handle: IndexHandlerSender) -> Result<Option<()>> {
+    fn process_pending_update(&self, index_resolver: Arc<HardStateIndexResolver>) -> Result<Option<()>> {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -303,7 +301,7 @@ impl UpdateStore {
                 state.swap(State::Processing(index_uuid, processing.clone()));
 
                 let result =
-                    self.perform_update(processing, index_handle, index_uuid, global_id);
+                    self.perform_update(processing, index_resolver, index_uuid, global_id);
 
                 state.swap(State::Idle);
 
@@ -316,18 +314,18 @@ impl UpdateStore {
     fn perform_update(
         &self,
         processing: Processing,
-        index_handle: IndexHandlerSender,
+        index_resolver: Arc<HardStateIndexResolver>,
         index_uuid: Uuid,
         global_id: u64,
     ) -> Result<Option<()>> {
         // Process the pending update using the provided user function.
         let handle = Handle::current();
         let update_id = processing.id();
-        let result =
-            match handle.block_on(IndexMsg::update(&index_handle, index_uuid, processing.clone())) {
-                Ok(result) => result,
-                Err(e) => Err(processing.fail(e)),
-            };
+        //IndexMsg::update(index_resolver, index_uuid, processing.clone()
+        let result = match handle.block_on(index_resolver.get_index_by_uuid(index_uuid)) {
+            Ok(index) => index.handle_update(processing),
+            Err(e) => Err(processing.fail(e)),
+        };
 
         // Once the pending update have been successfully processed
         // we must remove the content from the pending and processing stores and
@@ -484,9 +482,9 @@ impl UpdateStore {
 
     pub fn snapshot(
         &self,
-        uuids: &HashSet<Uuid>,
+        _uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
-        handle: IndexHandlerSender,
+        handle: Arc<HardStateIndexResolver>,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
@@ -522,22 +520,23 @@ impl UpdateStore {
             //}
         }
 
-        let path = &path.as_ref().to_path_buf();
-        let handle = &handle;
+        let _path = &path.as_ref().to_path_buf();
+        let _handle = &handle;
         // Perform the snapshot of each index concurently. Only a third of the capabilities of
         // the index actor at a time not to put too much pressure on the index actor
-        let mut stream = futures::stream::iter(uuids.iter())
-            .map(move |uuid| IndexMsg::snapshot(handle,*uuid, path.clone()))
-            .buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+        todo!()
+        //let mut stream = futures::stream::iter(uuids.iter())
+            //.map(move |uuid| IndexMsg::snapshot(handle,*uuid, path.clone()))
+            //.buffer_unordered(CONCURRENT_INDEX_MSG / 3);
 
-        Handle::current().block_on(async {
-            while let Some(res) = stream.next().await {
-                res?;
-            }
-            Ok(()) as Result<()>
-        })?;
+        //Handle::current().block_on(async {
+            //while let Some(res) = stream.next().await {
+                //res?;
+            //}
+            //Ok(()) as Result<()>
+        //})?;
 
-        Ok(())
+        //Ok(())
     }
 
     pub fn get_info(&self) -> Result<UpdateStoreInfo> {

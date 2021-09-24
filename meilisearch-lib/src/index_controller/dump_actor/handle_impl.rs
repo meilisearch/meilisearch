@@ -1,8 +1,9 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::index_controller::uuid_resolver::UuidResolverSender;
+use crate::index_controller::index_resolver::HardStateIndexResolver;
 
 use super::error::Result;
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
@@ -32,7 +33,7 @@ impl DumpActorHandle for DumpActorHandleImpl {
 impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
-        uuid_resolver: UuidResolverSender,
+        index_resolver: Arc<HardStateIndexResolver>,
         update: crate::index_controller::updates::UpdateSender,
         index_db_size: usize,
         update_db_size: usize,
@@ -40,7 +41,7 @@ impl DumpActorHandleImpl {
         let (sender, receiver) = mpsc::channel(10);
         let actor = DumpActor::new(
             receiver,
-            uuid_resolver,
+            index_resolver,
             update,
             path,
             index_db_size,
