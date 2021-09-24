@@ -18,7 +18,7 @@ use dump_actor::DumpActorHandle;
 pub use dump_actor::{DumpInfo, DumpStatus};
 use snapshot::load_snapshot;
 
-use crate::index::{Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
+use crate::index::{Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked};
 use crate::index_controller::index_resolver::create_index_resolver;
 use crate::options::IndexerOpts;
 use error::Result;
@@ -95,6 +95,7 @@ pub struct Stats {
 #[derive(derivative::Derivative)]
 #[derivative(Debug)]
 pub enum Update {
+    Settings(Settings<Unchecked>),
     DocumentAddition {
         #[derivative(Debug="ignore")]
         payload: Payload,
@@ -242,8 +243,8 @@ impl IndexController {
         IndexControllerBuilder::default()
     }
 
-    pub async fn register_update(&self, uid: &str, update: Update) -> Result<UpdateStatus> {
-        match self.index_resolver.get_uuid(uid.to_string()).await {
+    pub async fn register_update(&self, uid: String, update: Update) -> Result<UpdateStatus> {
+        match self.index_resolver.get_uuid(uid).await {
             Ok(uuid) => {
                 let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
                 Ok(update_result)

@@ -69,12 +69,12 @@ impl From<&UpdateStatus> for UpdateType {
                     _ => unreachable!(),
                 }
             }
+            RegisterUpdate::Settings(settings) => UpdateType::Settings {
+                settings: settings.clone(),
+            },
             //UpdateMeta::ClearDocuments => UpdateType::ClearAll,
             //UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
                 //number: Some(ids.len()),
-            //},
-            //UpdateMeta::Settings(settings) => UpdateType::Settings {
-                //settings: settings.clone(),
             //},
         }
     }

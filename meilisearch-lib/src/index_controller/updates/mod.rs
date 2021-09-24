@@ -24,6 +24,7 @@ use uuid::Uuid;
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
+use crate::index::{Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
@@ -53,6 +54,7 @@ pub enum RegisterUpdate {
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
     },
+    Settings(Settings<Unchecked>),
 }
 
 /// A wrapper type to implement read on a `Stream<Result<Bytes, Error>>`.
@@ -207,6 +209,7 @@ impl UpdateLoop {
                     content_uuid,
                 }
             }
+            Update::Settings(settings) => RegisterUpdate::Settings(settings),
         };
 
         let store = self.store.clone();

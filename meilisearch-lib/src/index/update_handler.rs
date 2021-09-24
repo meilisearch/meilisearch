@@ -1,10 +1,7 @@
-use crate::index::Index;
 use milli::update::UpdateBuilder;
 use milli::CompressionType;
 use rayon::ThreadPool;
 
-use crate::index_controller::updates::RegisterUpdate;
-use crate::index_controller::updates::status::{Failed, Processed, Processing};
 use crate::options::IndexerOpts;
 
 pub struct UpdateHandler {
@@ -48,25 +45,5 @@ impl UpdateHandler {
         }
         update_builder.chunk_compression_type(self.chunk_compression_type);
         update_builder
-    }
-
-    pub fn handle_update(
-        &self,
-        index: &Index,
-        meta: Processing,
-    ) -> Result<Processed, Failed> {
-        let update_id = meta.id();
-        let update_builder = self.update_builder(update_id);
-
-        let result = match meta.meta() {
-            RegisterUpdate::DocumentAddition { primary_key, content_uuid, method } => {
-                index.update_documents(*method, *content_uuid, update_builder, primary_key.as_deref())
-            }
-        };
-
-        match result {
-            Ok(result) => Ok(meta.process(result)),
-            Err(e) => Err(meta.fail(e)),
-        }
     }
 }

@@ -170,7 +170,7 @@ pub async fn add_documents(
         format: DocumentAdditionFormat::Json,
     };
     let update_status = meilisearch
-        .register_update(path.index_uid.as_str(), update)
+        .register_update(path.into_inner().index_uid, update)
         .await?;
 
     debug!("returns: {:?}", update_status);
@@ -193,7 +193,7 @@ pub async fn update_documents(
         format: DocumentAdditionFormat::Json,
     };
     let update_status = meilisearch
-        .register_update(path.index_uid.as_str(), update)
+        .register_update(path.into_inner().index_uid, update)
         .await?;
 
     debug!("returns: {:?}", update_status);

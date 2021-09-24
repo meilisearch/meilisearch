@@ -32,7 +32,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/updates").configure(updates::configure))
-            //.service(web::scope("/settings").configure(settings::configure)),
+            .service(web::scope("/settings").configure(settings::configure)),
     );
 }
 
