@@ -82,13 +82,13 @@ impl From<SearchQueryGet> for SearchQuery {
 }
 
 pub async fn search_with_url_query(
-    data: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let query = params.into_inner().into();
-    let search_result = data.search(path.into_inner().index_uid, query).await?;
+    let search_result = meilisearch.search(path.into_inner().index_uid, query).await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
@@ -99,12 +99,12 @@ pub async fn search_with_url_query(
 }
 
 pub async fn search_with_post(
-    data: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("search called with params: {:?}", params);
-    let search_result = data
+    let search_result = meilisearch
         .search(path.into_inner().index_uid, params.into_inner())
         .await?;
 

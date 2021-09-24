@@ -233,8 +233,8 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
-async fn get_stats(data: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
-    let response = data.get_all_stats().await?;
+async fn get_stats(meilisearch: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
+    let response = meilisearch.get_all_stats().await?;
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
@@ -248,7 +248,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-async fn get_version(_data: GuardedData<Private, MeiliSearch>) -> HttpResponse {
+async fn get_version(_meilisearch: GuardedData<Private, MeiliSearch>) -> HttpResponse {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -265,8 +265,8 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-pub async fn list_keys(data: GuardedData<Admin, ApiKeys>) -> HttpResponse {
-    let api_keys = (*data).clone();
+pub async fn list_keys(meilisearch: GuardedData<Admin, ApiKeys>) -> HttpResponse {
+    let api_keys = (*meilisearch).clone();
     HttpResponse::Ok().json(&KeysResponse {
         private: api_keys.private,
         public: api_keys.public,

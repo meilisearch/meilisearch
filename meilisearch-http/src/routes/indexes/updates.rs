@@ -37,11 +37,11 @@ pub struct UpdateParam {
 }
 
 pub async fn get_update_status(
-    data: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = path.into_inner();
-    let meta = data
+    let meta = meilisearch
         .update_status(params.index_uid, params.update_id)
         .await?;
     let meta = UpdateStatusResponse::from(meta);
@@ -50,10 +50,10 @@ pub async fn get_update_status(
 }
 
 pub async fn get_all_updates_status(
-    data: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let metas = data.all_update_status(path.into_inner().index_uid).await?;
+    let metas = meilisearch.all_update_status(path.into_inner().index_uid).await?;
     let metas = metas
         .into_iter()
         .map(UpdateStatusResponse::from)

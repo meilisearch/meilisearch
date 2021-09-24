@@ -88,12 +88,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn get_document(
-    data: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
-    let document = data
+    let document = meilisearch
         .document(index, id, None as Option<Vec<String>>)
         .await?;
     debug!("returns: {:?}", document);
@@ -120,7 +120,7 @@ pub struct BrowseQuery {
 }
 
 pub async fn get_all_documents(
-    data: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -136,7 +136,7 @@ pub async fn get_all_documents(
         Some(names)
     });
 
-    let documents = data
+    let documents = meilisearch
         .documents(
             path.index_uid.clone(),
             params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
@@ -157,7 +157,7 @@ pub struct UpdateDocumentsQuery {
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
 pub async fn add_documents(
-    data: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -169,7 +169,7 @@ pub async fn add_documents(
         method: IndexDocumentsMethod::ReplaceDocuments,
         format: DocumentAdditionFormat::Json,
     };
-    let update_status = data
+    let update_status = meilisearch
         .register_update(path.index_uid.as_str(), update)
         .await?;
 
@@ -180,7 +180,7 @@ pub async fn add_documents(
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
 pub async fn update_documents(
-    data: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -192,7 +192,7 @@ pub async fn update_documents(
         method: IndexDocumentsMethod::UpdateDocuments,
         format: DocumentAdditionFormat::Json,
     };
-    let update_status = data
+    let update_status = meilisearch
         .register_update(path.index_uid.as_str(), update)
         .await?;
 
