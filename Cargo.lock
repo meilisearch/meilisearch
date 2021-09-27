@@ -301,6 +301,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5ab7d9e73059c86c36473f459b52adbd99c3554a4fec492caef460806006f00"
 
 [[package]]
+name = "as-slice"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45403b49e3954a4b8428a0ac21a4b7afadccf92bfd96273f1a58cd4812496ae0"
+dependencies = [
+ "generic-array 0.12.4",
+ "generic-array 0.13.3",
+ "generic-array 0.14.4",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "assert-json-diff"
 version = "1.0.1"
 source = "git+https://github.com/qdequele/assert-json-diff?branch=master#9012a0c8866d0f2db0ef9a6242e4a19d1e8c67e4"
@@ -1091,6 +1103,15 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f797e67af32588215eaaab8327027ee8e71b9dd0b2b26996aedf20c030fce309"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
+name = "generic-array"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
@@ -1098,6 +1119,12 @@ dependencies = [
  "typenum",
  "version_check",
 ]
+
+[[package]]
+name = "geoutils"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e006f616a407d396ace1d2ebb3f43ed73189db8b098079bd129928d7645dd1e"
 
 [[package]]
 name = "getrandom"
@@ -1178,6 +1205,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4041af86e63ac4298ce40e5cca669066e75b6f1aa3390fe2561ffa5e1d9f4cc"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1192,6 +1228,18 @@ name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
+
+[[package]]
+name = "heapless"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "634bd4d29cbf24424d0a4bfcbf80c6960129dc24424752a7d1d1390607023422"
+dependencies = [
+ "as-slice",
+ "generic-array 0.14.4",
+ "hash32",
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "heck"
@@ -1697,6 +1745,7 @@ dependencies = [
  "http",
  "indexmap",
  "itertools",
+ "lazy_static",
  "log",
  "main_error",
  "meilisearch-error",
@@ -1780,8 +1829,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.13.1"
-source = "git+https://github.com/meilisearch/milli.git?rev=6de1b41#6de1b41f791e7d117634e63783d78b29b5228a99"
+version = "0.16.0"
+source = "git+https://github.com/meilisearch/milli.git#0f8320bdc24d76781e596d96d3b2e788a55655c6"
 dependencies = [
  "bimap",
  "bincode",
@@ -1794,6 +1843,7 @@ dependencies = [
  "flate2",
  "fst",
  "fxhash",
+ "geoutils",
  "grenad",
  "heed",
  "human_format",
@@ -1811,6 +1861,7 @@ dependencies = [
  "pest_derive",
  "rayon",
  "roaring",
+ "rstar",
  "serde",
  "serde_json",
  "slice-group-by",
@@ -1818,7 +1869,6 @@ dependencies = [
  "smallvec",
  "tempfile",
  "uuid",
- "vec-utils",
 ]
 
 [[package]]
@@ -2037,6 +2087,12 @@ name = "path-slash"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cacbb3c4ff353b534a67fb8d7524d00229da4cb1dc8c79f4db96e375ab5b619"
+
+[[package]]
+name = "pdqselect"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec91767ecc0a0bbe558ce8c9da33c068066c57ecc8bb8477ef8c1ad3ef77c27"
 
 [[package]]
 name = "percent-encoding"
@@ -2490,6 +2546,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rstar"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d535e658ada8c1987a113e5261f8b907f721b2854d666e72820671481b7ee125"
+dependencies = [
+ "heapless",
+ "num-traits",
+ "pdqselect",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2761,6 +2830,12 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+
+[[package]]
+name = "stable_deref_trait"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "standback"
@@ -3264,12 +3339,6 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
-name = "vec-utils"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dac984aa016c26ef4ed7b2c30d6a1bd570fd40a078caccaf6415a2ac5d96161"
 
 [[package]]
 name = "vec_map"

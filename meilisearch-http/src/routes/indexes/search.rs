@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse};
 use log::debug;
+use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
-use  meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -61,9 +61,7 @@ impl From<SearchQueryGet> for SearchQuery {
             None => None,
         };
 
-        let sort = other
-            .sort
-            .map(|attrs| attrs.split(',').map(String::from).collect());
+        let sort = other.sort.map(|attr| fix_sort_query_parameters(&attr));
 
         Self {
             q: other.q,
@@ -81,6 +79,30 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
+/// Transform the sort query parameter into something that matches the post expected format.
+fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
+    let mut sort_parameters = Vec::new();
+    let mut merge = false;
+    for current_sort in sort_query.trim_matches('"').split(',').map(|s| s.trim()) {
+        if current_sort.starts_with("_geoPoint(") {
+            sort_parameters.push(current_sort.to_string());
+            merge = true;
+        } else if merge && !sort_parameters.is_empty() {
+            sort_parameters
+                .last_mut()
+                .unwrap()
+                .push_str(&format!(",{}", current_sort));
+            if current_sort.ends_with("):desc") || current_sort.ends_with("):asc") {
+                merge = false;
+            }
+        } else {
+            sort_parameters.push(current_sort.to_string());
+            merge = false;
+        }
+    }
+    sort_parameters
+}
+
 pub async fn search_with_url_query(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
@@ -88,7 +110,9 @@ pub async fn search_with_url_query(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let query = params.into_inner().into();
-    let search_result = meilisearch.search(path.into_inner().index_uid, query).await?;
+    let search_result = meilisearch
+        .search(path.into_inner().index_uid, query)
+        .await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
@@ -114,4 +138,43 @@ pub async fn search_with_post(
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_fix_sort_query_parameters() {
+        let sort = fix_sort_query_parameters("_geoPoint(12, 13):asc");
+        assert_eq!(sort, vec!["_geoPoint(12,13):asc".to_string()]);
+        let sort = fix_sort_query_parameters("doggo:asc,_geoPoint(12.45,13.56):desc");
+        assert_eq!(
+            sort,
+            vec![
+                "doggo:asc".to_string(),
+                "_geoPoint(12.45,13.56):desc".to_string(),
+            ]
+        );
+        let sort = fix_sort_query_parameters(
+            "doggo:asc , _geoPoint(12.45, 13.56, 2590352):desc , catto:desc",
+        );
+        assert_eq!(
+            sort,
+            vec![
+                "doggo:asc".to_string(),
+                "_geoPoint(12.45,13.56,2590352):desc".to_string(),
+                "catto:desc".to_string(),
+            ]
+        );
+        let sort = fix_sort_query_parameters("doggo:asc , _geoPoint(1, 2), catto:desc");
+        // This is ugly but eh, I don't want to write a full parser just for this unused route
+        assert_eq!(
+            sort,
+            vec![
+                "doggo:asc".to_string(),
+                "_geoPoint(1,2),catto:desc".to_string(),
+            ]
+        );
+    }
 }

@@ -1,7 +1,7 @@
 use std::fmt;
 
 use actix_http::http::StatusCode;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
@@ -71,6 +71,8 @@ pub enum Code {
     BadRequest,
     DocumentNotFound,
     Internal,
+    InvalidGeoField,
+    InvalidRankingRule,
     InvalidToken,
     MissingAuthorizationHeader,
     NotFound,
@@ -108,6 +110,8 @@ impl Code {
             PrimaryKeyAlreadyPresent => {
                 ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST)
             }
+            // invalid ranking rule
+            InvalidRankingRule => ErrCode::invalid("invalid_request", StatusCode::BAD_REQUEST),
 
             // invalid document
             MaxFieldsLimitExceeded => {
@@ -126,6 +130,9 @@ impl Code {
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidGeoField => {
+                ErrCode::authentication("invalid_geo_field", StatusCode::BAD_REQUEST)
+            }
             InvalidToken => ErrCode::authentication("invalid_token", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)

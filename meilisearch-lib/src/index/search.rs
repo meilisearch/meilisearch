@@ -6,9 +6,12 @@ use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, UserError};
+use milli::{
+    AscDesc, AscDescError, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, UserError,
+};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::index::error::FacetError;
 use crate::index::IndexError;
@@ -110,12 +113,16 @@ impl Index {
         if let Some(ref sort) = query.sort {
             let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
                 Ok(sorts) => sorts,
-                Err(UserError::InvalidAscDescSyntax { name }) => {
+                Err(AscDescError::InvalidSyntax { name }) => {
                     return Err(IndexError::Milli(
                         UserError::InvalidSortName { name }.into(),
                     ))
                 }
-                Err(err) => return Err(IndexError::Milli(err.into())),
+                Err(AscDescError::ReservedKeyword { name }) => {
+                    return Err(IndexError::Milli(
+                        UserError::InvalidReservedSortName { name }.into(),
+                    ))
+                }
             };
 
             search.sort_criteria(sort);
@@ -193,7 +200,7 @@ impl Index {
         let documents_iter = self.documents(&rtxn, documents_ids)?;
 
         for (_id, obkv) in documents_iter {
-            let document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
+            let mut document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
 
             let matches_info = query
                 .matches
@@ -206,6 +213,10 @@ impl Index {
                 &matching_words,
                 &formatted_options,
             )?;
+
+            if let Some(sort) = query.sort.as_ref() {
+                insert_geo_distance(sort, &mut document);
+            }
 
             let hit = SearchHit {
                 document,
@@ -244,6 +255,25 @@ impl Index {
             exhaustive_facets_count,
         };
         Ok(result)
+    }
+}
+
+fn insert_geo_distance(sorts: &[String], document: &mut Document) {
+    lazy_static::lazy_static! {
+        static ref GEO_REGEX: Regex =
+            Regex::new(r"_geoPoint\(\s*([[:digit:].\-]+)\s*,\s*([[:digit:].\-]+)\s*\)").unwrap();
+    };
+    if let Some(capture_group) = sorts.iter().find_map(|sort| GEO_REGEX.captures(sort)) {
+        // TODO: TAMO: milli encountered an internal error, what do we want to do?
+        let base = [
+            capture_group[1].parse().unwrap(),
+            capture_group[2].parse().unwrap(),
+        ];
+        let geo_point = &document.get("_geo").unwrap_or(&json!(null));
+        if let Some((lat, lng)) = geo_point["lat"].as_f64().zip(geo_point["lng"].as_f64()) {
+            let distance = milli::distance_between_two_points(&base, &[lat, lng]);
+            document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
+        }
     }
 }
 
@@ -1331,5 +1361,66 @@ mod test {
             format!("{:?}", matches),
             r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##
         );
+    }
+
+    #[test]
+    fn test_insert_geo_distance() {
+        let value: Document = serde_json::from_str(
+            r#"{
+      "_geo": {
+        "lat": 50.629973371633746,
+        "lng": 3.0569447399419567
+      },
+      "city": "Lille",
+      "id": "1"
+    }"#,
+        )
+        .unwrap();
+
+        let sorters = &["_geoPoint(50.629973371633746,3.0569447399419567):desc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        let sorters = &["_geoPoint(50.629973371633746, 3.0569447399419567):asc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        let sorters =
+            &["_geoPoint(   50.629973371633746   ,  3.0569447399419567   ):desc".to_string()];
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        let sorters = &[
+            "prix:asc",
+            "villeneuve:desc",
+            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
+            "ubu:asc",
+        ]
+        .map(|s| s.to_string());
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        // only the first geoPoint is used to compute the distance
+        let sorters = &[
+            "chien:desc",
+            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
+            "pangolin:desc",
+            "_geoPoint(100.0, -80.0):asc",
+            "chat:asc",
+        ]
+        .map(|s| s.to_string());
+        let mut document = value.clone();
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
+
+        // there was no _geoPoint so nothing is inserted in the document
+        let sorters = &["chien:asc".to_string()];
+        let mut document = value;
+        insert_geo_distance(sorters, &mut document);
+        assert_eq!(document.get("_geoDistance"), None);
     }
 }

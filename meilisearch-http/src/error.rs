@@ -74,13 +74,11 @@ impl ErrorCode for MilliError<'_> {
             milli::Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
-                    | UserError::SerdeJson(_)
+                    UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidCriterionName { .. }
                     | UserError::InvalidDocumentId { .. }
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
-                    | UserError::InvalidAscDescSyntax { .. }
                     | UserError::DocumentLimitReached => Code::Internal,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
@@ -93,7 +91,10 @@ impl ErrorCode for MilliError<'_> {
                     UserError::SortRankingRuleMissing => Code::Sort,
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
-                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
+                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::InvalidSortableAttribute { .. }
+                    | UserError::InvalidReservedSortName { .. } => Code::Sort,
+                    UserError::CriterionError(_) => Code::BadRequest,
                 }
             }
         }
