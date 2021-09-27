@@ -63,7 +63,7 @@ As minimal requirements, your commit message should:
 - start with a verb so that we can read your commit message this way: "This commit will ...", where "..." is the commit message.
   e.g.: "Fix the home page button" or "Add more tests for create_index method"
 
-We don't follow any other convention, but if you want to use one, we recommend [this one](https://chris.beams.io/posts/git-commit/).
+We don't follow any other convention, but if you want to use one, we recommend [the Chris Beams one](https://chris.beams.io/posts/git-commit/).
 
 ### Github Pull Requests
 
