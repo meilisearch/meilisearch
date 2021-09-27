@@ -9,7 +9,7 @@ First, thank you for contributing to MeiliSearch! The goal of this document is t
 
 ## Assumptions
 
-1. **You're familiar with [Github](https://github.com) and [Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(PR) workflow.**
+1. **You're familiar with [Github](https://github.com) and the [Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(PR) workflow.**
 2. **You've read the MeiliSearch [documentation](https://docs.meilisearch.com).**
 3. **You know about the [MeiliSearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
    Please use this for help.**
