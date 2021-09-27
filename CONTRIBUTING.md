@@ -41,7 +41,7 @@ We recommend using the `--release` flag to test the full performance of MeiliSea
 cargo test
 ```
 
-If you get a "Too many open size" error you might want to increase the open file limit using this command:
+If you get a "Too many open files" error you might want to increase the open file limit using this command:
 
 ```bash
 ulimit -Sn 3000
