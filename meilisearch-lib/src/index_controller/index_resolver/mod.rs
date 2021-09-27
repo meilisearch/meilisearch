@@ -45,10 +45,18 @@ where U: UuidStore,
 
     pub async fn get_size(&self) -> Result<u64> {
         todo!()
+        //Ok(self.index_store.get_size()? + self.index_uuid_store.get_size().await?)
     }
 
-    pub async fn perform_snapshot(&self, _path: impl AsRef<Path>) -> Result<()> {
-        todo!()
+    pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+        let uuids = self.index_uuid_store.snapshot(path.as_ref().to_owned()).await?;
+        let mut indexes = Vec::new();
+
+        for uuid in uuids {
+            indexes.push(self.get_index_by_uuid(uuid).await?);
+        }
+
+        Ok(indexes)
     }
 
     pub async fn create_index(&self, uid: String, primary_key: Option<String>) -> Result<(Uuid, Index)> {

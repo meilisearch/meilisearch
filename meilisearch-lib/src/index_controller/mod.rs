@@ -20,6 +20,7 @@ use snapshot::load_snapshot;
 
 use crate::index::{Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked};
 use crate::index_controller::index_resolver::create_index_resolver;
+use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
 use error::Result;
 use crate::index::error::Result as IndexResult;
@@ -75,7 +76,7 @@ pub struct IndexSettings {
 #[derive(Clone)]
 pub struct IndexController {
     index_resolver: Arc<HardStateIndexResolver>,
-    update_handle: updates::UpdateSender,
+    update_sender: updates::UpdateSender,
     dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
@@ -113,8 +114,10 @@ pub struct IndexControllerBuilder {
     max_update_store_size: Option<usize>,
     snapshot_dir: Option<PathBuf>,
     import_snapshot: Option<PathBuf>,
+    snapshot_interval: Option<Duration>,
     ignore_snapshot_if_db_exists: bool,
     ignore_missing_snapshot: bool,
+    schedule_snapshot: bool,
     dump_src: Option<PathBuf>,
     dump_dst: Option<PathBuf>,
 }
@@ -155,36 +158,36 @@ impl IndexControllerBuilder {
         let index_resolver = Arc::new(create_index_resolver(&db_path, index_size, &indexer_options)?);
 
         #[allow(unreachable_code)]
-        let update_handle = updates::create_update_handler(index_resolver.clone(), &db_path, update_store_size)?;
+        let update_sender = updates::create_update_handler(index_resolver.clone(), &db_path, update_store_size)?;
 
         let dump_path = self.dump_dst.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
         let dump_handle = dump_actor::DumpActorHandleImpl::new(
             dump_path,
             index_resolver.clone(),
-            update_handle.clone(),
+            update_sender.clone(),
             index_size,
             update_store_size,
         )?;
 
-        //if options.schedule_snapshot {
-        //let snapshot_service = SnapshotService::new(
-        //uuid_resolver.clone(),
-        //update_handle.clone(),
-        //Duration::from_secs(options.snapshot_interval_sec),
-        //options.snapshot_dir.clone(),
-        //options
-        //.db_path
-        //.file_name()
-        //.map(|n| n.to_owned().into_string().expect("invalid path"))
-        //.unwrap_or_else(|| String::from("data.ms")),
-        //);
+        if self.schedule_snapshot {
+            let snapshot_service = SnapshotService::new(
+                index_resolver.clone(),
+                update_sender.clone(),
+                self.snapshot_interval.ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
+                self.snapshot_dir.ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
+                db_path
+                .as_ref()
+                .file_name()
+                .map(|n| n.to_owned().into_string().expect("invalid path"))
+                .unwrap_or_else(|| String::from("data.ms")),
+            );
 
-        //tokio::task::spawn(snapshot_service.run());
-        //}
+            tokio::task::spawn(snapshot_service.run());
+        }
 
         Ok(IndexController {
             index_resolver,
-            update_handle,
+            update_sender,
             dump_handle,
         })
     }
@@ -238,6 +241,18 @@ impl IndexControllerBuilder {
         self.import_snapshot.replace(import_snapshot);
         self
     }
+
+    /// Set the index controller builder's snapshot interval sec.
+    pub fn set_snapshot_interval(&mut self, snapshot_interval: Duration) -> &mut Self {
+        self.snapshot_interval = Some(snapshot_interval);
+        self
+    }
+
+    /// Set the index controller builder's schedule snapshot.
+    pub fn set_schedule_snapshot(&mut self) -> &mut Self {
+        self.schedule_snapshot = true;
+        self
+    }
 }
 
 impl IndexController {
@@ -248,12 +263,12 @@ impl IndexController {
     pub async fn register_update(&self, uid: String, update: Update) -> Result<UpdateStatus> {
         match self.index_resolver.get_uuid(uid).await {
             Ok(uuid) => {
-                let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
+                let update_result = UpdateMsg::update(&self.update_sender, uuid, update).await?;
                 Ok(update_result)
             }
             Err(IndexResolverError::UnexistingIndex(name)) => {
                 let (uuid, _) = self.index_resolver.create_index(name, None).await?;
-                let update_result = UpdateMsg::update(&self.update_handle, uuid, update).await?;
+                let update_result = UpdateMsg::update(&self.update_sender, uuid, update).await?;
                 // ignore if index creation fails now, since it may already have been created
 
                 Ok(update_result)
@@ -389,13 +404,13 @@ impl IndexController {
 
     pub async fn update_status(&self, uid: String, id: u64) -> Result<UpdateStatus> {
         let uuid = self.index_resolver.get_uuid(uid).await?;
-        let result = UpdateMsg::get_update(&self.update_handle, uuid, id).await?;
+        let result = UpdateMsg::get_update(&self.update_sender, uuid, id).await?;
         Ok(result)
     }
 
     pub async fn all_update_status(&self, uid: String) -> Result<Vec<UpdateStatus>> {
         let uuid = self.index_resolver.get_uuid(uid).await?;
-        let result = UpdateMsg::list_updates(&self.update_handle, uuid).await?;
+        let result = UpdateMsg::list_updates(&self.update_sender, uuid).await?;
         Ok(result)
     }
 
@@ -490,7 +505,7 @@ impl IndexController {
     }
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
-        let update_infos = UpdateMsg::get_info(&self.update_handle).await?;
+        let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
         let index = self.index_resolver.get_index(uid).await?;
         let uuid = index.uuid;
         let mut stats = spawn_blocking(move || index.stats()).await??;
@@ -500,7 +515,7 @@ impl IndexController {
     }
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
-        let update_infos = UpdateMsg::get_info(&self.update_handle).await?;
+        let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
         let mut database_size = self.get_uuids_size().await? + update_infos.size;
         let mut last_update: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();

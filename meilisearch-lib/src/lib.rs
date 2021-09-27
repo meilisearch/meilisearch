@@ -7,6 +7,8 @@ pub mod index_controller;
 
 pub use index_controller::{IndexController as MeiliSearch, updates::RegisterUpdate};
 
+mod compression;
+
 use walkdir::WalkDir;
 
 pub trait EnvSizer {

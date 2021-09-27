@@ -24,7 +24,7 @@ use uuid::Uuid;
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
-use crate::index::{Settings, Unchecked};
+use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
@@ -123,11 +123,10 @@ impl UpdateLoop {
 
         let must_exit = Arc::new(AtomicBool::new(false));
 
-        let store = UpdateStore::open(options, &path, index_resolver.clone(), must_exit.clone())?;
+        let update_file_store = UpdateFileStore::new(&path).unwrap();
+        let store = UpdateStore::open(options, &path, index_resolver.clone(), must_exit.clone(), update_file_store.clone())?;
 
         let inbox = Some(inbox);
-
-        let update_file_store = UpdateFileStore::new(&path).unwrap();
 
         Ok(Self {
             store,
@@ -179,8 +178,8 @@ impl UpdateLoop {
                     Delete { uuid, ret } => {
                         let _ = ret.send(self.handle_delete(uuid).await);
                     }
-                    Snapshot { uuids, path, ret } => {
-                        let _ = ret.send(self.handle_snapshot(uuids, path).await);
+                    Snapshot { indexes, path, ret } => {
+                        let _ = ret.send(self.handle_snapshot(indexes, path).await);
                     }
                     GetInfo { ret } => {
                         let _ = ret.send(self.handle_get_info().await);
@@ -270,15 +269,13 @@ impl UpdateLoop {
         Ok(())
     }
 
-    async fn handle_snapshot(&self, _uuids: HashSet<Uuid>,_pathh: PathBuf) -> Result<()> {
-        todo!()
-        //let index_handle = self.index_resolver.clone();
-        //let update_store = self.store.clone();
+    async fn handle_snapshot(&self, indexes: Vec<Index>, path: PathBuf) -> Result<()> {
+        let update_store = self.store.clone();
 
-        //tokio::task::spawn_blocking(move || update_store.snapshot(&uuids, &path, index_handle))
-            //.await??;
+        tokio::task::spawn_blocking(move || update_store.snapshot(indexes, path))
+            .await??;
 
-        //Ok(())
+        Ok(())
     }
 
     async fn handle_dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {

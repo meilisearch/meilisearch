@@ -46,8 +46,9 @@ impl HeedUuidStore {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(UUID_STORE_SIZE); // 1GB
+        options.max_dbs(1);
         let env = options.open(path)?;
-        let db = env.create_database(None)?;
+        let db = env.create_database(Some("uuids"))?;
         Ok(Self { env, db })
     }
 

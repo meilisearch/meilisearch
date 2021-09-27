@@ -1,88 +1,94 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::bail;
+use log::{error, info, trace};
+use tokio::task::spawn_blocking;
+use tokio::time::sleep;
+use tokio::fs;
 
-//pub struct SnapshotService<U, R> {
-    //uuid_resolver_handle: R,
-    //update_handle: U,
-    //snapshot_period: Duration,
-    //snapshot_path: PathBuf,
-    //db_name: String,
-//}
+use crate::index_controller::updates::UpdateMsg;
 
-//impl<U, R> SnapshotService<U, R>
-//where
-    //U: UpdateActorHandle,
-    //R: UuidResolverHandle,
-//{
-    //pub fn new(
-        //uuid_resolver_handle: R,
-        //update_handle: U,
-        //snapshot_period: Duration,
-        //snapshot_path: PathBuf,
-        //db_name: String,
-    //) -> Self {
-        //Self {
-            //uuid_resolver_handle,
-            //update_handle,
-            //snapshot_period,
-            //snapshot_path,
-            //db_name,
-        //}
-    //}
+use super::updates::UpdateSender;
+use super::index_resolver::HardStateIndexResolver;
 
-    //pub async fn run(self) {
-        //info!(
-            //"Snapshot scheduled every {}s.",
-            //self.snapshot_period.as_secs()
-        //);
-        //loop {
-            //if let Err(e) = self.perform_snapshot().await {
-                //error!("Error while performing snapshot: {}", e);
-            //}
-            //sleep(self.snapshot_period).await;
-        //}
-    //}
+pub struct SnapshotService {
+    index_resolver: Arc<HardStateIndexResolver>,
+    update_sender: UpdateSender,
+    snapshot_period: Duration,
+    snapshot_path: PathBuf,
+    db_name: String,
+}
 
-    //async fn perform_snapshot(&self) -> anyhow::Result<()> {
-        //trace!("Performing snapshot.");
+impl SnapshotService {
+    pub fn new(
+        index_resolver: Arc<HardStateIndexResolver>,
+        update_sender: UpdateSender,
+        snapshot_period: Duration,
+        snapshot_path: PathBuf,
+        db_name: String,
+    ) -> Self {
+        Self {
+            index_resolver,
+            update_sender,
+            snapshot_period,
+            snapshot_path,
+            db_name,
+        }
+    }
 
-        //let snapshot_dir = self.snapshot_path.clone();
-        //fs::create_dir_all(&snapshot_dir).await?;
-        //let temp_snapshot_dir =
-            //spawn_blocking(move || tempfile::tempdir_in(snapshot_dir)).await??;
-        //let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
+    pub async fn run(self) {
+        info!(
+            "Snapshot scheduled every {}s.",
+            self.snapshot_period.as_secs()
+        );
+        loop {
+            if let Err(e) = self.perform_snapshot().await {
+                error!("Error while performing snapshot: {}", e);
+            }
+            sleep(self.snapshot_period).await;
+        }
+    }
 
-        //let uuids = self
-            //.uuid_resolver_handle
-            //.snapshot(temp_snapshot_path.clone())
-            //.await?;
+    async fn perform_snapshot(&self) -> anyhow::Result<()> {
+        trace!("Performing snapshot.");
 
-        //if uuids.is_empty() {
-            //return Ok(());
-        //}
+        let snapshot_dir = self.snapshot_path.clone();
+        fs::create_dir_all(&snapshot_dir).await?;
+        let temp_snapshot_dir =
+            spawn_blocking(move || tempfile::tempdir_in(snapshot_dir)).await??;
+        let temp_snapshot_path = temp_snapshot_dir.path().to_owned();
 
-        //self.update_handle
-            //.snapshot(uuids, temp_snapshot_path.clone())
-            //.await?;
-        //let snapshot_dir = self.snapshot_path.clone();
-        //let snapshot_path = self
-            //.snapshot_path
-            //.join(format!("{}.snapshot", self.db_name));
-        //let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            //let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
-            //let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
-            //compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
-            //temp_snapshot_file.persist(&snapshot_path)?;
-            //Ok(snapshot_path)
-        //})
-        //.await??;
+        let indexes = self
+            .index_resolver
+            .snapshot(temp_snapshot_path.clone())
+            .await?;
 
-        //trace!("Created snapshot in {:?}.", snapshot_path);
+        if indexes.is_empty() {
+            return Ok(());
+        }
 
-        //Ok(())
-    //}
-//}
+        UpdateMsg::snapshot(&self.update_sender, temp_snapshot_path.clone(), indexes).await?;
+
+        let snapshot_dir = self.snapshot_path.clone();
+        let snapshot_path = self
+            .snapshot_path
+            .join(format!("{}.snapshot", self.db_name));
+        let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
+            let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
+            let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
+            crate::compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
+            temp_snapshot_file.persist(&snapshot_path)?;
+            Ok(snapshot_path)
+        })
+        .await??;
+
+        trace!("Created snapshot in {:?}.", snapshot_path);
+
+        Ok(())
+    }
+}
 
 pub fn load_snapshot(
     db_path: impl AsRef<Path>,
@@ -94,7 +100,7 @@ pub fn load_snapshot(
         match crate::from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),
             Err(e) => {
-                // clean created db folder
+                 //clean created db folder
                 std::fs::remove_dir_all(&db_path)?;
                 Err(e)
             }
@@ -120,140 +126,140 @@ pub fn load_snapshot(
     }
 }
 
-#[cfg(test)]
-mod test {
-    use std::iter::FromIterator;
-    use std::{collections::HashSet, sync::Arc};
+//#[cfg(test)]
+//mod test {
+    //use std::iter::FromIterator;
+    //use std::{collections::HashSet, sync::Arc};
 
-    use futures::future::{err, ok};
-    use rand::Rng;
-    use tokio::time::timeout;
-    use uuid::Uuid;
+    //use futures::future::{err, ok};
+    //use rand::Rng;
+    //use tokio::time::timeout;
+    //use uuid::Uuid;
 
-    use super::*;
-    use crate::index_controller::index_actor::MockIndexActorHandle;
-    use crate::index_controller::updates::{
-        error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
-    };
-    use crate::index_controller::uuid_resolver::{
-        error::UuidResolverError, MockUuidResolverHandle,
-    };
+    //use super::*;
+    //use crate::index_controller::index_actor::MockIndexActorHandle;
+    //use crate::index_controller::updates::{
+        //error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
+    //};
+    //use crate::index_controller::uuid_resolver::{
+        //error::UuidResolverError, MockUuidResolverHandle,
+    //};
 
-    #[actix_rt::test]
-    async fn test_normal() {
-        let mut rng = rand::thread_rng();
-        let uuids_num: usize = rng.gen_range(5..10);
-        let uuids = (0..uuids_num)
-            .map(|_| Uuid::new_v4())
-            .collect::<HashSet<_>>();
+    //#[actix_rt::test]
+    //async fn test_normal() {
+        //let mut rng = rand::thread_rng();
+        //let uuids_num: usize = rng.gen_range(5..10);
+        //let uuids = (0..uuids_num)
+            //.map(|_| Uuid::new_v4())
+            //.collect::<HashSet<_>>();
 
-        let mut uuid_resolver = MockUuidResolverHandle::new();
-        let uuids_clone = uuids.clone();
-        uuid_resolver
-            .expect_snapshot()
-            .times(1)
-            .returning(move |_| Box::pin(ok(uuids_clone.clone())));
+        //let mut uuid_resolver = MockUuidResolverHandle::new();
+        //let uuids_clone = uuids.clone();
+        //uuid_resolver
+            //.expect_snapshot()
+            //.times(1)
+            //.returning(move |_| Box::pin(ok(uuids_clone.clone())));
 
-        let uuids_clone = uuids.clone();
-        let mut index_handle = MockIndexActorHandle::new();
-        index_handle
-            .expect_snapshot()
-            .withf(move |uuid, _path| uuids_clone.contains(uuid))
-            .times(uuids_num)
-            .returning(move |_, _| Box::pin(ok(())));
+        //let uuids_clone = uuids.clone();
+        //let mut index_handle = MockIndexActorHandle::new();
+        //index_handle
+            //.expect_snapshot()
+            //.withf(move |uuid, _path| uuids_clone.contains(uuid))
+            //.times(uuids_num)
+            //.returning(move |_, _| Box::pin(ok(())));
 
-        let dir = tempfile::tempdir_in(".").unwrap();
-        let handle = Arc::new(index_handle);
-        let update_handle =
-            UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
+        //let dir = tempfile::tempdir_in(".").unwrap();
+        //let handle = Arc::new(index_handle);
+        //let update_handle =
+            //UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
 
-        let snapshot_path = tempfile::tempdir_in(".").unwrap();
-        let snapshot_service = SnapshotService::new(
-            uuid_resolver,
-            update_handle,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
+        //let snapshot_path = tempfile::tempdir_in(".").unwrap();
+        //let snapshot_service = SnapshotService::new(
+            //uuid_resolver,
+            //update_handle,
+            //Duration::from_millis(100),
+            //snapshot_path.path().to_owned(),
+            //"data.ms".to_string(),
+        //);
 
-        snapshot_service.perform_snapshot().await.unwrap();
-    }
+        //snapshot_service.perform_snapshot().await.unwrap();
+    //}
 
-    #[actix_rt::test]
-    async fn error_performing_uuid_snapshot() {
-        let mut uuid_resolver = MockUuidResolverHandle::new();
-        uuid_resolver
-            .expect_snapshot()
-            .times(1)
-            // abitrary error
-            .returning(|_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
+    //#[actix_rt::test]
+    //async fn error_performing_uuid_snapshot() {
+        //let mut uuid_resolver = MockUuidResolverHandle::new();
+        //uuid_resolver
+            //.expect_snapshot()
+            //.times(1)
+             //abitrary error
+            //.returning(|_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
-        let update_handle = MockUpdateActorHandle::new();
+        //let update_handle = MockUpdateActorHandle::new();
 
-        let snapshot_path = tempfile::tempdir_in(".").unwrap();
-        let snapshot_service = SnapshotService::new(
-            uuid_resolver,
-            update_handle,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
+        //let snapshot_path = tempfile::tempdir_in(".").unwrap();
+        //let snapshot_service = SnapshotService::new(
+            //uuid_resolver,
+            //update_handle,
+            //Duration::from_millis(100),
+            //snapshot_path.path().to_owned(),
+            //"data.ms".to_string(),
+        //);
 
-        assert!(snapshot_service.perform_snapshot().await.is_err());
-        // Nothing was written to the file
-        assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
-    }
+        //assert!(snapshot_service.perform_snapshot().await.is_err());
+         //Nothing was written to the file
+        //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
+    //}
 
-    #[actix_rt::test]
-    async fn error_performing_index_snapshot() {
-        let uuid = Uuid::new_v4();
-        let mut uuid_resolver = MockUuidResolverHandle::new();
-        uuid_resolver
-            .expect_snapshot()
-            .times(1)
-            .returning(move |_| Box::pin(ok(HashSet::from_iter(Some(uuid)))));
+    //#[actix_rt::test]
+    //async fn error_performing_index_snapshot() {
+        //let uuid = Uuid::new_v4();
+        //let mut uuid_resolver = MockUuidResolverHandle::new();
+        //uuid_resolver
+            //.expect_snapshot()
+            //.times(1)
+            //.returning(move |_| Box::pin(ok(HashSet::from_iter(Some(uuid)))));
 
-        let mut update_handle = MockUpdateActorHandle::new();
-        update_handle
-            .expect_snapshot()
-            // abitrary error
-            .returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
+        //let mut update_handle = MockUpdateActorHandle::new();
+        //update_handle
+            //.expect_snapshot()
+             //abitrary error
+            //.returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
 
-        let snapshot_path = tempfile::tempdir_in(".").unwrap();
-        let snapshot_service = SnapshotService::new(
-            uuid_resolver,
-            update_handle,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
+        //let snapshot_path = tempfile::tempdir_in(".").unwrap();
+        //let snapshot_service = SnapshotService::new(
+            //uuid_resolver,
+            //update_handle,
+            //Duration::from_millis(100),
+            //snapshot_path.path().to_owned(),
+            //"data.ms".to_string(),
+        //);
 
-        assert!(snapshot_service.perform_snapshot().await.is_err());
-        // Nothing was written to the file
-        assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
-    }
+        //assert!(snapshot_service.perform_snapshot().await.is_err());
+         //Nothing was written to the file
+        //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
+    //}
 
-    #[actix_rt::test]
-    async fn test_loop() {
-        let mut uuid_resolver = MockUuidResolverHandle::new();
-        uuid_resolver
-            .expect_snapshot()
-            // we expect the funtion to be called between 2 and 3 time in the given interval.
-            .times(2..4)
-            // abitrary error, to short-circuit the function
-            .returning(move |_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
+    //#[actix_rt::test]
+    //async fn test_loop() {
+        //let mut uuid_resolver = MockUuidResolverHandle::new();
+        //uuid_resolver
+            //.expect_snapshot()
+             //we expect the funtion to be called between 2 and 3 time in the given interval.
+            //.times(2..4)
+             //abitrary error, to short-circuit the function
+            //.returning(move |_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
-        let update_handle = MockUpdateActorHandle::new();
+        //let update_handle = MockUpdateActorHandle::new();
 
-        let snapshot_path = tempfile::tempdir_in(".").unwrap();
-        let snapshot_service = SnapshotService::new(
-            uuid_resolver,
-            update_handle,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
+        //let snapshot_path = tempfile::tempdir_in(".").unwrap();
+        //let snapshot_service = SnapshotService::new(
+            //uuid_resolver,
+            //update_handle,
+            //Duration::from_millis(100),
+            //snapshot_path.path().to_owned(),
+            //"data.ms".to_string(),
+        //);
 
-        let _ = timeout(Duration::from_millis(300), snapshot_service.run()).await;
-    }
-}
+        //let _ = timeout(Duration::from_millis(300), snapshot_service.run()).await;
+    //}
+//}

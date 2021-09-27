@@ -71,11 +71,15 @@ impl IndexMeta {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, derivative::Derivative)]
+#[derivative(Debug)]
 pub struct Index {
     pub uuid: Uuid,
+    #[derivative(Debug="ignore")]
     pub inner: Arc<milli::Index>,
+    #[derivative(Debug="ignore")]
     update_file_store: Arc<UpdateFileStore>,
+    #[derivative(Debug="ignore")]
     update_handler: Arc<UpdateHandler>,
 }
 
@@ -257,5 +261,14 @@ impl Index {
 
         displayed_fields_ids.retain(|fid| attributes_to_retrieve_ids.contains(fid));
         Ok(displayed_fields_ids)
+    }
+
+    pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
+        let mut dst = path.as_ref().join(format!("indexes/{}/", self.uuid));
+        create_dir_all(&dst)?;
+        dst.push("data.mdb");
+        let _txn = self.write_txn()?;
+        self.inner.env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
+        Ok(())
     }
 }

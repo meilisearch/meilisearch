@@ -22,6 +22,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::time::timeout;
 use uuid::Uuid;
+use rayon::prelude::*;
 
 use codec::*;
 
@@ -31,11 +32,10 @@ use super::status::{Enqueued, Processing};
 use crate::EnvSizer;
 use crate::index_controller::update_files_path;
 use crate::index_controller::updates::*;
+use crate::index::Index;
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
-
-const UPDATE_DIR: &str = "update_files";
 
 #[derive(Debug)]
 pub struct UpdateStoreInfo {
@@ -108,6 +108,7 @@ pub struct UpdateStore {
     state: Arc<StateLock>,
     /// Wake up the loop when a new event occurs.
     notification_sender: mpsc::Sender<()>,
+    update_file_store: UpdateFileStore,
     path: PathBuf,
 }
 
@@ -115,6 +116,7 @@ impl UpdateStore {
     fn new(
         mut options: EnvOpenOptions,
         path: impl AsRef<Path>,
+        update_file_store: UpdateFileStore,
     ) -> anyhow::Result<(Self, mpsc::Receiver<()>)> {
         options.max_dbs(5);
 
@@ -138,6 +140,7 @@ impl UpdateStore {
                 state,
                 notification_sender,
                 path: path.as_ref().to_owned(),
+                update_file_store,
             },
             notification_receiver,
         ))
@@ -148,8 +151,9 @@ impl UpdateStore {
         path: impl AsRef<Path>,
         index_resolver: Arc<HardStateIndexResolver>,
         must_exit: Arc<AtomicBool>,
+        update_file_store: UpdateFileStore,
     ) -> anyhow::Result<Arc<Self>> {
-        let (update_store, mut notification_receiver) = Self::new(options, path)?;
+        let (update_store, mut notification_receiver) = Self::new(options, path, update_file_store)?;
         let update_store = Arc::new(update_store);
 
         // Send a first notification to trigger the process.
@@ -482,12 +486,12 @@ impl UpdateStore {
 
     pub fn snapshot(
         &self,
-        _uuids: &HashSet<Uuid>,
+        indexes: Vec<Index>,
         path: impl AsRef<Path>,
-        handle: Arc<HardStateIndexResolver>,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Snapshoting);
+
 
         let txn = self.env.write_txn()?;
 
@@ -501,42 +505,28 @@ impl UpdateStore {
         // create db snapshot
         self.env.copy_to_path(&db_path, CompactionOption::Enabled)?;
 
-        let update_files_path = update_path.join(UPDATE_DIR);
-        create_dir_all(&update_files_path)?;
-
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
+        let uuids: HashSet<_> = indexes.iter().map(|i| i.uuid).collect();
         for entry in pendings {
-            let ((_, _uuid, _), _pending) = entry?;
-            //if uuids.contains(&uuid) {
-                //if let Enqueued {
-                    //content: Some(uuid),
-                    //..
-                //} = pending.decode()?
-                //{
-                    //let path = update_uuid_to_file_path(&self.path, uuid);
-                    //copy(path, &update_files_path)?;
-                //}
-            //}
+            let ((_, uuid, _), pending) = entry?;
+            if uuids.contains(&uuid) {
+                if let Enqueued {
+                    meta: RegisterUpdate::DocumentAddition {
+                        content_uuid, ..
+                    },
+                    ..
+                } = pending.decode()?
+                {
+                    self.update_file_store.snapshot(content_uuid, &path).unwrap();
+                }
+            }
         }
 
-        let _path = &path.as_ref().to_path_buf();
-        let _handle = &handle;
-        // Perform the snapshot of each index concurently. Only a third of the capabilities of
-        // the index actor at a time not to put too much pressure on the index actor
-        todo!()
-        //let mut stream = futures::stream::iter(uuids.iter())
-            //.map(move |uuid| IndexMsg::snapshot(handle,*uuid, path.clone()))
-            //.buffer_unordered(CONCURRENT_INDEX_MSG / 3);
+        let path = path.as_ref().to_owned();
+        indexes.par_iter().try_for_each(|index| index.snapshot(&path)).unwrap();
 
-        //Handle::current().block_on(async {
-            //while let Some(res) = stream.next().await {
-                //res?;
-            //}
-            //Ok(()) as Result<()>
-        //})?;
-
-        //Ok(())
+        Ok(())
     }
 
     pub fn get_info(&self) -> Result<UpdateStoreInfo> {

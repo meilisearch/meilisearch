@@ -45,16 +45,17 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
     ) -> Result<()> {
-        let dump_data_path = path.as_ref().join("data.jsonl");
-        let mut dump_data_file = File::create(dump_data_path)?;
+        //let dump_data_path = path.as_ref().join("data.jsonl");
+        //let mut dump_data_file = File::create(dump_data_path)?;
 
-        let update_files_path = path.as_ref().join(super::UPDATE_DIR);
-        create_dir_all(&update_files_path)?;
+        //let update_files_path = path.as_ref().join(super::UPDATE_DIR);
+        //create_dir_all(&update_files_path)?;
 
-        self.dump_pending(txn, uuids, &mut dump_data_file, &path)?;
-        self.dump_completed(txn, uuids, &mut dump_data_file)?;
+        //self.dump_pending(txn, uuids, &mut dump_data_file, &path)?;
+        //self.dump_completed(txn, uuids, &mut dump_data_file)?;
 
-        Ok(())
+        //Ok(())
+        todo!()
     }
 
     fn dump_pending(

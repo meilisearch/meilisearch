@@ -57,7 +57,7 @@ impl IndexStore for MapIndexStore {
         if let Some(index) = lock.get(&uuid) {
             return Ok(index.clone());
         }
-        let path = self.path.join(format!("index-{}", uuid));
+        let path = self.path.join(format!("{}", uuid));
         if path.exists() {
             return Err(IndexResolverError::IndexAlreadyExists);
         }
@@ -92,7 +92,7 @@ impl IndexStore for MapIndexStore {
             None => {
                 // drop the guard here so we can perform the write after without deadlocking;
                 drop(guard);
-                let path = self.path.join(format!("index-{}", uuid));
+                let path = self.path.join(format!("{}", uuid));
                 if !path.exists() {
                     return Ok(None);
                 }
@@ -108,7 +108,7 @@ impl IndexStore for MapIndexStore {
     }
 
     async fn delete(&self, uuid: Uuid) -> Result<Option<Index>> {
-        let db_path = self.path.join(format!("index-{}", uuid));
+        let db_path = self.path.join(format!("{}", uuid));
         fs::remove_dir_all(db_path).await?;
         let index = self.index_store.write().await.remove(&uuid);
         Ok(index)

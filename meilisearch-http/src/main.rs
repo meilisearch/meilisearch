@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, path::Path, time::Duration};
 
 use actix_web::HttpServer;
 use meilisearch_http::{create_app, Opt};
@@ -12,6 +12,7 @@ use meilisearch_http::analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+/// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
     let mut log_builder = env_logger::Builder::new();
     log_builder.parse_filters(&opt.log_level);
@@ -22,12 +23,19 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
     log_builder.init();
 
+
+    Ok(())
+}
+
+/// Cleans and setup the temporary file folder in the database directory. This must be done after
+/// the meilisearch instance has been created, to not interfere with the snapshot and dump loading.
+fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
     // Set the tempfile directory in the current db path, to avoid cross device references. Also
     // remove the previous outstanding files found there
     //
     // TODO: if two processes open the same db, one might delete the other tmpdir. Need to make
     // sure that no one is using it before deleting it.
-    let temp_path = opt.db_path.join("tmp");
+    let temp_path = db_path.as_ref().join("tmp");
     // Ignore error if tempdir doesn't exist
     let _ = std::fs::remove_dir_all(&temp_path);
     std::fs::create_dir_all(&temp_path)?;
@@ -48,13 +56,19 @@ fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
         .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
         .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
         .set_dump_dst(opt.dumps_dir.clone())
+        .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
         .set_snapshot_dir(opt.snapshot_dir.clone());
 
     if let Some(ref path) = opt.import_snapshot {
         meilisearch.set_import_snapshot(path.clone());
     }
+
     if let Some(ref path) = opt.import_dump {
         meilisearch.set_dump_src(path.clone());
+    }
+
+    if opt.schedule_snapshot {
+        meilisearch.set_schedule_snapshot();
     }
 
     meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
@@ -77,6 +91,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let meilisearch = setup_meilisearch(&opt)?;
+
+    setup_temp_dir(&opt.db_path)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
