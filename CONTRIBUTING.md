@@ -72,7 +72,7 @@ Some notes on GitHub PRs:
 - All PRs must be reviewed and approved by at least one maintainer.
 - The PR title should be accurate and descriptive of the changes.
 - [Convert your PR as a draft](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/changing-the-stage-of-a-pull-request) if your changes are a work in progress: no one will review it until you pass your PR as ready for review.<br>
-  The draft PR can be very useful if you want to show that you are working on something and make your work visible.
+  The draft PRs are recommended when you want to show that you are working on something and make your work visible.
 - The branch related to the PR must be **up-to-date with `main`** before merging. Fortunately, this project [Bors](https://github.com/bors-ng/bors-ng) to automatically enforce this requirement without the PR author having to do it manually..
 
 <hr>
