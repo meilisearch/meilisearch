@@ -30,7 +30,7 @@ First, thank you for contributing to MeiliSearch! The goal of this document is t
 ### Setup and run MeiliSearch
 
 ```bash
-cargo run
+cargo run --release
 ```
 
 We recommend using the `--release` flag to test the full performance of MeiliSearch.
