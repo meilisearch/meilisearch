@@ -13,22 +13,21 @@ use async_stream::stream;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use log::trace;
-use milli::documents::DocumentBatchBuilder;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
+use crate::document_formats::read_json;
 use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
 use super::index_resolver::HardStateIndexResolver;
-use super::{DocumentAdditionFormat, Payload, Update};
+use super::{DocumentAdditionFormat, Update};
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
 
@@ -197,9 +196,18 @@ impl UpdateLoop {
                 method,
                 format,
             } => {
-                let content_uuid = match format {
-                    DocumentAdditionFormat::Json => self.documents_from_json(payload).await?,
-                };
+                let reader = StreamReader::new(payload);
+                let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
+                tokio::task::spawn_blocking(move || -> Result<_> {
+                    match format {
+                        DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
+                    }
+
+                    update_file.persist()?;
+
+                    Ok(())
+                }).await??;
+
 
                 RegisterUpdate::DocumentAddition {
                     primary_key,
@@ -220,23 +228,6 @@ impl UpdateLoop {
         Ok(status.into())
     }
 
-    async fn documents_from_json(&self, payload: Payload) -> Result<Uuid> {
-        let file_store = self.update_file_store.clone();
-        tokio::task::spawn_blocking(move || {
-            let (uuid, mut file) = file_store.new_update().unwrap();
-            let mut builder = DocumentBatchBuilder::new(&mut *file).unwrap();
-
-            let documents: Vec<Map<String, Value>> =
-                serde_json::from_reader(StreamReader::new(payload))?;
-            builder.add_documents(documents).unwrap();
-            builder.finish().unwrap();
-
-            file.persist()?;
-
-            Ok(uuid)
-        })
-        .await?
-    }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let update_store = self.store.clone();

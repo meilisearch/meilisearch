@@ -3,7 +3,7 @@ use std::error::Error;
 
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index_controller::update_file_store::UpdateFileStoreError;
+use crate::{document_formats::DocumentFormatError, index_controller::update_file_store::UpdateFileStoreError};
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 
@@ -21,7 +21,8 @@ pub enum UpdateLoopError {
     )]
     FatalUpdateStoreError,
     #[error("{0}")]
-    InvalidPayload(Box<dyn Error + Send + Sync + 'static>),
+    InvalidPayload(#[from] DocumentFormatError),
+    // TODO: The reference to actix has to go.
     #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
 }

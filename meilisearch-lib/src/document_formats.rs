@@ -8,12 +8,14 @@ type Result<T> = std::result::Result<T, DocumentFormatError>;
 #[derive(Debug)]
 pub enum PayloadType {
     Jsonl,
+    Json,
 }
 
 impl fmt::Display for PayloadType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PayloadType::Jsonl => write!(f, "ndjson"),
+            PayloadType::Json => write!(f, "json"),
         }
     }
 }
@@ -47,6 +49,17 @@ pub fn read_jsonl(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     }
 
     builder.finish()?;
+
+    Ok(())
+}
+
+/// read json from input and write an obkv batch to writer.
+pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+    let mut builder = DocumentBatchBuilder::new(writer).unwrap();
+
+    let documents: Vec<Map<String, Value>> = malformed!(PayloadType::Json, serde_json::from_reader(input))?;
+    builder.add_documents(documents).unwrap();
+    builder.finish().unwrap();
 
     Ok(())
 }
