@@ -981,4 +981,41 @@ mod tests {
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 4);
     }
+
+    #[test]
+    fn test_meilisearch_1714() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let content = documents!([
+          {"id": "123", "title": "小化妆包" },
+          {"id": "456", "title": "Ipad 包" }
+        ]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        // Only the first document should match.
+        let count = index.word_docids.get(&rtxn, "化妆包").unwrap().unwrap().len();
+        assert_eq!(count, 1);
+
+        // Only the second document should match.
+        let count = index.word_docids.get(&rtxn, "包").unwrap().unwrap().len();
+        assert_eq!(count, 1);
+
+        let mut search = crate::Search::new(&rtxn, &index);
+        search.query("化妆包");
+        search.authorize_typos(true);
+        search.optional_words(true);
+
+        // only 1 document should be returned
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids.len(), 1);
+    }
 }

@@ -262,7 +262,7 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
 /// and the provided word length.
 fn typos(word: String, authorize_typos: bool) -> QueryKind {
     if authorize_typos {
-        match word.len() {
+        match word.chars().count() {
             0..=4 => QueryKind::exact(word),
             5..=8 => QueryKind::tolerant(1, word),
             _ => QueryKind::tolerant(2, word),
