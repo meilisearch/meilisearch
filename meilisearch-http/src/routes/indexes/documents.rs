@@ -32,8 +32,13 @@ macro_rules! guard_content_type {
         }
     };
 }
+
 guard_content_type!(guard_json, "application/json");
 guard_content_type!(guard_csv, "application/csv");
+
+fn empty_application_type(head: &actix_web::dev::RequestHead) -> bool {
+    head.headers.get("Content-Type").is_none()
+}
 
 /// This is required because Payload is not Sync nor Send
 fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
@@ -56,10 +61,16 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_all_documents))
+
+            .route(web::post().guard(empty_application_type).to(|| HttpResponse::UnsupportedMediaType()))
             .route(web::post().guard(guard_json).to(add_documents_json))
             .route(web::post().guard(guard_csv).to(add_documents_csv))
-            .route(web::post().guard(guard_json).to(update_documents_json))
-            .route(web::post().guard(guard_csv).to(update_documents_csv))
+            .route(web::post().to(|| HttpResponse::UnsupportedMediaType()))
+
+            .route(web::put().guard(empty_application_type).to(|| HttpResponse::UnsupportedMediaType()))
+            .route(web::put().guard(guard_json).to(update_documents_json))
+            .route(web::put().guard(guard_csv).to(update_documents_csv))
+            .route(web::put().to(|| HttpResponse::UnsupportedMediaType()))
             .route(web::delete().to(clear_all_documents)),
     )
     // this route needs to be before the /documents/{document_id} to match properly
