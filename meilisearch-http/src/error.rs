@@ -83,7 +83,6 @@ impl ErrorCode for MilliError<'_> {
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::InvalidFilterAttribute(_) => Code::Filter,
-                    UserError::InvalidSortName { .. } => Code::Sort,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
                     UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
@@ -92,9 +91,9 @@ impl ErrorCode for MilliError<'_> {
                     UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
-                    UserError::InvalidSortableAttribute { .. }
-                    | UserError::InvalidReservedSortName { .. } => Code::Sort,
-                    UserError::CriterionError(_) => Code::BadRequest,
+                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
+                    UserError::SortError(_) => Code::Sort,
+                    UserError::CriterionError(_) => Code::InvalidRankingRule,
                 }
             }
         }
