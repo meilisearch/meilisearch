@@ -1,3 +1,4 @@
+mod documents_from_csv;
 mod update_store;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -38,6 +39,7 @@ use warp::http::Response;
 use warp::Filter;
 
 use self::update_store::UpdateStore;
+use crate::documents_from_csv::CSVDocumentDeserializer;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -1056,8 +1058,7 @@ fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
-    let mut records = csv::Reader::from_reader(reader);
-    let iter = records.deserialize::<Map<String, Value>>();
+    let iter = CSVDocumentDeserializer::from_reader(reader)?;
 
     for doc in iter {
         let doc = doc?;
