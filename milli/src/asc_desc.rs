@@ -141,6 +141,7 @@ impl FromStr for AscDesc {
 
 #[derive(Debug)]
 pub enum SortError {
+    BadGeoPointUsage { name: String },
     InvalidName { name: String },
     ReservedName { name: String },
     ReservedNameForSettings { name: String },
@@ -151,6 +152,9 @@ impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
             AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
+                SortError::BadGeoPointUsage { name }
+            }
             AscDescError::ReservedKeyword { name } if &name == "_geo" => {
                 SortError::ReservedNameForSettings { name: "_geoPoint".to_string() }
             }
@@ -165,6 +169,14 @@ impl From<AscDescError> for SortError {
 impl fmt::Display for SortError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::BadGeoPointUsage { name } => {
+                write!(
+                    f,
+                    "invalid syntax for the `_geoPoint` parameter: `{}`. \
+Usage: `_geoPoint(latitude, longitude):asc`",
+                    name
+                )
+            }
             Self::InvalidName { name } => {
                 write!(f, "invalid syntax for the sort parameter {}", name)
             }
