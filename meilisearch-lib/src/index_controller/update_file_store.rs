@@ -159,4 +159,8 @@ impl UpdateFileStore {
 
         Ok(())
     }
+
+    pub fn get_size(&self, uuid: Uuid) -> Result<u64> {
+        Ok(self.get_update(uuid)?.metadata()?.len())
+    }
 }

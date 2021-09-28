@@ -535,24 +535,27 @@ impl UpdateStore {
         }
 
         let path = path.as_ref().to_owned();
-        indexes.par_iter().try_for_each(|index| index.snapshot(&path)).unwrap();
+        indexes.par_iter().try_for_each(|index| index.snapshot(path.clone())).unwrap();
 
         Ok(())
     }
 
     pub fn get_info(&self) -> Result<UpdateStoreInfo> {
-        let size = self.env.size();
+        let mut size = self.env.size();
         let txn = self.env.read_txn()?;
         for entry in self.pending_queue.iter(&txn)? {
-            let (_, _pending) = entry?;
-            //if let Enqueued {
-                //content: Some(uuid),
-                //..
-            //} = pending
-            //{
-                //let path = update_uuid_to_file_path(&self.path, uuid);
-                //size += File::open(path)?.metadata()?.len();
-            //}
+            let (_, pending) = entry?;
+            if let Enqueued {
+                meta: store::Update::DocumentAddition {
+                    content_uuid,
+                    ..
+                },
+                ..
+            } = pending
+            {
+                let len = self.update_file_store.get_size(content_uuid)?;
+                size += len;
+            }
         }
         let processing = match *self.state.read() {
             State::Processing(uuid, _) => Some(uuid),
