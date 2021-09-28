@@ -6,7 +6,10 @@ use meilisearch_error::{Code, ErrorCode};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 
-use crate::{Update, index::{Settings, Unchecked}};
+use crate::{
+    index::{Settings, Unchecked},
+    Update,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
@@ -160,7 +163,7 @@ impl Display for Failed {
     }
 }
 
-impl Error for Failed { }
+impl Error for Failed {}
 
 impl ErrorCode for Failed {
     fn error_code(&self) -> Code {

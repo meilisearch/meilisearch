@@ -1,11 +1,11 @@
 use actix_web::error::PayloadError;
-use actix_web::{web, HttpResponse};
 use actix_web::web::Bytes;
+use actix_web::{web, HttpResponse};
 use futures::{Stream, StreamExt};
 use log::debug;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
+use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -38,7 +38,7 @@ guard_content_type!(guard_json, "application/json");
 */
 
 /// This is required because Payload is not Sync nor Send
-fn payload_to_stream(mut payload: Payload) -> impl Stream<Item=Result<Bytes, PayloadError>> {
+fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
     let (snd, recv) = mpsc::channel(1);
     tokio::task::spawn_local(async move {
         while let Some(data) = payload.next().await {
@@ -104,9 +104,14 @@ pub async fn delete_document(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let DocumentParam { document_id, index_uid } = path.into_inner();
+    let DocumentParam {
+        document_id,
+        index_uid,
+    } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
-    let update_status = meilisearch.register_update(index_uid, update, false).await?;
+    let update_status = meilisearch
+        .register_update(index_uid, update, false)
+        .await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
@@ -216,7 +221,9 @@ pub async fn delete_documents(
         .collect();
 
     let update = Update::DeleteDocuments(ids);
-    let update_status = meilisearch.register_update(path.into_inner().index_uid, update, false).await?;
+    let update_status = meilisearch
+        .register_update(path.into_inner().index_uid, update, false)
+        .await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
@@ -226,7 +233,9 @@ pub async fn clear_all_documents(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;
-    let update_status = meilisearch.register_update(path.into_inner().index_uid, update, false).await?;
+    let update_status = meilisearch
+        .register_update(path.into_inner().index_uid, update, false)
+        .await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }

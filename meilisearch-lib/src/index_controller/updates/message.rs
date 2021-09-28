@@ -44,7 +44,11 @@ pub enum UpdateMsg {
 }
 
 impl UpdateMsg {
-    pub async fn snapshot(sender: &mpsc::Sender<Self>, path: PathBuf, indexes: Vec<Index>) -> Result<()> {
+    pub async fn snapshot(
+        sender: &mpsc::Sender<Self>,
+        path: PathBuf,
+        indexes: Vec<Index>,
+    ) -> Result<()> {
         let (ret, rcv) = oneshot::channel();
         let msg = Self::Snapshot { path, indexes, ret };
         sender.send(msg).await?;

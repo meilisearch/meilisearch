@@ -2,7 +2,7 @@ use actix_web::{http::StatusCode, test};
 use meilisearch_lib::MeiliSearch;
 use serde_json::Value;
 
-use meilisearch_http::{Opt, create_app};
+use meilisearch_http::{create_app, Opt};
 
 pub struct Service {
     pub meilisearch: MeiliSearch,

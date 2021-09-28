@@ -6,8 +6,8 @@ use log::debug;
 use meilisearch_lib::index_controller::updates::status::{UpdateResult, UpdateStatus};
 use serde::{Deserialize, Serialize};
 
-use meilisearch_lib::{MeiliSearch, Update};
 use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::{MeiliSearch, Update};
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -52,7 +52,7 @@ impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
         use meilisearch_lib::milli::update::IndexDocumentsMethod::*;
         match other.meta() {
-            Update::DocumentAddition{ method, ..  } => {
+            Update::DocumentAddition { method, .. } => {
                 let number = match other {
                     UpdateStatus::Processed(processed) => match processed.success {
                         UpdateResult::DocumentsAddition(ref addition) => {
@@ -233,7 +233,9 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
-async fn get_stats(meilisearch: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
+async fn get_stats(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
     let response = meilisearch.get_all_stats().await?;
 
     debug!("returns: {:?}", response);

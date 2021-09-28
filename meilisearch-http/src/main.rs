@@ -1,7 +1,7 @@
 use std::env;
 
 use actix_web::HttpServer;
-use meilisearch_http::{Opt, create_app, setup_meilisearch};
+use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
 
@@ -23,7 +23,6 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
     log_builder.init();
 
-
     Ok(())
 }
 
@@ -36,7 +35,9 @@ async fn main() -> anyhow::Result<()> {
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
-                anyhow::bail!("In production mode, the environment variable MEILI_MASTER_KEY is mandatory")
+                anyhow::bail!(
+                    "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
+                )
             }
         }
         "development" => (),

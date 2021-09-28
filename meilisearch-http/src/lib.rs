@@ -92,11 +92,7 @@ pub fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn configure_data(
-    config: &mut web::ServiceConfig,
-    data: MeiliSearch,
-    opt: &Opt,
-    ) {
+pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &Opt) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(data)
@@ -120,9 +116,9 @@ pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
         master: opts.master_key.clone(),
         private: None,
         public: None,
-        };
+    };
 
-        keys.generate_missing_api_keys();
+    keys.generate_missing_api_keys();
 
     let auth_config = if let Some(ref master_key) = keys.master {
         let private_key = keys.private.as_ref().unwrap();
@@ -139,8 +135,7 @@ pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
         AuthConfig::NoAuth
     };
 
-    config.app_data(auth_config)
-            .app_data(keys);
+    config.app_data(auth_config).app_data(keys);
 }
 
 #[cfg(feature = "mini-dashboard")]

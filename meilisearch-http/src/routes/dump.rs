@@ -11,7 +11,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/{dump_uid}/status").route(web::get().to(get_dump_status)));
 }
 
-pub async fn create_dump(meilisearch: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
+pub async fn create_dump(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
     let res = meilisearch.create_dump().await?;
 
     debug!("returns: {:?}", res);

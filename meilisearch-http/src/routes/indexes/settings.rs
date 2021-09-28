@@ -1,12 +1,12 @@
 use log::debug;
 
-use actix_web::{HttpResponse, web};
-use meilisearch_lib::MeiliSearch;
+use actix_web::{web, HttpResponse};
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
+use meilisearch_lib::MeiliSearch;
 
-use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::error::ResponseError;
+use crate::extractors::authentication::{policies::*, GuardedData};
 
 #[macro_export]
 macro_rules! make_setting_route {

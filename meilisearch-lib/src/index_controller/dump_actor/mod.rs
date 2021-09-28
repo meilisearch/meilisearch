@@ -158,8 +158,7 @@ impl DumpTask {
 
         create_dir_all(&self.path).await?;
 
-        let temp_dump_dir =
-            tokio::task::spawn_blocking(|| tempfile::TempDir::new()).await??;
+        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
         let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);

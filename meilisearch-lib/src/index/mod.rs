@@ -8,17 +8,17 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::{EnvOpenOptions, RoTxn};
 use milli::update::Setting;
-use milli::{FieldDistribution, FieldId, obkv_to_json};
+use milli::{obkv_to_json, FieldDistribution, FieldId};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use serde::{Serialize, Deserialize};
 
 use error::Result;
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Checked, Facets, Settings, Unchecked, apply_settings_to_builder};
+pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
 use uuid::Uuid;
 
-use crate::EnvSizer;
 use crate::index_controller::update_file_store::UpdateFileStore;
+use crate::EnvSizer;
 
 use self::error::IndexError;
 use self::update_handler::UpdateHandler;
@@ -75,11 +75,11 @@ impl IndexMeta {
 #[derivative(Debug)]
 pub struct Index {
     pub uuid: Uuid,
-    #[derivative(Debug="ignore")]
+    #[derivative(Debug = "ignore")]
     pub inner: Arc<milli::Index>,
-    #[derivative(Debug="ignore")]
+    #[derivative(Debug = "ignore")]
     update_file_store: Arc<UpdateFileStore>,
-    #[derivative(Debug="ignore")]
+    #[derivative(Debug = "ignore")]
     update_handler: Arc<UpdateHandler>,
 }
 
@@ -92,12 +92,23 @@ impl Deref for Index {
 }
 
 impl Index {
-    pub fn open(path: impl AsRef<Path>, size: usize, update_file_store: Arc<UpdateFileStore>, uuid: Uuid, update_handler: Arc<UpdateHandler>) -> Result<Self> {
+    pub fn open(
+        path: impl AsRef<Path>,
+        size: usize,
+        update_file_store: Arc<UpdateFileStore>,
+        uuid: Uuid,
+        update_handler: Arc<UpdateHandler>,
+    ) -> Result<Self> {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         let inner = Arc::new(milli::Index::new(options, &path)?);
-        Ok(Index { inner, update_file_store, uuid, update_handler })
+        Ok(Index {
+            inner,
+            update_file_store,
+            uuid,
+            update_handler,
+        })
     }
 
     pub fn stats(&self) -> Result<IndexStats> {
@@ -268,7 +279,9 @@ impl Index {
         create_dir_all(&dst)?;
         dst.push("data.mdb");
         let _txn = self.write_txn()?;
-        self.inner.env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
+        self.inner
+            .env
+            .copy_to_path(dst, heed::CompactionOption::Enabled)?;
         Ok(())
     }
 }

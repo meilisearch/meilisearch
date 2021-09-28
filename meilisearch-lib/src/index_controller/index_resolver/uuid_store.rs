@@ -8,7 +8,7 @@ use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::error::{Result, IndexResolverError};
+use super::error::{IndexResolverError, Result};
 use crate::EnvSizer;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB

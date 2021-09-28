@@ -18,25 +18,27 @@ use dump_actor::DumpActorHandle;
 pub use dump_actor::{DumpInfo, DumpStatus};
 use snapshot::load_snapshot;
 
-use crate::index::{Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked};
+use crate::index::error::Result as IndexResult;
+use crate::index::{
+    Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
+};
 use crate::index_controller::index_resolver::create_index_resolver;
 use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
 use error::Result;
-use crate::index::error::{Result as IndexResult};
 
 use self::dump_actor::load_dump;
-use self::index_resolver::HardStateIndexResolver;
 use self::index_resolver::error::IndexResolverError;
+use self::index_resolver::HardStateIndexResolver;
 use self::updates::status::UpdateStatus;
 use self::updates::UpdateMsg;
 
 mod dump_actor;
 pub mod error;
+mod index_resolver;
 mod snapshot;
 pub mod update_file_store;
 pub mod updates;
-mod index_resolver;
 
 pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
@@ -79,6 +81,7 @@ pub struct Stats {
     pub indexes: BTreeMap<String, IndexStats>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(derivative::Derivative)]
 #[derivative(Debug)]
 pub enum Update {
@@ -86,7 +89,7 @@ pub enum Update {
     ClearDocuments,
     Settings(Settings<Unchecked>),
     DocumentAddition {
-        #[derivative(Debug="ignore")]
+        #[derivative(Debug = "ignore")]
         payload: Payload,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
@@ -141,12 +144,19 @@ impl IndexControllerBuilder {
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
-        let index_resolver = Arc::new(create_index_resolver(&db_path, index_size, &indexer_options)?);
+        let index_resolver = Arc::new(create_index_resolver(
+            &db_path,
+            index_size,
+            &indexer_options,
+        )?);
 
         #[allow(unreachable_code)]
-        let update_sender = updates::create_update_handler(index_resolver.clone(), &db_path, update_store_size)?;
+        let update_sender =
+            updates::create_update_handler(index_resolver.clone(), &db_path, update_store_size)?;
 
-        let dump_path = self.dump_dst.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        let dump_path = self
+            .dump_dst
+            .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
         let dump_handle = dump_actor::DumpActorHandleImpl::new(
             dump_path,
             index_resolver.clone(),
@@ -159,13 +169,15 @@ impl IndexControllerBuilder {
             let snapshot_service = SnapshotService::new(
                 index_resolver.clone(),
                 update_sender.clone(),
-                self.snapshot_interval.ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
-                self.snapshot_dir.ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
+                self.snapshot_interval
+                    .ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
+                self.snapshot_dir
+                    .ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
                 db_path
-                .as_ref()
-                .file_name()
-                .map(|n| n.to_owned().into_string().expect("invalid path"))
-                .unwrap_or_else(|| String::from("data.ms")),
+                    .as_ref()
+                    .file_name()
+                    .map(|n| n.to_owned().into_string().expect("invalid path"))
+                    .unwrap_or_else(|| String::from("data.ms")),
             );
 
             tokio::task::spawn(snapshot_service.run());
@@ -246,7 +258,12 @@ impl IndexController {
         IndexControllerBuilder::default()
     }
 
-    pub async fn register_update(&self, uid: String, update: Update, create_index: bool) -> Result<UpdateStatus> {
+    pub async fn register_update(
+        &self,
+        uid: String,
+        update: Update,
+        create_index: bool,
+    ) -> Result<UpdateStatus> {
         match self.index_resolver.get_uuid(uid).await {
             Ok(uuid) => {
                 let update_result = UpdateMsg::update(&self.update_sender, uuid, update).await?;
@@ -255,12 +272,13 @@ impl IndexController {
             Err(IndexResolverError::UnexistingIndex(name)) => {
                 if create_index {
                     let index = self.index_resolver.create_index(name, None).await?;
-                    let update_result = UpdateMsg::update(&self.update_sender, index.uuid, update).await?;
+                    let update_result =
+                        UpdateMsg::update(&self.update_sender, index.uuid, update).await?;
                     // ignore if index creation fails now, since it may already have been created
 
                     Ok(update_result)
                 } else {
-                   Err(IndexResolverError::UnexistingIndex(name).into())
+                    Err(IndexResolverError::UnexistingIndex(name).into())
                 }
             }
             Err(e) => Err(e.into()),
@@ -310,7 +328,9 @@ impl IndexController {
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Vec<Document>> {
         let index = self.index_resolver.get_index(uid).await?;
-        let documents = spawn_blocking(move || index.retrieve_documents(offset, limit, attributes_to_retrieve)).await??;
+        let documents =
+            spawn_blocking(move || index.retrieve_documents(offset, limit, attributes_to_retrieve))
+                .await??;
         Ok(documents)
     }
 
@@ -321,7 +341,9 @@ impl IndexController {
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> Result<Document> {
         let index = self.index_resolver.get_index(uid).await?;
-        let document = spawn_blocking(move || index.retrieve_document(doc_id, attributes_to_retrieve)).await??;
+        let document =
+            spawn_blocking(move || index.retrieve_document(doc_id, attributes_to_retrieve))
+                .await??;
         Ok(document)
     }
 
@@ -330,12 +352,12 @@ impl IndexController {
         uid: String,
         mut index_settings: IndexSettings,
     ) -> Result<IndexMetadata> {
-
         index_settings.uid.take();
 
         let index = self.index_resolver.get_index(uid.clone()).await?;
         let uuid = index.uuid;
-        let meta = spawn_blocking(move || index.update_primary_key(index_settings.primary_key)).await??;
+        let meta =
+            spawn_blocking(move || index.update_primary_key(index_settings.primary_key)).await??;
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),
@@ -386,7 +408,8 @@ impl IndexController {
                 let stats = index.stats()?;
                 let meta = index.meta()?;
                 Ok((stats, meta))
-            }).await??;
+            })
+            .await??;
 
             database_size += stats.size;
 
@@ -415,8 +438,15 @@ impl IndexController {
         Ok(self.dump_handle.dump_info(uid).await?)
     }
 
-    pub async fn create_index(&self, uid: String, primary_key: Option<String>) -> Result<IndexMetadata> {
-        let index = self.index_resolver.create_index(uid.clone(), primary_key).await?;
+    pub async fn create_index(
+        &self,
+        uid: String,
+        primary_key: Option<String>,
+    ) -> Result<IndexMetadata> {
+        let index = self
+            .index_resolver
+            .create_index(uid.clone(), primary_key)
+            .await?;
         let meta = spawn_blocking(move || -> IndexResult<_> {
             let meta = index.meta()?;
             let meta = IndexMetadata {
@@ -426,7 +456,8 @@ impl IndexController {
                 meta,
             };
             Ok(meta)
-        }).await??;
+        })
+        .await??;
 
         Ok(meta)
     }

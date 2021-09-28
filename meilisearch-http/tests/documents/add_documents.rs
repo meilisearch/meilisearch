@@ -16,7 +16,12 @@ async fn add_documents_test_json_content_types() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.meilisearch, true, &server.service.options)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -41,7 +46,12 @@ async fn add_documents_test_no_content_types() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.meilisearch, true, &server.service.options)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -67,7 +77,12 @@ async fn add_documents_test_bad_content_types() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.meilisearch, true, &server.service.options)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())

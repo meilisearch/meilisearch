@@ -1,7 +1,7 @@
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::fs::{create_dir_all, File};
 use std::io::{BufReader, Write};
-use std::fs::{File, create_dir_all};
+use std::path::{Path, PathBuf};
 
 use heed::{EnvOpenOptions, RoTxn};
 use rayon::prelude::*;
@@ -11,7 +11,14 @@ use tempfile::{NamedTempFile, TempDir};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
-use crate::{Update, index::Index, index_controller::{update_file_store::UpdateFileStore, updates::status::{Enqueued, UpdateStatus}}};
+use crate::{
+    index::Index,
+    index_controller::{
+        update_file_store::UpdateFileStore,
+        updates::status::{Enqueued, UpdateStatus},
+    },
+    Update,
+};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -20,11 +27,7 @@ struct UpdateEntry {
 }
 
 impl UpdateStore {
-    pub fn dump(
-        &self,
-        indexes: &[Index],
-        path: PathBuf,
-    ) -> Result<()> {
+    pub fn dump(&self, indexes: &[Index], path: PathBuf) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
 
@@ -35,7 +38,10 @@ impl UpdateStore {
 
         self.dump_updates(&txn, &uuids, &path)?;
 
-        indexes.par_iter().try_for_each(|index| index.dump(&path)).unwrap();
+        indexes
+            .par_iter()
+            .try_for_each(|index| index.dump(&path))
+            .unwrap();
 
         Ok(())
     }
@@ -74,11 +80,13 @@ impl UpdateStore {
                 let update = data.decode()?;
 
                 if let Enqueued {
-                    meta: Update::DocumentAddition {
-                        content_uuid, ..
-                    }, ..
-                } = update {
-                    self.update_file_store.dump(content_uuid, &dst_path).unwrap();
+                    meta: Update::DocumentAddition { content_uuid, .. },
+                    ..
+                } = update
+                {
+                    self.update_file_store
+                        .dump(content_uuid, &dst_path)
+                        .unwrap();
                 }
 
                 let update_json = UpdateEntry {
@@ -122,7 +130,6 @@ impl UpdateStore {
         dst: impl AsRef<Path>,
         db_size: usize,
     ) -> anyhow::Result<()> {
-
         println!("target path: {}", dst.as_ref().display());
 
         let mut options = EnvOpenOptions::new();

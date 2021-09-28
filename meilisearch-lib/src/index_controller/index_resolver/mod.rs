@@ -1,19 +1,26 @@
-pub mod uuid_store;
-mod index_store;
 pub mod error;
+mod index_store;
+pub mod uuid_store;
 
 use std::path::Path;
 
-use uuid::Uuid;
-use uuid_store::{UuidStore, HeedUuidStore};
+use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
-use error::{Result, IndexResolverError};
+use uuid::Uuid;
+use uuid_store::{HeedUuidStore, UuidStore};
 
-use crate::{index::{Index, update_handler::UpdateHandler}, options::IndexerOpts};
+use crate::{
+    index::{update_handler::UpdateHandler, Index},
+    options::IndexerOpts,
+};
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
-pub fn create_index_resolver(path: impl AsRef<Path>, index_size: usize, indexer_opts: &IndexerOpts) -> anyhow::Result<HardStateIndexResolver> {
+pub fn create_index_resolver(
+    path: impl AsRef<Path>,
+    index_size: usize,
+    indexer_opts: &IndexerOpts,
+) -> anyhow::Result<HardStateIndexResolver> {
     let uuid_store = HeedUuidStore::new(&path)?;
     let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
     Ok(IndexResolver::new(uuid_store, index_store))
@@ -30,7 +37,7 @@ impl IndexResolver<HeedUuidStore, MapIndexStore> {
         dst: impl AsRef<Path>,
         index_db_size: usize,
         indexer_opts: &IndexerOpts,
-        ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()> {
         HeedUuidStore::load_dump(&src, &dst)?;
 
         let indexes_path = src.as_ref().join("indexes");
@@ -46,14 +53,12 @@ impl IndexResolver<HeedUuidStore, MapIndexStore> {
     }
 }
 
-impl<U, I> IndexResolver<U ,I>
-where U: UuidStore,
-      I: IndexStore,
+impl<U, I> IndexResolver<U, I>
+where
+    U: UuidStore,
+    I: IndexStore,
 {
-    pub fn new(
-        index_uuid_store: U,
-        index_store: I,
-        ) -> Self {
+    pub fn new(index_uuid_store: U, index_store: I) -> Self {
         Self {
             index_uuid_store,
             index_store,
@@ -75,7 +80,10 @@ where U: UuidStore,
     }
 
     pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-        let uuids = self.index_uuid_store.snapshot(path.as_ref().to_owned()).await?;
+        let uuids = self
+            .index_uuid_store
+            .snapshot(path.as_ref().to_owned())
+            .await?;
         let mut indexes = Vec::new();
         for uuid in uuids {
             indexes.push(self.get_index_by_uuid(uuid).await?);
@@ -99,13 +107,11 @@ where U: UuidStore,
         let mut indexes = Vec::new();
         for (name, uuid) in uuids {
             match self.index_store.get(uuid).await? {
-                Some(index) => {
-                    indexes.push((name, index))
-                },
+                Some(index) => indexes.push((name, index)),
                 None => {
                     // we found an unexisting index, we remove it from the uuid store
                     let _ = self.index_uuid_store.delete(name).await;
-                },
+                }
             }
         }
 
@@ -124,7 +130,10 @@ where U: UuidStore,
 
     pub async fn get_index_by_uuid(&self, uuid: Uuid) -> Result<Index> {
         // TODO: Handle this error better.
-        self.index_store.get(uuid).await?.ok_or(IndexResolverError::UnexistingIndex(String::new()))
+        self.index_store
+            .get(uuid)
+            .await?
+            .ok_or_else(|| IndexResolverError::UnexistingIndex(String::new()))
     }
 
     pub async fn get_index(&self, uid: String) -> Result<Index> {
@@ -137,17 +146,17 @@ where U: UuidStore,
                         // and remove the uuid from th uuid store.
                         let _ = self.index_uuid_store.delete(name.clone()).await;
                         Err(IndexResolverError::UnexistingIndex(name))
-                    },
+                    }
                 }
             }
-            (name, _) => Err(IndexResolverError::UnexistingIndex(name))
+            (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
         }
     }
 
     pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.get_uuid(uid).await? {
             (_, Some(uuid)) => Ok(uuid),
-            (name, _) => Err(IndexResolverError::UnexistingIndex(name))
+            (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
         }
     }
 }

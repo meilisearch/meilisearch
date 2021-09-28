@@ -151,7 +151,9 @@ impl Index {
         //If the document file is empty, we don't perform the document addition, to prevent
         //a primary key error to be thrown.
         if !documents_reader.is_empty() {
-            let builder = update_handler.update_builder(0).index_documents(&mut txn, &index);
+            let builder = update_handler
+                .update_builder(0)
+                .index_documents(&mut txn, &index);
             builder.execute(documents_reader, |_, _| ())?;
         }
 

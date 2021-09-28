@@ -2,9 +2,9 @@ use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use log::debug;
+use meilisearch_lib::MeiliSearch;
 use serde::Serialize;
 use siphasher::sip::SipHasher;
-use meilisearch_lib::MeiliSearch;
 
 use crate::Opt;
 

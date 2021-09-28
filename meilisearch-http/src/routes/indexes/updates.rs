@@ -53,7 +53,9 @@ pub async fn get_all_updates_status(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let metas = meilisearch.all_update_status(path.into_inner().index_uid).await?;
+    let metas = meilisearch
+        .all_update_status(path.into_inner().index_uid)
+        .await?;
     let metas = metas
         .into_iter()
         .map(UpdateStatusResponse::from)

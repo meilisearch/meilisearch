@@ -151,7 +151,7 @@ impl UpdateFileStore {
             }
 
             serde_json::to_writer(&mut dst_file, &document_buffer)?;
-            dst_file.write(b"\n")?;
+            dst_file.write_all(b"\n")?;
             document_buffer.clear();
         }
 

@@ -35,7 +35,10 @@ impl Server {
         let options = default_settings(dir.path());
 
         let meilisearch = setup_meilisearch(&options).unwrap();
-        let service = Service { meilisearch, options };
+        let service = Service {
+            meilisearch,
+            options,
+        };
 
         Server {
             service,
@@ -45,7 +48,10 @@ impl Server {
 
     pub async fn new_with_options(options: Opt) -> Self {
         let meilisearch = setup_meilisearch(&options).unwrap();
-        let service = Service { meilisearch, options };
+        let service = Service {
+            meilisearch,
+            options,
+        };
 
         Server {
             service,

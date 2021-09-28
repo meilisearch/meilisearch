@@ -1,16 +1,16 @@
+use std::fs;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::fs;
 
 use byte_unit::Byte;
+use meilisearch_lib::options::IndexerOpts;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
     RootCertStore,
 };
 use structopt::StructOpt;
-use meilisearch_lib::options::IndexerOpts;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
@@ -173,24 +173,30 @@ impl Opt {
 }
 
 fn load_certs(filename: PathBuf) -> anyhow::Result<Vec<rustls::Certificate>> {
-    let certfile = fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open certificate file"))?;
+    let certfile =
+        fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open certificate file"))?;
     let mut reader = BufReader::new(certfile);
-    Ok(certs(&mut reader).map_err(|_| anyhow::anyhow!("cannot read certificate file"))?)
+    certs(&mut reader).map_err(|_| anyhow::anyhow!("cannot read certificate file"))
 }
 
 fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
     let rsa_keys = {
-        let keyfile =
-            fs::File::open(filename.clone()).map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
+        let keyfile = fs::File::open(filename.clone())
+            .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
-        rsa_private_keys(&mut reader).map_err(|_| anyhow::anyhow!("file contains invalid rsa private key"))?
+        rsa_private_keys(&mut reader)
+            .map_err(|_| anyhow::anyhow!("file contains invalid rsa private key"))?
     };
 
     let pkcs8_keys = {
-        let keyfile = fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
+        let keyfile = fs::File::open(filename)
+            .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
-        pkcs8_private_keys(&mut reader)
-            .map_err(|_| anyhow::anyhow!("file contains invalid pkcs8 private key (encrypted keys not supported)"))?
+        pkcs8_private_keys(&mut reader).map_err(|_| {
+            anyhow::anyhow!(
+                "file contains invalid pkcs8 private key (encrypted keys not supported)"
+            )
+        })?
     };
 
     // prefer to load pkcs8 keys

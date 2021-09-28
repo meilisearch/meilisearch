@@ -27,7 +27,8 @@ pub enum IndexResolverError {
 }
 
 impl<T> From<MpscSendError<T>> for IndexResolverError
-where T: Send + Sync + 'static + fmt::Debug
+where
+    T: Send + Sync + 'static + fmt::Debug,
 {
     fn from(other: tokio::sync::mpsc::error::SendError<T>) -> Self {
         Self::Internal(Box::new(other))

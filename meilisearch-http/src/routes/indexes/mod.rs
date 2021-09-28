@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_lib::index_controller::IndexSettings;
+use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
@@ -36,7 +36,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-pub async fn list_indexes(data: GuardedData<Private, MeiliSearch>) -> Result<HttpResponse, ResponseError> {
+pub async fn list_indexes(
+    data: GuardedData<Private, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
     let indexes = data.list_indexes().await?;
     debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))

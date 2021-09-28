@@ -8,11 +8,11 @@ use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::Update;
 use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
+use crate::Update;
 
-use super::{Index, IndexMeta};
 use super::error::{IndexError, Result};
+use super::{Index, IndexMeta};
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -170,18 +170,26 @@ impl Index {
         let result = (|| {
             let mut txn = self.write_txn()?;
             let result = match update.meta() {
-                Update::DocumentAddition { primary_key, content_uuid, method } => {
-                    self.update_documents(&mut txn, *method, *content_uuid, update_builder, primary_key.as_deref())
-                }
+                Update::DocumentAddition {
+                    primary_key,
+                    content_uuid,
+                    method,
+                } => self.update_documents(
+                    &mut txn,
+                    *method,
+                    *content_uuid,
+                    update_builder,
+                    primary_key.as_deref(),
+                ),
                 Update::Settings(settings) => {
                     let settings = settings.clone().check();
                     self.update_settings(&mut txn, &settings, update_builder)
-                },
+                }
                 Update::ClearDocuments => {
                     let builder = update_builder.clear_documents(&mut txn, self);
                     let _count = builder.execute()?;
                     Ok(UpdateResult::Other)
-                },
+                }
                 Update::DeleteDocuments(ids) => {
                     let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
@@ -276,7 +284,10 @@ impl Index {
     }
 }
 
-pub fn apply_settings_to_builder(settings: &Settings<Checked>, builder: &mut milli::update::Settings) {
+pub fn apply_settings_to_builder(
+    settings: &Settings<Checked>,
+    builder: &mut milli::update::Settings,
+) {
     match settings.searchable_attributes {
         Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
         Setting::Reset => builder.reset_searchable_fields(),
@@ -298,9 +309,7 @@ pub fn apply_settings_to_builder(settings: &Settings<Checked>, builder: &mut mil
     }
 
     match settings.sortable_attributes {
-        Setting::Set(ref fields) => {
-            builder.set_sortable_fields(fields.iter().cloned().collect())
-        }
+        Setting::Set(ref fields) => builder.set_sortable_fields(fields.iter().cloned().collect()),
         Setting::Reset => builder.reset_sortable_fields(),
         Setting::NotSet => (),
     }
@@ -318,9 +327,7 @@ pub fn apply_settings_to_builder(settings: &Settings<Checked>, builder: &mut mil
     }
 
     match settings.synonyms {
-        Setting::Set(ref synonyms) => {
-            builder.set_synonyms(synonyms.clone().into_iter().collect())
-        }
+        Setting::Set(ref synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
         Setting::Reset => builder.reset_synonyms(),
         Setting::NotSet => (),
     }

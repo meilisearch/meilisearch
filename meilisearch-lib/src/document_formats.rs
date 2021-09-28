@@ -1,4 +1,7 @@
-use std::{fmt, io::{Read, Seek, Write}};
+use std::{
+    fmt,
+    io::{Read, Seek, Write},
+};
 
 use milli::documents::DocumentBatchBuilder;
 use serde_json::{Deserializer, Map, Value};
@@ -25,12 +28,13 @@ pub enum DocumentFormatError {
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}. The {1} payload provided is malformed.")]
-    MalformedPayload(Box<dyn std::error::Error + Send + Sync + 'static>, PayloadType),
+    MalformedPayload(
+        Box<dyn std::error::Error + Send + Sync + 'static>,
+        PayloadType,
+    ),
 }
 
-internal_error!(
-    DocumentFormatError: milli::documents::Error
-);
+internal_error!(DocumentFormatError: milli::documents::Error);
 
 macro_rules! malformed {
     ($type:path, $e:expr) => {
@@ -57,7 +61,8 @@ pub fn read_jsonl(input: impl Read, writer: impl Write + Seek) -> Result<()> {
 pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let mut builder = DocumentBatchBuilder::new(writer).unwrap();
 
-    let documents: Vec<Map<String, Value>> = malformed!(PayloadType::Json, serde_json::from_reader(input))?;
+    let documents: Vec<Map<String, Value>> =
+        malformed!(PayloadType::Json, serde_json::from_reader(input))?;
     builder.add_documents(documents).unwrap();
     builder.finish().unwrap();
 

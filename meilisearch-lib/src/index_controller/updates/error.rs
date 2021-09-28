@@ -1,9 +1,12 @@
-use std::fmt;
 use std::error::Error;
+use std::fmt;
 
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::{document_formats::DocumentFormatError, index_controller::update_file_store::UpdateFileStoreError};
+use crate::{
+    document_formats::DocumentFormatError,
+    index_controller::update_file_store::UpdateFileStoreError,
+};
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 
@@ -28,7 +31,8 @@ pub enum UpdateLoopError {
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateLoopError
-where T: Sync + Send + 'static + fmt::Debug
+where
+    T: Sync + Send + 'static + fmt::Debug,
 {
     fn from(other: tokio::sync::mpsc::error::SendError<T>) -> Self {
         Self::Internal(Box::new(other))

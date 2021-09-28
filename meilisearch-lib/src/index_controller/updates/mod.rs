@@ -80,7 +80,7 @@ impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Rea
                     self.read(buf)
                 }
                 Some(Err(e)) => Err(io::Error::new(io::ErrorKind::BrokenPipe, e)),
-                None => return Ok(0),
+                None => Ok(0),
             },
         }
     }
@@ -109,7 +109,13 @@ impl UpdateLoop {
         let must_exit = Arc::new(AtomicBool::new(false));
 
         let update_file_store = UpdateFileStore::new(&path).unwrap();
-        let store = UpdateStore::open(options, &path, index_resolver.clone(), must_exit.clone(), update_file_store.clone())?;
+        let store = UpdateStore::open(
+            options,
+            &path,
+            index_resolver,
+            must_exit.clone(),
+            update_file_store.clone(),
+        )?;
 
         let inbox = Some(inbox);
 
@@ -194,8 +200,8 @@ impl UpdateLoop {
                     update_file.persist()?;
 
                     Ok(())
-                }).await??;
-
+                })
+                .await??;
 
                 store::Update::DocumentAddition {
                     primary_key,
@@ -215,7 +221,6 @@ impl UpdateLoop {
 
         Ok(status.into())
     }
-
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let update_store = self.store.clone();
@@ -248,8 +253,7 @@ impl UpdateLoop {
     async fn handle_snapshot(&self, indexes: Vec<Index>, path: PathBuf) -> Result<()> {
         let update_store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || update_store.snapshot(indexes, path))
-            .await??;
+        tokio::task::spawn_blocking(move || update_store.snapshot(indexes, path)).await??;
 
         Ok(())
     }

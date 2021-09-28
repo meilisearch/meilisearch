@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{File, create_dir_all};
+use std::fs::{create_dir_all, File};
 use std::io::{BufReader, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::Path;
@@ -17,10 +17,7 @@ use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
 use crate::index_controller::{self, IndexMetadata};
 use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
-use crate::{
-    index::Unchecked,
-    options::IndexerOpts,
-};
+use crate::{index::Unchecked, options::IndexerOpts};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -136,16 +133,16 @@ fn load_index(
     //If the document file is empty, we don't perform the document addition, to prevent
     //a primary key error to be thrown.
     if !documents_reader.is_empty() {
-        let builder = update_handler.update_builder(0).index_documents(&mut txn, &index);
+        let builder = update_handler
+            .update_builder(0)
+            .index_documents(&mut txn, &index);
         builder.execute(documents_reader, |_, _| ())?;
     }
 
     txn.commit()?;
 
     // Finaly, we extract the original milli::Index and close it
-    index
-        .prepare_for_closing()
-        .wait();
+    index.prepare_for_closing().wait();
 
     // Updates are ignored in dumps V1.
 

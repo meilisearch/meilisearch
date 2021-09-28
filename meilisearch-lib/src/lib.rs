@@ -5,7 +5,7 @@ pub mod options;
 pub mod index;
 pub mod index_controller;
 
-pub use index_controller::{IndexController as MeiliSearch, updates::store::Update};
+pub use index_controller::{updates::store::Update, IndexController as MeiliSearch};
 
 pub use milli;
 
@@ -55,4 +55,3 @@ pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Res
     ar.unpack(&dest)?;
     Ok(())
 }
-

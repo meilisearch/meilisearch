@@ -6,9 +6,7 @@ use either::Either;
 use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{
-    AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, SortError
-};
+use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, SortError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -685,7 +683,7 @@ fn parse_filter_array(
         }
     }
 
-    Ok(FilterCondition::from_array(txn, &index, ands)?)
+    Ok(FilterCondition::from_array(txn, index, ands)?)
 }
 
 #[cfg(test)]

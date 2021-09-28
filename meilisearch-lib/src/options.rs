@@ -112,4 +112,3 @@ fn total_memory_bytes() -> Option<u64> {
         None
     }
 }
-
