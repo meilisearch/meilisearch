@@ -1,10 +1,8 @@
-mod csv_documents_iter;
 pub mod error;
 mod message;
 pub mod status;
 pub mod store;
 
-use crate::index_controller::updates::csv_documents_iter::CsvDocumentIter;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -15,7 +13,6 @@ use async_stream::stream;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use log::trace;
-use milli::documents::DocumentBatchBuilder;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -24,13 +21,13 @@ use uuid::Uuid;
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
-use crate::document_formats::read_json;
+use crate::document_formats::{read_csv, read_json};
 use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
 use super::index_resolver::HardStateIndexResolver;
-use super::{DocumentAdditionFormat, Payload, Update};
+use super::{DocumentAdditionFormat, Update};
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
 
@@ -198,6 +195,7 @@ impl UpdateLoop {
                 tokio::task::spawn_blocking(move || -> Result<_> {
                     match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
                     }
 
                     update_file.persist()?;
@@ -223,26 +221,6 @@ impl UpdateLoop {
                 .await??;
 
         Ok(status.into())
-    }
-
-    async fn documents_from_csv(&self, payload: Payload) -> Result<Uuid> {
-        let file_store = self.update_file_store.clone();
-        tokio::task::spawn_blocking(move || {
-            let (uuid, mut file) = file_store.new_update().unwrap();
-            let mut builder = DocumentBatchBuilder::new(&mut *file).unwrap();
-
-            let iter = CsvDocumentIter::from_reader(StreamReader::new(payload))?;
-            for doc in iter {
-                let doc = doc?;
-                builder.add_documents(doc).unwrap();
-            }
-            builder.finish().unwrap();
-
-            file.persist();
-
-            Ok(uuid)
-        })
-        .await?
     }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
