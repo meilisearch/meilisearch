@@ -8,7 +8,7 @@ use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::RegisterUpdate;
+use crate::Update;
 use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
 
 use super::{Index, IndexMeta};
@@ -170,19 +170,19 @@ impl Index {
         let result = (|| {
             let mut txn = self.write_txn()?;
             let result = match update.meta() {
-                RegisterUpdate::DocumentAddition { primary_key, content_uuid, method } => {
+                Update::DocumentAddition { primary_key, content_uuid, method } => {
                     self.update_documents(&mut txn, *method, *content_uuid, update_builder, primary_key.as_deref())
                 }
-                RegisterUpdate::Settings(settings) => {
+                Update::Settings(settings) => {
                     let settings = settings.clone().check();
                     self.update_settings(&mut txn, &settings, update_builder)
                 },
-                RegisterUpdate::ClearDocuments => {
+                Update::ClearDocuments => {
                     let builder = update_builder.clear_documents(&mut txn, self);
                     let _count = builder.execute()?;
                     Ok(UpdateResult::Other)
                 },
-                RegisterUpdate::DeleteDocuments(ids) => {
+                Update::DeleteDocuments(ids) => {
                     let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
                     // We ignore unexisting document ids

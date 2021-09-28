@@ -26,7 +26,6 @@ use rayon::prelude::*;
 
 use codec::*;
 
-use super::RegisterUpdate;
 use super::error::Result;
 use super::status::{Enqueued, Processing};
 use crate::EnvSizer;
@@ -36,6 +35,18 @@ use crate::index::Index;
 
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = U64<heed::byteorder::BE>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Update {
+    DeleteDocuments(Vec<String>),
+    DocumentAddition {
+        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
+        content_uuid: Uuid,
+    },
+    Settings(Settings<Unchecked>),
+    ClearDocuments,
+}
 
 #[derive(Debug)]
 pub struct UpdateStoreInfo {
@@ -242,7 +253,7 @@ impl UpdateStore {
     pub fn register_update(
         &self,
         index_uuid: Uuid,
-        update: RegisterUpdate,
+        update: Update,
     ) -> heed::Result<Enqueued> {
         let mut txn = self.env.write_txn()?;
         let (global_id, update_id) = self.next_update_id(&mut txn, index_uuid)?;
@@ -512,7 +523,7 @@ impl UpdateStore {
             let ((_, uuid, _), pending) = entry?;
             if uuids.contains(&uuid) {
                 if let Enqueued {
-                    meta: RegisterUpdate::DocumentAddition {
+                    meta: Update::DocumentAddition {
                         content_uuid, ..
                     },
                     ..

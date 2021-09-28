@@ -6,7 +6,7 @@ use meilisearch_error::{Code, ErrorCode};
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 
-use crate::{RegisterUpdate, index::{Settings, Unchecked}};
+use crate::{Update, index::{Settings, Unchecked}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
@@ -34,12 +34,12 @@ pub enum UpdateMeta {
 #[serde(rename_all = "camelCase")]
 pub struct Enqueued {
     pub update_id: u64,
-    pub meta: RegisterUpdate,
+    pub meta: Update,
     pub enqueued_at: DateTime<Utc>,
 }
 
 impl Enqueued {
-    pub fn new(meta: RegisterUpdate, update_id: u64) -> Self {
+    pub fn new(meta: Update, update_id: u64) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
@@ -61,7 +61,7 @@ impl Enqueued {
         }
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         &self.meta
     }
 
@@ -84,7 +84,7 @@ impl Processed {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         self.from.meta()
     }
 }
@@ -102,7 +102,7 @@ impl Processing {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         self.from.meta()
     }
 
@@ -139,7 +139,7 @@ impl Aborted {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         self.from.meta()
     }
 }
@@ -173,7 +173,7 @@ impl Failed {
         self.from.id()
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         self.from.meta()
     }
 }
@@ -199,7 +199,7 @@ impl UpdateStatus {
         }
     }
 
-    pub fn meta(&self) -> &RegisterUpdate {
+    pub fn meta(&self) -> &Update {
         match self {
             UpdateStatus::Processing(u) => u.meta(),
             UpdateStatus::Enqueued(u) => u.meta(),

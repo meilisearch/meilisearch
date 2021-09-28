@@ -11,7 +11,7 @@ use tempfile::{NamedTempFile, TempDir};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
-use crate::{RegisterUpdate, index::Index, index_controller::{update_file_store::UpdateFileStore, updates::status::{Enqueued, UpdateStatus}}};
+use crate::{Update, index::Index, index_controller::{update_file_store::UpdateFileStore, updates::status::{Enqueued, UpdateStatus}}};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -74,7 +74,7 @@ impl UpdateStore {
                 let update = data.decode()?;
 
                 if let Enqueued {
-                    meta: RegisterUpdate::DocumentAddition {
+                    meta: Update::DocumentAddition {
                         content_uuid, ..
                     }, ..
                 } = update {

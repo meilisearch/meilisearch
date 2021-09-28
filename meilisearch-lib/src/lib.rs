@@ -5,7 +5,7 @@ pub mod options;
 pub mod index;
 pub mod index_controller;
 
-pub use index_controller::{IndexController as MeiliSearch, updates::RegisterUpdate};
+pub use index_controller::{IndexController as MeiliSearch, updates::store::Update};
 
 mod compression;
 mod document_formats;

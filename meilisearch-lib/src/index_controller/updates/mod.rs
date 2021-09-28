@@ -45,18 +45,6 @@ pub fn create_update_handler(
     Ok(sender)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RegisterUpdate {
-    DeleteDocuments(Vec<String>),
-    DocumentAddition {
-        primary_key: Option<String>,
-        method: IndexDocumentsMethod,
-        content_uuid: Uuid,
-    },
-    Settings(Settings<Unchecked>),
-    ClearDocuments,
-}
-
 /// A wrapper type to implement read on a `Stream<Result<Bytes, Error>>`.
 struct StreamReader<S> {
     stream: S,
@@ -209,15 +197,15 @@ impl UpdateLoop {
                 }).await??;
 
 
-                RegisterUpdate::DocumentAddition {
+                store::Update::DocumentAddition {
                     primary_key,
                     method,
                     content_uuid,
                 }
             }
-            Update::Settings(settings) => RegisterUpdate::Settings(settings),
-            Update::ClearDocuments => RegisterUpdate::ClearDocuments,
-            Update::DeleteDocuments(ids) => RegisterUpdate::DeleteDocuments(ids),
+            Update::Settings(settings) => store::Update::Settings(settings),
+            Update::ClearDocuments => store::Update::ClearDocuments,
+            Update::DeleteDocuments(ids) => store::Update::DeleteDocuments(ids),
         };
 
         let store = self.store.clone();

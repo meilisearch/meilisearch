@@ -36,7 +36,7 @@ impl IndexResolver<HeedUuidStore, MapIndexStore> {
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
 
-        let update_handler = UpdateHandler::new(indexer_opts).unwrap();
+        let update_handler = UpdateHandler::new(indexer_opts)?;
         for index in indexes {
             let index = index?;
             Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;

@@ -6,7 +6,7 @@ use log::debug;
 use meilisearch_lib::index_controller::updates::status::{UpdateResult, UpdateStatus};
 use serde::{Deserialize, Serialize};
 
-use meilisearch_lib::{MeiliSearch, RegisterUpdate};
+use meilisearch_lib::{MeiliSearch, Update};
 use meilisearch_lib::index::{Settings, Unchecked};
 
 use crate::error::ResponseError;
@@ -52,7 +52,7 @@ impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
         use milli::update::IndexDocumentsMethod::*;
         match other.meta() {
-            RegisterUpdate::DocumentAddition{ method, ..  } => {
+            Update::DocumentAddition{ method, ..  } => {
                 let number = match other {
                     UpdateStatus::Processed(processed) => match processed.success {
                         UpdateResult::DocumentsAddition(ref addition) => {
@@ -69,11 +69,11 @@ impl From<&UpdateStatus> for UpdateType {
                     _ => unreachable!(),
                 }
             }
-            RegisterUpdate::Settings(settings) => UpdateType::Settings {
+            Update::Settings(settings) => UpdateType::Settings {
                 settings: settings.clone(),
             },
-            RegisterUpdate::ClearDocuments => UpdateType::ClearAll,
-            RegisterUpdate::DeleteDocuments(ids) => UpdateType::DocumentsDeletion {
+            Update::ClearDocuments => UpdateType::ClearAll,
+            Update::DeleteDocuments(ids) => UpdateType::DocumentsDeletion {
                 number: Some(ids.len()),
             },
         }
