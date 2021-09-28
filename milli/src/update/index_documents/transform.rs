@@ -171,7 +171,6 @@ impl Transform<'_, '_> {
                             }
                         };
                         serde_json::to_writer(&mut external_id_buffer, &value).unwrap();
-                        *bytes = &external_id_buffer;
                         Cow::Owned(value)
                     }
                     None => {

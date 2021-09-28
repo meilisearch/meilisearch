@@ -536,7 +536,7 @@ mod tests {
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
-        assert_eq!(doc_iter.next(), Some((0, &br#""1""#[..])));
+        assert_eq!(doc_iter.next(), Some((0, &b"1"[..])));
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), None);
         drop(rtxn);
@@ -562,9 +562,9 @@ mod tests {
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
-        assert_eq!(doc_iter.next(), Some((0, &br#""1""#[..])));
+        assert_eq!(doc_iter.next(), Some((0, &b"1"[..])));
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
-        assert_eq!(doc_iter.next(), Some((2, &br#"25"#[..])));
+        assert_eq!(doc_iter.next(), Some((2, &b"25"[..])));
         assert_eq!(doc_iter.next(), None);
         drop(rtxn);
     }
