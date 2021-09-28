@@ -262,28 +262,28 @@ impl UpdateStore {
 
     // /// Push already processed update in the UpdateStore without triggering the notification
     // /// process. This is useful for the dumps.
-    //pub fn register_raw_updates(
-        //&self,
-        //wtxn: &mut heed::RwTxn,
-        //update: &UpdateStatus,
-        //index_uuid: Uuid,
-    //) -> heed::Result<()> {
-        //match update {
-            //UpdateStatus::Enqueued(enqueued) => {
-                //let (global_id, _update_id) = self.next_update_id(wtxn, index_uuid)?;
-                //self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
-                    //wtxn,
-                    //&(global_id, index_uuid, enqueued.id()),
-                    //enqueued,
-                //)?;
-            //}
-            //_ => {
-                //let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
-                //self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
-            //}
-        //}
-        //Ok(())
-    //}
+    pub fn register_raw_updates(
+        &self,
+        wtxn: &mut heed::RwTxn,
+        update: &UpdateStatus,
+        index_uuid: Uuid,
+    ) -> heed::Result<()> {
+        match update {
+            UpdateStatus::Enqueued(enqueued) => {
+                let (global_id, _update_id) = self.next_update_id(wtxn, index_uuid)?;
+                self.pending_queue.remap_key_type::<PendingKeyCodec>().put(
+                    wtxn,
+                    &(global_id, index_uuid, enqueued.id()),
+                    enqueued,
+                )?;
+            }
+            _ => {
+                let _update_id = self.next_update_id_raw(wtxn, index_uuid)?;
+                self.updates.put(wtxn, &(index_uuid, update.id()), update)?;
+            }
+        }
+        Ok(())
+    }
 
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and

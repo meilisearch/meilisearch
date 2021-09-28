@@ -1,13 +1,16 @@
-use std::fs::File;
+use std::fs::{File, create_dir_all};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::ops::{Deref, DerefMut};
 
-//use milli::documents::DocumentBatchReader;
-//use serde_json::Map;
+use milli::documents::DocumentBatchReader;
+use serde_json::Map;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 const UPDATE_FILES_PATH: &str = "updates/updates_files";
+
+use crate::document_formats::read_jsonl;
 
 use super::error::Result;
 
@@ -42,6 +45,27 @@ pub struct UpdateFileStore {
 }
 
 impl UpdateFileStore {
+    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+        let src_update_files_path = src.as_ref().join(UPDATE_FILES_PATH);
+        let dst_update_files_path = dst.as_ref().join(UPDATE_FILES_PATH);
+
+        create_dir_all(&dst_update_files_path).unwrap();
+
+        let entries = std::fs::read_dir(src_update_files_path).unwrap();
+
+        for entry in entries {
+            let entry = entry.unwrap();
+            let update_file = BufReader::new(File::open(entry.path()).unwrap());
+            let file_uuid = entry.file_name();
+            let file_uuid = file_uuid.to_str().ok_or_else(|| anyhow::anyhow!("invalid update file name"))?;
+            let dst_path = dst_update_files_path.join(file_uuid);
+            let dst_file = BufWriter::new(File::create(dst_path)?);
+            read_jsonl(update_file, dst_file)?;
+        }
+
+        Ok(())
+    }
+
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().join(UPDATE_FILES_PATH);
         std::fs::create_dir_all(&path).unwrap();
@@ -78,27 +102,34 @@ impl UpdateFileStore {
     }
 
     /// Peform a dump of the given update file uuid into the provided snapshot path.
-    pub fn dump(&self, _uuid: Uuid, _snapshot_path: impl AsRef<Path>) -> Result<()> {
-        todo!()
-        //let update_file_path = self.path.join(uuid.to_string());
-        //let snapshot_file_path: snapshot_path.as_ref().join(format!("update_files/uuid", uuid));
+    pub fn dump(&self, uuid: Uuid, dump_path: impl AsRef<Path>) -> Result<()> {
+        let uuid_string = uuid.to_string();
+        let update_file_path = self.path.join(&uuid_string);
+        let mut dst = dump_path.as_ref().join(UPDATE_FILES_PATH);
+        std::fs::create_dir_all(&dst).unwrap();
+        dst.push(&uuid_string);
 
-        //let update_file = File::open(update_file_path).unwrap();
+        let update_file = File::open(update_file_path).unwrap();
+        let mut dst_file = NamedTempFile::new().unwrap();
+        let mut document_reader = DocumentBatchReader::from_reader(update_file).unwrap();
 
+        let mut document_buffer = Map::new();
+        // TODO: we need to find a way to do this more efficiently. (create a custom serializer to
+        // jsonl for example...)
+        while let Some((index, document)) = document_reader.next_document_with_index().unwrap() {
+            for (field_id, content) in document.iter() {
+                let field_name = index.get_by_left(&field_id).unwrap();
+                let content = serde_json::from_slice(content).unwrap();
+                document_buffer.insert(field_name.to_string(), content);
+            }
 
-        //let mut document_reader = DocumentBatchReader::from_reader(update_file).unwrap();
+            serde_json::to_writer(&mut dst_file, &document_buffer).unwrap();
+            dst_file.write(b"\n").unwrap();
+            document_buffer.clear();
+        }
 
-        //let mut document_buffer = Map::new();
-        //// TODO: we need to find a way to do this more efficiently. (create a custom serializer to
-        //// jsonl for example...)
-        //while let Some((index, document)) = document_reader.next_document_with_index().unwrap() {
-            //for (field_id, content) in document.iter() {
-                //let field_name = index.get_by_left(&field_id).unwrap();
-                //let content = serde_json::from_slice(content).unwrap();
-                //document_buffer.insert(field_name.to_string(), content);
-            //}
+        dst_file.persist(dst).unwrap();
 
-        //}
-        //Ok(())
+        Ok(())
     }
 }

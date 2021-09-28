@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::index::Index;
-use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
+use crate::index_controller::index_resolver::IndexResolver;
+use crate::index_controller::update_file_store::UpdateFileStore;
 use crate::index_controller::updates::store::UpdateStore;
 use crate::options::IndexerOpts;
 
@@ -41,19 +41,11 @@ impl MetadataV2 {
             self.dump_date, self.db_version
         );
 
-        info!("Loading index database.");
-        HeedUuidStore::load_dump(src.as_ref(), &dst)?;
-
-        info!("Loading updates.");
+        IndexResolver::load_dump(src.as_ref(), &dst, index_db_size, indexing_options)?;
+        UpdateFileStore::load_dump(src.as_ref(), &dst)?;
         UpdateStore::load_dump(&src, &dst, update_db_size)?;
 
         info!("Loading indexes.");
-        let indexes_path = src.as_ref().join("indexes");
-        let indexes = indexes_path.read_dir()?;
-        for index in indexes {
-            let index = index?;
-            Index::load_dump(&index.path(), &dst, index_db_size, indexing_options)?;
-        }
 
         Ok(())
     }

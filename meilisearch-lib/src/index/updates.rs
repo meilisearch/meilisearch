@@ -266,65 +266,69 @@ impl Index {
         // We must use the write transaction of the update here.
         let mut builder = update_builder.settings(txn, self);
 
-        match settings.searchable_attributes {
-            Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
-            Setting::Reset => builder.reset_searchable_fields(),
-            Setting::NotSet => (),
-        }
-
-        match settings.displayed_attributes {
-            Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
-            Setting::Reset => builder.reset_displayed_fields(),
-            Setting::NotSet => (),
-        }
-
-        match settings.filterable_attributes {
-            Setting::Set(ref facets) => {
-                builder.set_filterable_fields(facets.clone().into_iter().collect())
-            }
-            Setting::Reset => builder.reset_filterable_fields(),
-            Setting::NotSet => (),
-        }
-
-        match settings.sortable_attributes {
-            Setting::Set(ref fields) => {
-                builder.set_sortable_fields(fields.iter().cloned().collect())
-            }
-            Setting::Reset => builder.reset_sortable_fields(),
-            Setting::NotSet => (),
-        }
-
-        match settings.ranking_rules {
-            Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
-            Setting::Reset => builder.reset_criteria(),
-            Setting::NotSet => (),
-        }
-
-        match settings.stop_words {
-            Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
-            Setting::Reset => builder.reset_stop_words(),
-            Setting::NotSet => (),
-        }
-
-        match settings.synonyms {
-            Setting::Set(ref synonyms) => {
-                builder.set_synonyms(synonyms.clone().into_iter().collect())
-            }
-            Setting::Reset => builder.reset_synonyms(),
-            Setting::NotSet => (),
-        }
-
-        match settings.distinct_attribute {
-            Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
-            Setting::Reset => builder.reset_distinct_field(),
-            Setting::NotSet => (),
-        }
+        apply_settings_to_builder(settings, &mut builder);
 
         builder.execute(|indexing_step, update_id| {
             debug!("update {}: {:?}", update_id, indexing_step)
         })?;
 
         Ok(UpdateResult::Other)
+    }
+}
+
+pub fn apply_settings_to_builder(settings: &Settings<Checked>, builder: &mut milli::update::Settings) {
+    match settings.searchable_attributes {
+        Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
+        Setting::Reset => builder.reset_searchable_fields(),
+        Setting::NotSet => (),
+    }
+
+    match settings.displayed_attributes {
+        Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
+        Setting::Reset => builder.reset_displayed_fields(),
+        Setting::NotSet => (),
+    }
+
+    match settings.filterable_attributes {
+        Setting::Set(ref facets) => {
+            builder.set_filterable_fields(facets.clone().into_iter().collect())
+        }
+        Setting::Reset => builder.reset_filterable_fields(),
+        Setting::NotSet => (),
+    }
+
+    match settings.sortable_attributes {
+        Setting::Set(ref fields) => {
+            builder.set_sortable_fields(fields.iter().cloned().collect())
+        }
+        Setting::Reset => builder.reset_sortable_fields(),
+        Setting::NotSet => (),
+    }
+
+    match settings.ranking_rules {
+        Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
+        Setting::Reset => builder.reset_criteria(),
+        Setting::NotSet => (),
+    }
+
+    match settings.stop_words {
+        Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
+        Setting::Reset => builder.reset_stop_words(),
+        Setting::NotSet => (),
+    }
+
+    match settings.synonyms {
+        Setting::Set(ref synonyms) => {
+            builder.set_synonyms(synonyms.clone().into_iter().collect())
+        }
+        Setting::Reset => builder.reset_synonyms(),
+        Setting::NotSet => (),
+    }
+
+    match settings.distinct_attribute {
+        Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
+        Setting::Reset => builder.reset_distinct_field(),
+        Setting::NotSet => (),
     }
 }
 

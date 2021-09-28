@@ -1,6 +1,5 @@
 pub mod uuid_store;
 mod index_store;
-//mod message;
 pub mod error;
 
 use std::path::Path;
@@ -10,7 +9,7 @@ use uuid_store::{UuidStore, HeedUuidStore};
 use index_store::{IndexStore, MapIndexStore};
 use error::{Result, IndexResolverError};
 
-use crate::{index::Index, options::IndexerOpts};
+use crate::{index::{Index, update_handler::UpdateHandler}, options::IndexerOpts};
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
@@ -23,6 +22,28 @@ pub fn create_index_resolver(path: impl AsRef<Path>, index_size: usize, indexer_
 pub struct IndexResolver<U, I> {
     index_uuid_store: U,
     index_store: I,
+}
+
+impl IndexResolver<HeedUuidStore, MapIndexStore> {
+    pub fn load_dump(
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        index_db_size: usize,
+        indexer_opts: &IndexerOpts,
+        ) -> anyhow::Result<()> {
+        HeedUuidStore::load_dump(&src, &dst)?;
+
+        let indexes_path = src.as_ref().join("indexes");
+        let indexes = indexes_path.read_dir()?;
+
+        let update_handler = UpdateHandler::new(indexer_opts).unwrap();
+        for index in indexes {
+            let index = index?;
+            Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<U, I> IndexResolver<U ,I>
@@ -39,8 +60,14 @@ where U: UuidStore,
         }
     }
 
-    pub async fn dump(&self, _path: impl AsRef<Path>) -> Result<Vec<Uuid>> {
-        todo!()
+    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+        let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
+        let mut indexes = Vec::new();
+        for uuid in uuids {
+            indexes.push(self.get_index_by_uuid(uuid).await?);
+        }
+
+        Ok(indexes)
     }
 
     pub async fn get_size(&self) -> Result<u64> {
@@ -51,7 +78,6 @@ where U: UuidStore,
     pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
         let uuids = self.index_uuid_store.snapshot(path.as_ref().to_owned()).await?;
         let mut indexes = Vec::new();
-
         for uuid in uuids {
             indexes.push(self.get_index_by_uuid(uuid).await?);
         }

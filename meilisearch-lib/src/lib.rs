@@ -8,6 +8,7 @@ pub mod index_controller;
 pub use index_controller::{IndexController as MeiliSearch, updates::RegisterUpdate};
 
 mod compression;
+mod document_formats;
 
 use walkdir::WalkDir;
 

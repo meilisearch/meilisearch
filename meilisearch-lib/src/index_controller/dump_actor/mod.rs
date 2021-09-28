@@ -115,6 +115,7 @@ pub fn load_dump(
     let tmp_src = tempfile::tempdir_in(".")?;
     let tmp_src_path = tmp_src.path();
 
+    println!("importing to {}", dst_path.as_ref().display());
     crate::from_tar_gz(&src_path, tmp_src_path)?;
 
     let meta_path = tmp_src_path.join(META_FILE_NAME);
@@ -179,7 +180,7 @@ impl DumpTask {
 
         let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        UpdateMsg::dump(&self.update_handle, uuids.into_iter().collect(), temp_dump_path.clone()).await?;
+        UpdateMsg::dump(&self.update_handle, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;

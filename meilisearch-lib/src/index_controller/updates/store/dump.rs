@@ -1,11 +1,17 @@
-use std::{collections::HashSet, fs::{create_dir_all, File}, io::Write, path::{Path, PathBuf}, sync::Arc};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::io::{BufReader, Write};
+use std::fs::{File, create_dir_all};
 
-use heed::RoTxn;
+use heed::{EnvOpenOptions, RoTxn};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::Deserializer;
+use tempfile::{NamedTempFile, TempDir};
 use uuid::Uuid;
 
 use super::{Result, State, UpdateStore};
-use crate::index_controller::{index_resolver::HardStateIndexResolver, updates::status::UpdateStatus};
+use crate::{RegisterUpdate, index::Index, index_controller::{update_file_store::UpdateFileStore, updates::status::{Enqueued, UpdateStatus}}};
 
 #[derive(Serialize, Deserialize)]
 struct UpdateEntry {
@@ -16,9 +22,8 @@ struct UpdateEntry {
 impl UpdateStore {
     pub fn dump(
         &self,
-        uuids: &HashSet<Uuid>,
+        indexes: &[Index],
         path: PathBuf,
-        handle: Arc<HardStateIndexResolver>,
     ) -> Result<()> {
         let state_lock = self.state.write();
         state_lock.swap(State::Dumping);
@@ -26,15 +31,11 @@ impl UpdateStore {
         // txn must *always* be acquired after state lock, or it will dead lock.
         let txn = self.env.write_txn()?;
 
-        let dump_path = path.join("updates");
-        create_dir_all(&dump_path)?;
+        let uuids = indexes.iter().map(|i| i.uuid).collect();
 
-        self.dump_updates(&txn, uuids, &dump_path)?;
+        self.dump_updates(&txn, &uuids, &path)?;
 
-        let fut = dump_indexes(uuids, handle, &path);
-        tokio::runtime::Handle::current().block_on(fut)?;
-
-        state_lock.swap(State::Idle);
+        indexes.par_iter().try_for_each(|index| index.dump(&path)).unwrap();
 
         Ok(())
     }
@@ -45,58 +46,59 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
     ) -> Result<()> {
-        //let dump_data_path = path.as_ref().join("data.jsonl");
-        //let mut dump_data_file = File::create(dump_data_path)?;
+        let mut dump_data_file = NamedTempFile::new()?;
 
-        //let update_files_path = path.as_ref().join(super::UPDATE_DIR);
-        //create_dir_all(&update_files_path)?;
+        self.dump_pending(txn, uuids, &mut dump_data_file, &path)?;
+        self.dump_completed(txn, uuids, &mut dump_data_file)?;
 
-        //self.dump_pending(txn, uuids, &mut dump_data_file, &path)?;
-        //self.dump_completed(txn, uuids, &mut dump_data_file)?;
+        let mut dst_path = path.as_ref().join("updates");
+        create_dir_all(&dst_path)?;
+        dst_path.push("data.jsonl");
+        dump_data_file.persist(dst_path).unwrap();
 
-        //Ok(())
-        todo!()
+        Ok(())
     }
 
     fn dump_pending(
         &self,
-        _txn: &RoTxn,
-        _uuids: &HashSet<Uuid>,
-        _file: &mut File,
-        _dst_path: impl AsRef<Path>,
+        txn: &RoTxn,
+        uuids: &HashSet<Uuid>,
+        mut file: impl Write,
+        dst_path: impl AsRef<Path>,
     ) -> Result<()> {
-        todo!()
-        //let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
+        let pendings = self.pending_queue.iter(txn)?.lazily_decode_data();
 
-        //for pending in pendings {
-            //let ((_, uuid, _), data) = pending?;
-            //if uuids.contains(&uuid) {
-                //let update = data.decode()?;
+        for pending in pendings {
+            let ((_, uuid, _), data) = pending?;
+            if uuids.contains(&uuid) {
+                let update = data.decode()?;
 
-                //if let Some(ref update_uuid) = update.content {
-                    //let src = super::update_uuid_to_file_path(&self.path, *update_uuid);
-                    //let dst = super::update_uuid_to_file_path(&dst_path, *update_uuid);
-                    //std::fs::copy(src, dst)?;
-                //}
+                if let Enqueued {
+                    meta: RegisterUpdate::DocumentAddition {
+                        content_uuid, ..
+                    }, ..
+                } = update {
+                    self.update_file_store.dump(content_uuid, &dst_path).unwrap();
+                }
 
-                //let update_json = UpdateEntry {
-                    //uuid,
-                    //update: update.into(),
-                //};
+                let update_json = UpdateEntry {
+                    uuid,
+                    update: update.into(),
+                };
 
-                //serde_json::to_writer(&mut file, &update_json)?;
-                //file.write_all(b"\n")?;
-            //}
-        //}
+                serde_json::to_writer(&mut file, &update_json)?;
+                file.write_all(b"\n")?;
+            }
+        }
 
-        //Ok(())
+        Ok(())
     }
 
     fn dump_completed(
         &self,
         txn: &RoTxn,
         uuids: &HashSet<Uuid>,
-        mut file: &mut File,
+        mut file: impl Write,
     ) -> Result<()> {
         let updates = self.updates.iter(txn)?.lazily_decode_data();
 
@@ -116,65 +118,35 @@ impl UpdateStore {
     }
 
     pub fn load_dump(
-        _src: impl AsRef<Path>,
-        _dst: impl AsRef<Path>,
-        _db_size: usize,
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        db_size: usize,
     ) -> anyhow::Result<()> {
-        todo!()
-        //let dst_update_path = dst.as_ref().join("updates/");
-        //create_dir_all(&dst_update_path)?;
 
-        //let mut options = EnvOpenOptions::new();
-        //options.map_size(db_size as usize);
-        //let (store, _) = UpdateStore::new(options, &dst_update_path)?;
+        println!("target path: {}", dst.as_ref().display());
 
-        //let src_update_path = src.as_ref().join("updates");
-        //let update_data = File::open(&src_update_path.join("data.jsonl"))?;
-        //let mut update_data = BufReader::new(update_data);
+        let mut options = EnvOpenOptions::new();
+        options.map_size(db_size as usize);
 
-        //std::fs::create_dir_all(dst_update_path.join("update_files/"))?;
+        // create a dummy update fiel store, since it is not needed right now.
+        let tmp = TempDir::new().unwrap();
+        let update_file_store = UpdateFileStore::new(tmp.path()).unwrap();
+        let (store, _) = UpdateStore::new(options, &dst, update_file_store)?;
 
-        //let mut wtxn = store.env.write_txn()?;
-        //let mut line = String::new();
-        //loop {
-            //match update_data.read_line(&mut line) {
-                //Ok(0) => break,
-                //Ok(_) => {
-                    //let UpdateEntry { uuid, update } = serde_json::from_str(&line)?;
-                    //store.register_raw_updates(&mut wtxn, &update, uuid)?;
+        let src_update_path = src.as_ref().join("updates");
+        let update_data = File::open(&src_update_path.join("data.jsonl"))?;
+        let update_data = BufReader::new(update_data);
 
-                    //// Copy ascociated update path if it exists
-                    //if let UpdateStatus::Enqueued(Enqueued {
-                        //content: Some(uuid),
-                        //..
-                    //}) = update
-                    //{
-                        //let src = update_uuid_to_file_path(&src_update_path, uuid);
-                        //let dst = update_uuid_to_file_path(&dst_update_path, uuid);
-                        //std::fs::copy(src, dst)?;
-                    //}
-                //}
-                //_ => break,
-            //}
+        let stream = Deserializer::from_reader(update_data).into_iter::<UpdateEntry>();
+        let mut wtxn = store.env.write_txn()?;
 
-            //line.clear();
-        //}
+        for entry in stream {
+            let UpdateEntry { uuid, update } = entry?;
+            store.register_raw_updates(&mut wtxn, &update, uuid)?;
+        }
 
-        //wtxn.commit()?;
+        wtxn.commit()?;
 
-        //Ok(())
+        Ok(())
     }
-}
-
-async fn dump_indexes(
-    _uuids: &HashSet<Uuid>,
-    _handle: Arc<HardStateIndexResolver>,
-    _path: impl AsRef<Path>,
-) -> Result<()> {
-    todo!()
-    //for uuid in uuids {
-        //IndexMsg::dump(&handle, *uuid, path.as_ref().to_owned()).await?;
-    //}
-
-    //Ok(())
 }

@@ -3,7 +3,6 @@ mod message;
 pub mod status;
 pub mod store;
 
-use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -104,7 +103,6 @@ pub struct UpdateLoop {
     store: Arc<UpdateStore>,
     inbox: Option<mpsc::Receiver<UpdateMsg>>,
     update_file_store: UpdateFileStore,
-    index_resolver: Arc<HardStateIndexResolver>,
     must_exit: Arc<AtomicBool>,
 }
 
@@ -133,7 +131,6 @@ impl UpdateLoop {
             inbox,
             must_exit,
             update_file_store,
-            index_resolver,
         })
     }
 
@@ -184,8 +181,8 @@ impl UpdateLoop {
                     GetInfo { ret } => {
                         let _ = ret.send(self.handle_get_info().await);
                     }
-                    Dump { uuids, path, ret } => {
-                        let _ = ret.send(self.handle_dump(uuids, path).await);
+                    Dump { indexes, path, ret } => {
+                        let _ = ret.send(self.handle_dump(indexes, path).await);
                     }
                 }
             })
@@ -278,12 +275,11 @@ impl UpdateLoop {
         Ok(())
     }
 
-    async fn handle_dump(&self, uuids: HashSet<Uuid>, path: PathBuf) -> Result<()> {
-        let index_handle = self.index_resolver.clone();
+    async fn handle_dump(&self, indexes: Vec<Index>, path: PathBuf) -> Result<()> {
         let update_store = self.store.clone();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
-            update_store.dump(&uuids, path.to_path_buf(), index_handle)?;
+            update_store.dump(&indexes, path.to_path_buf())?;
             Ok(())
         })
         .await??;

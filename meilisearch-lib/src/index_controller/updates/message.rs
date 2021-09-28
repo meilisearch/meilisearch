@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 use tokio::sync::{mpsc, oneshot};
@@ -35,7 +34,7 @@ pub enum UpdateMsg {
         ret: oneshot::Sender<Result<()>>,
     },
     Dump {
-        uuids: HashSet<Uuid>,
+        indexes: Vec<Index>,
         path: PathBuf,
         ret: oneshot::Sender<Result<()>>,
     },
@@ -54,11 +53,11 @@ impl UpdateMsg {
 
     pub async fn dump(
         sender: &mpsc::Sender<Self>,
-        uuids: HashSet<Uuid>,
+        indexes: Vec<Index>,
         path: PathBuf,
     ) -> Result<()> {
         let (ret, rcv) = oneshot::channel();
-        let msg = Self::Dump { path, uuids, ret };
+        let msg = Self::Dump { path, indexes, ret };
         sender.send(msg).await?;
         rcv.await?
     }
