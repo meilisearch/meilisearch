@@ -231,7 +231,7 @@ impl UpdateLoop {
             builder.add_documents(documents).unwrap();
             builder.finish().unwrap();
 
-            file.persist();
+            file.persist()?;
 
             Ok(uuid)
         })

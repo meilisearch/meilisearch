@@ -3,6 +3,8 @@ use std::error::Error;
 
 use meilisearch_error::{Code, ErrorCode};
 
+use crate::index_controller::update_file_store::UpdateFileStoreError;
+
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +44,8 @@ internal_error!(
     UpdateLoopError: heed::Error,
     std::io::Error,
     serde_json::Error,
-    tokio::task::JoinError
+    tokio::task::JoinError,
+    UpdateFileStoreError
 );
 
 impl ErrorCode for UpdateLoopError {
