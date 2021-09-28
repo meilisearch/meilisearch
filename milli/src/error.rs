@@ -247,8 +247,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 )
             }
             Self::SortRankingRuleMissing => f.write_str(
-                "The sort ranking rule must be specified in the \
-                    ranking rules settings to use the sort parameter at search time",
+                "You must specify where \"sort\" is listed in the \
+rankingRules setting to use the sort parameter at search time",
             ),
             Self::MissingDocumentId { document } => {
                 let json = serde_json::to_string(document).unwrap();
