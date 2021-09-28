@@ -70,9 +70,8 @@ where U: UuidStore,
         Ok(indexes)
     }
 
-    pub async fn get_size(&self) -> Result<u64> {
-        todo!()
-        //Ok(self.index_store.get_size()? + self.index_uuid_store.get_size().await?)
+    pub async fn get_uuids_size(&self) -> Result<u64> {
+        Ok(self.index_uuid_store.get_size().await?)
     }
 
     pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
