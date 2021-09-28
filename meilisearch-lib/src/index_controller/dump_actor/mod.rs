@@ -2,7 +2,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Context;
 use chrono::{DateTime, Utc};
 use log::{info, trace, warn};
 #[cfg(test)]
@@ -112,22 +111,16 @@ pub fn load_dump(
     update_db_size: usize,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    let tmp_src = tempfile::tempdir_in(".")?;
+    let tmp_src = tempfile::tempdir()?;
     let tmp_src_path = tmp_src.path();
 
-    println!("importing to {}", dst_path.as_ref().display());
     crate::from_tar_gz(&src_path, tmp_src_path)?;
 
     let meta_path = tmp_src_path.join(META_FILE_NAME);
     let mut meta_file = File::open(&meta_path)?;
     let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
-    let dst_dir = dst_path
-        .as_ref()
-        .parent()
-        .with_context(|| format!("Invalid db path: {}", dst_path.as_ref().display()))?;
-
-    let tmp_dst = tempfile::tempdir_in(dst_dir)?;
+    let tmp_dst = tempfile::tempdir()?;
 
     match meta {
         Metadata::V1(meta) => {
@@ -168,9 +161,8 @@ impl DumpTask {
 
         create_dir_all(&self.path).await?;
 
-        let path_clone = self.path.clone();
         let temp_dump_dir =
-            tokio::task::spawn_blocking(|| tempfile::TempDir::new_in(path_clone)).await??;
+            tokio::task::spawn_blocking(|| tempfile::TempDir::new()).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
         let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);
@@ -183,7 +175,7 @@ impl DumpTask {
         UpdateMsg::dump(&self.update_handle, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
+            let temp_dump_file = tempfile::NamedTempFile::new()?;
             crate::to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 

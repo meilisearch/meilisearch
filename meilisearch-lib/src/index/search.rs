@@ -7,8 +7,7 @@ use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{
-    AscDesc, AscDescError, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, SortError,
-    UserError,
+    AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, SortError
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};

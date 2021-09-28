@@ -9,8 +9,8 @@ use meilisearch_http::Opt;
 
 #[actix_rt::test]
 async fn perform_snapshot() {
-    let temp = tempfile::tempdir_in(".").unwrap();
-    let snapshot_dir = tempfile::tempdir_in(".").unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot_dir = tempfile::tempdir().unwrap();
 
     let options = Opt {
         snapshot_dir: snapshot_dir.path().to_owned(),
@@ -29,7 +29,7 @@ async fn perform_snapshot() {
 
     sleep(Duration::from_secs(2)).await;
 
-    let temp = tempfile::tempdir_in(".").unwrap();
+    let temp = tempfile::tempdir().unwrap();
 
     let snapshot_path = snapshot_dir
         .path()

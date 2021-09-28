@@ -280,18 +280,17 @@ pub async fn get_health() -> Result<HttpResponse, ResponseError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data::Data;
     use crate::extractors::authentication::GuardedData;
 
     /// A type implemented for a route that uses a authentication policy `Policy`.
     ///
     /// This trait is used for regression testing of route authenticaton policies.
-    trait Is<Policy, T> {}
+    trait Is<Policy, Data, T> {}
 
     macro_rules! impl_is_policy {
         ($($param:ident)*) => {
-            impl<Policy, Func, $($param,)* Res> Is<Policy, (($($param,)*), Res)> for Func
-                where Func: Fn(GuardedData<Policy, MeiliSearch>, $($param,)*) -> Res {}
+            impl<Policy, Func, Data, $($param,)* Res> Is<Policy, Data, (($($param,)*), Res)> for Func
+                where Func: Fn(GuardedData<Policy, Data>, $($param,)*) -> Res {}
 
         };
     }
@@ -310,7 +309,7 @@ mod test {
         ($($policy:ident => { $($route:expr,)*})*) => {
             #[test]
             fn test_auth() {
-                $($(let _: &dyn Is<$policy, _> = &$route;)*)*
+                $($(let _: &dyn Is<$policy, _, _> = &$route;)*)*
             }
         };
     }

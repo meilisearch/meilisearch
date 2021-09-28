@@ -106,7 +106,7 @@ pub async fn delete_document(
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { document_id, index_uid } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
-    let update_status = meilisearch.register_update(index_uid, update).await?;
+    let update_status = meilisearch.register_update(index_uid, update, false).await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
@@ -170,7 +170,7 @@ pub async fn add_documents(
         format: DocumentAdditionFormat::Json,
     };
     let update_status = meilisearch
-        .register_update(path.into_inner().index_uid, update)
+        .register_update(path.into_inner().index_uid, update, true)
         .await?;
 
     debug!("returns: {:?}", update_status);
@@ -193,7 +193,7 @@ pub async fn update_documents(
         format: DocumentAdditionFormat::Json,
     };
     let update_status = meilisearch
-        .register_update(path.into_inner().index_uid, update)
+        .register_update(path.into_inner().index_uid, update, true)
         .await?;
 
     debug!("returns: {:?}", update_status);
@@ -216,7 +216,7 @@ pub async fn delete_documents(
         .collect();
 
     let update = Update::DeleteDocuments(ids);
-    let update_status = meilisearch.register_update(path.into_inner().index_uid, update).await?;
+    let update_status = meilisearch.register_update(path.into_inner().index_uid, update, false).await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }
@@ -226,7 +226,7 @@ pub async fn clear_all_documents(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;
-    let update_status = meilisearch.register_update(path.into_inner().index_uid, update).await?;
+    let update_status = meilisearch.register_update(path.into_inner().index_uid, update, false).await?;
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
 }

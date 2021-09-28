@@ -18,7 +18,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(list_indexes))
-            //.route(web::post().to(create_index)),
+            .route(web::post().to(create_index)),
     )
     .service(
         web::scope("/{index_uid}")
@@ -26,7 +26,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 web::resource("")
                     .route(web::get().to(get_index))
                     .route(web::put().to(update_index))
-                    //.route(web::delete().to(delete_index)),
+                    .route(web::delete().to(delete_index)),
             )
             .service(web::resource("/stats").route(web::get().to(get_index_stats)))
             .service(web::scope("/documents").configure(documents::configure))
@@ -49,14 +49,14 @@ pub struct IndexCreateRequest {
     primary_key: Option<String>,
 }
 
-//pub async fn create_index(
-    //data: GuardedData<Private, MeiliSearch>,
-    //body: web::Json<IndexCreateRequest>,
-//) -> Result<HttpResponse, ResponseError> {
-    //let body = body.into_inner();
-    //let meta = data.create_index(body.uid, body.primary_key).await?;
-    //Ok(HttpResponse::Created().json(meta))
-//}
+pub async fn create_index(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    body: web::Json<IndexCreateRequest>,
+) -> Result<HttpResponse, ResponseError> {
+    let body = body.into_inner();
+    let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
+    Ok(HttpResponse::Created().json(meta))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -102,13 +102,13 @@ pub async fn update_index(
     Ok(HttpResponse::Ok().json(meta))
 }
 
-//pub async fn delete_index(
-    //data: GuardedData<Private, MeiliSearch>,
-    //path: web::Path<IndexParam>,
-//) -> Result<HttpResponse, ResponseError> {
-    //data.delete_index(path.index_uid.clone()).await?;
-    //Ok(HttpResponse::NoContent().finish())
-//}
+pub async fn delete_index(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    meilisearch.delete_index(path.index_uid.clone()).await?;
+    Ok(HttpResponse::NoContent().finish())
+}
 
 pub async fn get_index_stats(
     meilisearch: GuardedData<Private, MeiliSearch>,

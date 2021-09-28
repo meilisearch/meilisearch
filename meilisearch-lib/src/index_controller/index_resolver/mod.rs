@@ -84,11 +84,14 @@ where U: UuidStore,
         Ok(indexes)
     }
 
-    pub async fn create_index(&self, uid: String, primary_key: Option<String>) -> Result<(Uuid, Index)> {
+    pub async fn create_index(&self, uid: String, primary_key: Option<String>) -> Result<Index> {
+        if !is_index_uid_valid(&uid) {
+            return Err(IndexResolverError::BadlyFormatted(uid));
+        }
         let uuid = Uuid::new_v4();
         let index = self.index_store.create(uuid, primary_key).await?;
         self.index_uuid_store.insert(uid, uuid).await?;
-        Ok((uuid, index))
+        Ok(index)
     }
 
     pub async fn list(&self) -> Result<Vec<(String, Index)>> {
@@ -109,11 +112,11 @@ where U: UuidStore,
         Ok(indexes)
     }
 
-    pub async fn delete_index(&self, uid: String) -> Result<()> {
+    pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
             Some(uuid) => {
                 let _ = self.index_store.delete(uuid).await;
-                Ok(())
+                Ok(uuid)
             }
             None => Err(IndexResolverError::UnexistingIndex(uid)),
         }
@@ -147,4 +150,9 @@ where U: UuidStore,
             (name, _) => Err(IndexResolverError::UnexistingIndex(name))
         }
     }
+}
+
+fn is_index_uid_valid(uid: &str) -> bool {
+    uid.chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
 }

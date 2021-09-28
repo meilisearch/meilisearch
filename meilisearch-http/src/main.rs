@@ -1,7 +1,7 @@
-use std::{env, path::Path, time::Duration};
+use std::env;
 
 use actix_web::HttpServer;
-use meilisearch_http::{create_app, Opt};
+use meilisearch_http::{Opt, create_app, setup_meilisearch};
 use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
 
@@ -27,53 +27,6 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Cleans and setup the temporary file folder in the database directory. This must be done after
-/// the meilisearch instance has been created, to not interfere with the snapshot and dump loading.
-fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
-    // Set the tempfile directory in the current db path, to avoid cross device references. Also
-    // remove the previous outstanding files found there
-    //
-    // TODO: if two processes open the same db, one might delete the other tmpdir. Need to make
-    // sure that no one is using it before deleting it.
-    let temp_path = db_path.as_ref().join("tmp");
-    // Ignore error if tempdir doesn't exist
-    let _ = std::fs::remove_dir_all(&temp_path);
-    std::fs::create_dir_all(&temp_path)?;
-    if cfg!(windows) {
-        std::env::set_var("TMP", temp_path);
-    } else {
-        std::env::set_var("TMPDIR", temp_path);
-    }
-
-    Ok(())
-}
-
-fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
-    let mut meilisearch = MeiliSearch::builder();
-    meilisearch
-        .set_max_index_size(opt.max_index_size.get_bytes() as usize)
-        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
-        .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
-        .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
-        .set_dump_dst(opt.dumps_dir.clone())
-        .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
-        .set_snapshot_dir(opt.snapshot_dir.clone());
-
-    if let Some(ref path) = opt.import_snapshot {
-        meilisearch.set_import_snapshot(path.clone());
-    }
-
-    if let Some(ref path) = opt.import_dump {
-        meilisearch.set_dump_src(path.clone());
-    }
-
-    if opt.schedule_snapshot {
-        meilisearch.set_schedule_snapshot();
-    }
-
-    meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
-}
-
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
@@ -92,7 +45,9 @@ async fn main() -> anyhow::Result<()> {
 
     let meilisearch = setup_meilisearch(&opt)?;
 
-    setup_temp_dir(&opt.db_path)?;
+    // Setup the temp directory to be in the db folder. This is important, since temporary file
+    // don't support to be persisted accross filesystem boundaries.
+    meilisearch_http::setup_temp_dir(&opt.db_path)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
