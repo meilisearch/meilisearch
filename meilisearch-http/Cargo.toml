@@ -44,7 +44,6 @@ http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
 log = "0.4.14"
-main_error = "0.1.1"
 meilisearch-lib = { path = "../meilisearch-lib" }
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
@@ -73,17 +72,13 @@ obkv = "0.2.0"
 pin-project = "1.0.8"
 whoami = { version = "1.1.3", optional = true }
 reqwest = { version = "0.11.4", features = ["json", "rustls-tls"], default-features = false, optional = true }
-serdeval = "0.1.0"
 sysinfo = "0.20.2"
 tokio-stream = "0.1.7"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
-assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
-mockall = "0.10.2"
 paste = "1.0.5"
 serde_url_params = "0.2.1"
-tempdir = "0.3.7"
 urlencoding = "2.1.0"
 
 [features]

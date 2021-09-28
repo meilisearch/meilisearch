@@ -4,8 +4,6 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use log::{info, trace, warn};
-#[cfg(test)]
-use mockall::automock;
 use serde::{Deserialize, Serialize};
 use tokio::fs::create_dir_all;
 
@@ -32,7 +30,6 @@ mod message;
 const META_FILE_NAME: &str = "metadata.json";
 
 #[async_trait::async_trait]
-#[cfg_attr(test, automock)]
 pub trait DumpActorHandle {
     /// Start the creation of a dump
     /// Implementation: [handle_impl::DumpActorHandleImpl::create_dump]
