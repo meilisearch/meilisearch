@@ -31,7 +31,6 @@ log = "0.4.14"
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 memmap = "0.7.0"
-#milli = { git = "https://github.com/meilisearch/milli.git", branch = "main" }
 milli = { path = "../../milli/milli" }
 mime = "0.3.16"
 num_cpus = "1.13.0"

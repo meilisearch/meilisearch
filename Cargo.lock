@@ -305,6 +305,20 @@ name = "as-slice"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45403b49e3954a4b8428a0ac21a4b7afadccf92bfd96273f1a58cd4812496ae0"
+<<<<<<< HEAD
+=======
+dependencies = [
+ "generic-array 0.12.4",
+ "generic-array 0.13.3",
+ "generic-array 0.14.4",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "assert-json-diff"
+version = "1.0.1"
+source = "git+https://github.com/qdequele/assert-json-diff?branch=master#9012a0c8866d0f2db0ef9a6242e4a19d1e8c67e4"
+>>>>>>> 9d9543fd (Use an existing revision of milli)
 dependencies = [
  "generic-array 0.12.4",
  "generic-array 0.13.3",
@@ -1778,7 +1792,12 @@ dependencies = [
 
 [[package]]
 name = "milli"
+<<<<<<< HEAD
 version = "0.16.0"
+=======
+version = "0.14.0"
+source = "git+https://github.com/meilisearch/milli.git?rev=9d9010e#9d9010e45ff1eddd8a7715423ad0988a35ee34b6"
+>>>>>>> 9d9543fd (Use an existing revision of milli)
 dependencies = [
  "bimap",
  "bincode",
