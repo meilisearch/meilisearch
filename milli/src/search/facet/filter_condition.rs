@@ -2,15 +2,10 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Bound::{self, Excluded, Included};
 use std::result::Result as StdResult;
-use std::str::FromStr;
 
 use either::Either;
 use heed::types::DecodeIgnore;
-use itertools::Itertools;
 use log::debug;
-use pest::error::{Error as PestError, ErrorVariant};
-use pest::iterators::{Pair, Pairs};
-use pest::Parser;
 use roaring::RoaringBitmap;
 
 use nom::{
@@ -28,7 +23,8 @@ use nom::{
 
 use self::FilterCondition::*;
 use self::Operator::*;
-use super::parser::{FilterParser, Rule, PREC_CLIMBER};
+use super::parser::FilterParser;
+use super::parser::{Rule, PREC_CLIMBER};
 use super::FacetNumberRange;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
@@ -145,9 +141,7 @@ impl<'a> ParseContext<'a> {
         let k = match op {
             "=" => Operator(fid, Equal(r.ok(), value.to_string().to_lowercase())),
             "!=" => Operator(fid, NotEqual(r.ok(), value.to_string().to_lowercase())),
-            ">" | "<" | "<=" | ">=" => {
-                return self.parse_numeric_unary_condition(input, fid, value)
-            }
+            ">" | "<" | "<=" | ">=" => return self.parse_numeric_unary_condition(op, fid, value),
             _ => unreachable!(),
         };
         Ok((input, k))
@@ -326,92 +320,6 @@ impl FilterCondition {
 }
 
 impl FilterCondition {
-    pub fn from_array_pest<I, J, A, B>(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        array: I,
-    ) -> Result<Option<FilterCondition>>
-    where
-        I: IntoIterator<Item = Either<J, B>>,
-        J: IntoIterator<Item = A>,
-        A: AsRef<str>,
-        B: AsRef<str>,
-    {
-        let mut ands = None;
-
-        for either in array {
-            match either {
-                Either::Left(array) => {
-                    let mut ors = None;
-                    for rule in array {
-                        let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
-                        ors = match ors.take() {
-                            Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
-                            None => Some(condition),
-                        };
-                    }
-
-                    if let Some(rule) = ors {
-                        ands = match ands.take() {
-                            Some(ands) => Some(And(Box::new(ands), Box::new(rule))),
-                            None => Some(rule),
-                        };
-                    }
-                }
-                Either::Right(rule) => {
-                    let condition = FilterCondition::from_str(rtxn, index, rule.as_ref())?;
-                    ands = match ands.take() {
-                        Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
-                        None => Some(condition),
-                    };
-                }
-            }
-        }
-
-        Ok(ands)
-    }
-
-    pub fn from_str_pest(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        expression: &str,
-    ) -> Result<FilterCondition> {
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let filterable_fields = index.filterable_fields(rtxn)?;
-        let lexed =
-            FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
-        FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
-    }
-
-    fn from_pairs(
-        fim: &FieldsIdsMap,
-        ff: &HashSet<String>,
-        expression: Pairs<Rule>,
-    ) -> Result<Self> {
-        PREC_CLIMBER.climb(
-            expression,
-            |pair: Pair<Rule>| match pair.as_rule() {
-                Rule::greater => Ok(Self::greater_than(fim, ff, pair)?),
-                Rule::geq => Ok(Self::greater_than_or_equal(fim, ff, pair)?),
-                Rule::eq => Ok(Self::equal(fim, ff, pair)?),
-                Rule::neq => Ok(Self::equal(fim, ff, pair)?.negate()),
-                Rule::leq => Ok(Self::lower_than_or_equal(fim, ff, pair)?),
-                Rule::less => Ok(Self::lower_than(fim, ff, pair)?),
-                Rule::between => Ok(Self::between(fim, ff, pair)?),
-                Rule::geo_radius => Ok(Self::geo_radius(fim, ff, pair)?),
-                Rule::not => Ok(Self::from_pairs(fim, ff, pair.into_inner())?.negate()),
-                Rule::prgm => Self::from_pairs(fim, ff, pair.into_inner()),
-                Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
-                _ => unreachable!(),
-            },
-            |lhs: Result<Self>, op: Pair<Rule>, rhs: Result<Self>| match op.as_rule() {
-                Rule::or => Ok(Or(Box::new(lhs?), Box::new(rhs?))),
-                Rule::and => Ok(And(Box::new(lhs?), Box::new(rhs?))),
-                _ => unreachable!(),
-            },
-        )
-    }
-
     fn negate(self) -> FilterCondition {
         match self {
             Operator(fid, op) => match op.negate() {
@@ -483,128 +391,6 @@ impl FilterCondition {
             )))?;
         }
         Ok(Operator(fid, GeoLowerThan([lat.0, lng.0], distance)))
-    }
-
-    fn between(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let (lresult, _) = pest_parse(items.next().unwrap());
-        let (rresult, _) = pest_parse(items.next().unwrap());
-
-        let lvalue = lresult.map_err(UserError::InvalidFilter)?;
-        let rvalue = rresult.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, Between(lvalue, rvalue)))
-    }
-
-    fn equal(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let value = items.next().unwrap();
-        let (result, svalue) = pest_parse(value);
-
-        let svalue = svalue.to_lowercase();
-        Ok(Operator(fid, Equal(result.ok(), svalue)))
-    }
-
-    fn greater_than(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let value = items.next().unwrap();
-        let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, GreaterThan(value)))
-    }
-
-    fn greater_than_or_equal(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let value = items.next().unwrap();
-        let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, GreaterThanOrEqual(value)))
-    }
-
-    fn lower_than(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let value = items.next().unwrap();
-        let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, LowerThan(value)))
-    }
-
-    fn lower_than_or_equal(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-
-        let value = items.next().unwrap();
-        let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
-
-        Ok(Operator(fid, LowerThanOrEqual(value)))
     }
 }
 
@@ -855,72 +641,6 @@ impl FilterCondition {
 ///
 /// The pest pair is simply a string associated with a span, a location to highlight in
 /// the error message.
-fn field_id(
-    fields_ids_map: &FieldsIdsMap,
-    filterable_fields: &HashSet<String>,
-    items: &mut Pairs<Rule>,
-) -> StdResult<Option<FieldId>, PestError<Rule>> {
-    // lexing ensures that we at least have a key
-    let key = items.next().unwrap();
-    if key.as_rule() == Rule::reserved {
-        let message = match key.as_str() {
-            key if key.starts_with("_geoPoint") => {
-                format!(
-                    "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. \
-                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
-                )
-            }
-            key @ "_geo" => {
-                format!(
-                    "`{}` is a reserved keyword and thus can't be used as a filter expression. \
-                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
-                    key
-                )
-            }
-            key => format!(
-                "`{}` is a reserved keyword and thus can't be used as a filter expression.",
-                key
-            ),
-        };
-        return Err(PestError::new_from_span(ErrorVariant::CustomError { message }, key.as_span()));
-    }
-
-    if !filterable_fields.contains(key.as_str()) {
-        return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` is not filterable, available filterable attributes are: {}.",
-                    key.as_str(),
-                    filterable_fields.iter().join(", "),
-                ),
-            },
-            key.as_span(),
-        ));
-    }
-
-    Ok(fields_ids_map.id(key.as_str()))
-}
-
-/// Tries to parse the pest pair into the type `T` specified, always returns
-/// the original string that we tried to parse.
-///
-/// Returns the parsing error associated with the span if the conversion fails.
-fn pest_parse<T>(pair: Pair<Rule>) -> (StdResult<T, pest::error::Error<Rule>>, String)
-where
-    T: FromStr,
-    T::Err: ToString,
-{
-    let result = match pair.as_str().parse::<T>() {
-        Ok(value) => Ok(value),
-        Err(e) => Err(PestError::<Rule>::new_from_span(
-            ErrorVariant::CustomError { message: e.to_string() },
-            pair.as_span(),
-        )),
-    };
-
-    (result, pair.as_str().to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use big_s::S;
@@ -988,6 +708,27 @@ mod tests {
         let condition = FilterCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected =
             Or(Box::new(Operator(0, LowerThan(22.0))), Box::new(Operator(0, GreaterThan(44.0))));
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn compare() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "channel < 20").unwrap();
+        let expected = Operator(0, LowerThan(20.0));
+
         assert_eq!(condition, expected);
     }
 
