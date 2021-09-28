@@ -79,6 +79,8 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
+// TODO: TAMO: split on :asc, and :desc, instead of doing some weird things
+
 /// Transform the sort query parameter into something that matches the post expected format.
 fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
     let mut sort_parameters = Vec::new();
