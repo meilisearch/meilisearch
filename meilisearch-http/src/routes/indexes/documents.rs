@@ -18,7 +18,6 @@ use crate::routes::IndexParam;
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
 
-/*
 macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
@@ -33,9 +32,8 @@ macro_rules! guard_content_type {
         }
     };
 }
-
 guard_content_type!(guard_json, "application/json");
-*/
+guard_content_type!(guard_csv, "application/csv");
 
 /// This is required because Payload is not Sync nor Send
 fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
@@ -48,22 +46,6 @@ fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, P
     tokio_stream::wrappers::ReceiverStream::new(recv)
 }
 
-fn guard_json(head: &actix_web::dev::RequestHead) -> bool {
-    if let Some(_content_type) = head.headers.get("Content-Type") {
-        // CURRENTLY AND FOR THIS RELEASE ONLY WE DECIDED TO INTERPRET ALL CONTENT-TYPES AS JSON
-        true
-        /*
-        content_type
-            .to_str()
-            .map(|v| v.contains("application/json"))
-            .unwrap_or(false)
-        */
-    } else {
-        // if no content-type is specified we still accept the data as json!
-        true
-    }
-}
-
 #[derive(Deserialize)]
 pub struct DocumentParam {
     index_uid: String,
@@ -74,8 +56,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_all_documents))
-            .route(web::post().guard(guard_json).to(add_documents))
-            .route(web::put().guard(guard_json).to(update_documents))
+            .route(web::post().guard(guard_json).to(add_documents_json))
+            .route(web::post().guard(guard_csv).to(add_documents_csv))
+            .route(web::post().guard(guard_json).to(update_documents_json))
+            .route(web::post().guard(guard_csv).to(update_documents_csv))
             .route(web::delete().to(clear_all_documents)),
     )
     // this route needs to be before the /documents/{document_id} to match properly
@@ -159,43 +143,57 @@ pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-/// Route used when the payload type is "application/json"
-/// Used to add or replace documents
-pub async fn add_documents(
+pub async fn add_documents_json(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", params);
-    let update = Update::DocumentAddition {
-        payload: Box::new(payload_to_stream(body)),
-        primary_key: params.primary_key.clone(),
-        method: IndexDocumentsMethod::ReplaceDocuments,
-        format: DocumentAdditionFormat::Json,
-    };
-    let update_status = meilisearch
-        .register_update(path.into_inner().index_uid, update, true)
-        .await?;
-
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Json, IndexDocumentsMethod::ReplaceDocuments).await
 }
 
-/// Route used when the payload type is "application/json"
-/// Used to add or replace documents
-pub async fn update_documents(
+pub async fn add_documents_csv(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
+    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Csv, IndexDocumentsMethod::ReplaceDocuments).await
+}
+
+pub async fn update_documents_json(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+) -> Result<HttpResponse, ResponseError> {
+    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Json, IndexDocumentsMethod::UpdateDocuments).await
+}
+
+pub async fn update_documents_csv(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+) -> Result<HttpResponse, ResponseError> {
+    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Csv, IndexDocumentsMethod::UpdateDocuments).await
+}
+/// Route used when the payload type is "application/json"
+/// Used to add or replace documents
+async fn document_addition(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+    format: DocumentAdditionFormat,
+    method: IndexDocumentsMethod,
+) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let update = Update::DocumentAddition {
         payload: Box::new(payload_to_stream(body)),
         primary_key: params.primary_key.clone(),
-        method: IndexDocumentsMethod::UpdateDocuments,
-        format: DocumentAdditionFormat::Json,
+        method,
+        format,
     };
     let update_status = meilisearch
         .register_update(path.into_inner().index_uid, update, true)

@@ -152,8 +152,8 @@ async fn document_add_create_index_bad_uid() {
 async fn document_update_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    let (_response, code) = index.update_documents(json!([]), None).await;
-    assert_eq!(code, 400);
+    let (response, code) = index.update_documents(json!([]), None).await;
+    assert_eq!(code, 400, "{}", response);
 }
 
 #[actix_rt::test]

@@ -67,8 +67,9 @@ impl<S: Stream<Item = std::result::Result<Bytes, PayloadError>> + Unpin> io::Rea
         // TODO: optimize buf filling
         match self.current.take() {
             Some(mut bytes) => {
-                let copied = bytes.split_to(buf.len());
-                buf.copy_from_slice(&copied);
+                let split_at = bytes.len().min(buf.len());
+                let copied = bytes.split_to(split_at);
+                buf[..split_at].copy_from_slice(&copied);
                 if !bytes.is_empty() {
                     self.current.replace(bytes);
                 }

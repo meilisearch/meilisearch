@@ -361,8 +361,10 @@ mod test {
 
             indexes::documents::clear_all_documents,
             indexes::documents::delete_documents,
-            indexes::documents::update_documents,
-            indexes::documents::add_documents,
+            indexes::documents::update_documents_json,
+            indexes::documents::update_documents_csv,
+            indexes::documents::add_documents_json,
+            indexes::documents::add_documents_csv,
             indexes::documents::delete_document,
 
             indexes::updates::get_all_updates_status,
