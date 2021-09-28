@@ -1,7 +1,7 @@
-use std::{env, path::Path, time::Duration};
+use std::{env, path::Path};
 
 use actix_web::HttpServer;
-use meilisearch_http::{create_app, Opt};
+use meilisearch_http::{Opt, create_app, setup_meilisearch};
 use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
 
@@ -46,32 +46,6 @@ fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
-    let mut meilisearch = MeiliSearch::builder();
-    meilisearch
-        .set_max_index_size(opt.max_index_size.get_bytes() as usize)
-        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
-        .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
-        .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
-        .set_dump_dst(opt.dumps_dir.clone())
-        .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
-        .set_snapshot_dir(opt.snapshot_dir.clone());
-
-    if let Some(ref path) = opt.import_snapshot {
-        meilisearch.set_import_snapshot(path.clone());
-    }
-
-    if let Some(ref path) = opt.import_dump {
-        meilisearch.set_dump_src(path.clone());
-    }
-
-    if opt.schedule_snapshot {
-        meilisearch.set_schedule_snapshot();
-    }
-
-    meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
 }
 
 #[actix_web::main]

@@ -30,8 +30,8 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {
     let server = Server::new().await;
-    let (_response, code) = server.index("test").settings().await;
-    assert_eq!(code, 404)
+    let (response, code) = server.index("test").settings().await;
+    assert_eq!(code, 404, "{}", response)
 }
 
 #[actix_rt::test]
@@ -167,8 +167,8 @@ async fn update_setting_unexisting_index() {
 async fn update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
-    let (_response, code) = index.update_settings(json!({})).await;
-    assert_eq!(code, 400);
+    let (response, code) = index.update_settings(json!({})).await;
+    assert_eq!(code, 400, "{}", response);
 }
 
 macro_rules! test_setting_routes {

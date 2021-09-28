@@ -1,9 +1,5 @@
-use byte_unit::ByteError;
-use std::fmt;
 use std::io::{BufReader, Read};
-use std::ops::Deref;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::fs;
 
@@ -14,7 +10,6 @@ use rustls::{
     RootCertStore,
 };
 use structopt::StructOpt;
-use sysinfo::{RefreshKind, System, SystemExt};
 use meilisearch_lib::options::IndexerOpts;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
@@ -174,63 +169,6 @@ impl Opt {
         } else {
             Ok(None)
         }
-    }
-}
-
-/// A type used to detect the max memory available and use 2/3 of it.
-#[derive(Debug, Clone, Copy)]
-pub struct MaxMemory(Option<Byte>);
-
-impl FromStr for MaxMemory {
-    type Err = ByteError;
-
-    fn from_str(s: &str) -> Result<MaxMemory, ByteError> {
-        Byte::from_str(s).map(Some).map(MaxMemory)
-    }
-}
-
-impl Default for MaxMemory {
-    fn default() -> MaxMemory {
-        MaxMemory(
-            total_memory_bytes()
-                .map(|bytes| bytes * 2 / 3)
-                .map(Byte::from_bytes),
-        )
-    }
-}
-
-impl fmt::Display for MaxMemory {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            Some(memory) => write!(f, "{}", memory.get_appropriate_unit(true)),
-            None => f.write_str("unknown"),
-        }
-    }
-}
-
-impl Deref for MaxMemory {
-    type Target = Option<Byte>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl MaxMemory {
-    pub fn unlimited() -> Self {
-        Self(None)
-    }
-}
-
-/// Returns the total amount of bytes available or `None` if this system isn't supported.
-fn total_memory_bytes() -> Option<u64> {
-    if System::IS_SUPPORTED {
-        let memory_kind = RefreshKind::new().with_memory();
-        let mut system = System::new_with_specifics(memory_kind);
-        system.refresh_memory();
-        Some(system.total_memory() * 1024) // KiB into bytes
-    } else {
-        None
     }
 }
 

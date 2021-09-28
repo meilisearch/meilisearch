@@ -71,12 +71,11 @@ impl SnapshotService {
 
         UpdateMsg::snapshot(&self.update_sender, temp_snapshot_path.clone(), indexes).await?;
 
-        let snapshot_dir = self.snapshot_path.clone();
         let snapshot_path = self
             .snapshot_path
             .join(format!("{}.snapshot", self.db_name));
         let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            let temp_snapshot_file = tempfile::NamedTempFile::new_in(snapshot_dir)?;
+            let temp_snapshot_file = tempfile::NamedTempFile::new()?;
             let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
             crate::compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
             temp_snapshot_file.persist(&snapshot_path)?;
@@ -137,13 +136,6 @@ pub fn load_snapshot(
     //use uuid::Uuid;
 
     //use super::*;
-    //use crate::index_controller::index_actor::MockIndexActorHandle;
-    //use crate::index_controller::updates::{
-        //error::UpdateActorError, MockUpdateActorHandle, UpdateActorHandleImpl,
-    //};
-    //use crate::index_controller::uuid_resolver::{
-        //error::UuidResolverError, MockUuidResolverHandle,
-    //};
 
     //#[actix_rt::test]
     //async fn test_normal() {
@@ -191,7 +183,7 @@ pub fn load_snapshot(
         //uuid_resolver
             //.expect_snapshot()
             //.times(1)
-             //abitrary error
+             ////abitrary error
             //.returning(|_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
         //let update_handle = MockUpdateActorHandle::new();
@@ -206,7 +198,7 @@ pub fn load_snapshot(
         //);
 
         //assert!(snapshot_service.perform_snapshot().await.is_err());
-         //Nothing was written to the file
+         ////Nothing was written to the file
         //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
     //}
 
@@ -222,7 +214,7 @@ pub fn load_snapshot(
         //let mut update_handle = MockUpdateActorHandle::new();
         //update_handle
             //.expect_snapshot()
-             //abitrary error
+             ////abitrary error
             //.returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
 
         //let snapshot_path = tempfile::tempdir_in(".").unwrap();
@@ -235,7 +227,7 @@ pub fn load_snapshot(
         //);
 
         //assert!(snapshot_service.perform_snapshot().await.is_err());
-         //Nothing was written to the file
+         ////Nothing was written to the file
         //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
     //}
 
@@ -244,9 +236,9 @@ pub fn load_snapshot(
         //let mut uuid_resolver = MockUuidResolverHandle::new();
         //uuid_resolver
             //.expect_snapshot()
-             //we expect the funtion to be called between 2 and 3 time in the given interval.
+             ////we expect the funtion to be called between 2 and 3 time in the given interval.
             //.times(2..4)
-             //abitrary error, to short-circuit the function
+             ////abitrary error, to short-circuit the function
             //.returning(move |_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
 
         //let update_handle = MockUpdateActorHandle::new();

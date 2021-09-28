@@ -24,7 +24,7 @@ pub enum UpdateMsg {
         ret: oneshot::Sender<Result<UpdateStatus>>,
         id: u64,
     },
-    Delete {
+    DeleteIndex {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
@@ -96,6 +96,13 @@ impl UpdateMsg {
     pub async fn get_info(sender: &mpsc::Sender<Self>) -> Result<UpdateStoreInfo> {
         let (ret, rcv) = oneshot::channel();
         let msg = Self::GetInfo { ret };
+        sender.send(msg).await?;
+        rcv.await?
+    }
+
+    pub async fn delete(sender: &mpsc::Sender<Self>, uuid: Uuid) -> Result<()> {
+        let (ret, rcv) = oneshot::channel();
+        let msg = Self::DeleteIndex { ret, uuid };
         sender.send(msg).await?;
         rcv.await?
     }

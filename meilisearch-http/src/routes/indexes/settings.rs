@@ -30,7 +30,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update).await?;
+                let update_status = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
                 debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
@@ -49,7 +49,7 @@ macro_rules! make_setting_route {
                 };
 
                 let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update).await?;
+                let update_status = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
                 debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
@@ -159,7 +159,7 @@ pub async fn update_all(
 
     let update = Update::Settings(settings);
     let update_result = meilisearch
-        .register_update(index_uid.into_inner(), update)
+        .register_update(index_uid.into_inner(), update, true)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
     debug!("returns: {:?}", json);
@@ -183,7 +183,7 @@ pub async fn delete_all(
 
     let update = Update::Settings(settings.into_unchecked());
     let update_result = data
-        .register_update(index_uid.into_inner(), update)
+        .register_update(index_uid.into_inner(), update, false)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
     debug!("returns: {:?}", json);

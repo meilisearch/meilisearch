@@ -172,7 +172,7 @@ impl UpdateLoop {
                     GetUpdate { uuid, ret, id } => {
                         let _ = ret.send(self.handle_get_update(uuid, id).await);
                     }
-                    Delete { uuid, ret } => {
+                    DeleteIndex { uuid, ret } => {
                         let _ = ret.send(self.handle_delete(uuid).await);
                     }
                     Snapshot { indexes, path, ret } => {

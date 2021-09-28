@@ -2,12 +2,13 @@ use std::path::Path;
 
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
+use meilisearch_http::setup_meilisearch;
+use meilisearch_lib::options::{IndexerOpts, MaxMemory};
 use serde_json::Value;
 use tempdir::TempDir;
 use urlencoding::encode;
 
-use meilisearch_http::data::Data;
-use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
+use meilisearch_http::option::Opt;
 
 use super::index::Index;
 use super::service::Service;
@@ -22,10 +23,10 @@ impl Server {
     pub async fn new() -> Self {
         let dir = TempDir::new("meilisearch").unwrap();
 
-        let opt = default_settings(dir.path());
+        let options = default_settings(dir.path());
 
-        let data = Data::new(opt).unwrap();
-        let service = Service(data);
+        let meilisearch = setup_meilisearch(&options).unwrap();
+        let service = Service { meilisearch, options };
 
         Server {
             service,
@@ -33,9 +34,9 @@ impl Server {
         }
     }
 
-    pub async fn new_with_options(opt: Opt) -> Self {
-        let data = Data::new(opt).unwrap();
-        let service = Service(data);
+    pub async fn new_with_options(options: Opt) -> Self {
+        let meilisearch = setup_meilisearch(&options).unwrap();
+        let service = Service { meilisearch, options };
 
         Server {
             service,
