@@ -22,7 +22,9 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use milli::documents::DocumentBatchReader;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
-use milli::{obkv_to_json, CompressionType, FilterCondition, Index, MatchingWords, SearchResult};
+use milli::{
+    obkv_to_json, CompressionType, FilterCondition, Index, MatchingWords, SearchResult, SortError,
+};
 use once_cell::sync::OnceCell;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -756,7 +758,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             if let Some(sort) = query.sort {
-                search.sort_criteria(vec![sort.parse().unwrap()]);
+                search.sort_criteria(vec![sort.parse().map_err(SortError::from).unwrap()]);
             }
 
             let SearchResult { matching_words, candidates, documents_ids } =
