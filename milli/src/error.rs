@@ -8,7 +8,7 @@ use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
 use crate::search::ParserRule;
-use crate::{CriterionError, DocumentId, FieldId};
+use crate::{CriterionError, DocumentId, FieldId, SortError};
 
 pub type Object = Map<String, Value>;
 
@@ -61,8 +61,6 @@ pub enum UserError {
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidFilter(pest::error::Error<ParserRule>),
     InvalidFilterAttribute(pest::error::Error<ParserRule>),
-    InvalidSortName { name: String },
-    InvalidReservedSortName { name: String },
     InvalidGeoField { document_id: Value, object: Value },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
@@ -74,6 +72,7 @@ pub enum UserError {
     PrimaryKeyCannotBeChanged,
     PrimaryKeyCannotBeReset,
     SerdeJson(serde_json::Error),
+    SortError(SortError),
     UnknownInternalDocumentId { document_id: DocumentId },
 }
 
@@ -227,13 +226,6 @@ impl fmt::Display for UserError {
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
-            Self::InvalidReservedSortName { name } => {
-                write!(
-                    f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression",
-                    name
-                )
-            }
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(
@@ -245,9 +237,6 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 )
             }
             Self::InvalidFilterAttribute(error) => error.fmt(f),
-            Self::InvalidSortName { name } => {
-                write!(f, "Invalid syntax for the sort parameter: {}", name)
-            }
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
@@ -277,6 +266,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 f.write_str("primary key cannot be reset if the database contains documents")
             }
             Self::SerdeJson(error) => error.fmt(f),
+            Self::SortError(error) => write!(f, "{}", error),
             Self::UnknownInternalDocumentId { document_id } => {
                 write!(f, "an unknown internal document id have been used ({})", document_id)
             }

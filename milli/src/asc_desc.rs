@@ -6,7 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::is_reserved_keyword;
-use crate::CriterionError;
+use crate::{CriterionError, Error, UserError};
 
 /// This error type is never supposed to be shown to the end user.
 /// You must always cast it to a sort error or a criterion error.
@@ -136,6 +136,68 @@ impl FromStr for AscDesc {
             Some((left, "desc")) => Ok(AscDesc::Desc(left.parse()?)),
             _ => Err(AscDescError::InvalidSyntax { name: text.to_string() }),
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum SortError {
+    InvalidName { name: String },
+    ReservedName { name: String },
+    ReservedNameForSettings { name: String },
+    ReservedNameForFilter { name: String },
+}
+
+impl From<AscDescError> for SortError {
+    fn from(error: AscDescError) -> Self {
+        match error {
+            AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
+            AscDescError::ReservedKeyword { name } if &name == "_geo" => {
+                SortError::ReservedNameForSettings { name: "_geoPoint".to_string() }
+            }
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
+                SortError::ReservedNameForFilter { name: "_geoRadius".to_string() }
+            }
+            AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
+        }
+    }
+}
+
+impl fmt::Display for SortError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidName { name } => {
+                write!(f, "invalid syntax for the sort parameter {}", name)
+            }
+            Self::ReservedName { name } => {
+                write!(
+                    f,
+                    "{} is a reserved keyword and thus can't be used as a sort expression",
+                    name
+                )
+            }
+            Self::ReservedNameForSettings { name } => {
+                write!(
+                    f,
+                    "{} is a reserved keyword and thus can't be used as a sort expression. \
+{} can only be used in the settings",
+                    name, name
+                )
+            }
+            Self::ReservedNameForFilter { name } => {
+                write!(
+                    f,
+                    "{} is a reserved keyword and thus can't be used as a sort expression. \
+{} can only be used for filtering at search time",
+                    name, name
+                )
+            }
+        }
+    }
+}
+
+impl From<SortError> for Error {
+    fn from(error: SortError) -> Self {
+        Self::UserError(UserError::SortError(error))
     }
 }
 
