@@ -499,11 +499,6 @@ impl IndexController {
         Ok(meta)
     }
 
-    pub async fn get_uuids_size(&self) -> Result<u64> {
-        let size = self.index_resolver.get_size().await?;
-        Ok(size)
-    }
-
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
         let index = self.index_resolver.get_index(uid).await?;
@@ -516,7 +511,7 @@ impl IndexController {
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
         let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
-        let mut database_size = self.get_uuids_size().await? + update_infos.size;
+        let mut database_size = self.index_resolver.get_uuids_size().await? + update_infos.size;
         let mut last_update: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();
 
