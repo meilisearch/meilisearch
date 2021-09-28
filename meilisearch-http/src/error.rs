@@ -7,7 +7,7 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponseBuilder;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
-use milli::UserError;
+use meilisearch_lib::milli;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -68,6 +68,8 @@ impl fmt::Display for MilliError<'_> {
 
 impl ErrorCode for MilliError<'_> {
     fn error_code(&self) -> Code {
+        use milli::UserError;
+
         match self.0 {
             milli::Error::InternalError(_) => Code::Internal,
             milli::Error::IoError(_) => Code::Internal,

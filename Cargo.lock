@@ -1678,7 +1678,6 @@ dependencies = [
  "meilisearch-lib",
  "meilisearch-tokenizer",
  "memmap",
- "milli",
  "mime",
  "mockall",
  "num_cpus",

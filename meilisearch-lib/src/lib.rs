@@ -7,6 +7,8 @@ pub mod index_controller;
 
 pub use index_controller::{IndexController as MeiliSearch, updates::store::Update};
 
+pub use milli;
+
 mod compression;
 mod document_formats;
 

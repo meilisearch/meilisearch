@@ -50,7 +50,7 @@ pub enum UpdateType {
 
 impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
-        use milli::update::IndexDocumentsMethod::*;
+        use meilisearch_lib::milli::update::IndexDocumentsMethod::*;
         match other.meta() {
             Update::DocumentAddition{ method, ..  } => {
                 let number = match other {

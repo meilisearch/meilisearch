@@ -5,7 +5,7 @@ use futures::{Stream, StreamExt};
 use log::debug;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
-use milli::update::IndexDocumentsMethod;
+use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;

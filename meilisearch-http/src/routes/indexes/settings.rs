@@ -15,7 +15,7 @@ macro_rules! make_setting_route {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
 
-            use milli::update::Setting;
+            use meilisearch_lib::milli::update::Setting;
             use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
 
             use crate::error::ResponseError;
