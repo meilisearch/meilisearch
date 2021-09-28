@@ -23,8 +23,7 @@ use nom::{
 
 use self::FilterCondition::*;
 use self::Operator::*;
-use super::parser::FilterParser;
-use super::parser::{Rule, PREC_CLIMBER};
+
 use super::FacetNumberRange;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{

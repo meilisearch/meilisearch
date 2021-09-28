@@ -7,7 +7,6 @@ use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
-use crate::search::ParserRule;
 use crate::{CriterionError, DocumentId, FieldId, SortError};
 
 pub type Object = Map<String, Value>;
@@ -59,8 +58,6 @@ pub enum UserError {
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
-    InvalidFilter(pest::error::Error<ParserRule>),
-    InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidGeoField { document_id: Value, object: Value },
     InvalidFilterAttributeNom,
     InvalidFilterValue,
@@ -226,12 +223,15 @@ impl fmt::Display for UserError {
                     name_list
                 )
             }
-            Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
+            Self::InvalidAscDescSyntax { name } => {
+                write!(f, "invalid asc/desc syntax for {}", name)
+            }
+            Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(
@@ -242,7 +242,9 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                     json
                 )
             }
-            Self::InvalidFilterAttribute(error) => error.fmt(f),
+            Self::InvalidSortName { name } => {
+                write!(f, "Invalid syntax for the sort parameter: {}", name)
+            }
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
