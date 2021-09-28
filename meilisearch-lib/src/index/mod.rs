@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 
 use error::Result;
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-pub use updates::{Checked, Facets, Settings, Unchecked};
+pub use updates::{Checked, Facets, Settings, Unchecked, apply_settings_to_builder};
 use uuid::Uuid;
 
 use crate::EnvSizer;

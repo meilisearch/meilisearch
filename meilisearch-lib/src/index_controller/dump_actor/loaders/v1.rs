@@ -1,12 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::{File, create_dir_all};
+use std::io::{BufReader, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::Path;
 
+use heed::EnvOpenOptions;
 use log::{error, info, warn};
+use milli::documents::DocumentBatchReader;
 use milli::update::Setting;
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
+use crate::document_formats::read_jsonl;
+use crate::index::apply_settings_to_builder;
+use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
 use crate::index_controller::{self, IndexMetadata};
 use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
@@ -83,57 +90,66 @@ struct Settings {
 }
 
 fn load_index(
-    _src: impl AsRef<Path>,
-    _dst: impl AsRef<Path>,
-    _uuid: Uuid,
-    _primary_key: Option<&str>,
-    _size: usize,
-    _indexer_options: &IndexerOpts,
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+    uuid: Uuid,
+    primary_key: Option<&str>,
+    size: usize,
+    indexer_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    todo!("fix dump obkv documents")
-    //let index_path = dst.as_ref().join(&format!("indexes/index-{}", uuid));
+    let index_path = dst.as_ref().join(&format!("indexes/index-{}", uuid));
 
-    //create_dir_all(&index_path)?;
-    //let mut options = EnvOpenOptions::new();
-    //options.map_size(size);
-    //let index = milli::Index::new(options, index_path)?;
-    //let index = Index(Arc::new(index));
+    create_dir_all(&index_path)?;
+    let mut options = EnvOpenOptions::new();
+    options.map_size(size);
+    let index = milli::Index::new(options, index_path)?;
 
-    //// extract `settings.json` file and import content
-    //let settings = import_settings(&src)?;
-    //let settings: index_controller::Settings<Unchecked> = settings.into();
+    let update_handler = UpdateHandler::new(indexer_options)?;
 
-    //let mut txn = index.write_txn()?;
+    let mut txn = index.write_txn()?;
+    // extract `settings.json` file and import content
+    let settings = import_settings(&src)?;
+    let settings: index_controller::Settings<Unchecked> = settings.into();
 
-    //let handler = UpdateHandler::new(indexer_options)?;
+    let handler = UpdateHandler::new(indexer_options)?;
 
-    //index.update_settings_txn(&mut txn, &settings.check(), handler.update_builder(0))?;
+    let mut builder = handler.update_builder(0).settings(&mut txn, &index);
 
-    //let file = File::open(&src.as_ref().join("documents.jsonl"))?;
-    //let mut reader = std::io::BufReader::new(file);
-    //reader.fill_buf()?;
-    //if !reader.buffer().is_empty() {
-        //index.update_documents_txn(
-            //&mut txn,
-            //IndexDocumentsMethod::ReplaceDocuments,
-            //Some(reader),
-            //handler.update_builder(0),
-            //primary_key,
-        //)?;
-    //}
+    if let Some(primary_key) = primary_key {
+        builder.set_primary_key(primary_key.to_string());
+    }
 
-    //txn.commit()?;
+    apply_settings_to_builder(&settings.check(), &mut builder);
 
-    //// Finaly, we extract the original milli::Index and close it
-    //Arc::try_unwrap(index.0)
-        //.map_err(|_e| "Couldn't close the index properly")
-        //.unwrap()
-        //.prepare_for_closing()
-        //.wait();
+    builder.execute(|_, _| ())?;
 
-    //// Updates are ignored in dumps V1.
+    let reader = BufReader::new(File::open(&src.as_ref().join("documents.jsonl"))?);
 
-    //Ok(())
+    let mut tmp_doc_file = tempfile::tempfile()?;
+
+    read_jsonl(reader, &mut tmp_doc_file)?;
+
+    tmp_doc_file.seek(SeekFrom::Start(0))?;
+
+    let documents_reader = DocumentBatchReader::from_reader(tmp_doc_file)?;
+
+    //If the document file is empty, we don't perform the document addition, to prevent
+    //a primary key error to be thrown.
+    if !documents_reader.is_empty() {
+        let builder = update_handler.update_builder(0).index_documents(&mut txn, &index);
+        builder.execute(documents_reader, |_, _| ())?;
+    }
+
+    txn.commit()?;
+
+    // Finaly, we extract the original milli::Index and close it
+    index
+        .prepare_for_closing()
+        .wait();
+
+    // Updates are ignored in dumps V1.
+
+    Ok(())
 }
 
 /// we need to **always** be able to convert the old settings to the settings currently being used
@@ -201,14 +217,14 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
 }
 
 // /// Extract Settings from `settings.json` file present at provided `dir_path`
-//fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
-    //let path = dir_path.as_ref().join("settings.json");
-    //let file = File::open(path)?;
-    //let reader = std::io::BufReader::new(file);
-    //let metadata = serde_json::from_reader(reader)?;
+fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
+    let path = dir_path.as_ref().join("settings.json");
+    let file = File::open(path)?;
+    let reader = std::io::BufReader::new(file);
+    let metadata = serde_json::from_reader(reader)?;
 
-    //Ok(metadata)
-//}
+    Ok(metadata)
+}
 
 #[cfg(test)]
 mod test {
