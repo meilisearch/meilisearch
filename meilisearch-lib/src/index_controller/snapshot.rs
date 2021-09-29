@@ -8,6 +8,7 @@ use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 
+use crate::compression::from_tar_gz;
 use crate::index_controller::updates::UpdateMsg;
 
 use super::index_resolver::HardStateIndexResolver;
@@ -95,7 +96,7 @@ pub fn load_snapshot(
     ignore_missing_snapshot: bool,
 ) -> anyhow::Result<()> {
     if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
-        match crate::from_tar_gz(snapshot_path, &db_path) {
+        match from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),
             Err(e) => {
                 //clean created db folder

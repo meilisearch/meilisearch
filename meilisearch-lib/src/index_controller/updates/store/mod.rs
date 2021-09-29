@@ -1,7 +1,7 @@
 mod codec;
 pub mod dump;
 
-use std::fs::{create_dir_all, remove_file};
+use std::fs::create_dir_all;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,7 +29,6 @@ use codec::*;
 use super::error::Result;
 use super::status::{Enqueued, Processing};
 use crate::index::Index;
-use crate::index_controller::update_files_path;
 use crate::index_controller::updates::*;
 use crate::EnvSizer;
 
@@ -269,8 +268,8 @@ impl UpdateStore {
         Ok(meta)
     }
 
-    // /// Push already processed update in the UpdateStore without triggering the notification
-    // /// process. This is useful for the dumps.
+    /// Push already processed update in the UpdateStore without triggering the notification
+    /// process. This is useful for the dumps.
     pub fn register_raw_updates(
         &self,
         wtxn: &mut heed::RwTxn,
@@ -436,19 +435,19 @@ impl UpdateStore {
     pub fn delete_all(&self, index_uuid: Uuid) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         // Contains all the content file paths that we need to be removed if the deletion was successful.
-        let uuids_to_remove = Vec::new();
+        let mut uuids_to_remove = Vec::new();
 
         let mut pendings = self.pending_queue.iter_mut(&mut txn)?.lazily_decode_data();
 
         while let Some(Ok(((_, uuid, _), pending))) = pendings.next() {
             if uuid == index_uuid {
-                let mut _pending = pending.decode()?;
-                //if let Some(update_uuid) = pending.content.take() {
-                //uuids_to_remove.push(update_uuid);
-                //}
+                let pending = pending.decode()?;
+                if let Update::DocumentAddition { content_uuid, .. } = pending.meta() {
+                    uuids_to_remove.push(*content_uuid);
+                }
 
-                // Invariant check: we can only delete the current entry when we don't hold
-                // references to it anymore. This must be done after we have retrieved its content.
+                //Invariant check: we can only delete the current entry when we don't hold
+                //references to it anymore. This must be done after we have retrieved its content.
                 unsafe {
                     pendings.del_current()?;
                 }
@@ -485,12 +484,9 @@ impl UpdateStore {
         // Finally, remove any outstanding update files. This must be done after waiting for the
         // last update to ensure that the update files are not deleted before the update needs
         // them.
-        uuids_to_remove
-            .iter()
-            .map(|uuid: &Uuid| update_files_path(&self.path).join(uuid.to_string()))
-            .for_each(|path| {
-                let _ = remove_file(path);
-            });
+        uuids_to_remove.iter().for_each(|uuid| {
+            let _ = self.update_file_store.delete(*uuid);
+        });
 
         Ok(())
     }

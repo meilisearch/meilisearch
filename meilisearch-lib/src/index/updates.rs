@@ -206,6 +206,10 @@ impl Index {
             result
         })();
 
+        if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
+            let _ = self.update_file_store.delete(*content_uuid);
+        }
+
         match result {
             Ok(result) => Ok(update.process(result)),
             Err(e) => Err(update.fail(e)),

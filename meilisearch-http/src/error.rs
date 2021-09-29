@@ -7,7 +7,6 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponseBuilder;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
-use meilisearch_lib::milli;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,53 +51,6 @@ impl aweb::error::ResponseError for ResponseError {
 
     fn status_code(&self) -> StatusCode {
         self.code
-    }
-}
-
-#[derive(Debug)]
-pub struct MilliError<'a>(pub &'a milli::Error);
-
-impl Error for MilliError<'_> {}
-
-impl fmt::Display for MilliError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl ErrorCode for MilliError<'_> {
-    fn error_code(&self) -> Code {
-        use milli::UserError;
-
-        match self.0 {
-            milli::Error::InternalError(_) => Code::Internal,
-            milli::Error::IoError(_) => Code::Internal,
-            milli::Error::UserError(ref error) => {
-                match error {
-                    // TODO: wait for spec for new error codes.
-                    UserError::SerdeJson(_)
-                    | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidDocumentId { .. }
-                    | UserError::InvalidStoreFile
-                    | UserError::NoSpaceLeftOnDevice
-                    | UserError::DocumentLimitReached => Code::Internal,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::Filter,
-                    UserError::InvalidFilterAttribute(_) => Code::Filter,
-                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
-                    UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
-                    UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
-                    UserError::SortRankingRuleMissing => Code::Sort,
-                    UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
-                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
-                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
-                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
-                    UserError::SortError(_) => Code::Sort,
-                    UserError::CriterionError(_) => Code::InvalidRankingRule,
-                }
-            }
-        }
     }
 }
 

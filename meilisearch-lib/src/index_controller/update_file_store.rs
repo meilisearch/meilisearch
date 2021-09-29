@@ -141,8 +141,7 @@ impl UpdateFileStore {
 
         let mut document_buffer = Map::new();
         // TODO: we need to find a way to do this more efficiently. (create a custom serializer
-        // for
-        // jsonl for example...)
+        // for jsonl for example...)
         while let Some((index, document)) = document_reader.next_document_with_index()? {
             for (field_id, content) in document.iter() {
                 if let Some(field_name) = index.get_by_left(&field_id) {
@@ -163,5 +162,11 @@ impl UpdateFileStore {
 
     pub fn get_size(&self, uuid: Uuid) -> Result<u64> {
         Ok(self.get_update(uuid)?.metadata()?.len())
+    }
+
+    pub fn delete(&self, uuid: Uuid) -> Result<()> {
+        let path = self.path.join(uuid.to_string());
+        std::fs::remove_file(path)?;
+        Ok(())
     }
 }

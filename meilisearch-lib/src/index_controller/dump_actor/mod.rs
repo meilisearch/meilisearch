@@ -16,6 +16,7 @@ pub use message::DumpMsg;
 
 use super::index_resolver::HardStateIndexResolver;
 use super::updates::UpdateSender;
+use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::index_controller::updates::UpdateMsg;
 use crate::options::IndexerOpts;
@@ -111,7 +112,7 @@ pub fn load_dump(
     let tmp_src = tempfile::tempdir()?;
     let tmp_src_path = tmp_src.path();
 
-    crate::from_tar_gz(&src_path, tmp_src_path)?;
+    from_tar_gz(&src_path, tmp_src_path)?;
 
     let meta_path = tmp_src_path.join(META_FILE_NAME);
     let mut meta_file = File::open(&meta_path)?;
@@ -172,7 +173,7 @@ impl DumpTask {
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new()?;
-            crate::to_tar_gz(temp_dump_path, temp_dump_file.path())
+            to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 
             let dump_path = self.path.join(self.uid).with_extension("dump");

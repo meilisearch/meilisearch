@@ -96,8 +96,6 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(data)
-        // TODO!: Why are we passing the data with two different things?
-        //.app_data(data)
         .app_data(
             web::JsonConfig::default()
                 .limit(http_payload_size_limit)

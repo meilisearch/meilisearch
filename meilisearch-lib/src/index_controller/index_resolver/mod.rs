@@ -143,7 +143,7 @@ where
                     Some(index) => Ok(index),
                     None => {
                         // For some reason we got a uuid to an unexisting index, we return an error,
-                        // and remove the uuid from th uuid store.
+                        // and remove the uuid from the uuid store.
                         let _ = self.index_uuid_store.delete(name.clone()).await;
                         Err(IndexResolverError::UnexistingIndex(name))
                     }

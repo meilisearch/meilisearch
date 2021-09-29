@@ -496,13 +496,9 @@ pub fn asc_ranking_rule(text: &str) -> Option<&str> {
         .map(|(field, _)| field)
 }
 
-/// Parses the v1 version of the Desc ranking rules `asc(price)`and returns the field name.
+/// Parses the v1 version of the Desc ranking rules `desc(price)`and returns the field name.
 pub fn desc_ranking_rule(text: &str) -> Option<&str> {
     text.split_once("desc(")
         .and_then(|(_, tail)| tail.rsplit_once(")"))
         .map(|(field, _)| field)
-}
-
-fn update_files_path(path: impl AsRef<Path>) -> PathBuf {
-    path.as_ref().join("updates/updates_files")
 }

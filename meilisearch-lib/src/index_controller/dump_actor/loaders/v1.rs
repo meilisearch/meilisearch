@@ -15,8 +15,7 @@ use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
-use crate::index_controller::{self, IndexMetadata};
-use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
+use crate::index_controller::{self, asc_ranking_rule, desc_ranking_rule, IndexMetadata};
 use crate::{index::Unchecked, options::IndexerOpts};
 
 #[derive(Serialize, Deserialize, Debug)]
