@@ -194,7 +194,6 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
         match ctx.word_position_last_level(&word, in_prefix_cache)? {
             Some(_) => {
                 // HOTFIX Meilisearch#1707: it is better to only iterate over the level 0.
-                // A cleaner fix will be implemented soon.
                 let level = TreeLevel::min_value();
                 let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
                 let inner =
