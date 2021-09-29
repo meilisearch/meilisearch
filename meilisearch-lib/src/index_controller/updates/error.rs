@@ -17,8 +17,6 @@ pub enum UpdateLoopError {
     UnexistingUpdate(u64),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
-    //#[error("{0}")]
-    //IndexActor(#[from] IndexActorError),
     #[error(
         "update store was shut down due to a fatal error, please check your logs for more info."
     )]

@@ -11,7 +11,7 @@ use milli::update::Setting;
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
-use crate::document_formats::read_jsonl;
+use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
@@ -124,7 +124,7 @@ fn load_index(
 
     let mut tmp_doc_file = tempfile::tempfile()?;
 
-    read_jsonl(reader, &mut tmp_doc_file)?;
+    read_ndjson(reader, &mut tmp_doc_file)?;
 
     tmp_doc_file.seek(SeekFrom::Start(0))?;
 
@@ -213,7 +213,7 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
     }
 }
 
-// /// Extract Settings from `settings.json` file present at provided `dir_path`
+/// Extract Settings from `settings.json` file present at provided `dir_path`
 fn import_settings(dir_path: impl AsRef<Path>) -> anyhow::Result<Settings> {
     let path = dir_path.as_ref().join("settings.json");
     let file = File::open(path)?;

@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 const UPDATE_FILES_PATH: &str = "updates/updates_files";
 
-use crate::document_formats::read_jsonl;
+use crate::document_formats::read_ndjson;
 
 pub struct UpdateFile {
     path: PathBuf,
@@ -86,7 +86,7 @@ impl UpdateFileStore {
                 .ok_or_else(|| anyhow::anyhow!("invalid update file name"))?;
             let dst_path = dst_update_files_path.join(file_uuid);
             let dst_file = BufWriter::new(File::create(dst_path)?);
-            read_jsonl(update_file, dst_file)?;
+            read_ndjson(update_file, dst_file)?;
         }
 
         Ok(())
@@ -98,9 +98,9 @@ impl UpdateFileStore {
         Ok(Self { path })
     }
 
-    /// Created a new temporary update file.
+    /// Creates a new temporary update file.
     ///
-    /// A call to persist is needed to persist in the database.
+    /// A call to `persist` is needed to persist the file in the database.
     pub fn new_update(&self) -> Result<(Uuid, UpdateFile)> {
         let file = NamedTempFile::new()?;
         let uuid = Uuid::new_v4();
@@ -110,14 +110,14 @@ impl UpdateFileStore {
         Ok((uuid, update_file))
     }
 
-    /// Returns a the file corresponding to the requested uuid.
+    /// Returns the file corresponding to the requested uuid.
     pub fn get_update(&self, uuid: Uuid) -> Result<File> {
         let path = self.path.join(uuid.to_string());
         let file = File::open(path)?;
         Ok(file)
     }
 
-    /// Copies the content of the update file poited to by uuid to dst directory.
+    /// Copies the content of the update file pointed to by `uuid` to the `dst` directory.
     pub fn snapshot(&self, uuid: Uuid, dst: impl AsRef<Path>) -> Result<()> {
         let src = self.path.join(uuid.to_string());
         let mut dst = dst.as_ref().join(UPDATE_FILES_PATH);
@@ -127,7 +127,7 @@ impl UpdateFileStore {
         Ok(())
     }
 
-    /// Peform a dump of the given update file uuid into the provided snapshot path.
+    /// Peforms a dump of the given update file uuid into the provided dump path.
     pub fn dump(&self, uuid: Uuid, dump_path: impl AsRef<Path>) -> Result<()> {
         let uuid_string = uuid.to_string();
         let update_file_path = self.path.join(&uuid_string);
@@ -140,7 +140,8 @@ impl UpdateFileStore {
         let mut document_reader = DocumentBatchReader::from_reader(update_file)?;
 
         let mut document_buffer = Map::new();
-        // TODO: we need to find a way to do this more efficiently. (create a custom serializer to
+        // TODO: we need to find a way to do this more efficiently. (create a custom serializer
+        // for
         // jsonl for example...)
         while let Some((index, document)) = document_reader.next_document_with_index()? {
             for (field_id, content) in document.iter() {

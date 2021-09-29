@@ -1,5 +1,5 @@
-use std::io::{self, Read, Result as IoResult, Seek, Write};
 use std::fmt;
+use std::io::{self, Read, Result as IoResult, Seek, Write};
 
 use csv::{Reader as CsvReader, StringRecordsIntoIter};
 use milli::documents::DocumentBatchBuilder;
@@ -9,7 +9,7 @@ type Result<T> = std::result::Result<T, DocumentFormatError>;
 
 #[derive(Debug)]
 pub enum PayloadType {
-    Jsonl,
+    Ndjson,
     Json,
     Csv,
 }
@@ -17,7 +17,7 @@ pub enum PayloadType {
 impl fmt::Display for PayloadType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PayloadType::Jsonl => write!(f, "ndjson"),
+            PayloadType::Ndjson => write!(f, "ndjson"),
             PayloadType::Json => write!(f, "json"),
             PayloadType::Csv => write!(f, "csv"),
         }
@@ -56,14 +56,13 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     Ok(())
 }
 
-
 /// read jsonl from input and write an obkv batch to writer.
-pub fn read_jsonl(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let mut builder = DocumentBatchBuilder::new(writer)?;
     let stream = Deserializer::from_reader(input).into_iter::<Map<String, Value>>();
 
     for value in stream {
-        let value = malformed!(PayloadType::Jsonl, value)?;
+        let value = malformed!(PayloadType::Ndjson, value)?;
         builder.add_documents(&value)?;
     }
 
@@ -83,7 +82,6 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
 
     Ok(())
 }
-
 
 enum AllowedType {
     String,
@@ -141,12 +139,12 @@ impl<R: Read> Iterator for CsvDocumentIter<R> {
                 for ((field_name, field_type), value) in
                     self.headers.iter().zip(csv_document.into_iter())
                 {
-                    let parsed_value = (|| match field_type {
-                        AllowedType::Number => malformed!(PayloadType::Csv, value
-                            .parse::<f64>()
-                            .map(Value::from)),
+                    let parsed_value = match field_type {
+                        AllowedType::Number => {
+                            malformed!(PayloadType::Csv, value.parse::<f64>().map(Value::from))
+                        }
                         AllowedType::String => Ok(Value::String(value.to_string())),
-                    })();
+                    };
 
                     match parsed_value {
                         Ok(value) => drop(document.insert(field_name.to_string(), value)),
@@ -156,7 +154,10 @@ impl<R: Read> Iterator for CsvDocumentIter<R> {
 
                 Some(Ok(document))
             }
-            Err(e) => Some(Err(DocumentFormatError::MalformedPayload(Box::new(e), PayloadType::Csv))),
+            Err(e) => Some(Err(DocumentFormatError::MalformedPayload(
+                Box::new(e),
+                PayloadType::Csv,
+            ))),
         }
     }
 }

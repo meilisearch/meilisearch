@@ -21,7 +21,7 @@ use uuid::Uuid;
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
-use crate::document_formats::{read_csv, read_json};
+use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
@@ -40,7 +40,7 @@ pub fn create_update_handler(
     let (sender, receiver) = mpsc::channel(100);
     let actor = UpdateLoop::new(update_store_size, receiver, path, index_resolver)?;
 
-    tokio::task::spawn_local(actor.run());
+    tokio::task::spawn(actor.run());
 
     Ok(sender)
 }
@@ -197,6 +197,7 @@ impl UpdateLoop {
                     match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
                     }
 
                     update_file.persist()?;

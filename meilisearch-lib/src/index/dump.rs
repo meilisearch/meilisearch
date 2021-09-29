@@ -9,7 +9,7 @@ use milli::documents::DocumentBatchReader;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::document_formats::read_jsonl;
+use crate::document_formats::read_ndjson;
 use crate::index::update_handler::UpdateHandler;
 use crate::index::updates::apply_settings_to_builder;
 use crate::index_controller::{asc_ranking_rule, desc_ranking_rule};
@@ -142,7 +142,7 @@ impl Index {
 
         let mut tmp_doc_file = tempfile::tempfile()?;
 
-        read_jsonl(reader, &mut tmp_doc_file)?;
+        read_ndjson(reader, &mut tmp_doc_file)?;
 
         tmp_doc_file.seek(SeekFrom::Start(0))?;
 

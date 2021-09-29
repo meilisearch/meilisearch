@@ -35,6 +35,7 @@ macro_rules! guard_content_type {
 
 guard_content_type!(guard_json, "application/json");
 guard_content_type!(guard_csv, "application/csv");
+guard_content_type!(guard_ndjson, "application/ndjson");
 
 fn empty_application_type(head: &actix_web::dev::RequestHead) -> bool {
     head.headers.get("Content-Type").is_none()
@@ -61,16 +62,26 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_all_documents))
-
-            .route(web::post().guard(empty_application_type).to(|| HttpResponse::UnsupportedMediaType()))
+            // replace documents routes
+            .route(
+                web::post()
+                    .guard(empty_application_type)
+                    .to(HttpResponse::UnsupportedMediaType),
+            )
             .route(web::post().guard(guard_json).to(add_documents_json))
+            .route(web::post().guard(guard_ndjson).to(add_documents_ndjson))
             .route(web::post().guard(guard_csv).to(add_documents_csv))
-            .route(web::post().to(|| HttpResponse::UnsupportedMediaType()))
-
-            .route(web::put().guard(empty_application_type).to(|| HttpResponse::UnsupportedMediaType()))
+            .route(web::post().to(HttpResponse::UnsupportedMediaType))
+            // update documents routes
+            .route(
+                web::put()
+                    .guard(empty_application_type)
+                    .to(HttpResponse::UnsupportedMediaType),
+            )
             .route(web::put().guard(guard_json).to(update_documents_json))
+            .route(web::put().guard(guard_ndjson).to(update_documents_ndjson))
             .route(web::put().guard(guard_csv).to(update_documents_csv))
-            .route(web::put().to(|| HttpResponse::UnsupportedMediaType()))
+            .route(web::put().to(HttpResponse::UnsupportedMediaType))
             .route(web::delete().to(clear_all_documents)),
     )
     // this route needs to be before the /documents/{document_id} to match properly
@@ -160,7 +171,32 @@ pub async fn add_documents_json(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Json, IndexDocumentsMethod::ReplaceDocuments).await
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Json,
+        IndexDocumentsMethod::ReplaceDocuments,
+    )
+    .await
+}
+
+pub async fn add_documents_ndjson(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+) -> Result<HttpResponse, ResponseError> {
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Ndjson,
+        IndexDocumentsMethod::ReplaceDocuments,
+    )
+    .await
 }
 
 pub async fn add_documents_csv(
@@ -169,7 +205,15 @@ pub async fn add_documents_csv(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Csv, IndexDocumentsMethod::ReplaceDocuments).await
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Csv,
+        IndexDocumentsMethod::ReplaceDocuments,
+    )
+    .await
 }
 
 pub async fn update_documents_json(
@@ -178,7 +222,32 @@ pub async fn update_documents_json(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Json, IndexDocumentsMethod::UpdateDocuments).await
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Json,
+        IndexDocumentsMethod::UpdateDocuments,
+    )
+    .await
+}
+
+pub async fn update_documents_ndjson(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+) -> Result<HttpResponse, ResponseError> {
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Ndjson,
+        IndexDocumentsMethod::UpdateDocuments,
+    )
+    .await
 }
 
 pub async fn update_documents_csv(
@@ -187,7 +256,15 @@ pub async fn update_documents_csv(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    document_addition(meilisearch, path, params, body, DocumentAdditionFormat::Csv, IndexDocumentsMethod::UpdateDocuments).await
+    document_addition(
+        meilisearch,
+        path,
+        params,
+        body,
+        DocumentAdditionFormat::Csv,
+        IndexDocumentsMethod::UpdateDocuments,
+    )
+    .await
 }
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
