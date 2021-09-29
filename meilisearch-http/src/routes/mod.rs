@@ -3,13 +3,15 @@ use std::time::Duration;
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
+use meilisearch_lib::index_controller::updates::status::{UpdateResult, UpdateStatus};
 use serde::{Deserialize, Serialize};
+
+use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::{MeiliSearch, Update};
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::index::{Settings, Unchecked};
-use crate::index_controller::{UpdateMeta, UpdateResult, UpdateStatus};
-use crate::Data;
+use crate::ApiKeys;
 
 mod dump;
 mod indexes;
@@ -48,9 +50,9 @@ pub enum UpdateType {
 
 impl From<&UpdateStatus> for UpdateType {
     fn from(other: &UpdateStatus) -> Self {
-        use milli::update::IndexDocumentsMethod::*;
+        use meilisearch_lib::milli::update::IndexDocumentsMethod::*;
         match other.meta() {
-            UpdateMeta::DocumentsAddition { method, .. } => {
+            Update::DocumentAddition { method, .. } => {
                 let number = match other {
                     UpdateStatus::Processed(processed) => match processed.success {
                         UpdateResult::DocumentsAddition(ref addition) => {
@@ -67,12 +69,12 @@ impl From<&UpdateStatus> for UpdateType {
                     _ => unreachable!(),
                 }
             }
-            UpdateMeta::ClearDocuments => UpdateType::ClearAll,
-            UpdateMeta::DeleteDocuments { ids } => UpdateType::DocumentsDeletion {
-                number: Some(ids.len()),
-            },
-            UpdateMeta::Settings(settings) => UpdateType::Settings {
+            Update::Settings(settings) => UpdateType::Settings {
                 settings: settings.clone(),
+            },
+            Update::ClearDocuments => UpdateType::ClearAll,
+            Update::DeleteDocuments(ids) => UpdateType::DocumentsDeletion {
+                number: Some(ids.len()),
             },
         }
     }
@@ -186,15 +188,17 @@ impl From<UpdateStatus> for UpdateStatusResponse {
                 let duration = Duration::from_millis(duration as u64).as_secs_f64();
 
                 let update_id = failed.id();
-                let response = failed.error;
+                let processed_at = failed.failed_at;
+                let enqueued_at = failed.from.from.enqueued_at;
+                let response = failed.into();
 
                 let content = FailedUpdateResult {
                     update_id,
                     update_type,
                     response,
                     duration,
-                    enqueued_at: failed.from.from.enqueued_at,
-                    processed_at: failed.failed_at,
+                    enqueued_at,
+                    processed_at,
                 };
                 UpdateStatusResponse::Failed { content }
             }
@@ -229,8 +233,10 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
 }
 
-async fn get_stats(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
-    let response = data.get_all_stats().await?;
+async fn get_stats(
+    meilisearch: GuardedData<Private, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
+    let response = meilisearch.get_all_stats().await?;
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
@@ -244,7 +250,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-async fn get_version(_data: GuardedData<Private, Data>) -> HttpResponse {
+async fn get_version(_meilisearch: GuardedData<Private, MeiliSearch>) -> HttpResponse {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -261,8 +267,8 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-pub async fn list_keys(data: GuardedData<Admin, Data>) -> HttpResponse {
-    let api_keys = data.api_keys.clone();
+pub async fn list_keys(meilisearch: GuardedData<Admin, ApiKeys>) -> HttpResponse {
+    let api_keys = (*meilisearch).clone();
     HttpResponse::Ok().json(&KeysResponse {
         private: api_keys.private,
         public: api_keys.public,
@@ -276,17 +282,16 @@ pub async fn get_health() -> Result<HttpResponse, ResponseError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::data::Data;
     use crate::extractors::authentication::GuardedData;
 
     /// A type implemented for a route that uses a authentication policy `Policy`.
     ///
     /// This trait is used for regression testing of route authenticaton policies.
-    trait Is<Policy, T> {}
+    trait Is<Policy, Data, T> {}
 
     macro_rules! impl_is_policy {
         ($($param:ident)*) => {
-            impl<Policy, Func, $($param,)* Res> Is<Policy, (($($param,)*), Res)> for Func
+            impl<Policy, Func, Data, $($param,)* Res> Is<Policy, Data, (($($param,)*), Res)> for Func
                 where Func: Fn(GuardedData<Policy, Data>, $($param,)*) -> Res {}
 
         };
@@ -306,7 +311,7 @@ mod test {
         ($($policy:ident => { $($route:expr,)*})*) => {
             #[test]
             fn test_auth() {
-                $($(let _: &dyn Is<$policy, _> = &$route;)*)*
+                $($(let _: &dyn Is<$policy, _, _> = &$route;)*)*
             }
         };
     }
@@ -356,8 +361,10 @@ mod test {
 
             indexes::documents::clear_all_documents,
             indexes::documents::delete_documents,
-            indexes::documents::update_documents,
-            indexes::documents::add_documents,
+            indexes::documents::update_documents_json,
+            indexes::documents::update_documents_csv,
+            indexes::documents::add_documents_json,
+            indexes::documents::add_documents_csv,
             indexes::documents::delete_document,
 
             indexes::updates::get_all_updates_status,

@@ -1,10 +1,12 @@
-use actix_web::{web, HttpResponse};
 use log::debug;
 
+use actix_web::{web, HttpResponse};
+use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::index_controller::Update;
+use meilisearch_lib::MeiliSearch;
+
+use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::index::Settings;
-use crate::Data;
-use crate::{error::ResponseError, index::Unchecked};
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -13,29 +15,28 @@ macro_rules! make_setting_route {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
 
-            use milli::update::Setting;
+            use meilisearch_lib::milli::update::Setting;
+            use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
 
-            use crate::data;
             use crate::error::ResponseError;
-            use crate::index::Settings;
             use crate::extractors::authentication::{GuardedData, policies::*};
 
             pub async fn delete(
-                data: GuardedData<Private, data::Data>,
+                meilisearch: GuardedData<Private, MeiliSearch>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                use crate::index::Settings;
                 let settings = Settings {
                     $attr: Setting::Reset,
                     ..Default::default()
                 };
-                let update_status = data.update_settings(index_uid.into_inner(), settings, false).await?;
+                let update = Update::Settings(settings);
+                let update_status = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
                 debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
             pub async fn update(
-                data: GuardedData<Private, data::Data>,
+                meilisearch: GuardedData<Private, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -47,16 +48,17 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let update_status = data.update_settings(index_uid.into_inner(), settings, true).await?;
+                let update = Update::Settings(settings);
+                let update_status = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
                 debug!("returns: {:?}", update_status);
                 Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
             }
 
             pub async fn get(
-                data: GuardedData<Private, data::Data>,
+                meilisearch: GuardedData<Private, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                let settings = data.settings(index_uid.into_inner()).await?;
+                let settings = meilisearch.settings(index_uid.into_inner()).await?;
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
@@ -149,13 +151,15 @@ generate_configure!(
 );
 
 pub async fn update_all(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = body.into_inner().check();
-    let update_result = data
-        .update_settings(index_uid.into_inner(), settings, true)
+    let settings = body.into_inner();
+
+    let update = Update::Settings(settings);
+    let update_result = meilisearch
+        .register_update(index_uid.into_inner(), update, true)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
     debug!("returns: {:?}", json);
@@ -163,7 +167,7 @@ pub async fn update_all(
 }
 
 pub async fn get_all(
-    data: GuardedData<Private, Data>,
+    data: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = data.settings(index_uid.into_inner()).await?;
@@ -172,12 +176,14 @@ pub async fn get_all(
 }
 
 pub async fn delete_all(
-    data: GuardedData<Private, Data>,
+    data: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
+
+    let update = Update::Settings(settings.into_unchecked());
     let update_result = data
-        .update_settings(index_uid.into_inner(), settings, false)
+        .register_update(index_uid.into_inner(), update, false)
         .await?;
     let json = serde_json::json!({ "updateId": update_result.id() });
     debug!("returns: {:?}", json);

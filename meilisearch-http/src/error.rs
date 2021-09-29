@@ -7,7 +7,6 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponseBuilder;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
-use milli::UserError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,64 +51,6 @@ impl aweb::error::ResponseError for ResponseError {
 
     fn status_code(&self) -> StatusCode {
         self.code
-    }
-}
-
-macro_rules! internal_error {
-    ($target:ty : $($other:path), *) => {
-        $(
-            impl From<$other> for $target {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
-    }
-}
-
-#[derive(Debug)]
-pub struct MilliError<'a>(pub &'a milli::Error);
-
-impl Error for MilliError<'_> {}
-
-impl fmt::Display for MilliError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl ErrorCode for MilliError<'_> {
-    fn error_code(&self) -> Code {
-        match self.0 {
-            milli::Error::InternalError(_) => Code::Internal,
-            milli::Error::IoError(_) => Code::Internal,
-            milli::Error::UserError(ref error) => {
-                match error {
-                    // TODO: wait for spec for new error codes.
-                    UserError::Csv(_)
-                    | UserError::SerdeJson(_)
-                    | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidCriterionName { .. }
-                    | UserError::InvalidDocumentId { .. }
-                    | UserError::InvalidStoreFile
-                    | UserError::NoSpaceLeftOnDevice
-                    | UserError::InvalidAscDescSyntax { .. }
-                    | UserError::DocumentLimitReached => Code::Internal,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::Filter,
-                    UserError::InvalidFilterAttribute(_) => Code::Filter,
-                    UserError::InvalidSortName { .. } => Code::Sort,
-                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
-                    UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
-                    UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
-                    UserError::SortRankingRuleMissing => Code::Sort,
-                    UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
-                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
-                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
-                }
-            }
-        }
     }
 }
 

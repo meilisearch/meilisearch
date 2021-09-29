@@ -1,8 +1,8 @@
 use std::env;
 
 use actix_web::HttpServer;
-use main_error::MainError;
-use meilisearch_http::{create_app, Data, Opt};
+use meilisearch_http::{create_app, setup_meilisearch, Opt};
+use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
@@ -12,10 +12,8 @@ use meilisearch_http::analytics;
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-#[actix_web::main]
-async fn main() -> Result<(), MainError> {
-    let opt = Opt::from_args();
-
+/// does all the setup before meilisearch is launched
+fn setup(opt: &Opt) -> anyhow::Result<()> {
     let mut log_builder = env_logger::Builder::new();
     log_builder.parse_filters(&opt.log_level);
     if opt.log_level == "info" {
@@ -25,38 +23,51 @@ async fn main() -> Result<(), MainError> {
 
     log_builder.init();
 
+    Ok(())
+}
+
+#[actix_web::main]
+async fn main() -> anyhow::Result<()> {
+    let opt = Opt::from_args();
+
+    setup(&opt)?;
+
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
-                return Err(
+                anyhow::bail!(
                     "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
-                        .into(),
-                );
+                )
             }
         }
         "development" => (),
         _ => unreachable!(),
     }
 
-    let data = Data::new(opt.clone())?;
+    let meilisearch = setup_meilisearch(&opt)?;
+
+    // Setup the temp directory to be in the db folder. This is important, since temporary file
+    // don't support to be persisted accross filesystem boundaries.
+    meilisearch_http::setup_temp_dir(&opt.db_path)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
-        let analytics_data = data.clone();
+        let analytics_data = meilisearch.clone();
         let analytics_opt = opt.clone();
         tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
     }
 
-    print_launch_resume(&opt, &data);
+    print_launch_resume(&opt);
 
-    run_http(data, opt).await?;
+    run_http(meilisearch, opt).await?;
 
     Ok(())
 }
 
-async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
-    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard))
+    let opt_clone = opt.clone();
+    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone))
         // Disable signals allows the server to terminate immediately when a user enter CTRL-C
         .disable_signals();
 
@@ -66,12 +77,12 @@ async fn run_http(data: Data, opt: Opt) -> Result<(), Box<dyn std::error::Error>
             .run()
             .await?;
     } else {
-        http_server.bind(opt.http_addr)?.run().await?;
+        http_server.bind(&opt.http_addr)?.run().await?;
     }
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, data: &Data) {
+pub fn print_launch_resume(opt: &Opt) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -116,7 +127,7 @@ Anonymous telemetry:   \"Enabled\""
 
     eprintln!();
 
-    if data.api_keys().master.is_some() {
+    if opt.master_key.is_some() {
         eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \

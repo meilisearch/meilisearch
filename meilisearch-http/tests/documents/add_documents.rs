@@ -16,7 +16,12 @@ async fn add_documents_test_json_content_types() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -41,7 +46,12 @@ async fn add_documents_test_no_content_types() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -67,7 +77,12 @@ async fn add_documents_test_bad_content_types() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(&server.service.0, true)).await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options
+    ))
+    .await;
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -137,8 +152,8 @@ async fn document_add_create_index_bad_uid() {
 async fn document_update_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    let (_response, code) = index.update_documents(json!([]), None).await;
-    assert_eq!(code, 400);
+    let (response, code) = index.update_documents(json!([]), None).await;
+    assert_eq!(code, 400, "{}", response);
 }
 
 #[actix_rt::test]

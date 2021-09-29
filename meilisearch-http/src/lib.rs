@@ -1,44 +1,4 @@
-//! # MeiliSearch
-//! Hello there, future contributors. If you are here and see this code, it's probably because you want to add a super new fancy feature in MeiliSearch or fix a bug and first of all, thank you for that!
-//!
-//! To help you in this task, we'll try to do a little overview of the project.
-//! ## Milli
-//! [Milli](https://github.com/meilisearch/milli) is the core library of MeiliSearch. It's where we actually index documents and perform searches. Its purpose is to do these two tasks as fast as possible. You can give an update to milli, and it'll uses as many cores as provided to perform it as fast as possible. Nothing more. You can perform searches at the same time (search only uses one core).
-//! As you can see, we're missing quite a lot of features here; milli does not handle multiples indexes, it can't queue updates, it doesn't provide any web / API frontend, it doesn't implement dumps or snapshots, etc...
-//!
-//! ## `Index` module
-//! The [index] module is what encapsulates one milli index. It abstracts over its transaction and isolates a task that can be run into a thread. This is the unit of interaction with milli.
-//! If you add a feature to milli, you'll probably need to add it in this module too before exposing it to the rest of meilisearch.
-//!
-//! ## `IndexController` module
-//! To handle multiple indexes, we created an [index_controller]. It's in charge of creating new indexes, keeping references to all its indexes, forward asynchronous updates to its indexes, and provide an API to search in its indexes synchronously.
-//! To achieves this goal, we use an [actor model](https://en.wikipedia.org/wiki/Actor_model).
-//!
-//! ### The actor model
-//! Every actor is composed of at least three files:
-//! - `mod.rs` declare and import all the files used by the actor. We also describe the interface (= all the methods) used to interact with the actor. If you are not modifying anything inside of an actor, this is usually all you need to see.
-//! - `handle_impl.rs` implements the interface described in the `mod.rs`; in reality, there is no code logic in this file. Every method is only wrapping its parameters in a structure that is sent to the actor. This is useful for test and futureproofing.
-//! - `message.rs` contains an enum that describes all the interactions you can have with the actor.
-//! - `actor.rs` is used to create and execute the actor. It's where we'll write the loop looking for new messages and actually perform the tasks.
-//!
-//! MeiliSearch currently uses four actors:
-//! - [`uuid_resolver`](index_controller/uuid_resolver/index.html) hold the association between the user-provided indexes name and the internal [`uuid`](https://en.wikipedia.org/wiki/Universally_unique_identifier) representation we use.
-//! - [`index_actor`](index_controller::index_actor) is our representation of multiples indexes. Any request made to MeiliSearch that needs to talk to milli will pass through this actor.
-//! - [`update_actor`](index_controller/update_actor/index.html) is in charge of indexes updates. Since updates can take a long time to receive and  process, we need to:
-//!   1. Store them as fast as possible so we can continue to receive other updates even if nothing has been processed
-//!   2. Feed the `index_actor` with a new update every time it finished its current job.
-//! - [`dump_actor`](index_controller/dump_actor/index.html) this actor handle the  [dumps](https://docs.meilisearch.com/reference/api/dump.html). It needs to contact all the others actors and create a dump of everything that was currently happening.
-//!
-//! ## Data module
-//! The [data] module provide a unified interface to communicate with the index controller and other services (snapshot, dumps, ...), initialize the MeiliSearch instance
-//!
-//! ## HTTP server
-//! To handle the web and API part, we are using [actix-web](https://docs.rs/actix-web/); you can find all routes in the [routes] module.
-//! Currently, the configuration of actix-web is made in the [lib.rs](crate).
-//! Most of the routes use [extractors] to handle the authentication.
-
 #![allow(rustdoc::private_intra_doc_links)]
-pub mod data;
 #[macro_use]
 pub mod error;
 #[macro_use]
@@ -46,11 +6,11 @@ pub mod extractors;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 pub mod helpers;
-mod index;
-mod index_controller;
 pub mod option;
 pub mod routes;
-pub use self::data::Data;
+use std::path::Path;
+use std::time::Duration;
+
 use crate::extractors::authentication::AuthConfig;
 pub use option::Opt;
 
@@ -58,11 +18,83 @@ use actix_web::web;
 
 use extractors::authentication::policies::*;
 use extractors::payload::PayloadConfig;
+use meilisearch_lib::MeiliSearch;
+use sha2::Digest;
 
-pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
-    let http_payload_size_limit = data.http_payload_size_limit();
+#[derive(Clone)]
+pub struct ApiKeys {
+    pub public: Option<String>,
+    pub private: Option<String>,
+    pub master: Option<String>,
+}
+
+impl ApiKeys {
+    pub fn generate_missing_api_keys(&mut self) {
+        if let Some(master_key) = &self.master {
+            if self.private.is_none() {
+                let key = format!("{}-private", master_key);
+                let sha = sha2::Sha256::digest(key.as_bytes());
+                self.private = Some(format!("{:x}", sha));
+            }
+            if self.public.is_none() {
+                let key = format!("{}-public", master_key);
+                let sha = sha2::Sha256::digest(key.as_bytes());
+                self.public = Some(format!("{:x}", sha));
+            }
+        }
+    }
+}
+
+pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
+    let mut meilisearch = MeiliSearch::builder();
+    meilisearch
+        .set_max_index_size(opt.max_index_size.get_bytes() as usize)
+        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
+        .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
+        .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
+        .set_dump_dst(opt.dumps_dir.clone())
+        .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
+        .set_snapshot_dir(opt.snapshot_dir.clone());
+
+    if let Some(ref path) = opt.import_snapshot {
+        meilisearch.set_import_snapshot(path.clone());
+    }
+
+    if let Some(ref path) = opt.import_dump {
+        meilisearch.set_dump_src(path.clone());
+    }
+
+    if opt.schedule_snapshot {
+        meilisearch.set_schedule_snapshot();
+    }
+
+    meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
+}
+
+/// Cleans and setup the temporary file folder in the database directory. This must be done after
+/// the meilisearch instance has been created, to not interfere with the snapshot and dump loading.
+pub fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
+    // Set the tempfile directory in the current db path, to avoid cross device references. Also
+    // remove the previous outstanding files found there
+    //
+    // TODO: if two processes open the same db, one might delete the other tmpdir. Need to make
+    // sure that no one is using it before deleting it.
+    let temp_path = db_path.as_ref().join("tmp");
+    // Ignore error if tempdir doesn't exist
+    let _ = std::fs::remove_dir_all(&temp_path);
+    std::fs::create_dir_all(&temp_path)?;
+    if cfg!(windows) {
+        std::env::set_var("TMP", temp_path);
+    } else {
+        std::env::set_var("TMPDIR", temp_path);
+    }
+
+    Ok(())
+}
+
+pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &Opt) {
+    let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
-        .app_data(web::Data::new(data.clone()))
         .app_data(data)
         .app_data(
             web::JsonConfig::default()
@@ -77,8 +109,15 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: Data) {
         );
 }
 
-pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
-    let keys = data.api_keys();
+pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
+    let mut keys = ApiKeys {
+        master: opts.master_key.clone(),
+        private: None,
+        public: None,
+    };
+
+    keys.generate_missing_api_keys();
+
     let auth_config = if let Some(ref master_key) = keys.master {
         let private_key = keys.private.as_ref().unwrap();
         let public_key = keys.public.as_ref().unwrap();
@@ -94,7 +133,7 @@ pub fn configure_auth(config: &mut web::ServiceConfig, data: &Data) {
         AuthConfig::NoAuth
     };
 
-    config.app_data(auth_config);
+    config.app_data(auth_config).app_data(keys);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -138,7 +177,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 
 #[macro_export]
 macro_rules! create_app {
-    ($data:expr, $enable_frontend:expr) => {{
+    ($data:expr, $enable_frontend:expr, $opt:expr) => {{
         use actix_cors::Cors;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
@@ -147,8 +186,8 @@ macro_rules! create_app {
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()
-            .configure(|s| configure_data(s, $data.clone()))
-            .configure(|s| configure_auth(s, &$data))
+            .configure(|s| configure_data(s, $data.clone(), &$opt))
+            .configure(|s| configure_auth(s, &$opt))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
             .wrap(

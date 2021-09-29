@@ -1,12 +1,13 @@
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
+use meilisearch_lib::index_controller::IndexSettings;
+use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
-use crate::Data;
 
 pub mod documents;
 pub mod search;
@@ -35,7 +36,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-pub async fn list_indexes(data: GuardedData<Private, Data>) -> Result<HttpResponse, ResponseError> {
+pub async fn list_indexes(
+    data: GuardedData<Private, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
     let indexes = data.list_indexes().await?;
     debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))
@@ -49,11 +52,11 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
-    let meta = data.create_index(body.uid, body.primary_key).await?;
+    let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
     Ok(HttpResponse::Created().json(meta))
 }
 
@@ -75,41 +78,45 @@ pub struct UpdateIndexResponse {
 }
 
 pub async fn get_index(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let meta = data.index(path.index_uid.clone()).await?;
+    let meta = meilisearch.get_index(path.index_uid.clone()).await?;
     debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
 pub async fn update_index(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let body = body.into_inner();
-    let meta = data
-        .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
+    let settings = IndexSettings {
+        uid: body.uid,
+        primary_key: body.primary_key,
+    };
+    let meta = meilisearch
+        .update_index(path.into_inner().index_uid, settings)
         .await?;
     debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
 pub async fn delete_index(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    data.delete_index(path.index_uid.clone()).await?;
+    meilisearch.delete_index(path.index_uid.clone()).await?;
     Ok(HttpResponse::NoContent().finish())
 }
 
 pub async fn get_index_stats(
-    data: GuardedData<Private, Data>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = data.get_index_stats(path.index_uid.clone()).await?;
+    let response = meilisearch.get_index_stats(path.index_uid.clone()).await?;
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))

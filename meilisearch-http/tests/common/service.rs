@@ -1,14 +1,17 @@
 use actix_web::{http::StatusCode, test};
+use meilisearch_lib::MeiliSearch;
 use serde_json::Value;
 
-use meilisearch_http::create_app;
-use meilisearch_http::data::Data;
+use meilisearch_http::{create_app, Opt};
 
-pub struct Service(pub Data);
+pub struct Service {
+    pub meilisearch: MeiliSearch,
+    pub options: Opt,
+}
 
 impl Service {
     pub async fn post(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(&self.0, true)).await;
+        let app = test::init_service(create_app!(&self.meilisearch, true, &self.options)).await;
 
         let req = test::TestRequest::post()
             .uri(url.as_ref())
@@ -28,7 +31,7 @@ impl Service {
         url: impl AsRef<str>,
         body: impl AsRef<str>,
     ) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(&self.0, true)).await;
+        let app = test::init_service(create_app!(&self.meilisearch, true, &self.options)).await;
 
         let req = test::TestRequest::post()
             .uri(url.as_ref())
@@ -44,7 +47,7 @@ impl Service {
     }
 
     pub async fn get(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(&self.0, true)).await;
+        let app = test::init_service(create_app!(&self.meilisearch, true, &self.options)).await;
 
         let req = test::TestRequest::get().uri(url.as_ref()).to_request();
         let res = test::call_service(&app, req).await;
@@ -56,7 +59,7 @@ impl Service {
     }
 
     pub async fn put(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(&self.0, true)).await;
+        let app = test::init_service(create_app!(&self.meilisearch, true, &self.options)).await;
 
         let req = test::TestRequest::put()
             .uri(url.as_ref())
@@ -71,7 +74,7 @@ impl Service {
     }
 
     pub async fn delete(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(&self.0, true)).await;
+        let app = test::init_service(create_app!(&self.meilisearch, true, &self.options)).await;
 
         let req = test::TestRequest::delete().uri(url.as_ref()).to_request();
         let res = test::call_service(&app, req).await;
