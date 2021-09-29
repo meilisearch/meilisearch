@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::create_dir_all;
 
 use loaders::v1::MetadataV1;
-use loaders::v2::MetadataV2;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
@@ -18,6 +17,7 @@ use super::index_resolver::HardStateIndexResolver;
 use super::updates::UpdateSender;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
+use crate::index_controller::dump_actor::loaders::v3;
 use crate::index_controller::updates::UpdateMsg;
 use crate::options::IndexerOpts;
 use error::Result;
@@ -29,6 +29,27 @@ mod loaders;
 mod message;
 
 const META_FILE_NAME: &str = "metadata.json";
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Metadata {
+    db_version: String,
+    index_db_size: usize,
+    update_db_size: usize,
+    dump_date: DateTime<Utc>,
+}
+
+impl Metadata {
+    pub fn new(index_db_size: usize, update_db_size: usize) -> Self {
+        Self {
+            db_version: env!("CARGO_PKG_VERSION").to_string(),
+            index_db_size,
+            update_db_size,
+            dump_date: Utc::now(),
+        }
+    }
+
+}
 
 #[async_trait::async_trait]
 pub trait DumpActorHandle {
@@ -43,15 +64,16 @@ pub trait DumpActorHandle {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "dumpVersion")]
-pub enum Metadata {
+pub enum MetadataVersion {
     V1(MetadataV1),
-    V2(MetadataV2),
+    V2(Metadata),
+    V3(Metadata),
 }
 
-impl Metadata {
-    pub fn new_v2(index_db_size: usize, update_db_size: usize) -> Self {
-        let meta = MetadataV2::new(index_db_size, update_db_size);
-        Self::V2(meta)
+impl MetadataVersion {
+    pub fn new_v3(index_db_size: usize, update_db_size: usize) -> Self {
+        let meta = Metadata::new(index_db_size, update_db_size);
+        Self::V3(meta)
     }
 }
 
@@ -125,23 +147,25 @@ pub fn load_dump(
 
     let meta_path = tmp_src_path.join(META_FILE_NAME);
     let mut meta_file = File::open(&meta_path)?;
-    let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
+    let meta: MetadataVersion = serde_json::from_reader(&mut meta_file)?;
 
     let tmp_dst = tempfile::tempdir()?;
 
     println!("temp path: {}", tmp_dst.path().display());
 
     match meta {
-        Metadata::V1(meta) => {
+        MetadataVersion::V1(meta) => {
             meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
-        Metadata::V2(meta) => meta.load_dump(
+        MetadataVersion::V3(meta) => v3::load_dump(
+            meta,
             &tmp_src_path,
             tmp_dst.path(),
             index_db_size,
             update_db_size,
             indexer_opts,
         )?,
+        MetadataVersion::V2(_) => todo!(),
     }
     // Persist and atomically rename the db
     let persisted_dump = tmp_dst.into_path();
@@ -173,7 +197,7 @@ impl DumpTask {
         let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        let meta = Metadata::new_v2(self.index_db_size, self.update_db_size);
+        let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
