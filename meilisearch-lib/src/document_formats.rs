@@ -312,7 +312,7 @@ mod test {
 
         let mut csv_iter = CsvDocumentIter::from_reader(documents.as_bytes()).unwrap();
 
-        assert!(dbg!(csv_iter.next().unwrap()).is_err());
+        assert!(csv_iter.next().unwrap().is_err());
     }
 
     #[test]

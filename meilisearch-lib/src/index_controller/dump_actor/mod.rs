@@ -17,7 +17,7 @@ use super::index_resolver::HardStateIndexResolver;
 use super::updates::UpdateSender;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::v3;
+use crate::index_controller::dump_actor::loaders::{v2, v3};
 use crate::index_controller::updates::UpdateMsg;
 use crate::options::IndexerOpts;
 use error::Result;
@@ -48,7 +48,6 @@ impl Metadata {
             dump_date: Utc::now(),
         }
     }
-
 }
 
 #[async_trait::async_trait]
@@ -74,6 +73,28 @@ impl MetadataVersion {
     pub fn new_v3(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = Metadata::new(index_db_size, update_db_size);
         Self::V3(meta)
+    }
+
+    pub fn db_version(&self) -> &str {
+        match self {
+            Self::V1(meta) => &meta.db_version,
+            Self::V2(meta) | Self::V3(meta) => &meta.db_version,
+        }
+    }
+
+    pub fn version(&self) -> &str {
+        match self {
+            MetadataVersion::V1(_) => "V1",
+            MetadataVersion::V2(_) => "V2",
+            MetadataVersion::V3(_) => "V3",
+        }
+    }
+
+    pub fn dump_date(&self) -> Option<&DateTime<Utc>> {
+        match self {
+            MetadataVersion::V1(_) => None,
+            MetadataVersion::V2(meta) | MetadataVersion::V3(meta) => Some(&meta.dump_date),
+        }
     }
 }
 
@@ -133,7 +154,11 @@ pub fn load_dump(
 ) -> anyhow::Result<()> {
     // Setup a temp directory path in the same path as the database, to prevent cross devices
     // references.
-    let temp_path = dst_path.as_ref().parent().map(ToOwned::to_owned).unwrap_or_else(|| ".".into());
+    let temp_path = dst_path
+        .as_ref()
+        .parent()
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| ".".into());
     if cfg!(windows) {
         std::env::set_var("TMP", temp_path);
     } else {
@@ -151,12 +176,27 @@ pub fn load_dump(
 
     let tmp_dst = tempfile::tempdir()?;
 
-    println!("temp path: {}", tmp_dst.path().display());
+    info!(
+        "Loading dump {}, dump database version: {}, dump version: {}",
+        meta.dump_date()
+            .map(|t| format!("from {}", t))
+            .unwrap_or_else(String::new),
+        meta.db_version(),
+        meta.version()
+    );
 
     match meta {
         MetadataVersion::V1(meta) => {
             meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
+        MetadataVersion::V2(meta) => v2::load_dump(
+            meta,
+            &tmp_src_path,
+            tmp_dst.path(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?,
         MetadataVersion::V3(meta) => v3::load_dump(
             meta,
             &tmp_src_path,
@@ -165,7 +205,6 @@ pub fn load_dump(
             update_db_size,
             indexer_opts,
         )?,
-        MetadataVersion::V2(_) => todo!(),
     }
     // Persist and atomically rename the db
     let persisted_dump = tmp_dst.into_path();

@@ -75,12 +75,11 @@ impl UpdateFileStore {
 
         // No update files to load
         if !src_update_files_path.exists() {
-            return Ok(())
+            return Ok(());
         }
 
         create_dir_all(&dst_update_files_path)?;
 
-        println!("src_update file: {}", src_update_files_path.display());
         let entries = std::fs::read_dir(src_update_files_path)?;
 
         for entry in entries {

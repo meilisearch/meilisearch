@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use heed::EnvOpenOptions;
-use log::{error, info, warn};
+use log::{error, warn};
 use milli::documents::DocumentBatchReader;
 use milli::update::Setting;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -14,14 +14,15 @@ use uuid::Uuid;
 use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
+use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
 use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
-use crate::index_controller::{self, asc_ranking_rule, desc_ranking_rule, IndexMetadata};
+use crate::index_controller::{self, IndexMetadata};
 use crate::{index::Unchecked, options::IndexerOpts};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MetadataV1 {
-    db_version: String,
+    pub db_version: String,
     indexes: Vec<IndexMetadata>,
 }
 
@@ -33,15 +34,10 @@ impl MetadataV1 {
         size: usize,
         indexer_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        info!(
-            "Loading dump, dump database version: {}, dump version: V1",
-            self.db_version
-        );
-
         let uuid_store = HeedUuidStore::new(&dst)?;
-        for index in dbg!(self.indexes) {
+        for index in self.indexes {
             let uuid = Uuid::new_v4();
-            uuid_store.insert(dbg!(index.uid.clone()), dbg!(uuid))?;
+            uuid_store.insert(index.uid.clone(), uuid)?;
             let src = src.as_ref().join(index.uid);
             load_index(
                 &src,
