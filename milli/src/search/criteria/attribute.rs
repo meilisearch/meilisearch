@@ -192,7 +192,10 @@ impl<'t, 'q> WordLevelIterator<'t, 'q> {
         in_prefix_cache: bool,
     ) -> heed::Result<Option<Self>> {
         match ctx.word_position_last_level(&word, in_prefix_cache)? {
-            Some(level) => {
+            Some(_) => {
+                // HOTFIX Meilisearch#1707: it is better to only iterate over the level 0.
+                // A cleaner fix will be implemented soon.
+                let level = TreeLevel::min_value();
                 let interval_size = LEVEL_EXPONENTIATION_BASE.pow(Into::<u8>::into(level) as u32);
                 let inner =
                     ctx.word_position_iterator(&word, level, in_prefix_cache, None, None)?;
@@ -528,10 +531,10 @@ impl<'t, 'q> Branch<'t, 'q> {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_rank = self.compute_rank();
         let other_rank = other.compute_rank();
-        let left_cmp = self_rank.cmp(&other_rank).reverse();
+        let left_cmp = self_rank.cmp(&other_rank);
         // on level: lower is better,
         // we want to dig faster into levels on interesting branches.
-        let level_cmp = self.tree_level.cmp(&other.tree_level).reverse();
+        let level_cmp = self.tree_level.cmp(&other.tree_level);
 
         left_cmp.then(level_cmp).then(self.last_result.2.len().cmp(&other.last_result.2.len()))
     }
