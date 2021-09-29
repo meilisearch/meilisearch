@@ -1581,7 +1581,7 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "meilisearch-error"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "actix-http",
  "serde",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.1.0"
+version = "0.23.0"
 dependencies = [
  "actix-rt",
  "actix-web",
