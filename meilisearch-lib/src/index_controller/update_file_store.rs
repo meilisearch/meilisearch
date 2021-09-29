@@ -75,6 +75,7 @@ impl UpdateFileStore {
 
         create_dir_all(&dst_update_files_path)?;
 
+        println!("src_update file: {}", src_update_files_path.display());
         let entries = std::fs::read_dir(src_update_files_path)?;
 
         for entry in entries {

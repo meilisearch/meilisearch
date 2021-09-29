@@ -109,6 +109,15 @@ pub fn load_dump(
     update_db_size: usize,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
+    // Setup a temp directory path in the same path as the database, to prevent cross devices
+    // references.
+    let temp_path = dst_path.as_ref().parent().map(ToOwned::to_owned).unwrap_or_else(|| ".".into());
+    if cfg!(windows) {
+        std::env::set_var("TMP", temp_path);
+    } else {
+        std::env::set_var("TMPDIR", temp_path);
+    }
+
     let tmp_src = tempfile::tempdir()?;
     let tmp_src_path = tmp_src.path();
 
@@ -119,6 +128,8 @@ pub fn load_dump(
     let meta: Metadata = serde_json::from_reader(&mut meta_file)?;
 
     let tmp_dst = tempfile::tempdir()?;
+
+    println!("temp path: {}", tmp_dst.path().display());
 
     match meta {
         Metadata::V1(meta) => {

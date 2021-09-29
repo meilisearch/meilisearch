@@ -39,9 +39,9 @@ impl MetadataV1 {
         );
 
         let uuid_store = HeedUuidStore::new(&dst)?;
-        for index in self.indexes {
+        for index in dbg!(self.indexes) {
             let uuid = Uuid::new_v4();
-            uuid_store.insert(index.uid.clone(), uuid)?;
+            uuid_store.insert(dbg!(index.uid.clone()), dbg!(uuid))?;
             let src = src.as_ref().join(index.uid);
             load_index(
                 &src,
@@ -93,7 +93,7 @@ fn load_index(
     size: usize,
     indexer_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    let index_path = dst.as_ref().join(&format!("indexes/index-{}", uuid));
+    let index_path = dst.as_ref().join(&format!("indexes/{}", uuid));
 
     create_dir_all(&index_path)?;
     let mut options = EnvOpenOptions::new();
