@@ -33,9 +33,9 @@ macro_rules! guard_content_type {
     };
 }
 
+guard_content_type!(guard_ndjson, "application/x-ndjson");
+guard_content_type!(guard_csv, "text/csv");
 guard_content_type!(guard_json, "application/json");
-guard_content_type!(guard_csv, "application/csv");
-guard_content_type!(guard_ndjson, "application/ndjson");
 
 fn empty_application_type(head: &actix_web::dev::RequestHead) -> bool {
     head.headers.get("Content-Type").is_none()
