@@ -2,6 +2,7 @@
 
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::{self, Cursor, Read, Seek};
+use std::num::ParseFloatError;
 use std::path::Path;
 
 use criterion::BenchmarkId;
@@ -175,8 +176,7 @@ fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
-    let mut records = csv::Reader::from_reader(reader);
-    let iter = records.deserialize::<Map<String, Value>>();
+    let iter = CSVDocumentDeserializer::from_reader(reader)?;
 
     for doc in iter {
         let doc = doc?;
@@ -186,4 +186,78 @@ fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     documents.finish()?;
 
     Ok(writer.into_inner())
+}
+
+enum AllowedType {
+    String,
+    Number,
+}
+
+fn parse_csv_header(header: &str) -> (String, AllowedType) {
+    // if there are several separators we only split on the last one.
+    match header.rsplit_once(':') {
+        Some((field_name, field_type)) => match field_type {
+            "string" => (field_name.to_string(), AllowedType::String),
+            "number" => (field_name.to_string(), AllowedType::Number),
+            // we may return an error in this case.
+            _otherwise => (header.to_string(), AllowedType::String),
+        },
+        None => (header.to_string(), AllowedType::String),
+    }
+}
+
+struct CSVDocumentDeserializer<R>
+where
+    R: Read,
+{
+    documents: csv::StringRecordsIntoIter<R>,
+    headers: Vec<(String, AllowedType)>,
+}
+
+impl<R: Read> CSVDocumentDeserializer<R> {
+    fn from_reader(reader: R) -> io::Result<Self> {
+        let mut records = csv::Reader::from_reader(reader);
+
+        let headers = records.headers()?.into_iter().map(parse_csv_header).collect();
+
+        Ok(Self { documents: records.into_records(), headers })
+    }
+}
+
+impl<R: Read> Iterator for CSVDocumentDeserializer<R> {
+    type Item = anyhow::Result<Map<String, Value>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let csv_document = self.documents.next()?;
+
+        match csv_document {
+            Ok(csv_document) => {
+                let mut document = Map::new();
+
+                for ((field_name, field_type), value) in
+                    self.headers.iter().zip(csv_document.into_iter())
+                {
+                    let parsed_value: Result<Value, ParseFloatError> = match field_type {
+                        AllowedType::Number => {
+                            value.parse::<f64>().map(Value::from).map_err(Into::into)
+                        }
+                        AllowedType::String => Ok(Value::String(value.to_string())),
+                    };
+
+                    match parsed_value {
+                        Ok(value) => drop(document.insert(field_name.to_string(), value)),
+                        Err(_e) => {
+                            return Some(Err(anyhow::anyhow!(
+                                "Value '{}' is not a valid number",
+                                value
+                            )))
+                        }
+                    }
+                }
+
+                Some(Ok(document))
+            }
+            Err(e) => Some(Err(anyhow::anyhow!("Error parsing csv document: {}", e))),
+        }
+    }
 }
