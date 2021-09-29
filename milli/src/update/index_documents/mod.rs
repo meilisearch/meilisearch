@@ -248,7 +248,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let chunk_iter = grenad_obkv_into_chunks(
                 documents_file,
                 params.clone(),
-                self.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
+                self.documents_chunk_size.unwrap_or(1024 * 1024 * 128), // 128MiB
             );
 
             let result = chunk_iter.map(|chunk_iter| {
