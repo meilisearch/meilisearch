@@ -83,6 +83,11 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
+
+    InvalidContentType,
+    MissingContentType,
+    MalformedPayload,
+    MissingPayload,
 }
 
 impl Code {
@@ -154,6 +159,14 @@ impl Code {
             DumpProcessFailed => {
                 ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR)
             }
+            MissingContentType => {
+                ErrCode::invalid("missing_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            }
+            MalformedPayload => ErrCode::invalid("malformed_payload", StatusCode::BAD_REQUEST),
+            InvalidContentType => {
+                ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            }
+            MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
         }
     }
 

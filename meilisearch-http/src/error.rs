@@ -9,6 +9,23 @@ use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, thiserror::Error)]
+pub enum MeilisearchHttpError {
+    #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"text/csv\"")]
+    MissingContentType,
+    #[error("The Content-Type \"{0}\" is invalid. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"text/csv\"")]
+    InvalidContentType(String),
+}
+
+impl ErrorCode for MeilisearchHttpError {
+    fn error_code(&self) -> Code {
+        match self {
+            MeilisearchHttpError::MissingContentType => Code::MissingContentType,
+            MeilisearchHttpError::InvalidContentType(_) => Code::InvalidContentType,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {

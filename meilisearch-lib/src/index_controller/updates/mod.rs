@@ -3,7 +3,7 @@ mod message;
 pub mod status;
 pub mod store;
 
-use std::io;
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -191,9 +191,15 @@ impl UpdateLoop {
                 method,
                 format,
             } => {
-                let reader = StreamReader::new(payload);
+                let mut reader = BufReader::new(StreamReader::new(payload));
                 let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
                 tokio::task::spawn_blocking(move || -> Result<_> {
+                    // check if the payload is empty, and return an error
+                    reader.fill_buf()?;
+                    if reader.buffer().is_empty() {
+                        return Err(UpdateLoopError::MissingPayload(format));
+                    }
+
                     match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,

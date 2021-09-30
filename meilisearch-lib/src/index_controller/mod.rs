@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,6 +74,16 @@ pub enum DocumentAdditionFormat {
     Json,
     Csv,
     Ndjson,
+}
+
+impl fmt::Display for DocumentAdditionFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DocumentAdditionFormat::Json => write!(f, "json"),
+            DocumentAdditionFormat::Ndjson => write!(f, "ndjson"),
+            DocumentAdditionFormat::Csv => write!(f, "csv"),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]

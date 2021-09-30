@@ -5,7 +5,7 @@ use meilisearch_error::{Code, ErrorCode};
 
 use crate::{
     document_formats::DocumentFormatError,
-    index_controller::update_file_store::UpdateFileStoreError,
+    index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat},
 };
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
@@ -22,12 +22,12 @@ pub enum UpdateLoopError {
     )]
     FatalUpdateStoreError,
     #[error("{0}")]
-    InvalidPayload(#[from] DocumentFormatError),
-    #[error("{0}")]
-    MalformedPayload(Box<dyn Error + Send + Sync + 'static>),
+    DocumentFormatError(#[from] DocumentFormatError),
     // TODO: The reference to actix has to go.
     #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
+    #[error("A {0} payload is missing.")]
+    MissingPayload(DocumentAdditionFormat),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateLoopError
@@ -60,12 +60,12 @@ impl ErrorCode for UpdateLoopError {
             Self::Internal(_) => Code::Internal,
             //Self::IndexActor(e) => e.error_code(),
             Self::FatalUpdateStoreError => Code::Internal,
-            Self::InvalidPayload(_) => Code::BadRequest,
-            Self::MalformedPayload(_) => Code::BadRequest,
+            Self::DocumentFormatError(error) => error.error_code(),
             Self::PayloadError(error) => match error {
                 actix_web::error::PayloadError::Overflow => Code::PayloadTooLarge,
                 _ => Code::Internal,
             },
+            Self::MissingPayload(_) => Code::MissingPayload,
         }
     }
 }
