@@ -202,7 +202,9 @@ impl Index {
                     Ok(UpdateResult::DocumentDeletion { deleted })
                 }
             };
-            txn.commit()?;
+            if result.is_ok() {
+                txn.commit()?;
+            }
             result
         })();
 

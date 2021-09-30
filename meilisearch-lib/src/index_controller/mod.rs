@@ -276,8 +276,6 @@ impl IndexController {
                     let index = self.index_resolver.create_index(name, None).await?;
                     let update_result =
                         UpdateMsg::update(&self.update_sender, index.uuid, update).await?;
-                    // ignore if index creation fails now, since it may already have been created
-
                     Ok(update_result)
                 } else {
                     Err(IndexResolverError::UnexistingIndex(name).into())
