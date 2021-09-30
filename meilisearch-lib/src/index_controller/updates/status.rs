@@ -133,8 +133,8 @@ impl Processing {
 #[serde(rename_all = "camelCase")]
 pub struct Aborted {
     #[serde(flatten)]
-    from: Enqueued,
-    aborted_at: DateTime<Utc>,
+    pub from: Enqueued,
+    pub aborted_at: DateTime<Utc>,
 }
 
 impl Aborted {

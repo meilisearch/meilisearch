@@ -21,9 +21,9 @@ use crate::{
 };
 
 #[derive(Serialize, Deserialize)]
-struct UpdateEntry {
-    uuid: Uuid,
-    update: UpdateStatus,
+pub struct UpdateEntry {
+    pub uuid: Uuid,
+    pub update: UpdateStatus,
 }
 
 impl UpdateStore {
@@ -130,8 +130,6 @@ impl UpdateStore {
         dst: impl AsRef<Path>,
         db_size: usize,
     ) -> anyhow::Result<()> {
-        println!("target path: {}", dst.as_ref().display());
-
         let mut options = EnvOpenOptions::new();
         options.map_size(db_size as usize);
 
