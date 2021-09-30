@@ -133,13 +133,16 @@ pub async fn add_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     document_addition(
-        req.headers().get("Content-type").map(|s| s.to_str().unwrap_or("unkown")),
+        req.headers()
+            .get("Content-type")
+            .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
         path.into_inner().index_uid,
         params.into_inner().primary_key,
         body,
-        IndexDocumentsMethod::ReplaceDocuments)
-        .await
+        IndexDocumentsMethod::ReplaceDocuments,
+    )
+    .await
 }
 
 pub async fn update_documents(
@@ -151,13 +154,16 @@ pub async fn update_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     document_addition(
-        req.headers().get("Content-type").map(|s| s.to_str().unwrap_or("unkown")),
+        req.headers()
+            .get("Content-type")
+            .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
         path.into_inner().index_uid,
         params.into_inner().primary_key,
         body,
-        IndexDocumentsMethod::UpdateDocuments)
-        .await
+        IndexDocumentsMethod::UpdateDocuments,
+    )
+    .await
 }
 
 /// Route used when the payload type is "application/json"
@@ -174,7 +180,9 @@ async fn document_addition(
         Some("application/json") => DocumentAdditionFormat::Json,
         Some("application/x-ndjson") => DocumentAdditionFormat::Ndjson,
         Some("text/csv") => DocumentAdditionFormat::Csv,
-        Some(other) => return Err(MeilisearchHttpError::InvalidContentType(other.to_string()).into()),
+        Some(other) => {
+            return Err(MeilisearchHttpError::InvalidContentType(other.to_string()).into())
+        }
         None => return Err(MeilisearchHttpError::MissingContentType.into()),
     };
 
@@ -185,9 +193,7 @@ async fn document_addition(
         format,
     };
 
-    let update_status = meilisearch
-        .register_update(index_uid, update, true)
-        .await?;
+    let update_status = meilisearch.register_update(index_uid, update, true).await?;
 
     debug!("returns: {:?}", update_status);
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))

@@ -5,7 +5,7 @@ use meilisearch_error::{Code, ErrorCode};
 
 use crate::{
     document_formats::DocumentFormatError,
-    index_controller::update_file_store::UpdateFileStoreError,
+    index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat},
 };
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
@@ -26,6 +26,8 @@ pub enum UpdateLoopError {
     // TODO: The reference to actix has to go.
     #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
+    #[error("A {0} payload is missing.")]
+    MissingPayload(DocumentAdditionFormat),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateLoopError
@@ -63,6 +65,7 @@ impl ErrorCode for UpdateLoopError {
                 actix_web::error::PayloadError::Overflow => Code::PayloadTooLarge,
                 _ => Code::Internal,
             },
+            Self::MissingPayload(_) => Code::MissingPayload,
         }
     }
 }
