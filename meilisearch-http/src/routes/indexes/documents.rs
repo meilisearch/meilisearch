@@ -1,6 +1,6 @@
 use actix_web::error::PayloadError;
 use actix_web::web::Bytes;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use futures::{Stream, StreamExt};
 use log::debug;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
@@ -17,29 +17,6 @@ use crate::routes::IndexParam;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
-
-macro_rules! guard_content_type {
-    ($fn_name:ident, $guard_value:literal) => {
-        fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
-            if let Some(content_type) = head.headers.get("Content-Type") {
-                content_type
-                    .to_str()
-                    .map(|v| v.contains($guard_value))
-                    .unwrap_or(false)
-            } else {
-                false
-            }
-        }
-    };
-}
-
-guard_content_type!(guard_ndjson, "application/x-ndjson");
-guard_content_type!(guard_csv, "text/csv");
-guard_content_type!(guard_json, "application/json");
-
-fn empty_application_type(head: &actix_web::dev::RequestHead) -> bool {
-    head.headers.get("Content-Type").is_none()
-}
 
 /// This is required because Payload is not Sync nor Send
 fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
@@ -62,26 +39,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_all_documents))
-            // replace documents routes
-            .route(
-                web::post()
-                    .guard(empty_application_type)
-                    .to(missing_content_type_error),
-            )
-            .route(web::post().guard(guard_json).to(add_documents_json))
-            .route(web::post().guard(guard_ndjson).to(add_documents_ndjson))
-            .route(web::post().guard(guard_csv).to(add_documents_csv))
-            .route(web::post().to(HttpResponse::UnsupportedMediaType))
-            // update documents routes
-            .route(
-                web::put()
-                    .guard(empty_application_type)
-                    .to(missing_content_type_error),
-            )
-            .route(web::put().guard(guard_json).to(update_documents_json))
-            .route(web::put().guard(guard_ndjson).to(update_documents_ndjson))
-            .route(web::put().guard(guard_csv).to(update_documents_csv))
-            .route(web::put().to(HttpResponse::UnsupportedMediaType))
+            .route(web::post().to(add_documents))
+            .route(web::put().to(update_documents))
             .route(web::delete().to(clear_all_documents)),
     )
     // this route needs to be before the /documents/{document_id} to match properly
@@ -91,10 +50,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::get().to(get_document))
             .route(web::delete().to(delete_document)),
     );
-}
-
-async fn missing_content_type_error() -> Result<HttpResponse, ResponseError> {
-    Err(MeilisearchHttpError::MissingContentType.into())
 }
 
 pub async fn get_document(
@@ -169,126 +124,69 @@ pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-pub async fn add_documents_json(
+pub async fn add_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
+    req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     document_addition(
+        req.headers().get("Content-type").map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
-        path,
-        params,
+        path.into_inner().index_uid,
+        params.into_inner().primary_key,
         body,
-        DocumentAdditionFormat::Json,
-        IndexDocumentsMethod::ReplaceDocuments,
-    )
-    .await
+        IndexDocumentsMethod::ReplaceDocuments)
+        .await
 }
 
-pub async fn add_documents_ndjson(
+pub async fn update_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
+    req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
     document_addition(
+        req.headers().get("Content-type").map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
-        path,
-        params,
+        path.into_inner().index_uid,
+        params.into_inner().primary_key,
         body,
-        DocumentAdditionFormat::Ndjson,
-        IndexDocumentsMethod::ReplaceDocuments,
-    )
-    .await
+        IndexDocumentsMethod::UpdateDocuments)
+        .await
 }
 
-pub async fn add_documents_csv(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: Payload,
-) -> Result<HttpResponse, ResponseError> {
-    document_addition(
-        meilisearch,
-        path,
-        params,
-        body,
-        DocumentAdditionFormat::Csv,
-        IndexDocumentsMethod::ReplaceDocuments,
-    )
-    .await
-}
-
-pub async fn update_documents_json(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: Payload,
-) -> Result<HttpResponse, ResponseError> {
-    document_addition(
-        meilisearch,
-        path,
-        params,
-        body,
-        DocumentAdditionFormat::Json,
-        IndexDocumentsMethod::UpdateDocuments,
-    )
-    .await
-}
-
-pub async fn update_documents_ndjson(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: Payload,
-) -> Result<HttpResponse, ResponseError> {
-    document_addition(
-        meilisearch,
-        path,
-        params,
-        body,
-        DocumentAdditionFormat::Ndjson,
-        IndexDocumentsMethod::UpdateDocuments,
-    )
-    .await
-}
-
-pub async fn update_documents_csv(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: Payload,
-) -> Result<HttpResponse, ResponseError> {
-    document_addition(
-        meilisearch,
-        path,
-        params,
-        body,
-        DocumentAdditionFormat::Csv,
-        IndexDocumentsMethod::UpdateDocuments,
-    )
-    .await
-}
 /// Route used when the payload type is "application/json"
 /// Used to add or replace documents
 async fn document_addition(
+    content_type: Option<&str>,
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
+    index_uid: String,
+    primary_key: Option<String>,
     body: Payload,
-    format: DocumentAdditionFormat,
     method: IndexDocumentsMethod,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", params);
+    let format = match content_type {
+        Some("application/json") => DocumentAdditionFormat::Json,
+        Some("application/x-ndjson") => DocumentAdditionFormat::Ndjson,
+        Some("text/csv") => DocumentAdditionFormat::Csv,
+        Some(other) => return Err(MeilisearchHttpError::InvalidContentType(other.to_string()).into()),
+        None => return Err(MeilisearchHttpError::MissingContentType.into()),
+    };
+
     let update = Update::DocumentAddition {
         payload: Box::new(payload_to_stream(body)),
-        primary_key: params.primary_key.clone(),
+        primary_key,
         method,
         format,
     };
+
     let update_status = meilisearch
-        .register_update(path.into_inner().index_uid, update, true)
+        .register_update(index_uid, update, true)
         .await?;
 
     debug!("returns: {:?}", update_status);

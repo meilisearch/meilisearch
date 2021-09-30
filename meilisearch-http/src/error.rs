@@ -13,12 +13,15 @@ use serde::{Deserialize, Serialize};
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"test/csv\"")]
     MissingContentType,
+    #[error("The Content-Type \"{0}\" is invalid. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"test/csv\"")]
+    InvalidContentType(String),
 }
 
 impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
             MeilisearchHttpError::MissingContentType => Code::MissingContentType,
+            MeilisearchHttpError::InvalidContentType(_) => Code::InvalidContentType,
         }
     }
 }
