@@ -83,6 +83,8 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
+
+    MissingContentType,
 }
 
 impl Code {
@@ -154,6 +156,7 @@ impl Code {
             DumpProcessFailed => {
                 ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR)
             }
+            MissingContentType => ErrCode::invalid("missing_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
         }
     }
 

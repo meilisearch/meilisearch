@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::error::ResponseError;
+use crate::error::{MeilisearchHttpError, ResponseError};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::routes::IndexParam;
@@ -66,7 +66,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(
                 web::post()
                     .guard(empty_application_type)
-                    .to(HttpResponse::UnsupportedMediaType),
+                    .to(missing_content_type_error),
             )
             .route(web::post().guard(guard_json).to(add_documents_json))
             .route(web::post().guard(guard_ndjson).to(add_documents_ndjson))
@@ -76,7 +76,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(
                 web::put()
                     .guard(empty_application_type)
-                    .to(HttpResponse::UnsupportedMediaType),
+                    .to(missing_content_type_error),
             )
             .route(web::put().guard(guard_json).to(update_documents_json))
             .route(web::put().guard(guard_ndjson).to(update_documents_ndjson))
@@ -91,6 +91,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::get().to(get_document))
             .route(web::delete().to(delete_document)),
     );
+}
+
+async fn missing_content_type_error() -> Result<HttpResponse, ResponseError> {
+    Err(MeilisearchHttpError::MissingContentType.into())
 }
 
 pub async fn get_document(
