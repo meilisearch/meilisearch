@@ -1,5 +1,5 @@
 use crate::common::Server;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
@@ -31,6 +31,22 @@ async fn create_index_with_primary_key() {
     //assert_eq!(response["createdAt"], response["updatedAt"]);
     assert_eq!(response["primaryKey"], "primary");
     assert_eq!(response.as_object().unwrap().len(), 5);
+}
+
+#[actix_rt::test]
+async fn create_index_with_invalid_primary_key() {
+    let document = json!([ { "id": 2, "title": "Pride and Prejudice" } ]);
+
+    let server = Server::new().await;
+    let index = server.index("movies");
+    let (_response, code) = index.add_documents(document, Some("title")).await;
+    assert_eq!(code, 202);
+
+    index.wait_update_id(0).await;
+
+    let (response, code) = index.get().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["primaryKey"], Value::Null);
 }
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
