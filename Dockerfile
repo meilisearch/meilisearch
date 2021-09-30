@@ -14,6 +14,7 @@ COPY    Cargo.toml .
 
 COPY    meilisearch-error/Cargo.toml meilisearch-error/
 COPY    meilisearch-http/Cargo.toml meilisearch-http/
+COPY    meilisearch-lib/Cargo.toml meilisearch-lib/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
