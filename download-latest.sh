@@ -140,7 +140,7 @@ get_os() {
 get_archi() {
     architecture=$(uname -m)
     case "$architecture" in
-    'x86_64' | 'amd64')
+    'x86_64' | 'amd64' | 'arm64')
         archi='amd64'
         ;;
     'aarch64')
@@ -188,7 +188,7 @@ case "$os" in
 		BINARY_NAME='meilisearch.exe'
 
         ;;
-	*) 
+	*)
 		release_file="meilisearch-$os-$archi"
 		BINARY_NAME='meilisearch'
 
