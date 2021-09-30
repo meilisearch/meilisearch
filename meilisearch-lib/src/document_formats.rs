@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::{self, Read, Result as IoResult, Seek, Write};
 
 use csv::{Reader as CsvReader, StringRecordsIntoIter};
+use meilisearch_error::{Code, ErrorCode};
 use milli::documents::DocumentBatchBuilder;
 use serde_json::{Deserializer, Map, Value};
 
@@ -33,6 +34,15 @@ pub enum DocumentFormatError {
         Box<dyn std::error::Error + Send + Sync + 'static>,
         PayloadType,
     ),
+}
+
+impl ErrorCode for DocumentFormatError {
+    fn error_code(&self) -> Code {
+        match self {
+            DocumentFormatError::Internal(_) => Code::Internal,
+            DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
+        }
+    }
 }
 
 internal_error!(DocumentFormatError: milli::documents::Error, io::Error);

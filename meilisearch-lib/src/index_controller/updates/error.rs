@@ -22,9 +22,7 @@ pub enum UpdateLoopError {
     )]
     FatalUpdateStoreError,
     #[error("{0}")]
-    InvalidPayload(#[from] DocumentFormatError),
-    #[error("{0}")]
-    MalformedPayload(Box<dyn Error + Send + Sync + 'static>),
+    DocumentFormatError(#[from] DocumentFormatError),
     // TODO: The reference to actix has to go.
     #[error("{0}")]
     PayloadError(#[from] actix_web::error::PayloadError),
@@ -60,8 +58,7 @@ impl ErrorCode for UpdateLoopError {
             Self::Internal(_) => Code::Internal,
             //Self::IndexActor(e) => e.error_code(),
             Self::FatalUpdateStoreError => Code::Internal,
-            Self::InvalidPayload(_) => Code::BadRequest,
-            Self::MalformedPayload(_) => Code::BadRequest,
+            Self::DocumentFormatError(error) => error.error_code(),
             Self::PayloadError(error) => match error {
                 actix_web::error::PayloadError::Overflow => Code::PayloadTooLarge,
                 _ => Code::Internal,

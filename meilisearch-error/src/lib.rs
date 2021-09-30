@@ -85,6 +85,7 @@ pub enum Code {
     DumpProcessFailed,
 
     MissingContentType,
+    MalformedPayload,
 }
 
 impl Code {
@@ -157,6 +158,7 @@ impl Code {
                 ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR)
             }
             MissingContentType => ErrCode::invalid("missing_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
+            MalformedPayload => ErrCode::invalid("malformed_payload", StatusCode::BAD_REQUEST)
         }
     }
 
