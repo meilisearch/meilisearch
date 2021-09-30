@@ -61,6 +61,10 @@ meilisearch
 docker run -p 7700:7700 -v "$(pwd)/data.ms:/data.ms" getmeili/meilisearch
 ```
 
+#### Announcing a cloud-hosted MeiliSearch
+
+Join the closed beta by filling out this [form](https://meilisearch.typeform.com/to/FtnzvZfh).
+
 #### Try MeiliSearch in our Sandbox
 
 Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisearch.com/). This instance is free, and will be active for 48 hours.
