@@ -600,24 +600,33 @@ fn field_id(
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
     if key.as_rule() == Rule::reserved {
-        return Err(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                                 "`{}` is a reserved keyword and therefore can't be used as a filter expression. \
-                    Available filterable attributes are: {}",
-                    key.as_str(),
-                    filterable_fields.iter().join(", "),
-                             ),
-                },
-                key.as_span(),
-        ));
+        let message = match key.as_str() {
+            key if key.starts_with("_geoPoint") => {
+                format!(
+                    "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. \
+                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
+                )
+            }
+            key @ "_geo" => {
+                format!(
+                    "`{}` is a reserved keyword and thus can't be used as a filter expression. \
+                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
+                    key
+                )
+            }
+            key => format!(
+                "`{}` is a reserved keyword and thus can't be used as a filter expression.",
+                key
+            ),
+        };
+        return Err(PestError::new_from_span(ErrorVariant::CustomError { message }, key.as_span()));
     }
 
     if !filterable_fields.contains(key.as_str()) {
         return Err(PestError::new_from_span(
             ErrorVariant::CustomError {
                 message: format!(
-                    "attribute `{}` is not filterable, available filterable attributes are: {}",
+                    "attribute `{}` is not filterable, available filterable attributes are: {}.",
                     key.as_str(),
                     filterable_fields.iter().join(", "),
                 ),
@@ -688,13 +697,6 @@ mod tests {
         let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
         let expected = Operator(0, Operator::NotEqual(None, S("ponce")));
         assert_eq!(condition, expected);
-
-        let result = FilterCondition::from_str(&rtxn, &index, "_geo = France");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains(
-            "`_geo` is a reserved keyword and therefore can't be used as a filter expression."
-        ));
     }
 
     #[test]
@@ -778,6 +780,49 @@ mod tests {
     }
 
     #[test]
+    fn reserved_field_names() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let rtxn = index.read_txn().unwrap();
+
+        let error = FilterCondition::from_str(&rtxn, &index, "_geo = 12").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
+            "{}",
+            error.to_string()
+        );
+
+        let error =
+            FilterCondition::from_str(&rtxn, &index, r#"_geoDistance <= 1000"#).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`_geoDistance` is a reserved keyword and thus can't be used as a filter expression."),
+            "{}",
+            error.to_string()
+        );
+
+        let error = FilterCondition::from_str(&rtxn, &index, r#"_geoPoint > 5"#).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
+            "{}",
+            error.to_string()
+        );
+
+        let error =
+            FilterCondition::from_str(&rtxn, &index, r#"_geoPoint(12, 16) > 5"#).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
+            "{}",
+            error.to_string()
+        );
+    }
+
+    #[test]
     fn geo_radius() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
@@ -788,6 +833,20 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        // _geo is not filterable
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 12, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("attribute `_geo` is not filterable, available filterable attributes are:"),);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();

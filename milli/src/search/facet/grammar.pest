@@ -8,7 +8,7 @@ char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
 
-reserved = { "_geo" | "_geoDistance" | "_geoPoint" | ("_geoPoint" ~ parameters) }
+reserved = { "_geoDistance" | ("_geoPoint" ~ parameters) | "_geo" }
 // we deliberately choose to allow empty parameters to generate more specific error message later
 parameters = {("(" ~ (value ~ ",")* ~ value? ~ ")") | ""}
 condition = _{between | eq | greater | less | geq | leq | neq}
