@@ -20,12 +20,12 @@ impl fmt::Display for AscDescError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}", name)
+                write!(f, "invalid asc/desc syntax for {}.", name)
             }
             Self::ReservedKeyword { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a asc/desc rule",
+                    "{} is a reserved keyword and thus can't be used as a asc/desc rule.",
                     name
                 )
             }
@@ -128,8 +128,6 @@ impl AscDesc {
 impl FromStr for AscDesc {
     type Err = AscDescError;
 
-    /// Since we don't know if this was deserialized for a criterion or a sort we just return a
-    /// string and let the caller create his own error.
     fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
         match text.rsplit_once(':') {
             Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),
@@ -156,10 +154,10 @@ impl From<AscDescError> for SortError {
                 SortError::BadGeoPointUsage { name }
             }
             AscDescError::ReservedKeyword { name } if &name == "_geo" => {
-                SortError::ReservedNameForSettings { name: "_geoPoint".to_string() }
+                SortError::ReservedNameForSettings { name }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
-                SortError::ReservedNameForFilter { name: "_geoRadius".to_string() }
+                SortError::ReservedNameForFilter { name: String::from("_geoRadius") }
             }
             AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
         }
@@ -173,34 +171,26 @@ impl fmt::Display for SortError {
                 write!(
                     f,
                     "invalid syntax for the `_geoPoint` parameter: `{}`. \
-Usage: `_geoPoint(latitude, longitude):asc`",
+                    Usage: `_geoPoint(latitude, longitude):asc`.",
                     name
                 )
             }
             Self::InvalidName { name } => {
-                write!(f, "invalid syntax for the sort parameter {}", name)
+                write!(f, "invalid syntax for the sort parameter `{}`.", name)
             }
             Self::ReservedName { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression",
+                    "{} is a reserved keyword and thus can't be used as a sort expression.",
                     name
                 )
             }
-            Self::ReservedNameForSettings { name } => {
+            Self::ReservedNameForSettings { name } | Self::ReservedNameForFilter { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression. \
-{} can only be used in the settings",
-                    name, name
-                )
-            }
-            Self::ReservedNameForFilter { name } => {
-                write!(
-                    f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression. \
-{} can only be used for filtering at search time",
-                    name, name
+                    "`{}` is a reserved keyword and thus can't be used as a sort expression. \
+                    Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates.",
+                    name,
                 )
             }
         }
@@ -296,6 +286,44 @@ mod tests {
                 req,
                 res,
                 expected_error
+            );
+        }
+    }
+
+    #[test]
+    fn sort_error_message() {
+        let errors = [
+            (
+                AscDescError::InvalidSyntax { name: S("truc:machin") },
+                S("invalid syntax for the sort parameter `truc:machin`."),
+            ),
+            (
+                AscDescError::InvalidSyntax { name: S("hello:world") },
+                S("invalid syntax for the sort parameter `hello:world`."),
+            ),
+            (
+                AscDescError::ReservedKeyword { name: S("_geo") },
+                S("`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates."),
+            ),
+            (
+                AscDescError::ReservedKeyword { name: S("_geoDistance") },
+                S("_geoDistance is a reserved keyword and thus can't be used as a sort expression.")
+            ),
+            (
+                AscDescError::ReservedKeyword { name: S("_geoRadius(12, 13)") },
+                S("`_geoRadius` is a reserved keyword and thus can't be used as a sort expression. Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates."),
+            ),
+        ];
+
+        for (asc_desc_error, expected_message) in errors {
+            let sort_error = SortError::from(asc_desc_error);
+            assert_eq!(
+                sort_error.to_string(),
+                expected_message,
+                "was expecting {} for the error {:?} but instead got {}",
+                expected_message,
+                sort_error,
+                sort_error.to_string()
             );
         }
     }
