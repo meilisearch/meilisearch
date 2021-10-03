@@ -67,10 +67,19 @@ semverLT() {
     return 1
 }
 
+# Get a token from https://github.com/settings/tokens to increasae rate limit (from 60 to 5000), make sure the token scope is set to 'public_repo'
+# Create GITHUB_PAT enviroment variable once you aquired the token to start using it
 # Returns the tag of the latest stable release (in terms of semver and not of release date)
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
-    curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
+    
+    if [[ -z "${GITHUB_PAT}" ]]
+    then
+        curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
+    else
+        curl -H "Authorization: token ${GITHUB_PAT}" -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
+    fi
+
     releases=$(cat "$temp_file" | \
         grep -E "tag_name|draft|prerelease" \
         | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')
