@@ -11,20 +11,26 @@ use tokio::time::sleep;
 use crate::compression::from_tar_gz;
 use crate::index_controller::updates::UpdateMsg;
 
-use super::index_resolver::HardStateIndexResolver;
+use super::index_resolver::IndexResolver;
+use super::index_resolver::index_store::IndexStore;
+use super::index_resolver::uuid_store::UuidStore;
 use super::updates::UpdateSender;
 
-pub struct SnapshotService {
-    index_resolver: Arc<HardStateIndexResolver>,
+pub struct SnapshotService<U, I> {
+    index_resolver: Arc<IndexResolver<U, I>>,
     update_sender: UpdateSender,
     snapshot_period: Duration,
     snapshot_path: PathBuf,
     db_name: String,
 }
 
-impl SnapshotService {
+impl<U, I> SnapshotService<U, I>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+{
     pub fn new(
-        index_resolver: Arc<HardStateIndexResolver>,
+        index_resolver: Arc<IndexResolver<U, I>>,
         update_sender: UpdateSender,
         snapshot_period: Duration,
         snapshot_path: PathBuf,
@@ -127,131 +133,161 @@ pub fn load_snapshot(
 
 #[cfg(test)]
 mod test {
-    //use std::iter::FromIterator;
-    //use std::{collections::HashSet, sync::Arc};
+    use std::{collections::HashSet, sync::Arc};
 
-    //use futures::future::{err, ok};
-    //use rand::Rng;
-    //use tokio::time::timeout;
-    //use uuid::Uuid;
+    use futures::future::{err, ok};
+    use once_cell::sync::Lazy;
+    use rand::Rng;
+    use uuid::Uuid;
 
-    //use super::*;
+    use crate::index::error::IndexError;
+    use crate::index::test::Mocker;
+    use crate::index::{Index, error::Result as IndexResult};
+    use crate::index_controller::index_resolver::IndexResolver;
+    use crate::index_controller::index_resolver::error::IndexResolverError;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::updates::create_update_handler;
 
-    //#[actix_rt::test]
-    //async fn test_normal() {
-        //let mut rng = rand::thread_rng();
-        //let uuids_num: usize = rng.gen_range(5..10);
-        //let uuids = (0..uuids_num)
-            //.map(|_| Uuid::new_v4())
-            //.collect::<HashSet<_>>();
+    use super::*;
 
-        //let mut uuid_resolver = MockUuidResolverHandle::new();
-        //let uuids_clone = uuids.clone();
-        //uuid_resolver
-            //.expect_snapshot()
-            //.times(1)
-            //.returning(move |_| Box::pin(ok(uuids_clone.clone())));
+    fn setup() {
+        static SETUP: Lazy<()> = Lazy::new(|| {
+            if cfg!(windows) {
+                std::env::set_var("TMP", ".");
+            } else {
+                std::env::set_var("TMPDIR", ".");
+            }
+        });
 
-        //let uuids_clone = uuids.clone();
-        //let mut index_handle = MockIndexActorHandle::new();
-        //index_handle
-            //.expect_snapshot()
-            //.withf(move |uuid, _path| uuids_clone.contains(uuid))
-            //.times(uuids_num)
-            //.returning(move |_, _| Box::pin(ok(())));
+        // just deref to make sure the env is setup
+        *SETUP
+    }
 
-        //let dir = tempfile::tempdir_in(".").unwrap();
-        //let handle = Arc::new(index_handle);
-        //let update_handle =
-            //UpdateActorHandleImpl::<Vec<u8>>::new(handle.clone(), dir.path(), 4096 * 100).unwrap();
+    #[actix_rt::test]
+    async fn test_normal() {
+        setup();
 
-        //let snapshot_path = tempfile::tempdir_in(".").unwrap();
-        //let snapshot_service = SnapshotService::new(
-            //uuid_resolver,
-            //update_handle,
-            //Duration::from_millis(100),
-            //snapshot_path.path().to_owned(),
-            //"data.ms".to_string(),
-        //);
+        let mut rng = rand::thread_rng();
+        let uuids_num: usize = rng.gen_range(5..10);
+        let uuids = (0..uuids_num)
+            .map(|_| Uuid::new_v4())
+            .collect::<HashSet<_>>();
 
-        //snapshot_service.perform_snapshot().await.unwrap();
-    //}
+        let mut uuid_store = MockUuidStore::new();
+        let uuids_clone = uuids.clone();
+        uuid_store
+            .expect_snapshot()
+            .times(1)
+            .returning(move |_| Box::pin(ok(uuids_clone.clone())));
 
-    //#[actix_rt::test]
-    //async fn error_performing_uuid_snapshot() {
-    //let mut uuid_resolver = MockUuidResolverHandle::new();
-    //uuid_resolver
-    //.expect_snapshot()
-    //.times(1)
-    ////abitrary error
-    //.returning(|_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
+        let mut indexes = uuids.clone().into_iter().map(|uuid| {
+            let mocker = Mocker::default();
+            mocker.when("snapshot").times(1).then(|_: &Path| -> IndexResult<()> { Ok(()) });
+            mocker.when("uuid").then(move |_: ()| uuid);
+            Index::faux(mocker)
+        });
 
-    //let update_handle = MockUpdateActorHandle::new();
+        let uuids_clone = uuids.clone();
+        let mut index_store = MockIndexStore::new();
+        index_store
+            .expect_get()
+            .withf(move |uuid| uuids_clone.contains(uuid))
+            .times(uuids_num)
+            .returning(move |_| Box::pin(ok(Some(indexes.next().unwrap()))));
 
-    //let snapshot_path = tempfile::tempdir_in(".").unwrap();
-    //let snapshot_service = SnapshotService::new(
-    //uuid_resolver,
-    //update_handle,
-    //Duration::from_millis(100),
-    //snapshot_path.path().to_owned(),
-    //"data.ms".to_string(),
-    //);
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-    //assert!(snapshot_service.perform_snapshot().await.is_err());
-    ////Nothing was written to the file
-    //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
-    //}
+        let dir = tempfile::tempdir().unwrap();
+        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
 
-    //#[actix_rt::test]
-    //async fn error_performing_index_snapshot() {
-    //let uuid = Uuid::new_v4();
-    //let mut uuid_resolver = MockUuidResolverHandle::new();
-    //uuid_resolver
-    //.expect_snapshot()
-    //.times(1)
-    //.returning(move |_| Box::pin(ok(HashSet::from_iter(Some(uuid)))));
+        let snapshot_path = tempfile::tempdir().unwrap();
+        let snapshot_service = SnapshotService::new(
+            index_resolver,
+            update_sender,
+            Duration::from_millis(100),
+            snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
+        );
 
-    //let mut update_handle = MockUpdateActorHandle::new();
-    //update_handle
-    //.expect_snapshot()
-    ////abitrary error
-    //.returning(|_, _| Box::pin(err(UpdateActorError::UnexistingUpdate(0))));
+        snapshot_service.perform_snapshot().await.unwrap();
+    }
 
-    //let snapshot_path = tempfile::tempdir_in(".").unwrap();
-    //let snapshot_service = SnapshotService::new(
-    //uuid_resolver,
-    //update_handle,
-    //Duration::from_millis(100),
-    //snapshot_path.path().to_owned(),
-    //"data.ms".to_string(),
-    //);
+    #[actix_rt::test]
+    async fn error_performing_uuid_snapshot() {
+        setup();
 
-    //assert!(snapshot_service.perform_snapshot().await.is_err());
-    ////Nothing was written to the file
-    //assert!(!snapshot_path.path().join("data.ms.snapshot").exists());
-    //}
+        let mut uuid_store = MockUuidStore::new();
+        uuid_store
+            .expect_snapshot()
+            .once()
+            .returning(move |_| Box::pin(err(IndexResolverError::IndexAlreadyExists)));
 
-    //#[actix_rt::test]
-    //async fn test_loop() {
-    //let mut uuid_resolver = MockUuidResolverHandle::new();
-    //uuid_resolver
-    //.expect_snapshot()
-    ////we expect the funtion to be called between 2 and 3 time in the given interval.
-    //.times(2..4)
-    ////abitrary error, to short-circuit the function
-    //.returning(move |_| Box::pin(err(UuidResolverError::NameAlreadyExist)));
+        let mut index_store = MockIndexStore::new();
+        index_store
+            .expect_get()
+            .never();
 
-    //let update_handle = MockUpdateActorHandle::new();
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-    //let snapshot_path = tempfile::tempdir_in(".").unwrap();
-    //let snapshot_service = SnapshotService::new(
-    //uuid_resolver,
-    //update_handle,
-    //Duration::from_millis(100),
-    //snapshot_path.path().to_owned(),
-    //"data.ms".to_string(),
-    //);
+        let dir = tempfile::tempdir().unwrap();
+        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
 
-    //let _ = timeout(Duration::from_millis(300), snapshot_service.run()).await;
-    //}
+        let snapshot_path = tempfile::tempdir().unwrap();
+        let snapshot_service = SnapshotService::new(
+            index_resolver,
+            update_sender,
+            Duration::from_millis(100),
+            snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
+        );
+
+        assert!(snapshot_service.perform_snapshot().await.is_err());
+    }
+
+    #[actix_rt::test]
+    async fn error_performing_index_snapshot() {
+        setup();
+
+        let uuids: HashSet<Uuid> = vec![Uuid::new_v4()].into_iter().collect();
+
+        let mut uuid_store = MockUuidStore::new();
+        let uuids_clone = uuids.clone();
+        uuid_store
+            .expect_snapshot()
+            .once()
+            .returning(move |_| Box::pin(ok(uuids_clone.clone())));
+
+        let mut indexes = uuids.clone().into_iter().map(|uuid| {
+            let mocker = Mocker::default();
+            // index returns random error
+            mocker.when("snapshot").then(|_: &Path| -> IndexResult<()> { Err(IndexError::ExistingPrimaryKey) });
+            mocker.when("uuid").then(move |_: ()| uuid);
+            Index::faux(mocker)
+        });
+
+        let uuids_clone = uuids.clone();
+        let mut index_store = MockIndexStore::new();
+        index_store
+            .expect_get()
+            .withf(move |uuid| uuids_clone.contains(uuid))
+            .once()
+            .returning(move |_| Box::pin(ok(Some(indexes.next().unwrap()))));
+
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+
+        let dir = tempfile::tempdir().unwrap();
+        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
+
+        let snapshot_path = tempfile::tempdir().unwrap();
+        let snapshot_service = SnapshotService::new(
+            index_resolver,
+            update_sender,
+            Duration::from_millis(100),
+            snapshot_path.path().to_owned(),
+            "data.ms".to_string(),
+        );
+
+        assert!(snapshot_service.perform_snapshot().await.is_err());
+    }
 }

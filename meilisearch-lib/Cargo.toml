@@ -60,4 +60,5 @@ derivative = "2.2.0"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
+mockall = "0.10.2"
 paste = "1.0.5"

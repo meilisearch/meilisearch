@@ -29,6 +29,8 @@ use codec::*;
 use super::error::Result;
 use super::status::{Enqueued, Processing};
 use crate::index::Index;
+use crate::index_controller::index_resolver::index_store::IndexStore;
+use crate::index_controller::index_resolver::uuid_store::UuidStore;
 use crate::index_controller::updates::*;
 use crate::EnvSizer;
 
@@ -157,13 +159,17 @@ impl UpdateStore {
         ))
     }
 
-    pub fn open(
+    pub fn open<U, I>(
         options: EnvOpenOptions,
         path: impl AsRef<Path>,
-        index_resolver: Arc<HardStateIndexResolver>,
+        index_resolver: Arc<IndexResolver<U, I>>,
         must_exit: Arc<AtomicBool>,
         update_file_store: UpdateFileStore,
-    ) -> anyhow::Result<Arc<Self>> {
+    ) -> anyhow::Result<Arc<Self>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         let (update_store, mut notification_receiver) =
             Self::new(options, path, update_file_store)?;
         let update_store = Arc::new(update_store);
@@ -296,10 +302,14 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(
+    fn process_pending_update<U, I>(
         &self,
-        index_resolver: Arc<HardStateIndexResolver>,
-    ) -> Result<Option<()>> {
+        index_resolver: Arc<IndexResolver<U, I>>,
+    ) -> Result<Option<()>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -325,13 +335,17 @@ impl UpdateStore {
         }
     }
 
-    fn perform_update(
+    fn perform_update<U, I>(
         &self,
         processing: Processing,
-        index_resolver: Arc<HardStateIndexResolver>,
+        index_resolver: Arc<IndexResolver<U, I>>,
         index_uuid: Uuid,
         global_id: u64,
-    ) -> Result<Option<()>> {
+    ) -> Result<Option<()>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         // Process the pending update using the provided user function.
         let handle = Handle::current();
         let update_id = processing.id();
@@ -519,8 +533,7 @@ impl UpdateStore {
                 } = pending.decode()?
                 {
                     self.update_file_store
-                        .snapshot(content_uuid, &path)
-                        .unwrap();
+                        .snapshot(content_uuid, &path)?;
                 }
             }
         }
@@ -528,8 +541,7 @@ impl UpdateStore {
         let path = path.as_ref().to_owned();
         indexes
             .par_iter()
-            .try_for_each(|index| index.snapshot(&path))
-            .unwrap();
+            .try_for_each(|index| index.snapshot(&path))?;
 
         Ok(())
     }

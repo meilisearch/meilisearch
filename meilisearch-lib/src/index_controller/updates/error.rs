@@ -3,10 +3,7 @@ use std::fmt;
 
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::{
-    document_formats::DocumentFormatError,
-    index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat},
-};
+use crate::{document_formats::DocumentFormatError, index::error::IndexError, index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat}};
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 
@@ -28,6 +25,8 @@ pub enum UpdateLoopError {
     PayloadError(#[from] actix_web::error::PayloadError),
     #[error("A {0} payload is missing.")]
     MissingPayload(DocumentAdditionFormat),
+    #[error("{0}")]
+    IndexError(#[from] IndexError),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for UpdateLoopError
@@ -58,7 +57,6 @@ impl ErrorCode for UpdateLoopError {
         match self {
             Self::UnexistingUpdate(_) => Code::NotFound,
             Self::Internal(_) => Code::Internal,
-            //Self::IndexActor(e) => e.error_code(),
             Self::FatalUpdateStoreError => Code::Internal,
             Self::DocumentFormatError(error) => error.error_code(),
             Self::PayloadError(error) => match error {
@@ -66,6 +64,7 @@ impl ErrorCode for UpdateLoopError {
                 _ => Code::Internal,
             },
             Self::MissingPayload(_) => Code::MissingPayload,
+            Self::IndexError(e) => e.error_code(),
         }
     }
 }

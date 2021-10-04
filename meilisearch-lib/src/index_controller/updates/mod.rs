@@ -26,16 +26,22 @@ use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
 
-use super::index_resolver::HardStateIndexResolver;
+use super::index_resolver::index_store::IndexStore;
+use super::index_resolver::uuid_store::UuidStore;
+use super::index_resolver::IndexResolver;
 use super::{DocumentAdditionFormat, Update};
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
 
-pub fn create_update_handler(
-    index_resolver: Arc<HardStateIndexResolver>,
+pub fn create_update_handler<U, I>(
+    index_resolver: Arc<IndexResolver<U, I>>,
     db_path: impl AsRef<Path>,
     update_store_size: usize,
-) -> anyhow::Result<UpdateSender> {
+) -> anyhow::Result<UpdateSender>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+{
     let path = db_path.as_ref().to_owned();
     let (sender, receiver) = mpsc::channel(100);
     let actor = UpdateLoop::new(update_store_size, receiver, path, index_resolver)?;
@@ -95,12 +101,16 @@ pub struct UpdateLoop {
 }
 
 impl UpdateLoop {
-    pub fn new(
+    pub fn new<U, I>(
         update_db_size: usize,
         inbox: mpsc::Receiver<UpdateMsg>,
         path: impl AsRef<Path>,
-        index_resolver: Arc<HardStateIndexResolver>,
-    ) -> anyhow::Result<Self> {
+        index_resolver: Arc<IndexResolver<U, I>>,
+    ) -> anyhow::Result<Self>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         let path = path.as_ref().to_owned();
         std::fs::create_dir_all(&path)?;
 
