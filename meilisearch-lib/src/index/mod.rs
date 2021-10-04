@@ -17,9 +17,10 @@ pub use index::Index;
 pub use test::MockIndex as Index;
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use std::any::Any;
     use std::collections::HashMap;
+    use std::panic::{RefUnwindSafe, UnwindSafe};
     use std::path::PathBuf;
     use std::sync::Mutex;
     use std::{path::Path, sync::Arc};
@@ -35,30 +36,25 @@ mod test {
     use super::error::Result;
     use super::update_handler::UpdateHandler;
 
-    #[derive(Debug, Clone)]
-    pub enum MockIndex {
-        Vrai(Index),
-        Faux(Arc<FauxIndex>),
-    }
 
     pub struct Stub<A, R> {
         name: String,
         times: Option<usize>,
         stub: Box<dyn Fn(A) -> R + Sync + Send>,
-        exact: bool,
+        invalidated: bool,
     }
 
     impl<A, R> Drop for Stub<A, R> {
         fn drop(&mut self) {
-            if self.exact {
-                if !matches!(self.times, Some(0)) {
-                    panic!("{} not called the correct amount of times", self.name);
+            if !self.invalidated {
+                if let Some(n) = self.times {
+                    assert_eq!(n, 0, "{} not called enough times", self.name);
                 }
             }
         }
     }
 
-    impl<A, R> Stub<A, R> {
+    impl<A: UnwindSafe, R> Stub<A, R> {
         fn call(&mut self, args: A) -> R {
             match self.times {
                 Some(0) => panic!("{} called to many times", self.name),
@@ -66,18 +62,27 @@ mod test {
                 None => (),
             }
 
-            (self.stub)(args)
+            // Since we add assertions in drop implementation for Stub, an panic can occur in a
+            // panic, cause a hard abort of the program. To handle that, we catch the panic, and
+            // set the stub as invalidated so the assertions are not run during the drop.
+            impl<'a, A, R> RefUnwindSafe for StubHolder<'a, A, R> {}
+            struct StubHolder<'a, A, R>(&'a (dyn Fn(A) -> R + Sync + Send));
+
+            let stub = StubHolder(self.stub.as_ref());
+
+            match std::panic::catch_unwind(|| (stub.0)(args)) {
+                Ok(r) => r,
+                Err(panic) => {
+                    self.invalidated = true;
+                    std::panic::resume_unwind(panic);
+                }
+            }
         }
     }
 
     #[derive(Debug, Default)]
     struct StubStore {
         inner: Arc<Mutex<HashMap<String, Box<dyn Any + Sync + Send>>>>
-    }
-
-    #[derive(Debug, Default)]
-    pub struct FauxIndex {
-        store: StubStore,
     }
 
     impl StubStore {
@@ -102,7 +107,6 @@ mod test {
         name: String,
         store: &'a StubStore,
         times: Option<usize>,
-        exact: bool,
     }
 
     impl<'a> StubBuilder<'a> {
@@ -112,32 +116,35 @@ mod test {
             self
         }
 
-       #[must_use]
-        pub fn exact(mut self, times: usize) -> Self {
-            self.times = Some(times);
-            self.exact = true;
-            self
-        }
-
         pub fn then<A: 'static, R: 'static>(self, f: impl Fn(A) -> R + Sync + Send + 'static) {
             let stub = Stub {
                 stub: Box::new(f),
                 times: self.times,
-                exact: self.exact,
                 name: self.name.clone(),
+                invalidated: false,
             };
 
             self.store.insert(self.name, stub);
         }
     }
 
-    impl FauxIndex {
+    /// Mocker allows to stub metod call on any struct. you can register stubs by calling
+    /// `Mocker::when` and retrieve it in the proxy implementation when with `Mocker::get`.
+    ///
+    /// Mocker uses unsafe code to erase function types, because `Any` is too restrictive with it's
+    /// requirement for all stub arguments to be static. Because of that panic inside a stub is UB,
+    /// and it has been observed to crash with an illegal hardware instruction. Use with caution.
+    #[derive(Debug, Default)]
+    pub struct Mocker {
+        store: StubStore,
+    }
+
+    impl Mocker {
         pub fn when(&self, name: &str) -> StubBuilder {
             StubBuilder {
                 name: name.to_string(),
                 store: &self.store,
                 times: None,
-                exact: false,
             }
         }
 
@@ -149,8 +156,14 @@ mod test {
         }
     }
 
+    #[derive(Debug, Clone)]
+    pub enum MockIndex {
+        Vrai(Index),
+        Faux(Arc<Mocker>),
+    }
+
     impl MockIndex {
-        pub fn faux(faux: FauxIndex) -> Self {
+        pub fn faux(faux: Mocker) -> Self {
             Self::Faux(Arc::new(faux))
         }
 
@@ -185,7 +198,7 @@ mod test {
         pub fn uuid(&self) -> Uuid {
             match self {
                 MockIndex::Vrai(index) => index.uuid(),
-                MockIndex::Faux(_) => todo!(),
+                MockIndex::Faux(faux) => faux.get("uuid").call(()),
             }
         }
 
@@ -242,7 +255,9 @@ mod test {
         pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
             match self {
                 MockIndex::Vrai(index) => index.snapshot(path),
-                MockIndex::Faux(faux) => faux.get("snapshot").call(path.as_ref())
+                MockIndex::Faux(faux) => {
+                    faux.get("snapshot").call(path.as_ref())
+                }
             }
         }
 
@@ -276,13 +291,42 @@ mod test {
 
     #[test]
     fn test_faux_index() {
-        let faux = FauxIndex::default();
+        let faux = Mocker::default();
         faux
             .when("snapshot")
-            .exact(2)
-            .then(|path: &Path| -> Result<()> {
-                println!("path: {}", path.display());
+            .times(2)
+            .then(|_: &Path| -> Result<()> {
                 Ok(())
+            });
+
+        let index = MockIndex::faux(faux);
+
+        let path = PathBuf::from("hello");
+        index.snapshot(&path).unwrap();
+        index.snapshot(&path).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_faux_unexisting_method_stub() {
+        let faux = Mocker::default();
+
+        let index = MockIndex::faux(faux);
+
+        let path = PathBuf::from("hello");
+        index.snapshot(&path).unwrap();
+        index.snapshot(&path).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_faux_panic() {
+        let faux = Mocker::default();
+        faux
+            .when("snapshot")
+            .times(2)
+            .then(|_: &Path| -> Result<()> {
+                panic!();
             });
 
         let index = MockIndex::faux(faux);
