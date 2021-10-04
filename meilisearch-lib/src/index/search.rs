@@ -12,10 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::index::error::FacetError;
-use crate::index::IndexError;
 
-use super::error::Result;
-use super::Index;
+use super::error::{Result, IndexError};
+use super::index::Index;
 
 pub type Document = IndexMap<String, Value>;
 type MatchesInfo = BTreeMap<String, Vec<MatchInfo>>;

@@ -314,7 +314,7 @@ impl IndexController {
         for (uid, index) in indexes {
             let meta = index.meta()?;
             let meta = IndexMetadata {
-                uuid: index.uuid,
+                uuid: index.uuid(),
                 name: uid.clone(),
                 uid,
                 meta,
@@ -366,7 +366,7 @@ impl IndexController {
         index_settings.uid.take();
 
         let index = self.index_resolver.get_index(uid.clone()).await?;
-        let uuid = index.uuid;
+        let uuid = index.uuid();
         let meta =
             spawn_blocking(move || index.update_primary_key(index_settings.primary_key)).await??;
         let meta = IndexMetadata {
@@ -386,7 +386,7 @@ impl IndexController {
 
     pub async fn get_index(&self, uid: String) -> Result<IndexMetadata> {
         let index = self.index_resolver.get_index(uid.clone()).await?;
-        let uuid = index.uuid;
+        let uuid = index.uuid();
         let meta = spawn_blocking(move || index.meta()).await??;
         let meta = IndexMetadata {
             uuid,
@@ -400,7 +400,7 @@ impl IndexController {
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
         let index = self.index_resolver.get_index(uid).await?;
-        let uuid = index.uuid;
+        let uuid = index.uuid();
         let mut stats = spawn_blocking(move || index.stats()).await??;
         // Check if the currently indexing update is from our index.
         stats.is_indexing = Some(Some(uuid) == update_infos.processing);
@@ -414,7 +414,7 @@ impl IndexController {
         let mut indexes = BTreeMap::new();
 
         for (index_uid, index) in self.index_resolver.list().await? {
-            let uuid = index.uuid;
+            let uuid = index.uuid();
             let (mut stats, meta) = spawn_blocking::<_, IndexResult<_>>(move || {
                 let stats = index.stats()?;
                 let meta = index.meta()?;
@@ -461,7 +461,7 @@ impl IndexController {
         let meta = spawn_blocking(move || -> IndexResult<_> {
             let meta = index.meta()?;
             let meta = IndexMetadata {
-                uuid: index.uuid,
+                uuid: index.uuid(),
                 uid: uid.clone(),
                 name: uid,
                 meta,

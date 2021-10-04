@@ -509,7 +509,7 @@ impl UpdateStore {
 
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
-        let uuids: HashSet<_> = indexes.iter().map(|i| i.uuid).collect();
+        let uuids: HashSet<_> = indexes.iter().map(|i| i.uuid()).collect();
         for entry in pendings {
             let ((_, uuid, _), pending) = entry?;
             if uuids.contains(&uuid) {
@@ -528,7 +528,7 @@ impl UpdateStore {
         let path = path.as_ref().to_owned();
         indexes
             .par_iter()
-            .try_for_each(|index| index.snapshot(path.clone()))
+            .try_for_each(|index| index.snapshot(&path))
             .unwrap();
 
         Ok(())
