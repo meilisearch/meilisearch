@@ -147,7 +147,6 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
 
     if enable_frontend {
         let generated = generated::generate();
-        let mut scope = web::scope("/");
         // Generate routes for mini-dashboard assets
         for (path, resource) in generated.into_iter() {
             let Resource {
@@ -159,12 +158,11 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
                     web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
                 ));
             } else {
-                scope = scope.service(web::resource(path).route(
+                config.service(web::resource(path).route(
                     web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
                 ));
             }
         }
-        config.service(scope);
     } else {
         config.service(web::resource("/").route(web::get().to(routes::running)));
     }
