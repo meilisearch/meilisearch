@@ -103,20 +103,31 @@ pub mod test {
         }
     }
 
-    pub struct StubBuilder<'a> {
+    pub struct StubBuilder<'a, A, R> {
         name: String,
         store: &'a StubStore,
         times: Option<usize>,
+        _f: std::marker::PhantomData<fn(A) -> R>
     }
 
-    impl<'a> StubBuilder<'a> {
+    impl<'a, A: 'static, R: 'static> StubBuilder<'a, A, R> {
+        /// Asserts the stub has been called exactly `times` times.
        #[must_use]
         pub fn times(mut self, times: usize) -> Self {
             self.times = Some(times);
             self
         }
 
-        pub fn then<A: 'static, R: 'static>(self, f: impl Fn(A) -> R + Sync + Send + 'static) {
+        /// Asserts the stub has been called exactly once.
+       #[must_use]
+        pub fn once(mut self) -> Self {
+            self.times = Some(1);
+            self
+        }
+
+        /// The function that will be called when the stub is called. This needs to be called to
+        /// actually build the stub and register it to the stub store.
+        pub fn then(self, f: impl Fn(A) -> R + Sync + Send + 'static) {
             let stub = Stub {
                 stub: Box::new(f),
                 times: self.times,
@@ -130,21 +141,18 @@ pub mod test {
 
     /// Mocker allows to stub metod call on any struct. you can register stubs by calling
     /// `Mocker::when` and retrieve it in the proxy implementation when with `Mocker::get`.
-    ///
-    /// Mocker uses unsafe code to erase function types, because `Any` is too restrictive with it's
-    /// requirement for all stub arguments to be static. Because of that panic inside a stub is UB,
-    /// and it has been observed to crash with an illegal hardware instruction. Use with caution.
     #[derive(Debug, Default)]
     pub struct Mocker {
         store: StubStore,
     }
 
     impl Mocker {
-        pub fn when(&self, name: &str) -> StubBuilder {
+        pub fn when<A, R>(&self, name: &str) -> StubBuilder<A, R> {
             StubBuilder {
                 name: name.to_string(),
                 store: &self.store,
                 times: None,
+                _f: std::marker::PhantomData,
             }
         }
 
@@ -191,7 +199,7 @@ pub mod test {
         pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
             match self {
                 MockIndex::Vrai(index) => index.handle_update(update),
-                MockIndex::Faux(_) => todo!(),
+                MockIndex::Faux(faux) => faux.get("handle_update").call(update),
             }
         }
 
