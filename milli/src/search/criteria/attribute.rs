@@ -19,7 +19,7 @@ const LCM_10_FIRST_NUMBERS: u32 = 2520;
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
-const CANDIDATES_THRESHOLD: u64 = 1000;
+const CANDIDATES_THRESHOLD: u64 = 500;
 
 type FlattenedQueryTree = Vec<Vec<Vec<Query>>>;
 
