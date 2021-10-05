@@ -7,7 +7,7 @@ use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use milli::facet::FacetType;
 use milli::index::db_name::*;
-use milli::{FieldId, Index, TreeLevel};
+use milli::{FieldId, Index};
 use structopt::StructOpt;
 use Command::*;
 
@@ -22,8 +22,8 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     DOCID_WORD_POSITIONS,
     WORD_PAIR_PROXIMITY_DOCIDS,
     WORD_PREFIX_PAIR_PROXIMITY_DOCIDS,
-    WORD_LEVEL_POSITION_DOCIDS,
-    WORD_PREFIX_LEVEL_POSITION_DOCIDS,
+    WORD_POSITION_DOCIDS,
+    WORD_PREFIX_POSITION_DOCIDS,
     FIELD_ID_WORD_COUNT_DOCIDS,
     FACET_ID_F64_DOCIDS,
     FACET_ID_STRING_DOCIDS,
@@ -281,10 +281,10 @@ fn main() -> anyhow::Result<()> {
             facet_values_docids(&index, &rtxn, !full_display, FacetType::String, field_name)
         }
         WordsLevelPositionsDocids { full_display, words } => {
-            words_level_positions_docids(&index, &rtxn, !full_display, words)
+            words_positions_docids(&index, &rtxn, !full_display, words)
         }
         WordPrefixesLevelPositionsDocids { full_display, prefixes } => {
-            word_prefixes_level_positions_docids(&index, &rtxn, !full_display, prefixes)
+            word_prefixes_positions_docids(&index, &rtxn, !full_display, prefixes)
         }
         FieldIdWordCountDocids { full_display, field_name } => {
             field_id_word_count_docids(&index, &rtxn, !full_display, field_name)
@@ -379,8 +379,8 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         docid_word_positions,
         word_pair_proximity_docids,
         word_prefix_pair_proximity_docids,
-        word_level_position_docids,
-        word_prefix_level_position_docids,
+        word_position_docids,
+        word_prefix_position_docids,
         field_id_word_count_docids,
         facet_id_f64_docids,
         facet_id_string_docids,
@@ -395,8 +395,8 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let docid_word_positions_name = "docid_word_positions";
     let word_prefix_pair_proximity_docids_name = "word_prefix_pair_proximity_docids";
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
-    let word_level_position_docids_name = "word_level_position_docids";
-    let word_prefix_level_position_docids_name = "word_prefix_level_position_docids";
+    let word_position_docids_name = "word_position_docids";
+    let word_prefix_position_docids_name = "word_prefix_position_docids";
     let field_id_word_count_docids_name = "field_id_word_count_docids";
     let facet_id_f64_docids_name = "facet_id_f64_docids";
     let facet_id_string_docids_name = "facet_id_string_docids";
@@ -471,19 +471,19 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             }
         }
 
-        for result in word_level_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
-            let ((word, level, left, right), value) = result?;
-            let key = format!("{} {} {:?}", word, level, left..=right);
-            heap.push(Reverse((value.len(), key, word_level_position_docids_name)));
+        for result in word_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word, pos), value) = result?;
+            let key = format!("{} {}", word, pos);
+            heap.push(Reverse((value.len(), key, word_position_docids_name)));
             if heap.len() > limit {
                 heap.pop();
             }
         }
 
-        for result in word_prefix_level_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
-            let ((word, level, left, right), value) = result?;
-            let key = format!("{} {} {:?}", word, level, left..=right);
-            heap.push(Reverse((value.len(), key, word_prefix_level_position_docids_name)));
+        for result in word_prefix_position_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word, pos), value) = result?;
+            let key = format!("{} {}", word, pos);
+            heap.push(Reverse((value.len(), key, word_prefix_position_docids_name)));
             if heap.len() > limit {
                 heap.pop();
             }
@@ -663,7 +663,7 @@ fn facet_values_docids(
     Ok(wtr.flush()?)
 }
 
-fn words_level_positions_docids(
+fn words_positions_docids(
     index: &Index,
     rtxn: &heed::RoTxn,
     debug: bool,
@@ -671,16 +671,16 @@ fn words_level_positions_docids(
 ) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["word", "level", "positions", "documents_count", "documents_ids"])?;
+    wtr.write_record(&["word", "position", "documents_count", "documents_ids"])?;
 
     for word in words.iter().map(AsRef::as_ref) {
         let range = {
-            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
-            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
+            let left = (word, u32::min_value());
+            let right = (word, u32::max_value());
             left..=right
         };
-        for result in index.word_level_position_docids.range(rtxn, &range)? {
-            let ((w, level, left, right), docids) = result?;
+        for result in index.word_position_docids.range(rtxn, &range)? {
+            let ((w, pos), docids) = result?;
 
             let count = docids.len().to_string();
             let docids = if debug {
@@ -688,20 +688,15 @@ fn words_level_positions_docids(
             } else {
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
-            let position_range = if level == TreeLevel::min_value() {
-                format!("{:?}", left)
-            } else {
-                format!("{:?}", left..=right)
-            };
-            let level = level.to_string();
-            wtr.write_record(&[w, &level, &position_range, &count, &docids])?;
+            let position = format!("{:?}", pos);
+            wtr.write_record(&[w, &position, &count, &docids])?;
         }
     }
 
     Ok(wtr.flush()?)
 }
 
-fn word_prefixes_level_positions_docids(
+fn word_prefixes_positions_docids(
     index: &Index,
     rtxn: &heed::RoTxn,
     debug: bool,
@@ -709,16 +704,16 @@ fn word_prefixes_level_positions_docids(
 ) -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["prefix", "level", "positions", "documents_count", "documents_ids"])?;
+    wtr.write_record(&["prefix", "position", "documents_count", "documents_ids"])?;
 
     for word in prefixes.iter().map(AsRef::as_ref) {
         let range = {
-            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
-            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
+            let left = (word, u32::min_value());
+            let right = (word, u32::max_value());
             left..=right
         };
-        for result in index.word_prefix_level_position_docids.range(rtxn, &range)? {
-            let ((w, level, left, right), docids) = result?;
+        for result in index.word_prefix_position_docids.range(rtxn, &range)? {
+            let ((w, pos), docids) = result?;
 
             let count = docids.len().to_string();
             let docids = if debug {
@@ -726,13 +721,8 @@ fn word_prefixes_level_positions_docids(
             } else {
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
-            let position_range = if level == TreeLevel::min_value() {
-                format!("{:?}", left)
-            } else {
-                format!("{:?}", left..=right)
-            };
-            let level = level.to_string();
-            wtr.write_record(&[w, &level, &position_range, &count, &docids])?;
+            let position = format!("{:?}", pos);
+            wtr.write_record(&[w, &position, &count, &docids])?;
         }
     }
 
@@ -970,8 +960,8 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         docid_word_positions,
         word_pair_proximity_docids,
         word_prefix_pair_proximity_docids,
-        word_level_position_docids,
-        word_prefix_level_position_docids,
+        word_position_docids,
+        word_prefix_position_docids,
         field_id_word_count_docids,
         facet_id_f64_docids,
         facet_id_string_docids,
@@ -994,8 +984,8 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             DOCID_WORD_POSITIONS => docid_word_positions.as_polymorph(),
             WORD_PAIR_PROXIMITY_DOCIDS => word_pair_proximity_docids.as_polymorph(),
             WORD_PREFIX_PAIR_PROXIMITY_DOCIDS => word_prefix_pair_proximity_docids.as_polymorph(),
-            WORD_LEVEL_POSITION_DOCIDS => word_level_position_docids.as_polymorph(),
-            WORD_PREFIX_LEVEL_POSITION_DOCIDS => word_prefix_level_position_docids.as_polymorph(),
+            WORD_POSITION_DOCIDS => word_position_docids.as_polymorph(),
+            WORD_PREFIX_POSITION_DOCIDS => word_prefix_position_docids.as_polymorph(),
             FIELD_ID_WORD_COUNT_DOCIDS => field_id_word_count_docids.as_polymorph(),
             FACET_ID_F64_DOCIDS => facet_id_f64_docids.as_polymorph(),
             FACET_ID_STRING_DOCIDS => facet_id_string_docids.as_polymorph(),
