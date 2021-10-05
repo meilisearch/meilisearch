@@ -5,8 +5,8 @@ mod extract_fid_docid_facet_values;
 mod extract_fid_word_count_docids;
 mod extract_geo_points;
 mod extract_word_docids;
-mod extract_word_level_position_docids;
 mod extract_word_pair_proximity_docids;
+mod extract_word_position_docids;
 
 use std::collections::HashSet;
 use std::fs::File;
@@ -22,8 +22,8 @@ use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
-use self::extract_word_level_position_docids::extract_word_level_position_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
+use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
     into_clonable_grenad, keep_first_prefix_value_merge_roaring_bitmaps, merge_cbo_roaring_bitmaps,
     merge_readers, merge_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn,
@@ -98,10 +98,10 @@ pub(crate) fn data_from_obkv_documents(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
-        extract_word_level_position_docids,
+        extract_word_position_docids,
         merge_cbo_roaring_bitmaps,
-        TypedChunk::WordLevelPositionDocids,
-        "word-level-position-docids",
+        TypedChunk::WordPositionDocids,
+        "word-position-docids",
     );
 
     spawn_extraction_task(

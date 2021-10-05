@@ -14,7 +14,7 @@ use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, WordDerivationsCache};
-use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result, TreeLevel};
+use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result};
 
 mod asc_desc;
 mod attribute;
@@ -90,20 +90,8 @@ pub trait Context<'c> {
     fn word_position_iterator(
         &self,
         word: &str,
-        level: TreeLevel,
         in_prefix_cache: bool,
-        left: Option<u32>,
-        right: Option<u32>,
-    ) -> heed::Result<
-        Box<
-            dyn Iterator<Item = heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c,
-        >,
-    >;
-    fn word_position_last_level(
-        &self,
-        word: &str,
-        in_prefix_cache: bool,
-    ) -> heed::Result<Option<TreeLevel>>;
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>>;
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn searchable_fields_ids(&self) -> Result<Vec<FieldId>>;
     fn field_id_word_count_docids(
@@ -111,13 +99,7 @@ pub trait Context<'c> {
         field_id: FieldId,
         word_count: u8,
     ) -> heed::Result<Option<RoaringBitmap>>;
-    fn word_level_position_docids(
-        &self,
-        word: &str,
-        level: TreeLevel,
-        left: u32,
-        right: u32,
-    ) -> heed::Result<Option<RoaringBitmap>>;
+    fn word_position_docids(&self, word: &str, pos: u32) -> heed::Result<Option<RoaringBitmap>>;
 }
 
 pub struct CriteriaBuilder<'t> {
@@ -183,52 +165,22 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
     fn word_position_iterator(
         &self,
         word: &str,
-        level: TreeLevel,
         in_prefix_cache: bool,
-        left: Option<u32>,
-        right: Option<u32>,
-    ) -> heed::Result<
-        Box<
-            dyn Iterator<Item = heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>> + 'c,
-        >,
-    > {
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>>
+    {
         let range = {
-            let left = left.unwrap_or(u32::min_value());
-            let right = right.unwrap_or(u32::max_value());
-            let left = (word, level, left, left);
-            let right = (word, level, right, right);
+            let left = u32::min_value();
+            let right = u32::max_value();
+            let left = (word, left);
+            let right = (word, right);
             left..=right
         };
         let db = match in_prefix_cache {
-            true => self.index.word_prefix_level_position_docids,
-            false => self.index.word_level_position_docids,
+            true => self.index.word_prefix_position_docids,
+            false => self.index.word_position_docids,
         };
 
         Ok(Box::new(db.range(self.rtxn, &range)?))
-    }
-
-    fn word_position_last_level(
-        &self,
-        word: &str,
-        in_prefix_cache: bool,
-    ) -> heed::Result<Option<TreeLevel>> {
-        let range = {
-            let left = (word, TreeLevel::min_value(), u32::min_value(), u32::min_value());
-            let right = (word, TreeLevel::max_value(), u32::max_value(), u32::max_value());
-            left..=right
-        };
-        let db = match in_prefix_cache {
-            true => self.index.word_prefix_level_position_docids,
-            false => self.index.word_level_position_docids,
-        };
-        let last_level = db
-            .remap_data_type::<heed::types::DecodeIgnore>()
-            .range(self.rtxn, &range)?
-            .last()
-            .transpose()?
-            .map(|((_, level, _, _), _)| level);
-
-        Ok(last_level)
     }
 
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>> {
@@ -251,15 +203,9 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         self.index.field_id_word_count_docids.get(self.rtxn, &key)
     }
 
-    fn word_level_position_docids(
-        &self,
-        word: &str,
-        level: TreeLevel,
-        left: u32,
-        right: u32,
-    ) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (word, level, left, right);
-        self.index.word_level_position_docids.get(self.rtxn, &key)
+    fn word_position_docids(&self, word: &str, pos: u32) -> heed::Result<Option<RoaringBitmap>> {
+        let key = (word, pos);
+        self.index.word_position_docids.get(self.rtxn, &key)
     }
 }
 
@@ -616,24 +562,10 @@ pub mod test {
         fn word_position_iterator(
             &self,
             _word: &str,
-            _level: TreeLevel,
             _in_prefix_cache: bool,
-            _left: Option<u32>,
-            _right: Option<u32>,
         ) -> heed::Result<
-            Box<
-                dyn Iterator<Item = heed::Result<((&'c str, TreeLevel, u32, u32), RoaringBitmap)>>
-                    + 'c,
-            >,
+            Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>,
         > {
-            todo!()
-        }
-
-        fn word_position_last_level(
-            &self,
-            _word: &str,
-            _in_prefix_cache: bool,
-        ) -> heed::Result<Option<TreeLevel>> {
             todo!()
         }
 
@@ -645,12 +577,10 @@ pub mod test {
             todo!()
         }
 
-        fn word_level_position_docids(
+        fn word_position_docids(
             &self,
             _word: &str,
-            _level: TreeLevel,
-            _left: u32,
-            _right: u32,
+            _pos: u32,
         ) -> heed::Result<Option<RoaringBitmap>> {
             todo!()
         }

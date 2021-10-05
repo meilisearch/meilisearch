@@ -10,7 +10,7 @@ use super::{resolve_query_tree, Context, Criterion, CriterionParameters, Criteri
 use crate::search::criteria::Query;
 use crate::search::query_tree::{Operation, QueryKind};
 use crate::search::{build_dfa, word_derivations, WordDerivationsCache};
-use crate::{Result, TreeLevel};
+use crate::Result;
 
 /// To be able to divide integers by the number of words in the query
 /// we want to find a multiplier that allow us to divide by any number between 1 and 10.
@@ -176,20 +176,14 @@ impl<'t> Criterion for Attribute<'t> {
     }
 }
 
-/// QueryLevelIterator is an pseudo-Iterator for a Query,
-/// It contains WordLevelIterators and is chainned with other QueryLevelIterator.
-struct QueryLevelIterator<'t> {
-    inner: Vec<
-        Peekable<
-            Box<
-                dyn Iterator<Item = heed::Result<((&'t str, TreeLevel, u32, u32), RoaringBitmap)>>
-                    + 't,
-            >,
-        >,
-    >,
+/// QueryPositionIterator is an Iterator over positions of a Query,
+/// It contains iterators over words positions.
+struct QueryPositionIterator<'t> {
+    inner:
+        Vec<Peekable<Box<dyn Iterator<Item = heed::Result<((&'t str, u32), RoaringBitmap)>> + 't>>>,
 }
 
-impl<'t> QueryLevelIterator<'t> {
+impl<'t> QueryPositionIterator<'t> {
     fn new(
         ctx: &'t dyn Context<'t>,
         queries: &[Query],
@@ -201,25 +195,14 @@ impl<'t> QueryLevelIterator<'t> {
             match &query.kind {
                 QueryKind::Exact { word, .. } => {
                     if !query.prefix || in_prefix_cache {
-                        let iter = ctx.word_position_iterator(
-                            query.kind.word(),
-                            TreeLevel::min_value(),
-                            in_prefix_cache,
-                            None,
-                            None,
-                        )?;
+                        let iter =
+                            ctx.word_position_iterator(query.kind.word(), in_prefix_cache)?;
 
                         inner.push(iter.peekable());
                     } else {
                         for (word, _) in word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?
                         {
-                            let iter = ctx.word_position_iterator(
-                                &word,
-                                TreeLevel::min_value(),
-                                in_prefix_cache,
-                                None,
-                                None,
-                            )?;
+                            let iter = ctx.word_position_iterator(&word, in_prefix_cache)?;
 
                             inner.push(iter.peekable());
                         }
@@ -229,13 +212,7 @@ impl<'t> QueryLevelIterator<'t> {
                     for (word, _) in
                         word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)?
                     {
-                        let iter = ctx.word_position_iterator(
-                            &word,
-                            TreeLevel::min_value(),
-                            in_prefix_cache,
-                            None,
-                            None,
-                        )?;
+                        let iter = ctx.word_position_iterator(&word, in_prefix_cache)?;
 
                         inner.push(iter.peekable());
                     }
@@ -247,7 +224,7 @@ impl<'t> QueryLevelIterator<'t> {
     }
 }
 
-impl<'t> Iterator for QueryLevelIterator<'t> {
+impl<'t> Iterator for QueryPositionIterator<'t> {
     type Item = heed::Result<(u32, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -256,14 +233,14 @@ impl<'t> Iterator for QueryLevelIterator<'t> {
             .inner
             .iter_mut()
             .filter_map(|wli| match wli.peek() {
-                Some(Ok(((_, _, pos, _), _))) => Some(*pos),
+                Some(Ok(((_, pos), _))) => Some(*pos),
                 _ => None,
             })
             .min()?;
 
         let mut candidates = None;
         for wli in self.inner.iter_mut() {
-            if let Some(Ok(((_, _, pos, _), _))) = wli.peek() {
+            if let Some(Ok(((_, pos), _))) = wli.peek() {
                 if *pos > expected_pos {
                     continue;
                 }
@@ -286,9 +263,9 @@ impl<'t> Iterator for QueryLevelIterator<'t> {
 }
 
 /// A Branch is represent a possible alternative of the original query and is build with the Query Tree,
-/// This branch allows us to iterate over meta-interval of position and to dig in it if it contains interesting candidates.
+/// This branch allows us to iterate over meta-interval of positions.
 struct Branch<'t> {
-    query_level_iterator: Vec<(u32, RoaringBitmap, Peekable<QueryLevelIterator<'t>>)>,
+    query_level_iterator: Vec<(u32, RoaringBitmap, Peekable<QueryPositionIterator<'t>>)>,
     last_result: (u32, RoaringBitmap),
     branch_size: u32,
 }
@@ -302,7 +279,7 @@ impl<'t> Branch<'t> {
     ) -> Result<Self> {
         let mut query_level_iterator = Vec::new();
         for queries in flatten_branch {
-            let mut qli = QueryLevelIterator::new(ctx, queries, wdcache)?.peekable();
+            let mut qli = QueryPositionIterator::new(ctx, queries, wdcache)?.peekable();
             let (pos, docids) = qli.next().transpose()?.unwrap_or((0, RoaringBitmap::new()));
             query_level_iterator.push((pos, docids & allowed_candidates, qli));
         }

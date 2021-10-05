@@ -8,7 +8,7 @@ pub use self::update_builder::UpdateBuilder;
 pub use self::update_step::UpdateIndexingStep;
 pub use self::word_prefix_docids::WordPrefixDocids;
 pub use self::word_prefix_pair_proximity_docids::WordPrefixPairProximityDocids;
-pub use self::words_level_positions::WordsLevelPositions;
+pub use self::words_prefix_position_docids::WordPrefixPositionDocids;
 pub use self::words_prefixes_fst::WordsPrefixesFst;
 
 mod available_documents_ids;
@@ -21,5 +21,5 @@ mod update_builder;
 mod update_step;
 mod word_prefix_docids;
 mod word_prefix_pair_proximity_docids;
-mod words_level_positions;
+mod words_prefix_position_docids;
 mod words_prefixes_fst;

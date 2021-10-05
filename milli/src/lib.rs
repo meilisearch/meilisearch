@@ -14,7 +14,6 @@ pub mod heed_codec;
 pub mod index;
 pub mod proximity;
 mod search;
-pub mod tree_level;
 pub mod update;
 
 use std::collections::{BTreeMap, HashMap};
@@ -35,11 +34,10 @@ pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{
     BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapCodec,
     CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, StrLevelPositionCodec, StrStrU8Codec,
+    RoaringBitmapLenCodec, StrBEU32Codec, StrStrU8Codec,
 };
 pub use self::index::Index;
 pub use self::search::{FacetDistribution, FilterCondition, MatchingWords, Search, SearchResult};
-pub use self::tree_level::TreeLevel;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 

@@ -10,7 +10,7 @@ use crate::search::criteria::{
     resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult,
 };
 use crate::search::query_tree::{Operation, PrimitiveQueryPart};
-use crate::{Result, TreeLevel};
+use crate::Result;
 
 pub struct Exactness<'t> {
     ctx: &'t dyn Context<'t>,
@@ -293,7 +293,6 @@ fn attribute_start_with_docids(
     attribute_id: u32,
     query: &[ExactQueryPart],
 ) -> heed::Result<Vec<RoaringBitmap>> {
-    let lowest_level = TreeLevel::min_value();
     let mut attribute_candidates_array = Vec::new();
     // start from attribute first position
     let mut pos = attribute_id * 1000;
@@ -303,7 +302,7 @@ fn attribute_start_with_docids(
             Synonyms(synonyms) => {
                 let mut synonyms_candidates = RoaringBitmap::new();
                 for word in synonyms {
-                    let wc = ctx.word_level_position_docids(word, lowest_level, pos, pos)?;
+                    let wc = ctx.word_position_docids(word, pos)?;
                     if let Some(word_candidates) = wc {
                         synonyms_candidates |= word_candidates;
                     }
@@ -313,7 +312,7 @@ fn attribute_start_with_docids(
             }
             Phrase(phrase) => {
                 for word in phrase {
-                    let wc = ctx.word_level_position_docids(word, lowest_level, pos, pos)?;
+                    let wc = ctx.word_position_docids(word, pos)?;
                     if let Some(word_candidates) = wc {
                         attribute_candidates_array.push(word_candidates);
                     }
