@@ -292,7 +292,7 @@ pub mod test {
         pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
             match self {
                 MockIndex::Vrai(index) => index.dump(path),
-                MockIndex::Faux(_) => todo!(),
+                MockIndex::Faux(faux) => faux.get("dump").call(path.as_ref()),
             }
         }
     }

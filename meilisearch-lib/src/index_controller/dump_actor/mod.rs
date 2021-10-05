@@ -13,7 +13,9 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 
-use super::index_resolver::HardStateIndexResolver;
+use super::index_resolver::index_store::IndexStore;
+use super::index_resolver::uuid_store::UuidStore;
+use super::index_resolver::IndexResolver;
 use super::updates::UpdateSender;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
@@ -218,16 +220,20 @@ pub fn load_dump(
     Ok(())
 }
 
-struct DumpTask {
+struct DumpTask<U, I> {
     path: PathBuf,
-    index_resolver: Arc<HardStateIndexResolver>,
-    update_handle: UpdateSender,
+    index_resolver: Arc<IndexResolver<U, I>>,
+    update_sender: UpdateSender,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
 }
 
-impl DumpTask {
+impl<U, I> DumpTask<U, I>
+where
+    U: UuidStore + Sync + Send + 'static,
+    I: IndexStore + Sync + Send + 'static,
+{
     async fn run(self) -> Result<()> {
         trace!("Performing dump.");
 
@@ -243,7 +249,7 @@ impl DumpTask {
 
         let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        UpdateMsg::dump(&self.update_handle, uuids, temp_dump_path.clone()).await?;
+        UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new()?;
@@ -260,5 +266,112 @@ impl DumpTask {
         info!("Created dump in {:?}.", dump_path);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashSet;
+
+    use futures::future::{err, ok};
+    use once_cell::sync::Lazy;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::index::test::Mocker;
+    use crate::index::Index;
+    use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_controller::updates::create_update_handler;
+    use crate::index::error::Result as IndexResult;
+    use crate::index_controller::index_resolver::error::IndexResolverError;
+
+    fn setup() {
+        static SETUP: Lazy<()> = Lazy::new(|| {
+            if cfg!(windows) {
+                std::env::set_var("TMP", ".");
+            } else {
+                std::env::set_var("TMPDIR", ".");
+            }
+        });
+
+        // just deref to make sure the env is setup
+        *SETUP
+    }
+
+    #[actix_rt::test]
+    async fn test_dump_normal() {
+        setup();
+
+        let tmp = tempfile::tempdir().unwrap();
+
+        let uuids = std::iter::repeat_with(Uuid::new_v4)
+            .take(4)
+            .collect::<HashSet<_>>();
+        let mut uuid_store = MockUuidStore::new();
+        let uuids_cloned = uuids.clone();
+        uuid_store
+            .expect_dump()
+            .once()
+            .returning(move |_| Box::pin(ok(uuids_cloned.clone())));
+
+        let mut index_store = MockIndexStore::new();
+        index_store.expect_get().times(4).returning(move |uuid| {
+            let mocker = Mocker::default();
+            let uuids_clone = uuids.clone();
+            mocker.when::<(), Uuid>("uuid").once().then(move |_| {
+                assert!(uuids_clone.contains(&uuid));
+                uuid
+            });
+            mocker.when::<&Path, IndexResult<()>>("dump").once().then(move |_| {
+                Ok(())
+            });
+            Box::pin(ok(Some(Index::faux(mocker))))
+        });
+
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+
+
+        let update_sender =
+            create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
+
+        let task = DumpTask {
+            path: tmp.path().to_owned(),
+            index_resolver,
+            update_sender,
+            uid: String::from("test"),
+            update_db_size: 4096 * 10,
+            index_db_size: 4096 * 10,
+        };
+
+        task.run().await.unwrap();
+    }
+
+    #[actix_rt::test]
+    async fn error_performing_dump() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let mut uuid_store = MockUuidStore::new();
+        uuid_store
+            .expect_dump()
+            .once()
+            .returning(move |_| Box::pin(err(IndexResolverError::ExistingPrimaryKey)));
+
+        let index_store = MockIndexStore::new();
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+
+        let update_sender =
+            create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
+
+        let task = DumpTask {
+            path: tmp.path().to_owned(),
+            index_resolver,
+            update_sender,
+            uid: String::from("test"),
+            update_db_size: 4096 * 10,
+            index_db_size: 4096 * 10,
+        };
+
+        assert!(task.run().await.is_err());
     }
 }
