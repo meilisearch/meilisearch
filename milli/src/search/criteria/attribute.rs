@@ -228,7 +228,7 @@ impl<'t> Iterator for QueryPositionIterator<'t> {
     type Item = heed::Result<(u32, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // sort inner words from the closest next position to the more far next position.
+        // sort inner words from the closest next position to the farthest next position.
         let expected_pos = self
             .inner
             .iter_mut()
@@ -324,11 +324,12 @@ impl<'t> Branch<'t> {
                 if docids.is_empty() {
                     0
                 } else {
-                    qli.peek()
-                        .map(|result| {
+                    match qli.peek() {
+                        Some(result) => {
                             result.as_ref().map(|(next_pos, _)| *next_pos - *pos).unwrap_or(0)
-                        })
-                        .unwrap_or(u32::MAX)
+                        }
+                        None => u32::MAX,
+                    }
                 }
             })
             .enumerate()
