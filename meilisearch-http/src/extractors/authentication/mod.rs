@@ -168,7 +168,8 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                                     None => err(AuthenticationError::IrretrievableState.into()),
                                 }
                             } else {
-                                err(AuthenticationError::InvalidToken(String::from("hello")).into())
+                                let token = token.to_str().unwrap_or("unknown").to_string();
+                                err(AuthenticationError::InvalidToken(token).into())
                             }
                         }
                         None => err(AuthenticationError::MissingAuthorizationHeader.into()),
