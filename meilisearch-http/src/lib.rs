@@ -11,7 +11,10 @@ pub mod routes;
 use std::path::Path;
 use std::time::Duration;
 
+use crate::error::{MeilisearchHttpError, ResponseError};
 use crate::extractors::authentication::AuthConfig;
+use actix_web::error::JsonPayloadError;
+use http::header::CONTENT_TYPE;
 pub use option::Opt;
 
 use actix_web::web;
@@ -98,9 +101,28 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &
         .app_data(data)
         .app_data(
             web::JsonConfig::default()
-                .limit(http_payload_size_limit)
-                .content_type(|_mime| true) // Accept all mime types
-                .error_handler(|err, _req| error::payload_error_handler(err).into()),
+                .content_type(|mime| mime == mime::APPLICATION_JSON)
+                .error_handler(|err, req| match err {
+                    JsonPayloadError::ContentType if req.headers().get(CONTENT_TYPE).is_none() => {
+                        ResponseError::from(MeilisearchHttpError::MissingContentType(vec![
+                            mime::APPLICATION_JSON.to_string(),
+                        ]))
+                        .into()
+                    }
+                    JsonPayloadError::ContentType => {
+                        ResponseError::from(MeilisearchHttpError::InvalidContentType(
+                            req.headers()
+                                .get(CONTENT_TYPE)
+                                .unwrap()
+                                .to_str()
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            vec![mime::APPLICATION_JSON.to_string()],
+                        ))
+                        .into()
+                    }
+                    err => error::payload_error_handler(err).into(),
+                }),
         )
         .app_data(PayloadConfig::new(http_payload_size_limit))
         .app_data(
@@ -180,6 +202,7 @@ macro_rules! create_app {
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
+        use meilisearch_http::error::{MeilisearchHttpError, ResponseError};
         use meilisearch_http::routes;
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 

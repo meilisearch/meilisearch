@@ -181,9 +181,24 @@ async fn document_addition(
         Some("application/x-ndjson") => DocumentAdditionFormat::Ndjson,
         Some("text/csv") => DocumentAdditionFormat::Csv,
         Some(other) => {
-            return Err(MeilisearchHttpError::InvalidContentType(other.to_string()).into())
+            return Err(MeilisearchHttpError::InvalidContentType(
+                other.to_string(),
+                vec![
+                    "application/json".to_string(),
+                    "application/x-ndjson".to_string(),
+                    "application/csv".to_string(),
+                ],
+            )
+            .into())
         }
-        None => return Err(MeilisearchHttpError::MissingContentType.into()),
+        None => {
+            return Err(MeilisearchHttpError::MissingContentType(vec![
+                "application/json".to_string(),
+                "application/x-ndjson".to_string(),
+                "application/csv".to_string(),
+            ])
+            .into())
+        }
     };
 
     let update = Update::DocumentAddition {

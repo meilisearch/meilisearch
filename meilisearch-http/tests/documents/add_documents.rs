@@ -67,7 +67,6 @@ async fn add_documents_test_no_content_types() {
 
 /// any other content-type is must be refused
 #[actix_rt::test]
-#[ignore]
 async fn add_documents_test_bad_content_types() {
     let document = json!([
         {
@@ -91,8 +90,14 @@ async fn add_documents_test_bad_content_types() {
     let res = test::call_service(&app, req).await;
     let status_code = res.status();
     let body = test::read_body(res).await;
-    assert_eq!(status_code, 405);
-    assert!(body.is_empty());
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 415);
+    assert_eq!(
+        response["message"],
+        json!(
+            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "application/csv""#
+        )
+    );
 }
 
 #[actix_rt::test]
