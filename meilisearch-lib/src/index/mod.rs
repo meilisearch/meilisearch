@@ -27,6 +27,7 @@ pub mod test {
     use std::panic::{RefUnwindSafe, UnwindSafe};
     use std::path::Path;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
     use serde_json::{Map, Value};
@@ -42,15 +43,16 @@ pub mod test {
 
     pub struct Stub<A, R> {
         name: String,
-        times: Option<usize>,
+        times: Mutex<Option<usize>>,
         stub: Box<dyn Fn(A) -> R + Sync + Send>,
-        invalidated: bool,
+        invalidated: AtomicBool,
     }
 
     impl<A, R> Drop for Stub<A, R> {
         fn drop(&mut self) {
-            if !self.invalidated {
-                if let Some(n) = self.times {
+            if !self.invalidated.load(Ordering::Relaxed) {
+                let lock = self.times.lock().unwrap();
+                if let Some(n) = *lock {
                     assert_eq!(n, 0, "{} not called enough times", self.name);
                 }
             }
@@ -58,14 +60,15 @@ pub mod test {
     }
 
     impl<A, R> Stub<A, R> {
-        fn invalidate(&mut self) {
-            self.invalidated = true;
+        fn invalidate(&self) {
+            self.invalidated.store(true, Ordering::Relaxed);
         }
     }
 
     impl<A: UnwindSafe, R> Stub<A, R> {
-        fn call(&mut self, args: A) -> R {
-            match self.times {
+        fn call(&self, args: A) -> R {
+            let mut lock = self.times.lock().unwrap();
+            match *lock {
                 Some(0) => panic!("{} called to many times", self.name),
                 Some(ref mut times) => {
                     *times -= 1;
@@ -102,7 +105,7 @@ pub mod test {
             lock.insert(name, Box::new(stub));
         }
 
-        pub fn get_mut<A, B>(&self, name: &str) -> Option<&mut Stub<A, B>> {
+        pub fn get<A, B>(&self, name: &str) -> Option<&Stub<A, B>> {
             let mut lock = self.inner.lock().unwrap();
             match lock.get_mut(name) {
                 Some(s) => {
@@ -139,11 +142,12 @@ pub mod test {
         /// The function that will be called when the stub is called. This needs to be called to
         /// actually build the stub and register it to the stub store.
         pub fn then(self, f: impl Fn(A) -> R + Sync + Send + 'static) {
+            let times = Mutex::new(self.times);
             let stub = Stub {
                 stub: Box::new(f),
-                times: self.times,
+                times,
                 name: self.name.clone(),
-                invalidated: false,
+                invalidated: AtomicBool::new(false),
             };
 
             self.store.insert(self.name, stub);
@@ -167,15 +171,15 @@ pub mod test {
             }
         }
 
-        pub fn get<'a, A, R>(&'a self, name: &str) -> &'a mut Stub<A, R> {
-            match self.store.get_mut(name) {
+        pub fn get<A, R>(&self, name: &str) -> &Stub<A, R> {
+            match self.store.get(name) {
                 Some(stub) => stub,
                 None => {
                     // panic here causes the stubs to get dropped, and panic in turn. To prevent
                     // that, we forget them, and let them be cleaned by the os later. This is not
                     // optimal, but is still better than nested panicks.
                     let mut stubs = self.store.inner.lock().unwrap();
-                    let stubs = std::mem::replace(&mut *stubs, HashMap::new());
+                    let stubs = std::mem::take(&mut *stubs);
                     std::mem::forget(stubs);
                     panic!("unexpected call to {}", name)
                 }
