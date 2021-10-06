@@ -30,6 +30,12 @@ impl ErrorCode for MeilisearchHttpError {
     }
 }
 
+impl From<MeilisearchHttpError> for aweb::Error {
+    fn from(other: MeilisearchHttpError) -> Self {
+        aweb::Error::from(ResponseError::from(other))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {
@@ -125,9 +131,8 @@ impl From<QueryPayloadError> for PayloadError {
     }
 }
 
-pub fn payload_error_handler<E>(err: E) -> ResponseError
-where
-    E: Into<PayloadError>,
-{
-    err.into().into()
+impl From<PayloadError> for aweb::Error {
+    fn from(other: PayloadError) -> Self {
+        aweb::Error::from(ResponseError::from(other))
+    }
 }

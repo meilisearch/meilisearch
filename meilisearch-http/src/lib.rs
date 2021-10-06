@@ -11,13 +11,14 @@ pub mod routes;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::error::{MeilisearchHttpError, ResponseError};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::AuthConfig;
 use actix_web::error::JsonPayloadError;
+use error::PayloadError;
 use http::header::CONTENT_TYPE;
 pub use option::Opt;
 
-use actix_web::web;
+use actix_web::{web, HttpRequest};
 
 use extractors::authentication::policies::*;
 use extractors::payload::PayloadConfig;
@@ -102,32 +103,24 @@ pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &
         .app_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
-                .error_handler(|err, req| match err {
-                    JsonPayloadError::ContentType if req.headers().get(CONTENT_TYPE).is_none() => {
-                        ResponseError::from(MeilisearchHttpError::MissingContentType(vec![
-                            mime::APPLICATION_JSON.to_string(),
-                        ]))
-                        .into()
-                    }
-                    JsonPayloadError::ContentType => {
-                        ResponseError::from(MeilisearchHttpError::InvalidContentType(
-                            req.headers()
-                                .get(CONTENT_TYPE)
-                                .unwrap()
-                                .to_str()
-                                .unwrap_or("unknown")
-                                .to_string(),
+                .error_handler(|err, req: &HttpRequest| match err {
+                    JsonPayloadError::ContentType => match req.headers().get(CONTENT_TYPE) {
+                        Some(content_type) => MeilisearchHttpError::InvalidContentType(
+                            content_type.to_str().unwrap_or("unknown").to_string(),
                             vec![mime::APPLICATION_JSON.to_string()],
-                        ))
-                        .into()
-                    }
-                    err => error::payload_error_handler(err).into(),
+                        )
+                        .into(),
+                        None => MeilisearchHttpError::MissingContentType(vec![
+                            mime::APPLICATION_JSON.to_string(),
+                        ])
+                        .into(),
+                    },
+                    err => PayloadError::from(err).into(),
                 }),
         )
         .app_data(PayloadConfig::new(http_payload_size_limit))
         .app_data(
-            web::QueryConfig::default()
-                .error_handler(|err, _req| error::payload_error_handler(err).into()),
+            web::QueryConfig::default().error_handler(|err, _req| PayloadError::from(err).into()),
         );
 }
 
