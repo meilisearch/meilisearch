@@ -1,5 +1,5 @@
 pub mod error;
-mod index_store;
+pub mod index_store;
 pub mod uuid_store;
 
 use std::path::Path;

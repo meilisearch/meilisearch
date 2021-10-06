@@ -12,7 +12,7 @@ use crate::index_controller::updates::status::{Failed, Processed, Processing, Up
 use crate::Update;
 
 use super::error::{IndexError, Result};
-use super::{Index, IndexMeta};
+use super::index::{Index, IndexMeta};
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,

@@ -29,6 +29,8 @@ use codec::*;
 use super::error::Result;
 use super::status::{Enqueued, Processing};
 use crate::index::Index;
+use crate::index_controller::index_resolver::index_store::IndexStore;
+use crate::index_controller::index_resolver::uuid_store::UuidStore;
 use crate::index_controller::updates::*;
 use crate::EnvSizer;
 
@@ -157,13 +159,17 @@ impl UpdateStore {
         ))
     }
 
-    pub fn open(
+    pub fn open<U, I>(
         options: EnvOpenOptions,
         path: impl AsRef<Path>,
-        index_resolver: Arc<HardStateIndexResolver>,
+        index_resolver: Arc<IndexResolver<U, I>>,
         must_exit: Arc<AtomicBool>,
         update_file_store: UpdateFileStore,
-    ) -> anyhow::Result<Arc<Self>> {
+    ) -> anyhow::Result<Arc<Self>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         let (update_store, mut notification_receiver) =
             Self::new(options, path, update_file_store)?;
         let update_store = Arc::new(update_store);
@@ -296,10 +302,14 @@ impl UpdateStore {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update(
+    fn process_pending_update<U, I>(
         &self,
-        index_resolver: Arc<HardStateIndexResolver>,
-    ) -> Result<Option<()>> {
+        index_resolver: Arc<IndexResolver<U, I>>,
+    ) -> Result<Option<()>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
         let first_meta = self.pending_queue.first(&rtxn)?;
@@ -325,13 +335,17 @@ impl UpdateStore {
         }
     }
 
-    fn perform_update(
+    fn perform_update<U, I>(
         &self,
         processing: Processing,
-        index_resolver: Arc<HardStateIndexResolver>,
+        index_resolver: Arc<IndexResolver<U, I>>,
         index_uuid: Uuid,
         global_id: u64,
-    ) -> Result<Option<()>> {
+    ) -> Result<Option<()>>
+    where
+        U: UuidStore + Sync + Send + 'static,
+        I: IndexStore + Sync + Send + 'static,
+    {
         // Process the pending update using the provided user function.
         let handle = Handle::current();
         let update_id = processing.id();
@@ -509,7 +523,7 @@ impl UpdateStore {
 
         let pendings = self.pending_queue.iter(&txn)?.lazily_decode_data();
 
-        let uuids: HashSet<_> = indexes.iter().map(|i| i.uuid).collect();
+        let uuids: HashSet<_> = indexes.iter().map(|i| i.uuid()).collect();
         for entry in pendings {
             let ((_, uuid, _), pending) = entry?;
             if uuids.contains(&uuid) {
@@ -518,9 +532,7 @@ impl UpdateStore {
                     ..
                 } = pending.decode()?
                 {
-                    self.update_file_store
-                        .snapshot(content_uuid, &path)
-                        .unwrap();
+                    self.update_file_store.snapshot(content_uuid, &path)?;
                 }
             }
         }
@@ -528,8 +540,7 @@ impl UpdateStore {
         let path = path.as_ref().to_owned();
         indexes
             .par_iter()
-            .try_for_each(|index| index.snapshot(path.clone()))
-            .unwrap();
+            .try_for_each(|index| index.snapshot(&path))?;
 
         Ok(())
     }
@@ -557,149 +568,217 @@ impl UpdateStore {
     }
 }
 
-//#[cfg(test)]
-//mod test {
-//use super::*;
-//use crate::index_controller::{
-//index_actor::{error::IndexActorError, MockIndexActorHandle},
-//UpdateResult,
-//};
+#[cfg(test)]
+mod test {
+    use futures::future::ok;
+    use mockall::predicate::eq;
 
-//use futures::future::ok;
+    use crate::index::error::IndexError;
+    use crate::index::test::Mocker;
+    use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_controller::updates::status::{Failed, Processed};
 
-//#[actix_rt::test]
-//async fn test_next_id() {
-//let dir = tempfile::tempdir_in(".").unwrap();
-//let mut options = EnvOpenOptions::new();
-//let handle = Arc::new(MockIndexActorHandle::new());
-//options.map_size(4096 * 100);
-//let update_store = UpdateStore::open(
-//options,
-//dir.path(),
-//handle,
-//Arc::new(AtomicBool::new(false)),
-//)
-//.unwrap();
+    use super::*;
 
-//let index1_uuid = Uuid::new_v4();
-//let index2_uuid = Uuid::new_v4();
+    #[actix_rt::test]
+    async fn test_next_id() {
+        let dir = tempfile::tempdir_in(".").unwrap();
+        let mut options = EnvOpenOptions::new();
+        let index_store = MockIndexStore::new();
+        let uuid_store = MockUuidStore::new();
+        let index_resolver = IndexResolver::new(uuid_store, index_store);
+        let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
+        options.map_size(4096 * 100);
+        let update_store = UpdateStore::open(
+            options,
+            dir.path(),
+            Arc::new(index_resolver),
+            Arc::new(AtomicBool::new(false)),
+            update_file_store,
+        )
+        .unwrap();
 
-//let mut txn = update_store.env.write_txn().unwrap();
-//let ids = update_store.next_update_id(&mut txn, index1_uuid).unwrap();
-//txn.commit().unwrap();
-//assert_eq!((0, 0), ids);
+        let index1_uuid = Uuid::new_v4();
+        let index2_uuid = Uuid::new_v4();
 
-//let mut txn = update_store.env.write_txn().unwrap();
-//let ids = update_store.next_update_id(&mut txn, index2_uuid).unwrap();
-//txn.commit().unwrap();
-//assert_eq!((1, 0), ids);
+        let mut txn = update_store.env.write_txn().unwrap();
+        let ids = update_store.next_update_id(&mut txn, index1_uuid).unwrap();
+        txn.commit().unwrap();
+        assert_eq!((0, 0), ids);
 
-//let mut txn = update_store.env.write_txn().unwrap();
-//let ids = update_store.next_update_id(&mut txn, index1_uuid).unwrap();
-//txn.commit().unwrap();
-//assert_eq!((2, 1), ids);
-//}
+        let mut txn = update_store.env.write_txn().unwrap();
+        let ids = update_store.next_update_id(&mut txn, index2_uuid).unwrap();
+        txn.commit().unwrap();
+        assert_eq!((1, 0), ids);
 
-//#[actix_rt::test]
-//async fn test_register_update() {
-//let dir = tempfile::tempdir_in(".").unwrap();
-//let mut options = EnvOpenOptions::new();
-//let handle = Arc::new(MockIndexActorHandle::new());
-//options.map_size(4096 * 100);
-//let update_store = UpdateStore::open(
-//options,
-//dir.path(),
-//handle,
-//Arc::new(AtomicBool::new(false)),
-//)
-//.unwrap();
-//let meta = UpdateMeta::ClearDocuments;
-//let uuid = Uuid::new_v4();
-//let store_clone = update_store.clone();
-//tokio::task::spawn_blocking(move || {
-//store_clone.register_update(meta, None, uuid).unwrap();
-//})
-//.await
-//.unwrap();
+        let mut txn = update_store.env.write_txn().unwrap();
+        let ids = update_store.next_update_id(&mut txn, index1_uuid).unwrap();
+        txn.commit().unwrap();
+        assert_eq!((2, 1), ids);
+    }
 
-//let txn = update_store.env.read_txn().unwrap();
-//assert!(update_store
-//.pending_queue
-//.get(&txn, &(0, uuid, 0))
-//.unwrap()
-//.is_some());
-//}
+    #[actix_rt::test]
+    async fn test_register_update() {
+        let dir = tempfile::tempdir_in(".").unwrap();
+        let index_store = MockIndexStore::new();
+        let uuid_store = MockUuidStore::new();
+        let index_resolver = IndexResolver::new(uuid_store, index_store);
+        let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100);
+        let update_store = UpdateStore::open(
+            options,
+            dir.path(),
+            Arc::new(index_resolver),
+            Arc::new(AtomicBool::new(false)),
+            update_file_store,
+        )
+        .unwrap();
+        let update = Update::ClearDocuments;
+        let uuid = Uuid::new_v4();
+        let store_clone = update_store.clone();
+        tokio::task::spawn_blocking(move || {
+            store_clone.register_update(uuid, update).unwrap();
+        })
+        .await
+        .unwrap();
 
-//#[actix_rt::test]
-//async fn test_process_update() {
-//let dir = tempfile::tempdir_in(".").unwrap();
-//let mut handle = MockIndexActorHandle::new();
+        let txn = update_store.env.read_txn().unwrap();
+        assert!(update_store
+            .pending_queue
+            .get(&txn, &(0, uuid, 0))
+            .unwrap()
+            .is_some());
+    }
 
-//handle
-//.expect_update()
-//.times(2)
-//.returning(|_index_uuid, processing, _file| {
-//if processing.id() == 0 {
-//Box::pin(ok(Ok(processing.process(UpdateResult::Other))))
-//} else {
-//Box::pin(ok(Err(
-//processing.fail(IndexActorError::ExistingPrimaryKey.into())
-//)))
-//}
-//});
+    #[actix_rt::test]
+    async fn test_process_update_success() {
+        let dir = tempfile::tempdir_in(".").unwrap();
+        let index_uuid = Uuid::new_v4();
 
-//let handle = Arc::new(handle);
+        let mut index_store = MockIndexStore::new();
+        index_store
+            .expect_get()
+            .with(eq(index_uuid))
+            .returning(|_uuid| {
+                let mocker = Mocker::default();
+                mocker
+                    .when::<Processing, std::result::Result<Processed, Failed>>("handle_update")
+                    .once()
+                    .then(|update| Ok(update.process(status::UpdateResult::Other)));
 
-//let mut options = EnvOpenOptions::new();
-//options.map_size(4096 * 100);
-//let store = UpdateStore::open(
-//options,
-//dir.path(),
-//handle.clone(),
-//Arc::new(AtomicBool::new(false)),
-//)
-//.unwrap();
+                Box::pin(ok(Some(Index::faux(mocker))))
+            });
 
-//// wait a bit for the event loop exit.
-//tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let uuid_store = MockUuidStore::new();
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-//let mut txn = store.env.write_txn().unwrap();
+        let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100);
+        let store = UpdateStore::open(
+            options,
+            dir.path(),
+            index_resolver.clone(),
+            Arc::new(AtomicBool::new(false)),
+            update_file_store,
+        )
+        .unwrap();
 
-//let update = Enqueued::new(UpdateMeta::ClearDocuments, 0, None);
-//let uuid = Uuid::new_v4();
+        // wait a bit for the event loop exit.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-//store
-//.pending_queue
-//.put(&mut txn, &(0, uuid, 0), &update)
-//.unwrap();
+        let mut txn = store.env.write_txn().unwrap();
 
-//let update = Enqueued::new(UpdateMeta::ClearDocuments, 1, None);
+        let update = Enqueued::new(Update::ClearDocuments, 0);
 
-//store
-//.pending_queue
-//.put(&mut txn, &(1, uuid, 1), &update)
-//.unwrap();
+        store
+            .pending_queue
+            .put(&mut txn, &(0, index_uuid, 0), &update)
+            .unwrap();
 
-//txn.commit().unwrap();
+        txn.commit().unwrap();
 
-//// Process the pending, and check that it has been moved to the update databases, and
-//// removed from the pending database.
-//let store_clone = store.clone();
-//tokio::task::spawn_blocking(move || {
-//store_clone.process_pending_update(handle.clone()).unwrap();
-//store_clone.process_pending_update(handle).unwrap();
-//})
-//.await
-//.unwrap();
+        // Process the pending, and check that it has been moved to the update databases, and
+        // removed from the pending database.
+        let store_clone = store.clone();
+        tokio::task::spawn_blocking(move || {
+            store_clone.process_pending_update(index_resolver).unwrap();
+        })
+        .await
+        .unwrap();
 
-//let txn = store.env.read_txn().unwrap();
+        let txn = store.env.read_txn().unwrap();
 
-//assert!(store.pending_queue.first(&txn).unwrap().is_none());
-//let update = store.updates.get(&txn, &(uuid, 0)).unwrap().unwrap();
+        assert!(store.pending_queue.first(&txn).unwrap().is_none());
+        let update = store.updates.get(&txn, &(index_uuid, 0)).unwrap().unwrap();
 
-//assert!(matches!(update, UpdateStatus::Processed(_)));
-//let update = store.updates.get(&txn, &(uuid, 1)).unwrap().unwrap();
+        assert!(matches!(update, UpdateStatus::Processed(_)));
+    }
 
-//assert!(matches!(update, UpdateStatus::Failed(_)));
-//}
-//}
+    #[actix_rt::test]
+    async fn test_process_update_failure() {
+        let dir = tempfile::tempdir_in(".").unwrap();
+        let index_uuid = Uuid::new_v4();
+
+        let mut index_store = MockIndexStore::new();
+        index_store
+            .expect_get()
+            .with(eq(index_uuid))
+            .returning(|_uuid| {
+                let mocker = Mocker::default();
+                mocker
+                    .when::<Processing, std::result::Result<Processed, Failed>>("handle_update")
+                    .once()
+                    .then(|update| Err(update.fail(IndexError::ExistingPrimaryKey)));
+
+                Box::pin(ok(Some(Index::faux(mocker))))
+            });
+
+        let uuid_store = MockUuidStore::new();
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+
+        let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100);
+        let store = UpdateStore::open(
+            options,
+            dir.path(),
+            index_resolver.clone(),
+            Arc::new(AtomicBool::new(false)),
+            update_file_store,
+        )
+        .unwrap();
+
+        // wait a bit for the event loop exit.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let mut txn = store.env.write_txn().unwrap();
+
+        let update = Enqueued::new(Update::ClearDocuments, 0);
+
+        store
+            .pending_queue
+            .put(&mut txn, &(0, index_uuid, 0), &update)
+            .unwrap();
+
+        txn.commit().unwrap();
+
+        // Process the pending, and check that it has been moved to the update databases, and
+        // removed from the pending database.
+        let store_clone = store.clone();
+        tokio::task::spawn_blocking(move || {
+            store_clone.process_pending_update(index_resolver).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let txn = store.env.read_txn().unwrap();
+
+        assert!(store.pending_queue.first(&txn).unwrap().is_none());
+        let update = store.updates.get(&txn, &(index_uuid, 0)).unwrap().unwrap();
+
+        assert!(matches!(update, UpdateStatus::Failed(_)));
+    }
+}
