@@ -18,14 +18,16 @@ pub use index::Index;
 #[cfg(test)]
 pub use test::MockIndex as Index;
 
+/// The index::test module provides means of mocking an index instance. I can be used throughout the
+/// code for unit testing, in places where an index would normally be used.
 #[cfg(test)]
 pub mod test {
     use std::any::Any;
     use std::collections::HashMap;
     use std::panic::{RefUnwindSafe, UnwindSafe};
+    use std::path::Path;
     use std::path::PathBuf;
-    use std::sync::Mutex;
-    use std::{path::Path, sync::Arc};
+    use std::sync::{Arc, Mutex};
 
     use serde_json::{Map, Value};
     use uuid::Uuid;
@@ -71,9 +73,9 @@ pub mod test {
                 None => (),
             }
 
-            // Since we add assertions in drop implementation for Stub, an panic can occur in a
-            // panic, cause a hard abort of the program. To handle that, we catch the panic, and
-            // set the stub as invalidated so the assertions are not run during the drop.
+            // Since we add assertions in the drop implementation for Stub, a panic can occur in a
+            // panic, causing a hard abort of the program. To handle that, we catch the panic, and
+            // set the stub as invalidated so the assertions aren't run during the drop.
             impl<'a, A, R> RefUnwindSafe for StubHolder<'a, A, R> {}
             struct StubHolder<'a, A, R>(&'a (dyn Fn(A) -> R + Sync + Send));
 
@@ -169,8 +171,12 @@ pub mod test {
             match self.store.get_mut(name) {
                 Some(stub) => stub,
                 None => {
-                    // TODO: this can cause nested panics, because stubs are dropped and panic
-                    // themselves in their drops.
+                    // panic here causes the stubs to get dropped, and panic in turn. To prevent
+                    // that, we forget them, and let them be cleaned by the os later. This is not
+                    // optimal, but is still better than nested panicks.
+                    let mut stubs = self.store.inner.lock().unwrap();
+                    let stubs = std::mem::replace(&mut *stubs, HashMap::new());
+                    std::mem::forget(stubs);
                     panic!("unexpected call to {}", name)
                 }
             }
