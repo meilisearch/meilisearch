@@ -27,7 +27,7 @@ pub use self::transform::{Transform, TransformOutput};
 use crate::documents::DocumentBatchReader;
 use crate::update::{
     Facets, UpdateBuilder, UpdateIndexingStep, WordPrefixDocids, WordPrefixPairProximityDocids,
-    WordsLevelPositions, WordsPrefixesFst,
+    WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result};
 
@@ -412,8 +412,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        // Run the words level positions update operation.
-        let mut builder = WordsLevelPositions::new(self.wtxn, self.index);
+        // Run the words prefix position docids update operation.
+        let mut builder = WordPrefixPositionDocids::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.max_nb_chunks = self.max_nb_chunks;

@@ -22,7 +22,7 @@ pub(crate) enum TypedChunk {
     FieldIdWordcountDocids(grenad::Reader<File>),
     NewDocumentsIds(RoaringBitmap),
     WordDocids(grenad::Reader<File>),
-    WordLevelPositionDocids(grenad::Reader<File>),
+    WordPositionDocids(grenad::Reader<File>),
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
@@ -110,10 +110,10 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_words_fst(wtxn, &fst)?;
             is_merged_database = true;
         }
-        TypedChunk::WordLevelPositionDocids(word_level_position_docids_iter) => {
+        TypedChunk::WordPositionDocids(word_position_docids_iter) => {
             append_entries_into_database(
-                word_level_position_docids_iter,
-                &index.word_level_position_docids,
+                word_position_docids_iter,
+                &index.word_position_docids,
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),

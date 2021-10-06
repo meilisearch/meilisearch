@@ -361,6 +361,7 @@ async fn main() -> anyhow::Result<()> {
                         // We must use the write transaction of the update here.
                         let mut wtxn = index_cloned.write_txn()?;
                         let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
+                        builder.enable_autogenerate_docids();
 
                         match method.as_str() {
                             "replace" => builder
