@@ -68,6 +68,7 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    pub(crate) max_positions_per_attributes: Option<u32>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
     words_prefix_threshold: Option<u32>,
@@ -104,6 +105,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             autogenerate_docids: false,
             update_id,
+            max_positions_per_attributes: None,
         }
     }
 
@@ -262,6 +264,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     primary_key_id,
                     geo_field_id,
                     stop_words,
+                    self.max_positions_per_attributes,
                 )
             });
 
@@ -284,6 +287,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
                 thread_pool: self.thread_pool,
+                max_positions_per_attributes: self.max_positions_per_attributes,
                 update_id: self.update_id,
             };
             let mut deletion_builder = update_builder.delete_documents(self.wtxn, self.index)?;

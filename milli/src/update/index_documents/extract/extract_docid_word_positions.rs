@@ -23,7 +23,10 @@ pub fn extract_docid_word_positions<R: io::Read>(
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
+    max_positions_per_attributes: Option<u32>,
 ) -> Result<(RoaringBitmap, grenad::Reader<File>)> {
+    let max_positions_per_attributes = max_positions_per_attributes
+        .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
 
     let mut documents_ids = RoaringBitmap::new();
@@ -62,7 +65,7 @@ pub fn extract_docid_word_positions<R: io::Read>(
                 if let Some(field) = json_to_string(&value, &mut field_buffer) {
                     let analyzed = analyzer.analyze(field);
                     let tokens = process_tokens(analyzed.tokens())
-                        .take_while(|(p, _)| (*p as u32) < MAX_POSITION_PER_ATTRIBUTE);
+                        .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
                         let token = token.text().trim();

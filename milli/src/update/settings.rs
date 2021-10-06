@@ -69,6 +69,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    pub(crate) max_positions_per_attributes: Option<u32>,
     update_id: u64,
 
     searchable_fields: Setting<Vec<String>>,
@@ -108,6 +109,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             update_id,
+            max_positions_per_attributes: None,
         }
     }
 
@@ -237,6 +239,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         indexing_builder.chunk_compression_type = self.chunk_compression_type;
         indexing_builder.chunk_compression_level = self.chunk_compression_level;
         indexing_builder.thread_pool = self.thread_pool;
+        indexing_builder.max_positions_per_attributes = self.max_positions_per_attributes;
         indexing_builder.execute_raw(output, &cb)?;
 
         Ok(())

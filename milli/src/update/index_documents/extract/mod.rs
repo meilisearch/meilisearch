@@ -42,6 +42,7 @@ pub(crate) fn data_from_obkv_documents(
     primary_key_id: FieldId,
     geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
+    max_positions_per_attributes: Option<u32>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
         .par_bridge()
@@ -55,6 +56,7 @@ pub(crate) fn data_from_obkv_documents(
                 primary_key_id,
                 geo_field_id,
                 &stop_words,
+                max_positions_per_attributes,
             )
         })
         .collect();
@@ -177,6 +179,7 @@ fn extract_documents_data(
     primary_key_id: FieldId,
     geo_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
+    max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
     (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
@@ -206,6 +209,7 @@ fn extract_documents_data(
                     indexer.clone(),
                     searchable_fields,
                     stop_words.as_ref(),
+                    max_positions_per_attributes,
                 )?;
 
                 // send documents_ids to DB writer
