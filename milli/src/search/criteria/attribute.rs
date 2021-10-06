@@ -195,15 +195,13 @@ impl<'t> QueryPositionIterator<'t> {
             match &query.kind {
                 QueryKind::Exact { word, .. } => {
                     if !query.prefix || in_prefix_cache {
-                        let iter =
-                            ctx.word_position_iterator(query.kind.word(), in_prefix_cache)?;
-
+                        let word = query.kind.word();
+                        let iter = ctx.word_position_iterator(word, in_prefix_cache)?;
                         inner.push(iter.peekable());
                     } else {
                         for (word, _) in word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?
                         {
                             let iter = ctx.word_position_iterator(&word, in_prefix_cache)?;
-
                             inner.push(iter.peekable());
                         }
                     }
@@ -213,7 +211,6 @@ impl<'t> QueryPositionIterator<'t> {
                         word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)?
                     {
                         let iter = ctx.word_position_iterator(&word, in_prefix_cache)?;
-
                         inner.push(iter.peekable());
                     }
                 }
@@ -305,15 +302,13 @@ impl<'t> Branch<'t> {
                 Some((next_pos, next_docids)) => {
                     *cur_pos = next_pos;
                     *cur_docids |= next_docids & allowed_candidates;
+                    self.update_last_result();
+                    Ok(true)
                 }
-                None => return Ok(false),
+                None => Ok(false),
             },
-            None => return Ok(false),
+            None => Ok(false),
         }
-
-        self.update_last_result();
-
-        Ok(true)
     }
 
     fn lowest_iterator_index(&mut self) -> usize {
