@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Deserializer, Value};
 use tempfile::NamedTempFile;
-use uuid::Uuid;
 
 use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
 use crate::index_controller::dump_actor::Metadata;
@@ -200,7 +199,7 @@ impl From<compat::Enqueued> for Enqueued {
                     method,
                     // Just ignore if the uuid is no present. If it is needed later, an error will
                     // be thrown.
-                    content_uuid: content.unwrap_or_else(Uuid::default),
+                    content_uuid: content.unwrap_or_default(),
                 }
             }
             compat::UpdateMeta::ClearDocuments => Update::ClearDocuments,

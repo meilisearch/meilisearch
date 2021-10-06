@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 mod common;
 
-use crate::common::{GetAllDocumentsOptions, Server};
+use crate::common::Server;
 use actix_web::test;
 use meilisearch_http::create_app;
 use serde_json::{json, Value};

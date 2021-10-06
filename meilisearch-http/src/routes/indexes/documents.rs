@@ -177,7 +177,7 @@ async fn document_addition(
     body: Payload,
     method: IndexDocumentsMethod,
 ) -> Result<HttpResponse, ResponseError> {
-    const ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
+    static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
         vec![
             "application/json".to_string(),
             "application/x-ndjson".to_string(),
