@@ -246,7 +246,11 @@ impl IndexController {
         let uid = uid.ok_or(IndexControllerError::MissingUid)?;
         let uuid = Uuid::new_v4();
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
-        self.uuid_resolver.insert(uid.clone(), uuid).await?;
+        if let Err(e) = self.uuid_resolver.insert(uid.clone(), uuid).await {
+            self.index_handle.delete(uuid).await?;
+            return Err(e.into());
+        }
+
         let meta = IndexMetadata {
             uuid,
             name: uid.clone(),
