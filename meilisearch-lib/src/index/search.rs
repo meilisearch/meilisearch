@@ -13,13 +13,13 @@ use serde_json::{json, Value};
 
 use crate::index::error::FacetError;
 
-use super::error::{Result, IndexError};
+use super::error::{IndexError, Result};
 use super::index::Index;
 
 pub type Document = IndexMap<String, Value>;
 type MatchesInfo = BTreeMap<String, Vec<MatchInfo>>;
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct MatchInfo {
     start: usize,
     length: usize,
@@ -35,7 +35,7 @@ pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQuery {
     pub q: Option<String>,
@@ -55,7 +55,7 @@ pub struct SearchQuery {
     pub facets_distribution: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SearchHit {
     #[serde(flatten)]
     pub document: Document,
@@ -65,7 +65,7 @@ pub struct SearchHit {
     pub matches_info: Option<MatchesInfo>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,

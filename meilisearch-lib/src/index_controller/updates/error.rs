@@ -3,7 +3,11 @@ use std::fmt;
 
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::{document_formats::DocumentFormatError, index::error::IndexError, index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat}};
+use crate::{
+    document_formats::DocumentFormatError,
+    index::error::IndexError,
+    index_controller::{update_file_store::UpdateFileStoreError, DocumentAdditionFormat},
+};
 
 pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 

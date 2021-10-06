@@ -1,11 +1,13 @@
 pub use search::{default_crop_length, SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
 
-pub mod error;
-pub mod update_handler;
 mod dump;
+pub mod error;
 mod search;
+pub mod update_handler;
 mod updates;
+
+#[allow(clippy::module_inception)]
 mod index;
 
 pub use index::{Document, IndexMeta, IndexStats};
@@ -31,11 +33,10 @@ pub mod test {
     use crate::index_controller::update_file_store::UpdateFileStore;
     use crate::index_controller::updates::status::{Failed, Processed, Processing};
 
-    use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
-    use super::index::Index;
     use super::error::Result;
+    use super::index::Index;
     use super::update_handler::UpdateHandler;
-
+    use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
 
     pub struct Stub<A, R> {
         name: String,
@@ -54,11 +55,19 @@ pub mod test {
         }
     }
 
+    impl<A, R> Stub<A, R> {
+        fn invalidate(&mut self) {
+            self.invalidated = true;
+        }
+    }
+
     impl<A: UnwindSafe, R> Stub<A, R> {
         fn call(&mut self, args: A) -> R {
             match self.times {
                 Some(0) => panic!("{} called to many times", self.name),
-                Some(ref mut times) => { *times -= 1; },
+                Some(ref mut times) => {
+                    *times -= 1;
+                }
                 None => (),
             }
 
@@ -73,7 +82,7 @@ pub mod test {
             match std::panic::catch_unwind(|| (stub.0)(args)) {
                 Ok(r) => r,
                 Err(panic) => {
-                    self.invalidated = true;
+                    self.invalidate();
                     std::panic::resume_unwind(panic);
                 }
             }
@@ -82,7 +91,7 @@ pub mod test {
 
     #[derive(Debug, Default)]
     struct StubStore {
-        inner: Arc<Mutex<HashMap<String, Box<dyn Any + Sync + Send>>>>
+        inner: Arc<Mutex<HashMap<String, Box<dyn Any + Sync + Send>>>>,
     }
 
     impl StubStore {
@@ -107,19 +116,19 @@ pub mod test {
         name: String,
         store: &'a StubStore,
         times: Option<usize>,
-        _f: std::marker::PhantomData<fn(A) -> R>
+        _f: std::marker::PhantomData<fn(A) -> R>,
     }
 
     impl<'a, A: 'static, R: 'static> StubBuilder<'a, A, R> {
         /// Asserts the stub has been called exactly `times` times.
-       #[must_use]
+        #[must_use]
         pub fn times(mut self, times: usize) -> Self {
             self.times = Some(times);
             self
         }
 
         /// Asserts the stub has been called exactly once.
-       #[must_use]
+        #[must_use]
         pub fn once(mut self) -> Self {
             self.times = Some(1);
             self
@@ -159,7 +168,11 @@ pub mod test {
         pub fn get<'a, A, R>(&'a self, name: &str) -> &'a mut Stub<A, R> {
             match self.store.get_mut(name) {
                 Some(stub) => stub,
-                None => panic!("unexpected call to {}", name),
+                None => {
+                    // TODO: this can cause nested panics, because stubs are dropped and panic
+                    // themselves in their drops.
+                    panic!("unexpected call to {}", name)
+                }
             }
         }
     }
@@ -237,7 +250,9 @@ pub mod test {
             attributes_to_retrieve: Option<Vec<S>>,
         ) -> Result<Vec<Map<String, Value>>> {
             match self {
-                MockIndex::Vrai(index) => index.retrieve_documents(offset, limit, attributes_to_retrieve),
+                MockIndex::Vrai(index) => {
+                    index.retrieve_documents(offset, limit, attributes_to_retrieve)
+                }
                 MockIndex::Faux(_) => todo!(),
             }
         }
@@ -263,9 +278,7 @@ pub mod test {
         pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
             match self {
                 MockIndex::Vrai(index) => index.snapshot(path),
-                MockIndex::Faux(faux) => {
-                    faux.get("snapshot").call(path.as_ref())
-                }
+                MockIndex::Faux(faux) => faux.get("snapshot").call(path.as_ref()),
             }
         }
 
@@ -285,7 +298,7 @@ pub mod test {
         pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
             match self {
                 MockIndex::Vrai(index) => index.perform_search(query),
-                MockIndex::Faux(_) => todo!(),
+                MockIndex::Faux(faux) => faux.get("perform_search").call(query),
             }
         }
 
@@ -300,12 +313,9 @@ pub mod test {
     #[test]
     fn test_faux_index() {
         let faux = Mocker::default();
-        faux
-            .when("snapshot")
+        faux.when("snapshot")
             .times(2)
-            .then(|_: &Path| -> Result<()> {
-                Ok(())
-            });
+            .then(|_: &Path| -> Result<()> { Ok(()) });
 
         let index = MockIndex::faux(faux);
 
@@ -330,8 +340,7 @@ pub mod test {
     #[should_panic]
     fn test_faux_panic() {
         let faux = Mocker::default();
-        faux
-            .when("snapshot")
+        faux.when("snapshot")
             .times(2)
             .then(|_: &Path| -> Result<()> {
                 panic!();

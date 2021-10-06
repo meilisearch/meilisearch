@@ -16,10 +16,10 @@ use uuid::Uuid;
 use crate::index_controller::update_file_store::UpdateFileStore;
 use crate::EnvSizer;
 
-use super::{Checked, Settings};
 use super::error::IndexError;
-use super::update_handler::UpdateHandler;
 use super::error::Result;
+use super::update_handler::UpdateHandler;
+use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
 
@@ -284,4 +284,3 @@ impl Index {
         Ok(())
     }
 }
-

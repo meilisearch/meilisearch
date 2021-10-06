@@ -53,6 +53,7 @@ impl Metadata {
 }
 
 #[async_trait::async_trait]
+#[cfg_attr(test, mockall::automock)]
 pub trait DumpActorHandle {
     /// Start the creation of a dump
     /// Implementation: [handle_impl::DumpActorHandleImpl::create_dump]
@@ -278,13 +279,13 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
+    use crate::index::error::Result as IndexResult;
     use crate::index::test::Mocker;
     use crate::index::Index;
+    use crate::index_controller::index_resolver::error::IndexResolverError;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
     use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
     use crate::index_controller::updates::create_update_handler;
-    use crate::index::error::Result as IndexResult;
-    use crate::index_controller::index_resolver::error::IndexResolverError;
 
     fn setup() {
         static SETUP: Lazy<()> = Lazy::new(|| {
@@ -323,14 +324,14 @@ mod test {
                 assert!(uuids_clone.contains(&uuid));
                 uuid
             });
-            mocker.when::<&Path, IndexResult<()>>("dump").once().then(move |_| {
-                Ok(())
-            });
+            mocker
+                .when::<&Path, IndexResult<()>>("dump")
+                .once()
+                .then(move |_| Ok(()));
             Box::pin(ok(Some(Index::faux(mocker))))
         });
 
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
-
 
         let update_sender =
             create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();

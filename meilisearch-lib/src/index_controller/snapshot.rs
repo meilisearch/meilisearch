@@ -11,9 +11,9 @@ use tokio::time::sleep;
 use crate::compression::from_tar_gz;
 use crate::index_controller::updates::UpdateMsg;
 
-use super::index_resolver::IndexResolver;
 use super::index_resolver::index_store::IndexStore;
 use super::index_resolver::uuid_store::UuidStore;
+use super::index_resolver::IndexResolver;
 use super::updates::UpdateSender;
 
 pub struct SnapshotService<U, I> {
@@ -25,9 +25,9 @@ pub struct SnapshotService<U, I> {
 }
 
 impl<U, I> SnapshotService<U, I>
-    where
-        U: UuidStore + Sync + Send + 'static,
-        I: IndexStore + Sync + Send + 'static,
+where
+    U: UuidStore + Sync + Send + 'static,
+    I: IndexStore + Sync + Send + 'static,
 {
     pub fn new(
         index_resolver: Arc<IndexResolver<U, I>>,
@@ -142,11 +142,11 @@ mod test {
 
     use crate::index::error::IndexError;
     use crate::index::test::Mocker;
-    use crate::index::{Index, error::Result as IndexResult};
-    use crate::index_controller::index_resolver::IndexResolver;
+    use crate::index::{error::Result as IndexResult, Index};
     use crate::index_controller::index_resolver::error::IndexResolverError;
-    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_controller::index_resolver::IndexResolver;
     use crate::index_controller::updates::create_update_handler;
 
     use super::*;
@@ -183,7 +183,10 @@ mod test {
 
         let mut indexes = uuids.clone().into_iter().map(|uuid| {
             let mocker = Mocker::default();
-            mocker.when("snapshot").times(1).then(|_: &Path| -> IndexResult<()> { Ok(()) });
+            mocker
+                .when("snapshot")
+                .times(1)
+                .then(|_: &Path| -> IndexResult<()> { Ok(()) });
             mocker.when("uuid").then(move |_: ()| uuid);
             Index::faux(mocker)
         });
@@ -199,7 +202,8 @@ mod test {
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
         let dir = tempfile::tempdir().unwrap();
-        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
+        let update_sender =
+            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
 
         let snapshot_path = tempfile::tempdir().unwrap();
         let snapshot_service = SnapshotService::new(
@@ -224,14 +228,13 @@ mod test {
             .returning(move |_| Box::pin(err(IndexResolverError::IndexAlreadyExists)));
 
         let mut index_store = MockIndexStore::new();
-        index_store
-            .expect_get()
-            .never();
+        index_store.expect_get().never();
 
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
         let dir = tempfile::tempdir().unwrap();
-        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
+        let update_sender =
+            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
 
         let snapshot_path = tempfile::tempdir().unwrap();
         let snapshot_service = SnapshotService::new(
@@ -261,7 +264,9 @@ mod test {
         let mut indexes = uuids.clone().into_iter().map(|uuid| {
             let mocker = Mocker::default();
             // index returns random error
-            mocker.when("snapshot").then(|_: &Path| -> IndexResult<()> { Err(IndexError::ExistingPrimaryKey) });
+            mocker
+                .when("snapshot")
+                .then(|_: &Path| -> IndexResult<()> { Err(IndexError::ExistingPrimaryKey) });
             mocker.when("uuid").then(move |_: ()| uuid);
             Index::faux(mocker)
         });
@@ -277,7 +282,8 @@ mod test {
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
         let dir = tempfile::tempdir().unwrap();
-        let update_sender = create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
+        let update_sender =
+            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
 
         let snapshot_path = tempfile::tempdir().unwrap();
         let snapshot_service = SnapshotService::new(

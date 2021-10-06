@@ -38,9 +38,9 @@ pub fn create_update_handler<U, I>(
     db_path: impl AsRef<Path>,
     update_store_size: usize,
 ) -> anyhow::Result<UpdateSender>
-    where
-        U: UuidStore + Sync + Send + 'static,
-        I: IndexStore + Sync + Send + 'static,
+where
+    U: UuidStore + Sync + Send + 'static,
+    I: IndexStore + Sync + Send + 'static,
 {
     let path = db_path.as_ref().to_owned();
     let (sender, receiver) = mpsc::channel(100);

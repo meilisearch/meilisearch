@@ -532,8 +532,7 @@ impl UpdateStore {
                     ..
                 } = pending.decode()?
                 {
-                    self.update_file_store
-                        .snapshot(content_uuid, &path)?;
+                    self.update_file_store.snapshot(content_uuid, &path)?;
                 }
             }
         }
@@ -576,8 +575,8 @@ mod test {
 
     use crate::index::error::IndexError;
     use crate::index::test::Mocker;
-    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
     use crate::index_controller::updates::status::{Failed, Processed};
 
     use super::*;
@@ -598,7 +597,7 @@ mod test {
             Arc::new(AtomicBool::new(false)),
             update_file_store,
         )
-            .unwrap();
+        .unwrap();
 
         let index1_uuid = Uuid::new_v4();
         let index2_uuid = Uuid::new_v4();
@@ -635,7 +634,7 @@ mod test {
             Arc::new(AtomicBool::new(false)),
             update_file_store,
         )
-            .unwrap();
+        .unwrap();
         let update = Update::ClearDocuments;
         let uuid = Uuid::new_v4();
         let store_clone = update_store.clone();
@@ -643,7 +642,7 @@ mod test {
             store_clone.register_update(uuid, update).unwrap();
         })
         .await
-            .unwrap();
+        .unwrap();
 
         let txn = update_store.env.read_txn().unwrap();
         assert!(update_store
@@ -675,7 +674,6 @@ mod test {
         let uuid_store = MockUuidStore::new();
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-
         let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(4096 * 100);
@@ -686,7 +684,7 @@ mod test {
             Arc::new(AtomicBool::new(false)),
             update_file_store,
         )
-            .unwrap();
+        .unwrap();
 
         // wait a bit for the event loop exit.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -700,7 +698,6 @@ mod test {
             .put(&mut txn, &(0, index_uuid, 0), &update)
             .unwrap();
 
-
         txn.commit().unwrap();
 
         // Process the pending, and check that it has been moved to the update databases, and
@@ -710,7 +707,7 @@ mod test {
             store_clone.process_pending_update(index_resolver).unwrap();
         })
         .await
-            .unwrap();
+        .unwrap();
 
         let txn = store.env.read_txn().unwrap();
 
@@ -742,7 +739,6 @@ mod test {
         let uuid_store = MockUuidStore::new();
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-
         let update_file_store = UpdateFileStore::new(dir.path()).unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(4096 * 100);
@@ -753,7 +749,7 @@ mod test {
             Arc::new(AtomicBool::new(false)),
             update_file_store,
         )
-            .unwrap();
+        .unwrap();
 
         // wait a bit for the event loop exit.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -767,7 +763,6 @@ mod test {
             .put(&mut txn, &(0, index_uuid, 0), &update)
             .unwrap();
 
-
         txn.commit().unwrap();
 
         // Process the pending, and check that it has been moved to the update databases, and
@@ -777,7 +772,7 @@ mod test {
             store_clone.process_pending_update(index_resolver).unwrap();
         })
         .await
-            .unwrap();
+        .unwrap();
 
         let txn = store.env.read_txn().unwrap();
 

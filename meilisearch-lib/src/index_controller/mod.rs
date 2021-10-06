@@ -30,7 +30,9 @@ use error::Result;
 
 use self::dump_actor::load_dump;
 use self::index_resolver::error::IndexResolverError;
-use self::index_resolver::HardStateIndexResolver;
+use self::index_resolver::index_store::{IndexStore, MapIndexStore};
+use self::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
+use self::index_resolver::IndexResolver;
 use self::updates::status::UpdateStatus;
 use self::updates::UpdateMsg;
 
@@ -40,6 +42,10 @@ mod index_resolver;
 mod snapshot;
 pub mod update_file_store;
 pub mod updates;
+
+/// Concrete implementation of the IndexController, exposed by meilisearch-lib
+pub type MeiliSearch =
+    IndexController<HeedUuidStore, MapIndexStore, dump_actor::DumpActorHandleImpl>;
 
 pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
@@ -60,13 +66,6 @@ pub struct IndexMetadata {
 pub struct IndexSettings {
     pub uid: Option<String>,
     pub primary_key: Option<String>,
-}
-
-#[derive(Clone)]
-pub struct IndexController {
-    index_resolver: Arc<HardStateIndexResolver>,
-    update_sender: updates::UpdateSender,
-    dump_handle: dump_actor::DumpActorHandleImpl,
 }
 
 #[derive(Debug)]
@@ -129,7 +128,7 @@ impl IndexControllerBuilder {
         self,
         db_path: impl AsRef<Path>,
         indexer_options: IndexerOpts,
-    ) -> anyhow::Result<IndexController> {
+    ) -> anyhow::Result<MeiliSearch> {
         let index_size = self
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
@@ -177,6 +176,8 @@ impl IndexControllerBuilder {
             index_size,
             update_store_size,
         )?;
+
+        let dump_handle = Arc::new(dump_handle);
 
         if self.schedule_snapshot {
             let snapshot_service = SnapshotService::new(
@@ -266,7 +267,21 @@ impl IndexControllerBuilder {
     }
 }
 
-impl IndexController {
+// Using derivative to derive clone here, to ignore U and I bounds.
+#[derive(derivative::Derivative)]
+#[derivative(Clone(bound = ""))]
+pub struct IndexController<U, I, D> {
+    index_resolver: Arc<IndexResolver<U, I>>,
+    update_sender: updates::UpdateSender,
+    dump_handle: Arc<D>,
+}
+
+impl<U, I, D> IndexController<U, I, D>
+where
+    U: UuidStore + Sync + Send + 'static,
+    I: IndexStore + Sync + Send + 'static,
+    D: DumpActorHandle + Send + Sync,
+{
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
     }
@@ -286,7 +301,7 @@ impl IndexController {
                 if create_index {
                     let index = self.index_resolver.create_index(name, None).await?;
                     let update_result =
-                        UpdateMsg::update(&self.update_sender, index.uuid, update).await?;
+                        UpdateMsg::update(&self.update_sender, index.uuid(), update).await?;
                     Ok(update_result)
                 } else {
                     Err(IndexResolverError::UnexistingIndex(name).into())
@@ -495,5 +510,119 @@ pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
                 continue;
             }
         }
+    }
+}
+
+/// Parses the v1 version of the Asc ranking rules `asc(price)`and returns the field name.
+pub fn asc_ranking_rule(text: &str) -> Option<&str> {
+    text.split_once("asc(")
+        .and_then(|(_, tail)| tail.rsplit_once(")"))
+        .map(|(field, _)| field)
+}
+
+/// Parses the v1 version of the Desc ranking rules `desc(price)`and returns the field name.
+pub fn desc_ranking_rule(text: &str) -> Option<&str> {
+    text.split_once("desc(")
+        .and_then(|(_, tail)| tail.rsplit_once(")"))
+        .map(|(field, _)| field)
+}
+
+#[cfg(test)]
+mod test {
+    use futures::future::ok;
+    use mockall::predicate::eq;
+    use tokio::sync::mpsc;
+
+    use crate::index::error::Result as IndexResult;
+    use crate::index::test::Mocker;
+    use crate::index::Index;
+    use crate::index_controller::dump_actor::MockDumpActorHandle;
+    use crate::index_controller::index_resolver::index_store::MockIndexStore;
+    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+
+    use super::updates::UpdateSender;
+    use super::*;
+
+    impl<D: DumpActorHandle> IndexController<MockUuidStore, MockIndexStore, D> {
+        pub fn mock(
+            index_resolver: IndexResolver<MockUuidStore, MockIndexStore>,
+            update_sender: UpdateSender,
+            dump_handle: D,
+        ) -> Self {
+            IndexController {
+                index_resolver: Arc::new(index_resolver),
+                update_sender,
+                dump_handle: Arc::new(dump_handle),
+            }
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_search_simple() {
+        let index_uid = "test";
+        let index_uuid = Uuid::new_v4();
+        let query = SearchQuery {
+            q: Some(String::from("hello world")),
+            offset: Some(10),
+            limit: 0,
+            attributes_to_retrieve: Some(vec!["string".to_owned()].into_iter().collect()),
+            attributes_to_crop: None,
+            crop_length: 18,
+            attributes_to_highlight: None,
+            matches: true,
+            filter: None,
+            sort: None,
+            facets_distribution: None,
+        };
+
+        let result = SearchResult {
+            hits: vec![],
+            nb_hits: 29,
+            exhaustive_nb_hits: true,
+            query: "hello world".to_string(),
+            limit: 24,
+            offset: 0,
+            processing_time_ms: 50,
+            facets_distribution: None,
+            exhaustive_facets_count: Some(true),
+        };
+
+        let mut uuid_store = MockUuidStore::new();
+        uuid_store
+            .expect_get_uuid()
+            .with(eq(index_uid.to_owned()))
+            .returning(move |s| Box::pin(ok((s, Some(index_uuid)))));
+
+        let mut index_store = MockIndexStore::new();
+        let result_clone = result.clone();
+        let query_clone = query.clone();
+        index_store
+            .expect_get()
+            .with(eq(index_uuid))
+            .returning(move |_uuid| {
+                let result = result_clone.clone();
+                let query = query_clone.clone();
+                let mocker = Mocker::default();
+                mocker
+                    .when::<SearchQuery, IndexResult<SearchResult>>("perform_search")
+                    .once()
+                    .then(move |q| {
+                        assert_eq!(&q, &query);
+                        Ok(result.clone())
+                    });
+                let index = Index::faux(mocker);
+                Box::pin(ok(Some(index)))
+            });
+
+        let index_resolver = IndexResolver::new(uuid_store, index_store);
+        let (update_sender, _) = mpsc::channel(1);
+        let dump_actor = MockDumpActorHandle::new();
+        let index_controller = IndexController::mock(index_resolver, update_sender, dump_actor);
+
+        let r = index_controller
+            .search(index_uid.to_owned(), query.clone())
+            .await
+            .unwrap();
+        assert_eq!(r, result);
     }
 }
