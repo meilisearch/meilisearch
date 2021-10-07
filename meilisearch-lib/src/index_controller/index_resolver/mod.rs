@@ -6,6 +6,7 @@ use std::path::Path;
 
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
+use log::error;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
@@ -100,8 +101,12 @@ where
         let index = self.index_store.create(uuid, primary_key).await?;
         match self.index_uuid_store.insert(uid, uuid).await {
             Err(e) => {
-                if let Some(index) = self.index_store.delete(uuid).await? {
-                    index.inner().clone().prepare_for_closing();
+                match self.index_store.delete(uuid).await {
+                    Ok(Some(index)) => {
+                        index.inner().clone().prepare_for_closing();
+                    }
+                    Ok(None) => (),
+                    Err(e) => error!("Error while deleting index: {:?}", e),
                 }
                 Err(e)
             }
@@ -128,8 +133,12 @@ where
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
             Some(uuid) => {
-                if let Some(index) = self.index_store.delete(uuid).await? {
-                    index.inner().clone().prepare_for_closing();
+                match self.index_store.delete(uuid).await {
+                    Ok(Some(index)) => {
+                        index.inner().clone().prepare_for_closing();
+                    }
+                    Ok(None) => (),
+                    Err(e) => error!("Error while deleting index: {:?}", e),
                 }
                 Ok(uuid)
             }
