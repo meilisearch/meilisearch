@@ -206,17 +206,19 @@ impl FilterCondition {
             )))?;
         }
         let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
-        if let Some(span) = (!(-181.0..181.).contains(&lat.0))
-            .then(|| &lat.1)
-            .or((!(-181.0..181.).contains(&lng.0)).then(|| &lng.1))
-        {
+        if !(-90.0..=90.0).contains(&lat.0) {
             return Err(UserError::InvalidFilter(PestError::new_from_span(
                 ErrorVariant::CustomError {
-                    message: format!(
-                        "Latitude and longitude must be contained between -180 to 180 degrees."
-                    ),
+                    message: format!("Latitude must be contained between -90 and 90 degrees."),
                 },
-                span.clone(),
+                lat.1.clone(),
+            )))?;
+        } else if !(-180.0..=180.0).contains(&lng.0) {
+            return Err(UserError::InvalidFilter(PestError::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!("Longitude must be contained between -180 and 180 degrees."),
+                },
+                lng.1.clone(),
             )))?;
         }
         Ok(Operator(fid, GeoLowerThan([lat.0, lng.0], distance)))
@@ -858,6 +860,18 @@ mod tests {
         let expected = Operator(0, GeoLowerThan([12., 13.0005], 2000.));
         assert_eq!(condition, expected);
 
+        // basic test with latitude and longitude at the max angle
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(90, 180, 2000)").unwrap();
+        let expected = Operator(0, GeoLowerThan([90., 180.], 2000.));
+        assert_eq!(condition, expected);
+
+        // basic test with latitude and longitude at the min angle
+        let condition =
+            FilterCondition::from_str(&rtxn, &index, "_geoRadius(-90, -180, 2000)").unwrap();
+        let expected = Operator(0, GeoLowerThan([-90., -180.], 2000.));
+        assert_eq!(condition, expected);
+
         // test the negation of the GeoLowerThan
         let condition =
             FilterCondition::from_str(&rtxn, &index, "NOT _geoRadius(50, 18, 2000.500)").unwrap();
@@ -906,20 +920,36 @@ mod tests {
         assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
 
         // georadius have a bad latitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-200, 150, 10)");
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-100, 150, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+            .contains("Latitude must be contained between -90 and 90 degrees."));
+
+        // georadius have a bad latitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-90.0000001, 150, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude must be contained between -90 and 90 degrees."));
 
         // georadius have a bad longitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 181, 10)");
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 250, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+            .contains("Longitude must be contained between -180 and 180 degrees."));
+
+        // georadius have a bad longitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 180.000001, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Longitude must be contained between -180 and 180 degrees."));
     }
 
     #[test]
