@@ -6,6 +6,7 @@ use std::path::Path;
 
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
+use log::error;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
@@ -98,8 +99,19 @@ where
         }
         let uuid = Uuid::new_v4();
         let index = self.index_store.create(uuid, primary_key).await?;
-        self.index_uuid_store.insert(uid, uuid).await?;
-        Ok(index)
+        match self.index_uuid_store.insert(uid, uuid).await {
+            Err(e) => {
+                match self.index_store.delete(uuid).await {
+                    Ok(Some(index)) => {
+                        index.inner().clone().prepare_for_closing();
+                    }
+                    Ok(None) => (),
+                    Err(e) => error!("Error while deleting index: {:?}", e),
+                }
+                Err(e)
+            }
+            Ok(()) => Ok(index),
+        }
     }
 
     pub async fn list(&self) -> Result<Vec<(String, Index)>> {
@@ -121,7 +133,13 @@ where
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
             Some(uuid) => {
-                let _ = self.index_store.delete(uuid).await;
+                match self.index_store.delete(uuid).await {
+                    Ok(Some(index)) => {
+                        index.inner().clone().prepare_for_closing();
+                    }
+                    Ok(None) => (),
+                    Err(e) => error!("Error while deleting index: {:?}", e),
+                }
                 Ok(uuid)
             }
             None => Err(IndexResolverError::UnexistingIndex(uid)),
