@@ -3,6 +3,12 @@ members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
+    "meilisearch-update-store",
+]
+default-members = [
+    "meilisearch-http",
+    "meilisearch-error",
+    "meilisearch-lib",
 ]
 resolver = "2"
 
