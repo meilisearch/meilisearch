@@ -12,8 +12,8 @@ use crate::{CriterionError, Error, UserError};
 /// You must always cast it to a sort error or a criterion error.
 #[derive(Debug)]
 pub enum AscDescError {
-    BadLat,
-    BadLng,
+    InvalidLatitude,
+    InvalidLongitude,
     InvalidSyntax { name: String },
     ReservedKeyword { name: String },
 }
@@ -21,10 +21,10 @@ pub enum AscDescError {
 impl fmt::Display for AscDescError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::BadLat => {
+            Self::InvalidLatitude => {
                 write!(f, "Latitude must be contained between -90 and 90 degrees.",)
             }
-            Self::BadLng => {
+            Self::InvalidLongitude => {
                 write!(f, "Longitude must be contained between -180 and 180 degrees.",)
             }
             Self::InvalidSyntax { name } => {
@@ -44,7 +44,7 @@ impl fmt::Display for AscDescError {
 impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::BadLat | AscDescError::BadLng => {
+            AscDescError::InvalidLatitude | AscDescError::InvalidLongitude => {
                 CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
             AscDescError::InvalidSyntax { name } => CriterionError::InvalidName { name },
@@ -81,9 +81,9 @@ impl FromStr for Member {
                             .map_err(|_| AscDescError::ReservedKeyword { name: text.to_string() })
                     })?;
                 if !(-90.0..=90.0).contains(&lat) {
-                    return Err(AscDescError::BadLat)?;
+                    return Err(AscDescError::InvalidLatitude)?;
                 } else if !(-180.0..=180.0).contains(&lng) {
-                    return Err(AscDescError::BadLng)?;
+                    return Err(AscDescError::InvalidLongitude)?;
                 }
                 Ok(Member::Geo([lat, lng]))
             }
@@ -155,8 +155,8 @@ impl FromStr for AscDesc {
 
 #[derive(Debug)]
 pub enum SortError {
-    BadLat,
-    BadLng,
+    InvalidLatitude,
+    InvalidLongitude,
     BadGeoPointUsage { name: String },
     InvalidName { name: String },
     ReservedName { name: String },
@@ -167,8 +167,8 @@ pub enum SortError {
 impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::BadLat => SortError::BadLat,
-            AscDescError::BadLng => SortError::BadLng,
+            AscDescError::InvalidLatitude => SortError::InvalidLatitude,
+            AscDescError::InvalidLongitude => SortError::InvalidLongitude,
             AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
                 SortError::BadGeoPointUsage { name }
@@ -187,12 +187,8 @@ impl From<AscDescError> for SortError {
 impl fmt::Display for SortError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::BadLat => {
-                write!(f, "Latitude must be contained between -90 and 90 degrees.",)
-            }
-            Self::BadLng => {
-                write!(f, "Longitude must be contained between -180 and 180 degrees.",)
-            }
+            Self::InvalidLatitude => write!(f, "{}", AscDescError::InvalidLatitude),
+            Self::InvalidLongitude => write!(f, "{}", AscDescError::InvalidLongitude),
             Self::BadGeoPointUsage { name } => {
                 write!(
                     f,
@@ -296,11 +292,11 @@ mod tests {
             ),
             ("_geoPoint(35, 85, 75):asc", ReservedKeyword { name: S("_geoPoint(35, 85, 75)") }),
             ("_geoPoint(18):asc", ReservedKeyword { name: S("_geoPoint(18)") }),
-            ("_geoPoint(200, 200):asc", BadLat),
-            ("_geoPoint(90.000001, 0):asc", BadLat),
-            ("_geoPoint(0, -180.000001):desc", BadLng),
-            ("_geoPoint(159.256, 130):asc", BadLat),
-            ("_geoPoint(12, -2021):desc", BadLng),
+            ("_geoPoint(200, 200):asc", InvalidLatitude),
+            ("_geoPoint(90.000001, 0):asc", InvalidLatitude),
+            ("_geoPoint(0, -180.000001):desc", InvalidLongitude),
+            ("_geoPoint(159.256, 130):asc", InvalidLatitude),
+            ("_geoPoint(12, -2021):desc", InvalidLongitude),
         ];
 
         for (req, expected_error) in invalid_req {
@@ -347,11 +343,11 @@ mod tests {
                 S("`_geoRadius` is a reserved keyword and thus can't be used as a sort expression. Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates."),
             ),
             (
-                AscDescError::BadLat,
+                AscDescError::InvalidLatitude,
                 S("Latitude must be contained between -90 and 90 degrees."),
             ),
             (
-                AscDescError::BadLng,
+                AscDescError::InvalidLongitude,
                 S("Longitude must be contained between -180 and 180 degrees."),
             ),
         ];
