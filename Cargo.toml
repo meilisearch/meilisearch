@@ -3,7 +3,7 @@ members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
-    "meilisearch-update-store",
+    "meilisearch-tasks",
 ]
 default-members = [
     "meilisearch-http",

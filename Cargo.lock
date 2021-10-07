@@ -1271,14 +1271,33 @@ dependencies = [
 
 [[package]]
 name = "heed"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "269c7486ed6def5d7b59a427cec3e87b4d4dd4381d01e21c8c9f2d3985688392"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "heed-traits 0.8.0",
+ "heed-types 0.8.0",
+ "libc",
+ "lmdb-rkv-sys 0.11.0",
+ "once_cell",
+ "page_size",
+ "serde",
+ "synchronoise",
+ "url",
+]
+
+[[package]]
+name = "heed"
 version = "0.12.1"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 dependencies = [
  "byteorder",
- "heed-traits",
- "heed-types",
+ "heed-traits 0.7.0",
+ "heed-types 0.7.2",
  "libc",
- "lmdb-rkv-sys",
+ "lmdb-rkv-sys 0.15.0",
  "once_cell",
  "page_size",
  "serde",
@@ -1293,15 +1312,35 @@ version = "0.7.0"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 
 [[package]]
+name = "heed-traits"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a53a94e5b2fd60417e83ffdfe136c39afacff0d4ac1d8d01cd66928ac610e1a2"
+
+[[package]]
 name = "heed-types"
 version = "0.7.2"
 source = "git+https://github.com/Kerollmops/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
 dependencies = [
  "bincode",
- "heed-traits",
+ "heed-traits 0.7.0",
  "serde",
  "serde_json",
  "zerocopy",
+]
+
+[[package]]
+name = "heed-types"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a6cf0a6952fcedc992602d5cddd1e3fff091fbe87d38636e3ec23a31f32acbd"
+dependencies = [
+ "bincode",
+ "bytemuck",
+ "byteorder",
+ "heed-traits 0.8.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1548,6 +1587,17 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lmdb-rkv-sys"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b27470ac25167b3afdfb6af8fcd3bc1be67de50ffbdaf4073378cfded6ae24a5"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
+name = "lmdb-rkv-sys"
 version = "0.15.0"
 source = "git+https://github.com/meilisearch/lmdb-rs#d0b50d02938ee84e4e4372697ea991fe2a4cae3b"
 dependencies = [
@@ -1657,7 +1707,7 @@ dependencies = [
  "fst",
  "futures",
  "futures-util",
- "heed",
+ "heed 0.12.1",
  "hex",
  "http",
  "indexmap",
@@ -1724,7 +1774,7 @@ dependencies = [
  "fst",
  "futures",
  "futures-util",
- "heed",
+ "heed 0.12.1",
  "http",
  "indexmap",
  "itertools",
@@ -1762,6 +1812,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "meilisearch-tasks"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "heed 0.11.0",
+ "serde",
+]
+
+[[package]]
 name = "meilisearch-tokenizer"
 version = "0.2.5"
 source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.5#c0b5cf741ed9485147f2cbe523f2214d4fa4c395"
@@ -1776,10 +1836,6 @@ dependencies = [
  "unicode-segmentation",
  "whatlang",
 ]
-
-[[package]]
-name = "meilisearch-update-store"
-version = "0.1.0"
 
 [[package]]
 name = "memchr"
@@ -1824,7 +1880,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
- "heed",
+ "heed 0.12.1",
  "human_format",
  "itertools",
  "levenshtein_automata",
