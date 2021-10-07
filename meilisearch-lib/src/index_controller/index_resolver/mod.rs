@@ -100,7 +100,9 @@ where
         let index = self.index_store.create(uuid, primary_key).await?;
         match self.index_uuid_store.insert(uid, uuid).await {
             Err(e) => {
-                let _ = self.index_store.delete(uuid).await;
+                if let Some(index) = self.index_store.delete(uuid).await? {
+                    index.inner().clone().prepare_for_closing();
+                }
                 Err(e)
             }
             Ok(()) => Ok(index),
@@ -126,7 +128,9 @@ where
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
             Some(uuid) => {
-                let _ = self.index_store.delete(uuid).await;
+                if let Some(index) = self.index_store.delete(uuid).await? {
+                    index.inner().clone().prepare_for_closing();
+                }
                 Ok(uuid)
             }
             None => Err(IndexResolverError::UnexistingIndex(uid)),
