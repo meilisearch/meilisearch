@@ -6,8 +6,8 @@ members = [
 ]
 resolver = "2"
 
-[profile.release]
-debug = true
+[build]
+rustflags = "-C link-args=-s"
 
 [patch.crates-io]
 pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
