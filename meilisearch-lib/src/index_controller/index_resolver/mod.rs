@@ -98,8 +98,13 @@ where
         }
         let uuid = Uuid::new_v4();
         let index = self.index_store.create(uuid, primary_key).await?;
-        self.index_uuid_store.insert(uid, uuid).await?;
-        Ok(index)
+        match self.index_uuid_store.insert(uid, uuid).await {
+            Err(e) => {
+                let _ = self.index_store.delete(uuid).await;
+                Err(e)
+            }
+            Ok(()) => Ok(index),
+        }
     }
 
     pub async fn list(&self) -> Result<Vec<(String, Index)>> {
