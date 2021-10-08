@@ -555,6 +555,10 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                     })
                     .collect(),
             ),
+            Value::Number(number) => {
+                let number_string_value = self.format_string(number.to_string(), matcher, format_options);
+                Value::String(number_string_value)
+            }
             value => value,
         }
     }
