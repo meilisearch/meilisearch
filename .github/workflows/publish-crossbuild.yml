@@ -57,20 +57,24 @@ jobs:
 
       - name: Configure target aarch64 GNU
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-        # LD gold won't work with MUSL
-        env:
-          JEMALLOC_SYS_WITH_LG_PAGE: 16
-          RUSTFLAGS: '-Clink-arg=-fuse-ld=gold'
+        ## Environment variable is not passed using env:
+        ## LD gold won't work with MUSL
+        # env:
+        #   JEMALLOC_SYS_WITH_LG_PAGE: 16
+        #   RUSTFLAGS: '-Clink-arg=-fuse-ld=gold'
         run: |
           echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
+          echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
+          echo RUSTFLAGS="-Clink-arg=-fuse-ld=gold" >> $GITHUB_ENV
 
       - name: Configure target aarch64 MUSL
         if: matrix.target == 'aarch64-unknown-linux-musl'
-        env:
-          JEMALLOC_SYS_WITH_LG_PAGE: 16
+        # env:
+        #   JEMALLOC_SYS_WITH_LG_PAGE: 16
         run: |
           sudo apt-get install -y musl-tools
+          echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
 
       - name: Configure target x86_64 MUSL
         if: matrix.target == 'x86_64-unknown-linux-musl'
