@@ -1,0 +1,7 @@
+[build.env]
+passthrough = [
+    "RUST_BACKTRACE",
+    "CARGO_TERM_COLOR",
+    "RUSTFLAGS",
+    "JEMALLOC_SYS_WITH_LG_PAGE"
+]
