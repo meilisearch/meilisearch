@@ -26,7 +26,7 @@
 <p align="center">⚡ Lightning Fast, Ultra Relevant, and Typo-Tolerant Search Engine 🔍</p>
 
 **MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
-For more information about features go to [our documentation](https://docs.meilisearch.com/).
+For more information about features go to [Our Documentation](https://docs.meilisearch.com/).
 
 <p align="center">
   <img src="assets/trumen-fast.gif" alt="Web interface gif" />
