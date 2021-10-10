@@ -9,10 +9,11 @@ use nom::{
     bytes::complete::{tag, take_while1},
     character::complete::{char, multispace0},
     combinator::map,
-    error::ErrorKind,
     error::ParseError,
     error::VerboseError,
+    error::{ContextError, ErrorKind},
     multi::many0,
+    multi::separated_list1,
     sequence::{delimited, preceded, tuple},
     IResult,
 };
@@ -43,6 +44,8 @@ impl Operator {
             LowerThan(n) => (GreaterThanOrEqual(n), None),
             LowerThanOrEqual(n) => (GreaterThan(n), None),
             Between(n, m) => (LowerThan(n), Some(GreaterThan(m))),
+            GeoLowerThan(point, distance) => (GeoGreaterThan(point, distance), None),
+            GeoGreaterThan(point, distance) => (GeoLowerThan(point, distance), None),
         }
     }
 }
@@ -193,13 +196,52 @@ impl<'a> ParseContext<'a> {
         Ok((input, res))
     }
 
+    fn parse_geo_radius<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    where
+        E: ParseError<&'a str>,
+    {
+        let (input, args) = preceded(
+            tag("_geoRadius"),
+            delimited(
+                tag("("),
+                separated_list1(tag(","), self.ws(|c| self.parse_value(c))),
+                tag(")"),
+            ),
+        )(input)?;
+
+        if args.len() != 3 {
+            let e = E::from_char(input, '(');
+            return Err(nom::Err::Failure(e));
+        }
+        let lat = self.parse_numeric(args[0])?;
+        let lng = self.parse_numeric(args[1])?;
+        let dis = self.parse_numeric(args[2])?;
+
+        let fid = match self.fields_ids_map.id("_geo") {
+            Some(fid) => fid,
+            None => return Ok((input, FilterCondition::Empty)),
+        };
+
+        if let Some(span) = (!(-181.0..181.).contains(&lat))
+            .then(|| &lat)
+            .or((!(-181.0..181.).contains(&lng)).then(|| &lng))
+        {
+            let e = E::from_char(input, '(');
+            return Err(nom::Err::Failure(e));
+        }
+
+        let res = FilterCondition::Operator(fid, GeoLowerThan([lat, lng], dis));
+        Ok((input, res))
+    }
+
     fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: ParseError<&'a str>,
     {
+        let l0 = |c| self.parse_geo_radius(c);
         let l1 = |c| self.parse_simple_condition(c);
         let l2 = |c| self.parse_range_condition(c);
-        let (input, condition) = alt((l1, l2))(input)?;
+        let (input, condition) = alt((l0, l1, l2))(input)?;
         Ok((input, condition))
     }
 
@@ -220,6 +262,15 @@ impl<'a> ParseContext<'a> {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
     }
+
+    fn parse_value<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
+    where
+        E: ParseError<&'a str>,
+    {
+        let key = |input| take_while1(Self::is_key_component)(input);
+        alt((key, delimited(char('"'), key, char('"'))))(input)
+    }
+
     fn is_key_component(c: char) -> bool {
         c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
     }
@@ -431,13 +482,13 @@ mod tests {
         // basic test
         let condition =
             FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 13.0005, 2000)").unwrap();
-        let expected = Operator(0, GeoLowerThan([12., 13.0005], 2000.));
+        let expected = FilterCondition::Operator(0, GeoLowerThan([12., 13.0005], 2000.));
         assert_eq!(condition, expected);
 
         // test the negation of the GeoLowerThan
         let condition =
             FilterCondition::from_str(&rtxn, &index, "NOT _geoRadius(50, 18, 2000.500)").unwrap();
-        let expected = Operator(0, GeoGreaterThan([50., 18.], 2000.500));
+        let expected = FilterCondition::Operator(0, GeoGreaterThan([50., 18.], 2000.500));
         assert_eq!(condition, expected);
 
         // composition of multiple operations
@@ -446,13 +497,13 @@ mod tests {
             &index,
             "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
         )
-        .unwrap();
-        let expected = Or(
-            Box::new(And(
-                Box::new(Operator(0, GeoGreaterThan([1., 2.], 300.))),
-                Box::new(Operator(0, GeoLowerThan([1.001, 2.002], 1000.300))),
+        .unwrap_or_else(|e| FilterCondition::Empty);
+        let expected = FilterCondition::Or(
+            Box::new(FilterCondition::And(
+                Box::new(FilterCondition::Operator(0, GeoGreaterThan([1., 2.], 300.))),
+                Box::new(FilterCondition::Operator(0, GeoLowerThan([1.001, 2.002], 1000.300))),
             )),
-            Box::new(Operator(1, LowerThanOrEqual(10.))),
+            Box::new(FilterCondition::Operator(1, LowerThanOrEqual(10.))),
         );
         assert_eq!(condition, expected);
 

@@ -5,7 +5,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use either::Either;
 use heed::types::DecodeIgnore;
 use log::debug;
-use nom::error::VerboseError;
+use nom::error::{convert_error, VerboseError};
 use roaring::RoaringBitmap;
 
 use self::FilterCondition::*;
@@ -87,7 +87,15 @@ impl FilterCondition {
             ParseContext { fields_ids_map: &fields_ids_map, filterable_fields: &filterable_fields };
         match ctx.parse_expression::<VerboseError<&str>>(expression) {
             Ok((_, fc)) => Ok(fc),
-            Err(e) => Err(Error::UserError(UserError::InvalidFilterNom { input: e.to_string() })),
+            Err(e) => {
+                match e {
+                    nom::Err::Error(x) => {
+                        println!("verbose err:\n{}", convert_error(expression, x))
+                    }
+                    _ => unreachable!(),
+                }
+                Err(Error::UserError(UserError::InvalidFilterNom { input: "whatever".to_string() }))
+            }
         }
     }
     pub fn negate(self) -> FilterCondition {
@@ -100,67 +108,6 @@ impl FilterCondition {
             And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
             Empty => Empty,
         }
-    }
-
-    fn geo_radius(
-        fields_ids_map: &FieldsIdsMap,
-        filterable_fields: &HashSet<String>,
-        item: Pair<Rule>,
-    ) -> Result<FilterCondition> {
-        if !filterable_fields.contains("_geo") {
-            return Err(UserError::InvalidFilterAttribute(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                    "attribute `_geo` is not filterable, available filterable attributes are: {}",
-                    filterable_fields.iter().join(", "),
-                ),
-                },
-                item.as_span(),
-            )))?;
-        }
-        let mut items = item.into_inner();
-        let fid = match fields_ids_map.id("_geo") {
-            Some(fid) => fid,
-            None => return Ok(Empty),
-        };
-        let parameters_item = items.next().unwrap();
-        // We don't need more than 3 parameters, but to handle errors correctly we are still going
-        // to extract the first 4 parameters
-        let param_span = parameters_item.as_span();
-        let parameters = parameters_item
-            .into_inner()
-            .take(4)
-            .map(|param| (param.clone(), param.as_span()))
-            .map(|(param, span)| pest_parse(param).0.map(|arg| (arg, span)))
-            .collect::<StdResult<Vec<(f64, _)>, _>>()
-            .map_err(UserError::InvalidFilter)?;
-        if parameters.len() != 3 {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
-                        },
-                        // we want to point to the last parameters and if there was no parameters we
-                        // point to the parenthesis
-                        parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
-            )))?;
-        }
-        let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
-        if !(-90.0..=90.0).contains(&lat.0) {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!("Latitude must be contained between -90 and 90 degrees."),
-                },
-                lat.1.clone(),
-            )))?;
-        } else if !(-180.0..=180.0).contains(&lng.0) {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!("Longitude must be contained between -180 and 180 degrees."),
-                },
-                lng.1.clone(),
-            )))?;
-        }
-        Ok(Operator(fid, Operator::GeoLowerThan([lat.0, lng.0], distance)))
     }
 }
 
@@ -348,7 +295,7 @@ impl FilterCondition {
                     numbers_db,
                     strings_db,
                     field_id,
-                    &GeoLowerThan(point.clone(), *distance),
+                    &Operator::GeoLowerThan(point.clone(), *distance),
                 )?;
                 let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
                 return Ok(geo_faceted_doc_ids - result);

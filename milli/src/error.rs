@@ -210,6 +210,8 @@ impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             //TODO
+            Self::InvalidFilterAttributeNom => write!(f, "parser error "),
+            Self::InvalidFilterValue => write!(f, "parser error "),
             Self::InvalidFilterNom { input } => write!(f, "parser error {}", input),
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::CriterionError(error) => write!(f, "{}", error),
@@ -228,10 +230,6 @@ impl fmt::Display for UserError {
                 "the document with the id: {} contains an invalid _geo field: {}",
                 document_id, object
             ),
-            Self::InvalidAscDescSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}", name)
-            }
-            Self::InvalidCriterionName { name } => write!(f, "invalid criterion {}", name),
             Self::InvalidDocumentId { document_id } => {
                 let json = serde_json::to_string(document_id).unwrap();
                 write!(
