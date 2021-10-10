@@ -70,7 +70,7 @@ pub unsafe fn into_clonable_grenad(
     reader: grenad::Reader<File>,
 ) -> Result<grenad::Reader<CursorClonableMmap>> {
     let file = reader.into_inner();
-    let mmap = memmap::Mmap::map(&file)?;
+    let mmap = memmap2::Mmap::map(&file)?;
     let cursor = io::Cursor::new(ClonableMmap::from(mmap));
     let reader = grenad::Reader::new(cursor)?;
     Ok(reader)
