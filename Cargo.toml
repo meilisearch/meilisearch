@@ -3,13 +3,15 @@ members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
-    "meilisearch-tasks",
+    #"meilisearch-tasks",
 ]
 default-members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
 ]
+
+exclude = ["meilisearch-tasks"]
 resolver = "2"
 
 [patch.crates-io]

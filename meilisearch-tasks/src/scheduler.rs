@@ -42,6 +42,10 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
         }
     }
 
+    /// Checks for pending tasks and groups them in a batch. If there are no pending update,
+    /// return Ok(None)
+    ///
+    /// Until batching is properly implemented, the batches contain only one task.
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
         match self.store.peek_pending().await {
             Some(next_task_id) => {
@@ -63,6 +67,10 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
         }
     }
 
+    /// Handles the result from a batch processing.
+    ///
+    /// When a task is processed, the result of the processing is pushed to its event list. The
+    /// handle batch result make sure that the new state is save into its store.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
         self.store.update_tasks(batch.tasks).await?;
         Ok(())
@@ -73,7 +81,7 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
 mod test {
     use nelson::Mocker;
 
-    use crate::task::{Task, TaskContent, TaskEvent, TaskId};
+    use crate::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
     use crate::MockTaskPerformer;
 
     use super::*;
@@ -120,7 +128,7 @@ mod test {
                 let task = Task {
                     id,
                     index_uid: "Test".to_string(),
-                    content: TaskContent::ClearIndex,
+                    content: TaskContent::IndexDeletion,
                     events: vec![TaskEvent::Created(Utc::now())],
                 };
                 Ok(Some(task))
@@ -171,7 +179,7 @@ mod test {
                 let task = Task {
                     id,
                     index_uid: "Test".to_string(),
-                    content: TaskContent::ClearIndex,
+                    content: TaskContent::IndexDeletion,
                     events: vec![TaskEvent::Created(Utc::now())],
                 };
                 Ok(Some(task))
@@ -180,7 +188,7 @@ mod test {
             .once()
             .then(|tasks| {
                 assert_eq!(tasks.len(), 1);
-                assert!(tasks[0].events.contains(&TaskEvent::Processed));
+                assert!(tasks[0].events.iter().find(|e| matches!(e, &TaskEvent::Succeded { .. })).is_some());
                 Ok(())
             });
 
@@ -190,7 +198,10 @@ mod test {
         performer.expect_process()
             .once()
             .returning(|mut batch| {
-                batch.tasks.iter_mut().for_each(|t| t.events.push(TaskEvent::Processed));
+                batch.tasks.iter_mut().for_each(|t| t.events.push(TaskEvent::Succeded {
+                    result: TaskResult,
+                    timestamp: Utc::now(),
+                }));
                 Ok(batch)
             });
 

@@ -11,6 +11,7 @@ chrono = { version = "0.4.19", features = ["serde"] }
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 serde = { version = "1.0.130", features = ["derive"] }
 tokio = { version = "1.12.0", features = ["full"] }
+uuid = { version = "0.8.2", features = ["serde"] }
 
 [dev-dependencies]
 mockall = "0.10.2"
