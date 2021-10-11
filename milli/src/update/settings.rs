@@ -1134,7 +1134,6 @@ mod tests {
             "release_date": 819676800
           }
         ]);
-
         let builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
