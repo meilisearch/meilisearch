@@ -4,9 +4,10 @@ use crate::task::Task;
 
 pub type BatchId = u32;
 
+#[derive(Debug)]
 pub struct Batch {
-    id: BatchId,
-    index_uid: String,
-    created_at: DateTime<Utc>,
-    tasks: Vec<Task>,
+    pub id: BatchId,
+    pub index_uid: String,
+    pub created_at: DateTime<Utc>,
+    pub tasks: Vec<Task>,
 }

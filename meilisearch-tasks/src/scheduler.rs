@@ -1,28 +1,212 @@
 use std::sync::Arc;
+use std::time::Duration;
+
+use chrono::Utc;
 
 use crate::batch::Batch;
-use crate::store::TaskStore;
-use crate::{TaskPerformer, Result};
+use crate::task::TaskEvent;
+use crate::{Result, TaskPerformer};
 
+#[cfg(not(test))]
+use crate::store::TaskStore;
+
+#[cfg(test)]
+use test::TaskStore;
+
+/// The scheduler roles is to perform batches of tasks one at a time. It will monitor the TaskStore
+/// for new tasks, put them in a batch, and process the batch as soon as possible.
+///
+/// When a batch is currently processing, the scheduler is just waiting.
 pub struct Scheduler<P> {
-    store: TaskStore,
+    store: Arc<TaskStore>,
     performer: Arc<P>,
+
+    /// The inderval at which the the `TaskStore` should be checked for new updates
+    task_store_check_interval: Duration,
 }
 
-impl<P: TaskPerformer> Scheduler<P> {
+impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
     async fn run(self) {
         loop {
-            let batch = self.prepare_batch().unwrap();
-            let batch_result = self.performer.process(batch).unwrap();
-            self.handle_batch_result(batch_result).unwrap();
+            match self.prepare_batch().await.unwrap() {
+                Some(batch) => {
+                    let performer = self.performer.clone();
+                    let batch_result = tokio::task::spawn_blocking(move || performer.process(batch).unwrap()).await.unwrap();
+                    self.handle_batch_result(batch_result).await.unwrap();
+                }
+                None => {
+                    // No updates found to create a batch we wait a bit before we retry.
+                    tokio::time::sleep(self.task_store_check_interval).await;
+                }
+            }
         }
     }
 
-    fn prepare_batch(&self) -> Result<Batch> {
-        todo!()
+    async fn prepare_batch(&self) -> Result<Option<Batch>> {
+        match self.store.peek_pending().await {
+            Some(next_task_id) => {
+                let mut task = self.store.get_task(next_task_id).await?.unwrap();
+                task.events.push(TaskEvent::Batched {
+                    timestamp: Utc::now(),
+                    batch_id: 0,
+                });
+
+                let batch = Batch {
+                    id: 0,
+                    index_uid: task.index_uid.clone(),
+                    created_at: Utc::now(),
+                    tasks: vec![task],
+                };
+                Ok(Some(batch))
+            }
+            None => Ok(None),
+        }
     }
 
-    fn handle_batch_result(&self, batch: Batch) -> Result<Batch> {
-        todo!()
+    async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
+        self.store.update_tasks(batch.tasks).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use nelson::Mocker;
+
+    use crate::task::{Task, TaskContent, TaskEvent, TaskId};
+    use crate::MockTaskPerformer;
+
+    use super::*;
+
+    pub enum TaskStore {
+        Real(crate::store::TaskStore),
+        Mock(Arc<Mocker>),
+    }
+
+    impl TaskStore {
+        pub fn mock(mocker: Mocker) -> Self {
+            Self::Mock(Arc::new(mocker))
+        }
+
+        pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
+            match self {
+                TaskStore::Real(s) => s.update_tasks(tasks).await,
+                TaskStore::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
+            }
+        }
+
+        pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>> {
+            match self {
+                TaskStore::Real(s) => s.get_task(id).await,
+                TaskStore::Mock(m) => unsafe { m.get::<_, Result<Option<Task>>>("get_task").call(id) },
+            }
+        }
+
+        pub async fn peek_pending(&self) -> Option<TaskId> {
+            match self {
+                TaskStore::Real(s) => s.peek_pending().await,
+                TaskStore::Mock(m) => unsafe { m.get::<_, Option<TaskId>>("peek_pending").call(()) },
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prepare_batch_full() {
+        let mocker = Mocker::default();
+
+        mocker.when::<TaskId, Result<Option<Task>>>("get_task")
+            .once()
+            .then(|id| {
+                let task = Task {
+                    id,
+                    index_uid: "Test".to_string(),
+                    content: TaskContent::ClearIndex,
+                    events: vec![TaskEvent::Created(Utc::now())],
+                };
+                Ok(Some(task))
+            });
+
+        mocker.when::<(), Option<TaskId>>("peek_pending").then(|()| { Some(1) });
+
+        let store = Arc::new(TaskStore::mock(mocker));
+        let performer = Arc::new(MockTaskPerformer::new());
+
+        let scheduler = Scheduler {
+            store,
+            performer,
+            task_store_check_interval: Duration::from_millis(1),
+        };
+
+        let batch = scheduler.prepare_batch().await.unwrap().unwrap();
+
+        assert_eq!(batch.tasks.len(), 1);
+        assert_eq!(batch.tasks[0].id, 1);
+    }
+
+    #[tokio::test]
+    async fn test_prepare_batch_empty() {
+        let mocker = Mocker::default();
+        mocker.when::<(), Option<TaskId>>("peek_pending").then(|()| None);
+
+        let store = Arc::new(TaskStore::mock(mocker));
+        let performer = Arc::new(MockTaskPerformer::new());
+
+        let scheduler = Scheduler {
+            store,
+            performer,
+            task_store_check_interval: Duration::from_millis(1),
+        };
+
+        assert!(scheduler.prepare_batch().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_loop_run_normal() {
+        let mocker = Mocker::default();
+        let mut id = Some(1);
+        mocker.when::<(), Option<TaskId>>("peek_pending").then(move |()| { id.take() });
+        mocker.when::<TaskId, Result<Option<Task>>>("get_task")
+            .once()
+            .then(|id| {
+                let task = Task {
+                    id,
+                    index_uid: "Test".to_string(),
+                    content: TaskContent::ClearIndex,
+                    events: vec![TaskEvent::Created(Utc::now())],
+                };
+                Ok(Some(task))
+            });
+        mocker.when::<Vec<Task>, Result<()>>("update_tasks")
+            .once()
+            .then(|tasks| {
+                assert_eq!(tasks.len(), 1);
+                assert!(tasks[0].events.contains(&TaskEvent::Processed));
+                Ok(())
+            });
+
+        let store = Arc::new(TaskStore::mock(mocker));
+
+        let mut performer = MockTaskPerformer::new();
+        performer.expect_process()
+            .once()
+            .returning(|mut batch| {
+                batch.tasks.iter_mut().for_each(|t| t.events.push(TaskEvent::Processed));
+                Ok(batch)
+            });
+
+        let performer = Arc::new(performer);
+
+        let scheduler = Scheduler {
+            store,
+            performer,
+            task_store_check_interval: Duration::from_millis(1),
+        };
+
+        let handle = tokio::spawn(scheduler.run());
+
+        match tokio::time::timeout(Duration::from_millis(100), handle).await {
+            Ok(r) => r.unwrap(),
+            _ => ()
+        }
     }
 }

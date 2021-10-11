@@ -7,6 +7,11 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.51"
-chrono = "0.4.19"
-heed = "0.11.0"
+chrono = { version = "0.4.19", features = ["serde"] }
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 serde = { version = "1.0.130", features = ["derive"] }
+tokio = { version = "1.12.0", features = ["full"] }
+
+[dev-dependencies]
+mockall = "0.10.2"
+nelson = { path = "../../nelson" }
