@@ -6,6 +6,7 @@ use log::debug;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -176,14 +177,29 @@ async fn document_addition(
     body: Payload,
     method: IndexDocumentsMethod,
 ) -> Result<HttpResponse, ResponseError> {
+    static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
+        vec![
+            "application/json".to_string(),
+            "application/x-ndjson".to_string(),
+            "application/csv".to_string(),
+        ]
+    });
     let format = match content_type {
         Some("application/json") => DocumentAdditionFormat::Json,
         Some("application/x-ndjson") => DocumentAdditionFormat::Ndjson,
         Some("text/csv") => DocumentAdditionFormat::Csv,
         Some(other) => {
-            return Err(MeilisearchHttpError::InvalidContentType(other.to_string()).into())
+            return Err(MeilisearchHttpError::InvalidContentType(
+                other.to_string(),
+                ACCEPTED_CONTENT_TYPE.clone(),
+            )
+            .into())
         }
-        None => return Err(MeilisearchHttpError::MissingContentType.into()),
+        None => {
+            return Err(
+                MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()).into(),
+            )
+        }
     };
 
     let update = Update::DocumentAddition {

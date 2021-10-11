@@ -22,6 +22,7 @@ struct DumpEntry {
 const UUIDS_DB_PATH: &str = "index_uuids";
 
 #[async_trait::async_trait]
+#[cfg_attr(test, mockall::automock)]
 pub trait UuidStore: Sized {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.

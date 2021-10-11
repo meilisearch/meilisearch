@@ -22,6 +22,7 @@ async fn add_documents_test_json_content_types() {
         &server.service.options
     ))
     .await;
+    // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -33,6 +34,19 @@ async fn add_documents_test_json_content_types() {
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
     assert_eq!(response, json!({ "updateId": 0 }));
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response, json!({ "updateId": 1 }));
 }
 
 /// no content type is still supposed to be accepted as json
@@ -52,6 +66,7 @@ async fn add_documents_test_no_content_types() {
         &server.service.options
     ))
     .await;
+    // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -63,11 +78,23 @@ async fn add_documents_test_no_content_types() {
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
     assert_eq!(response, json!({ "updateId": 0 }));
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response, json!({ "updateId": 1 }));
 }
 
 /// any other content-type is must be refused
 #[actix_rt::test]
-#[ignore]
 async fn add_documents_test_bad_content_types() {
     let document = json!([
         {
@@ -83,6 +110,7 @@ async fn add_documents_test_bad_content_types() {
         &server.service.options
     ))
     .await;
+    // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
         .set_payload(document.to_string())
@@ -91,8 +119,32 @@ async fn add_documents_test_bad_content_types() {
     let res = test::call_service(&app, req).await;
     let status_code = res.status();
     let body = test::read_body(res).await;
-    assert_eq!(status_code, 405);
-    assert!(body.is_empty());
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 415);
+    assert_eq!(
+        response["message"],
+        json!(
+            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "application/csv""#
+        )
+    );
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "text/plain"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 415);
+    assert_eq!(
+        response["message"],
+        json!(
+            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "application/csv""#
+        )
+    );
 }
 
 #[actix_rt::test]
