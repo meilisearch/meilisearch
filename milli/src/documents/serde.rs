@@ -1,9 +1,12 @@
+use std::collections::BTreeMap;
 use std::convert::TryInto;
+use std::io::Cursor;
 use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use obkv::KvWriter;
 use serde::ser::{Impossible, Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde_json::Value;
 
 use super::{ByteCounter, DocumentsBatchIndex, Error};
 use crate::FieldId;
@@ -36,7 +39,7 @@ impl<'a, W: io::Write> Serializer for &'a mut DocumentSerializer<W> {
             map: KvWriter::new(cursor),
             index: &mut self.index,
             writer: &mut self.writer,
-            buffer: Vec::new(),
+            mapped_documents: BTreeMap::new(),
         };
 
         Ok(map_serializer)
@@ -226,7 +229,7 @@ pub struct MapSerializer<'a, W> {
     map: KvWriter<io::Cursor<&'a mut Vec<u8>>, FieldId>,
     index: &'a mut DocumentsBatchIndex,
     writer: W,
-    buffer: Vec<u8>,
+    mapped_documents: BTreeMap<FieldId, Value>,
 }
 
 /// This implementation of SerializeMap uses serilialize_entry instead of seriliaze_key and
@@ -244,6 +247,14 @@ impl<'a, W: io::Write> SerializeMap for MapSerializer<'a, W> {
     }
 
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        let mut buf = Vec::new();
+        for (key, value) in self.mapped_documents {
+            buf.clear();
+            let mut cursor = Cursor::new(&mut buf);
+            serde_json::to_writer(&mut cursor, &value).map_err(Error::JsonError)?;
+            self.map.insert(key, cursor.into_inner()).map_err(Error::Io)?;
+        }
+
         let data = self.map.into_inner().map_err(Error::Io)?.into_inner();
         let data_len: u32 = data.len().try_into().map_err(|_| Error::DocumentTooLarge)?;
 
@@ -265,11 +276,9 @@ impl<'a, W: io::Write> SerializeMap for MapSerializer<'a, W> {
         let field_serializer = FieldSerializer { index: &mut self.index };
         let field_id: FieldId = key.serialize(field_serializer)?;
 
-        self.buffer.clear();
-        let mut cursor = io::Cursor::new(&mut self.buffer);
-        serde_json::to_writer(&mut cursor, value).map_err(Error::JsonError)?;
+        let value = serde_json::to_value(value).map_err(Error::JsonError)?;
 
-        self.map.insert(field_id, cursor.into_inner()).map_err(Error::Io)?;
+        self.mapped_documents.insert(field_id, value);
 
         Ok(())
     }

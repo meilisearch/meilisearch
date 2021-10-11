@@ -230,4 +230,12 @@ mod test {
         let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
         assert_eq!(nested, json!({ "toto": ["hello"] }));
     }
+
+    #[test]
+    fn out_of_order_fields() {
+        let _documents = documents!([
+            {"id": 1,"b": 0},
+            {"id": 2,"a": 0,"b": 0},
+        ]);
+    }
 }
