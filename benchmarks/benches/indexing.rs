@@ -197,7 +197,8 @@ fn indexing_wiki(c: &mut Criterion) {
             move |index| {
                 let update_builder = UpdateBuilder::new(0);
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder = update_builder.index_documents(&mut wtxn, &index);
+                builder.enable_autogenerate_docids();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
                 builder.execute(documents, |_, _| ()).unwrap();
