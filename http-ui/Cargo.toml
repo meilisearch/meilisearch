@@ -1,7 +1,7 @@
 [package]
 name = "http-ui"
 description = "The HTTP user interface of the milli search engine"
-version = "0.17.1"
+version = "0.17.2"
 authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
 
