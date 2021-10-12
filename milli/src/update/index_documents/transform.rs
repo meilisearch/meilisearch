@@ -77,7 +77,9 @@ fn create_fields_mapping(
 
 fn find_primary_key(index: &bimap::BiHashMap<u16, String>) -> Option<&str> {
     index
-        .right_values()
+        .iter()
+        .sorted_by_key(|(k, _)| *k)
+        .map(|(_, v)| v)
         .find(|v| v.to_lowercase().contains(DEFAULT_PRIMARY_KEY_NAME))
         .map(String::as_str)
 }
@@ -497,7 +499,6 @@ mod test {
     use super::*;
 
     mod compute_primary_key {
-
         use super::{compute_primary_key_pair, FieldsIdsMap};
 
         #[test]
@@ -538,7 +539,6 @@ mod test {
             assert!(result.is_err());
             assert_eq!(fields_map.len(), 0);
         }
-
     }
 
     mod primary_key_inference {
