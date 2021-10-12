@@ -302,6 +302,7 @@ mod test {
     impl_is_policy! {A B}
     impl_is_policy! {A B C}
     impl_is_policy! {A B C D}
+    impl_is_policy! {A B C D E}
 
     /// Emits a compile error if a route doesn't have the correct authentication policy.
     ///
