@@ -98,9 +98,14 @@ pub async fn update_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let body = body.into_inner();
+    analytics.publish(
+        "Index Updated".to_string(),
+        json!({ "with_primary_key": body.primary_key}),
+    );
     let settings = IndexSettings {
         uid: body.uid,
         primary_key: body.primary_key,
