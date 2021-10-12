@@ -49,4 +49,5 @@ COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
 EXPOSE  7700/tcp
 
-CMD ["tini", "--","./meilisearch"]
+ENTRYPOINT ["tini", "--"]
+CMD     ./meilisearch
