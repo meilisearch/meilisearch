@@ -77,7 +77,9 @@ fn create_fields_mapping(
 
 fn find_primary_key(index: &bimap::BiHashMap<u16, String>) -> Option<&str> {
     index
-        .right_values()
+        .iter()
+        .sorted_by_key(|(k, _)| *k)
+        .map(|(_, v)| v)
         .find(|v| v.to_lowercase().contains(DEFAULT_PRIMARY_KEY_NAME))
         .map(String::as_str)
 }
@@ -536,6 +538,27 @@ mod test {
             let result = compute_primary_key_pair(None, &mut fields_map, None, false);
             assert!(result.is_err());
             assert_eq!(fields_map.len(), 0);
+        }
+    }
+
+    mod primary_key_inference {
+        use bimap::BiHashMap;
+
+        use crate::update::index_documents::transform::find_primary_key;
+
+        #[test]
+        fn primary_key_infered_on_first_field() {
+            // We run the test multiple times to change the order in which the fields are iterated upon.
+            for _ in 1..50 {
+                let mut map = BiHashMap::new();
+                map.insert(1, "fakeId".to_string());
+                map.insert(2, "fakeId".to_string());
+                map.insert(3, "fakeId".to_string());
+                map.insert(4, "fakeId".to_string());
+                map.insert(0, "realId".to_string());
+
+                assert_eq!(find_primary_key(&map), Some("realId"));
+            }
         }
     }
 }
