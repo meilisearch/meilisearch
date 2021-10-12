@@ -1,4 +1,3 @@
-
 use std::fmt::Debug;
 use std::ops::Bound::{self, Excluded, Included};
 
@@ -16,9 +15,7 @@ use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
-use crate::{
-    distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result,
-};
+use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FilterCondition {

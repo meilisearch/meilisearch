@@ -215,8 +215,7 @@ impl<'a> ParseContext<'a> {
     where
         E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let err_msg_args_incomplete:&'static str  = 
-            "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
+        let err_msg_args_incomplete:&'static str  = "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
         let err_msg_args_invalid: &'static str =
             "_geoRadius. Latitude and longitude must be contained between -180 to 180 degrees.";
         let (input, args): (&str, Vec<&str>) = match preceded(
@@ -256,7 +255,7 @@ impl<'a> ParseContext<'a> {
             .or((!(-181.0..181.).contains(&lng)).then(|| &lng))
         {
             let e = E::from_char(input, '(');
-            return Err(nom::Err::Failure(E::add_context(input,err_msg_args_invalid, e)));
+            return Err(nom::Err::Failure(E::add_context(input, err_msg_args_invalid, e)));
         }
 
         let res = FilterCondition::Operator(fid, GeoLowerThan([lat, lng], dis));
@@ -270,7 +269,7 @@ impl<'a> ParseContext<'a> {
         let l1 = |c| self.parse_simple_condition(c);
         let l2 = |c| self.parse_range_condition(c);
         let l3 = |c| self.parse_geo_radius(c);
-        let (input, condition) = alt((l1, l2,l3))(input)?;
+        let (input, condition) = alt((l1, l2, l3))(input)?;
         Ok((input, condition))
     }
 
@@ -395,7 +394,7 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("channel"), S("timestamp"),S("id")]); // to keep the fields order
+        builder.set_searchable_fields(vec![S("channel"), S("timestamp"), S("id")]); // to keep the fields order
         builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") ,S("id")});
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -530,7 +529,8 @@ mod tests {
             &rtxn,
             &index,
             "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
-        ).unwrap();
+        )
+        .unwrap();
         let expected = FilterCondition::Or(
             Box::new(FilterCondition::And(
                 Box::new(FilterCondition::Operator(0, GeoGreaterThan([1., 2.], 300.))),
