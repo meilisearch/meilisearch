@@ -3,8 +3,9 @@ use log::debug;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
+use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
@@ -109,9 +110,14 @@ pub async fn search_with_url_query(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let query = params.into_inner().into();
+    let query: SearchQuery = params.into_inner().into();
+
+    let mut analytics_value = extract_analytics_from_query(&query);
+    analytics_value["http_method"] = json!("get");
+
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
         .await?;
@@ -119,6 +125,9 @@ pub async fn search_with_url_query(
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
+
+    analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
+    analytics.publish("Documents Searched".to_string(), analytics_value);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -128,18 +137,45 @@ pub async fn search_with_post(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("search called with params: {:?}", params);
+    let query = params.into_inner();
+    debug!("search called with params: {:?}", query);
+
+    let mut analytics_value = extract_analytics_from_query(&query);
+    analytics_value["http_method"] = json!("post");
+
     let search_result = meilisearch
-        .search(path.into_inner().index_uid, params.into_inner())
+        .search(path.into_inner().index_uid, query)
         .await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
 
+    analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
+    analytics.publish("Documents Searched".to_string(), analytics_value);
+
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
+}
+
+fn extract_analytics_from_query(query: &SearchQuery) -> Value {
+    json!({
+        "sort": {
+            "total": query.sort.as_ref().map(|sort| sort.len()),
+            "has_geoPoint": query.sort.as_ref().map(|sort| sort.iter().any(|sort| sort.starts_with("_geoPoint"))),
+        },
+        "filter": {
+            "has_geoRadius": query.filter.as_ref().map(|filter| filter.to_string().contains("_geoRadius")),
+            // "syntax": 42,
+        },
+        "pagination": {
+            "offset": query.offset,
+            "limit": query.limit,
+        },
+        "terms_number": query.q.as_ref().map(|q| q.split_whitespace().count()).unwrap_or_default(),
+    })
 }
 
 #[cfg(test)]
