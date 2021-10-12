@@ -395,15 +395,19 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
+        builder.set_searchable_fields(vec![S("channel"), S("timestamp"),S("id")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") ,S("id")});
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
         let condition = FilterCondition::from_str(&rtxn, &index, "channel < 20").unwrap();
         let expected = FilterCondition::Operator(0, LowerThan(20.0));
+        assert_eq!(condition, expected);
 
+        let rtxn = index.read_txn().unwrap();
+        let condition = FilterCondition::from_str(&rtxn, &index, "id < 200").unwrap();
+        let expected = FilterCondition::Operator(2, LowerThan(200.0));
         assert_eq!(condition, expected);
     }
 
