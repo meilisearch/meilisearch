@@ -12,6 +12,7 @@ pub struct UpdateBuilder<'a> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    pub(crate) max_positions_per_attributes: Option<u32>,
     pub(crate) update_id: u64,
 }
 
@@ -25,6 +26,7 @@ impl<'a> UpdateBuilder<'a> {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             thread_pool: None,
+            max_positions_per_attributes: None,
             update_id,
         }
     }
@@ -57,6 +59,10 @@ impl<'a> UpdateBuilder<'a> {
         self.thread_pool = Some(thread_pool);
     }
 
+    pub fn max_positions_per_attributes(&mut self, max_positions_per_attributes: u32) {
+        self.max_positions_per_attributes = Some(max_positions_per_attributes);
+    }
+
     pub fn clear_documents<'t, 'u, 'i>(
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -87,6 +93,7 @@ impl<'a> UpdateBuilder<'a> {
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.thread_pool = self.thread_pool;
+        builder.max_positions_per_attributes = self.max_positions_per_attributes;
 
         builder
     }
@@ -105,6 +112,7 @@ impl<'a> UpdateBuilder<'a> {
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.thread_pool = self.thread_pool;
+        builder.max_positions_per_attributes = self.max_positions_per_attributes;
 
         builder
     }

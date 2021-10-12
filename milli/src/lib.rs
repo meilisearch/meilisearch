@@ -53,8 +53,23 @@ pub type Attribute = u32;
 pub type DocumentId = u32;
 pub type FieldId = u16;
 pub type Position = u32;
+pub type RelativePosition = u16;
 pub type FieldDistribution = BTreeMap<String, u64>;
 pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 2], DocumentId>;
+
+pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+// Convert an absolute word position into a relative position.
+// Return the field id of the attribute related to the absolute position
+// and the relative position in the attribute.
+pub fn relative_from_absolute_position(absolute: Position) -> (FieldId, RelativePosition) {
+    ((absolute >> 16) as u16, (absolute & 0xFFFF) as u16)
+}
+
+// Compute the absolute word position with the field id of the attribute and relative position in the attribute.
+pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosition) -> Position {
+    (field_id as u32) << 16 | (relative as u32)
+}
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
@@ -186,5 +201,27 @@ mod tests {
         // We don't care about having two point (.) after the other as
         // the distance of hard separators is clamped to 8 anyway.
         assert_eq!(string, "name: John Doe. . 43. hello. I. am. fine. . ");
+    }
+
+    #[test]
+    fn test_relative_position_conversion() {
+        assert_eq!((0x0000, 0x0000), relative_from_absolute_position(0x00000000));
+        assert_eq!((0x0000, 0xFFFF), relative_from_absolute_position(0x0000FFFF));
+        assert_eq!((0xFFFF, 0x0000), relative_from_absolute_position(0xFFFF0000));
+        assert_eq!((0xFF00, 0xFF00), relative_from_absolute_position(0xFF00FF00));
+        assert_eq!((0xFF00, 0x00FF), relative_from_absolute_position(0xFF0000FF));
+        assert_eq!((0x1234, 0x5678), relative_from_absolute_position(0x12345678));
+        assert_eq!((0xFFFF, 0xFFFF), relative_from_absolute_position(0xFFFFFFFF));
+    }
+
+    #[test]
+    fn test_absolute_position_conversion() {
+        assert_eq!(0x00000000, absolute_from_relative_position(0x0000, 0x0000));
+        assert_eq!(0x0000FFFF, absolute_from_relative_position(0x0000, 0xFFFF));
+        assert_eq!(0xFFFF0000, absolute_from_relative_position(0xFFFF, 0x0000));
+        assert_eq!(0xFF00FF00, absolute_from_relative_position(0xFF00, 0xFF00));
+        assert_eq!(0xFF0000FF, absolute_from_relative_position(0xFF00, 0x00FF));
+        assert_eq!(0x12345678, absolute_from_relative_position(0x1234, 0x5678));
+        assert_eq!(0xFFFFFFFF, absolute_from_relative_position(0xFFFF, 0xFFFF));
     }
 }

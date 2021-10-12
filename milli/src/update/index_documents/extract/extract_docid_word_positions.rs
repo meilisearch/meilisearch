@@ -10,8 +10,7 @@ use serde_json::Value;
 
 use super::helpers::{concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
-use crate::proximity::ONE_ATTRIBUTE;
-use crate::{FieldId, Result};
+use crate::{absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
@@ -24,7 +23,10 @@ pub fn extract_docid_word_positions<R: io::Read>(
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
+    max_positions_per_attributes: Option<u32>,
 ) -> Result<(RoaringBitmap, grenad::Reader<File>)> {
+    let max_positions_per_attributes = max_positions_per_attributes
+        .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
 
     let mut documents_ids = RoaringBitmap::new();
@@ -63,7 +65,7 @@ pub fn extract_docid_word_positions<R: io::Read>(
                 if let Some(field) = json_to_string(&value, &mut field_buffer) {
                     let analyzed = analyzer.analyze(field);
                     let tokens = process_tokens(analyzed.tokens())
-                        .take_while(|(p, _)| (*p as u32) < ONE_ATTRIBUTE);
+                        .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
                         let token = token.text().trim();
@@ -71,10 +73,10 @@ pub fn extract_docid_word_positions<R: io::Read>(
                             key_buffer.truncate(mem::size_of::<u32>());
                             key_buffer.extend_from_slice(token.as_bytes());
 
-                            let position: u32 = index
+                            let position: u16 = index
                                 .try_into()
                                 .map_err(|_| SerializationError::InvalidNumberSerialization)?;
-                            let position = field_id as u32 * ONE_ATTRIBUTE + position;
+                            let position = absolute_from_relative_position(field_id, position);
                             docid_word_positions_sorter
                                 .insert(&key_buffer, &position.to_ne_bytes())?;
                         }

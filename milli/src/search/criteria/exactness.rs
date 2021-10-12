@@ -10,7 +10,7 @@ use crate::search::criteria::{
     resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult,
 };
 use crate::search::query_tree::{Operation, PrimitiveQueryPart};
-use crate::Result;
+use crate::{absolute_from_relative_position, FieldId, Result};
 
 pub struct Exactness<'t> {
     ctx: &'t dyn Context<'t>,
@@ -181,7 +181,7 @@ fn resolve_state(
                         ctx.field_id_word_count_docids(id, query_len)?
                     {
                         let mut attribute_candidates_array =
-                            attribute_start_with_docids(ctx, id as u32, query)?;
+                            attribute_start_with_docids(ctx, id, query)?;
                         attribute_candidates_array.push(attribute_allowed_docids);
                         candidates |= intersection_of(attribute_candidates_array.iter().collect());
                     }
@@ -199,8 +199,7 @@ fn resolve_state(
             let mut candidates = RoaringBitmap::new();
             let attributes_ids = ctx.searchable_fields_ids()?;
             for id in attributes_ids {
-                let attribute_candidates_array =
-                    attribute_start_with_docids(ctx, id as u32, query)?;
+                let attribute_candidates_array = attribute_start_with_docids(ctx, id, query)?;
                 candidates |= intersection_of(attribute_candidates_array.iter().collect());
             }
 
@@ -290,12 +289,12 @@ fn resolve_state(
 
 fn attribute_start_with_docids(
     ctx: &dyn Context,
-    attribute_id: u32,
+    attribute_id: FieldId,
     query: &[ExactQueryPart],
 ) -> heed::Result<Vec<RoaringBitmap>> {
     let mut attribute_candidates_array = Vec::new();
     // start from attribute first position
-    let mut pos = attribute_id * 1000;
+    let mut pos = absolute_from_relative_position(attribute_id, 0);
     for part in query {
         use ExactQueryPart::*;
         match part {

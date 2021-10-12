@@ -131,6 +131,11 @@ pub struct IndexerOpt {
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[structopt(long)]
     pub indexing_jobs: Option<usize>,
+
+    /// Maximum relative position in an attribute for a word to be indexed.
+    /// Any value higher than 65535 will be clamped.
+    #[structopt(long)]
+    pub max_positions_per_attributes: Option<u32>,
 }
 
 struct Highlighter<'a, A> {
@@ -345,6 +350,9 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(chunk_compression_level) = indexer_opt_cloned.chunk_compression_level {
                 update_builder.chunk_compression_level(chunk_compression_level);
+            }
+            if let Some(max_pos_per_attributes) = indexer_opt_cloned.max_positions_per_attributes {
+                update_builder.max_positions_per_attributes(max_pos_per_attributes);
             }
             update_builder.thread_pool(GLOBAL_THREAD_POOL.get().unwrap());
             update_builder.log_every_n(indexer_opt_cloned.log_every_n);

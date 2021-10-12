@@ -68,6 +68,7 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    pub(crate) max_positions_per_attributes: Option<u32>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
     words_prefix_threshold: Option<u32>,
@@ -104,6 +105,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             autogenerate_docids: false,
             update_id,
+            max_positions_per_attributes: None,
         }
     }
 
@@ -262,6 +264,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     primary_key_id,
                     geo_field_id,
                     stop_words,
+                    self.max_positions_per_attributes,
                 )
             });
 
@@ -284,6 +287,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
                 thread_pool: self.thread_pool,
+                max_positions_per_attributes: self.max_positions_per_attributes,
                 update_id: self.update_id,
             };
             let mut deletion_builder = update_builder.delete_documents(self.wtxn, self.index)?;
@@ -882,6 +886,44 @@ mod tests {
         builder.execute(content, |_, _| ()).unwrap();
 
         wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn index_more_than_1000_positions_in_a_field() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(50 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let mut big_object = HashMap::new();
+        big_object.insert(S("id"), "wow");
+        let content: String =
+            (0..=u16::MAX).into_iter().map(|p| p.to_string()).reduce(|a, b| a + " " + &b).unwrap();
+        big_object.insert("content".to_string(), &content);
+
+        let mut cursor = Cursor::new(Vec::new());
+
+        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+        builder.add_documents(big_object).unwrap();
+        builder.finish().unwrap();
+        cursor.set_position(0);
+        let content = DocumentBatchReader::from_reader(cursor).unwrap();
+
+        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        wtxn.commit().unwrap();
+
+        let mut rtxn = index.read_txn().unwrap();
+
+        assert!(index.word_docids.get(&mut rtxn, "0").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "64").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "256").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "1024").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "32768").unwrap().is_some());
+        assert!(index.word_docids.get(&mut rtxn, "65535").unwrap().is_some());
     }
 
     #[test]
