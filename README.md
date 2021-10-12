@@ -187,7 +187,7 @@ Search and indexation are the domain of our core engine, [`milli`](https://githu
 MeiliSearch collects anonymous data regarding general usage.
 This helps us better understand developers' usage of MeiliSearch features.
 
-The exhaustive list of the information we're retrieving is available on the [Telemetry page](https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html) in our documentation.
+To find out more on what information we're retrieving, please see our documentation on [Telemetry](https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html).
 
 This program is optional, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
