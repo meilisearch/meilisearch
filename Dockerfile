@@ -35,7 +35,7 @@ RUN     $HOME/.cargo/bin/cargo build --release
 # Run
 FROM    alpine:3.14
 
-ARG     USER=meiliuser
+ARG     USER=meili
 ENV     HOME /home/${USER}
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 
