@@ -3,7 +3,6 @@
 pub mod error;
 #[macro_use]
 pub mod extractors;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 pub mod helpers;
 pub mod option;

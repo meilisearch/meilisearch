@@ -2543,7 +2543,7 @@ dependencies = [
 [[package]]
 name = "segment"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/segment#656b91e1f7a2c6443e2a8ed59f8942400e9a811e"
+source = "git+https://github.com/meilisearch/segment#042a8631361f02ba84e8bb06f9120e93bf1922f2"
 dependencies = [
  "async-trait",
  "chrono",

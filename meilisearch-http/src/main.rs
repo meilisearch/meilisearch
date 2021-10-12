@@ -1,12 +1,11 @@
 use std::env;
 
 use actix_web::HttpServer;
+use meilisearch_http::analytics;
+use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
-
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
-use meilisearch_http::analytics;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -47,12 +46,15 @@ async fn main() -> anyhow::Result<()> {
     let meilisearch = setup_meilisearch(&opt)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    if !opt.no_analytics {
-        let analytics = analytics::Analytics::new(&opt, &meilisearch).await;
-        println!("go my analytics back");
-    }
+    let analytics = if !opt.no_analytics {
+        analytics::SegmentAnalytics::new(&opt, &meilisearch).await as &'static dyn Analytics
+    } else {
+        analytics::MockAnalytics::new(&opt) as &'static dyn Analytics
+    };
+    #[cfg(any(debug_assertions, not(feature = "analytics")))]
+    let analytics = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt);
+    print_launch_resume(&opt, analytics);
 
     run_http(meilisearch, opt).await?;
 
@@ -77,7 +79,7 @@ async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt) {
+pub fn print_launch_resume(opt: &Opt, analytics: &'static dyn Analytics) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -119,6 +121,7 @@ Anonymous telemetry:   \"Enabled\""
             );
         }
     }
+    eprintln!("Unique User ID:\t\"{}\"", analytics);
 
     eprintln!();
 
