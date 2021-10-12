@@ -58,7 +58,7 @@ pub struct ParseContext<'a> {
 impl<'a> ParseContext<'a> {
     fn parse_or_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let (input, lhs) = self.parse_and_nom(input)?;
         let (input, ors) =
@@ -72,7 +72,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_and_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let (input, lhs) = self.parse_not_nom(input)?;
         // let (input, lhs) = alt((
@@ -90,7 +90,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_not_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         alt((
             map(
@@ -106,14 +106,14 @@ impl<'a> ParseContext<'a> {
     fn ws<F, O, E>(&'a self, inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
     where
         F: Fn(&'a str) -> IResult<&'a str, O, E>,
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         delimited(multispace0, inner, multispace0)
     }
 
     fn parse_simple_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + std::fmt::Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + std::fmt::Debug,
     {
         let operator = alt((tag("<="), tag(">="), tag(">"), tag("="), tag("<"), tag("!=")));
         let k = tuple((self.ws(|c| self.parse_key(c)), operator, self.ws(|c| self.parse_key(c))))(
@@ -141,7 +141,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_numeric<E, T>(&'a self, input: &'a str) -> StdResult<T, nom::Err<E>>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
         T: std::str::FromStr,
     {
         match input.parse::<T>() {
@@ -162,7 +162,7 @@ impl<'a> ParseContext<'a> {
         value: &'a str,
     ) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let numeric: f64 = self.parse_numeric(value)?;
         let k = match input {
@@ -177,7 +177,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_fid<E>(&'a self, input: &'a str, key: &'a str) -> StdResult<FieldId, nom::Err<E>>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let error = match input.chars().nth(0) {
             Some(ch) => Err(nom::Err::Failure(E::from_char(input, ch))),
@@ -194,7 +194,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_range_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let (input, (key, from, _, to)) = tuple((
             self.ws(|c| self.parse_key(c)),
@@ -213,20 +213,34 @@ impl<'a> ParseContext<'a> {
 
     fn parse_geo_radius<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let (input, args) = preceded(
+        let err_msg_args_incomplete:&'static str  = 
+            "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
+        let err_msg_args_invalid: &'static str =
+            "_geoRadius. Latitude and longitude must be contained between -180 to 180 degrees.";
+        let (input, args): (&str, Vec<&str>) = match preceded(
             tag("_geoRadius"),
             delimited(
                 char('('),
-                separated_list1(tag(","), self.ws(|c| self.parse_value(c))),
+                separated_list1(tag(","), self.ws(|c| self.parse_value::<E>(c))),
                 char(')'),
             ),
-        )(input)?;
+        )(input)
+        {
+            Ok(e) => e,
+            Err(_e) => {
+                return Err(nom::Err::Failure(E::add_context(
+                    input,
+                    err_msg_args_incomplete,
+                    E::from_char(input, '('),
+                )));
+            }
+        };
 
         if args.len() != 3 {
             let e = E::from_char(input, '(');
-            return Err(nom::Err::Failure(e));
+            return Err(nom::Err::Failure(E::add_context(input, err_msg_args_incomplete, e)));
         }
         let lat = self.parse_numeric(args[0])?;
         let lng = self.parse_numeric(args[1])?;
@@ -237,12 +251,12 @@ impl<'a> ParseContext<'a> {
             None => return Ok((input, FilterCondition::Empty)),
         };
 
-        if let Some(span) = (!(-181.0..181.).contains(&lat))
+        if let Some(_span) = (!(-181.0..181.).contains(&lat))
             .then(|| &lat)
             .or((!(-181.0..181.).contains(&lng)).then(|| &lng))
         {
             let e = E::from_char(input, '(');
-            return Err(nom::Err::Failure(e));
+            return Err(nom::Err::Failure(E::add_context(input,err_msg_args_invalid, e)));
         }
 
         let res = FilterCondition::Operator(fid, GeoLowerThan([lat, lng], dis));
@@ -251,18 +265,18 @@ impl<'a> ParseContext<'a> {
 
     fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let l0 = |c| self.parse_geo_radius(c);
         let l1 = |c| self.parse_simple_condition(c);
         let l2 = |c| self.parse_range_condition(c);
-        let (input, condition) = alt((l0, l1, l2))(input)?;
+        let l3 = |c| self.parse_geo_radius(c);
+        let (input, condition) = alt((l1, l2,l3))(input)?;
         Ok((input, condition))
     }
 
     fn parse_condition_expression<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         alt((
             delimited(self.ws(char('(')), |c| Self::parse_expression(self, c), self.ws(char(')'))),
@@ -272,7 +286,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_key<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + ContextError<&'a str>,
     {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
@@ -280,7 +294,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_value<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
@@ -292,7 +306,7 @@ impl<'a> ParseContext<'a> {
 
     pub fn parse_expression<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + Debug,
+        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
         let a = self.parse_or_nom(input);
         a
@@ -512,8 +526,7 @@ mod tests {
             &rtxn,
             &index,
             "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
-        )
-        .unwrap_or_else(|e| FilterCondition::Empty);
+        ).unwrap();
         let expected = FilterCondition::Or(
             Box::new(FilterCondition::And(
                 Box::new(FilterCondition::Operator(0, GeoGreaterThan([1., 2.], 300.))),

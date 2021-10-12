@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+
 use std::fmt::Debug;
 use std::ops::Bound::{self, Excluded, Included};
 
@@ -17,7 +17,7 @@ use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
 use crate::{
-    distance_between_two_points, CboRoaringBitmapCodec, FieldId, FieldsIdsMap, Index, Result,
+    distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,13 +88,14 @@ impl FilterCondition {
         match ctx.parse_expression::<VerboseError<&str>>(expression) {
             Ok((_, fc)) => Ok(fc),
             Err(e) => {
-                match e {
-                    nom::Err::Error(x) => {
-                        println!("verbose err:\n{}", convert_error(expression, x))
-                    }
+                let ve = match e {
+                    nom::Err::Error(x) => x,
+                    nom::Err::Failure(x) => x,
                     _ => unreachable!(),
-                }
-                Err(Error::UserError(UserError::InvalidFilterNom { input: "whatever".to_string() }))
+                };
+                Err(Error::UserError(UserError::InvalidFilterNom {
+                    input: convert_error(expression, ve).to_string(),
+                }))
             }
         }
     }
