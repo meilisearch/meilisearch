@@ -151,6 +151,7 @@ mod segment {
     impl super::Analytics for SegmentAnalytics {
         fn publish(&'static self, event_name: String, send: Value) {
             tokio::spawn(async move {
+                println!("ANALYTICS pushing {} in the batcher", event_name);
                 let _ = self
                     .batcher
                     .lock()
@@ -162,6 +163,7 @@ mod segment {
                         ..Default::default()
                     })
                     .await;
+                println!("ANALYTICS {} pushed", event_name);
             });
         }
     }
@@ -205,6 +207,6 @@ impl Display for MockAnalytics {
 }
 
 #[async_trait::async_trait]
-pub trait Analytics: Display {
+pub trait Analytics: Display + Sync + Send {
     fn publish(&'static self, event_name: String, send: Value);
 }

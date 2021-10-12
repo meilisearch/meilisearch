@@ -56,17 +56,22 @@ async fn main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, analytics);
 
-    run_http(meilisearch, opt).await?;
+    run_http(meilisearch, opt, analytics).await?;
 
     Ok(())
 }
 
-async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
+async fn run_http(
+    data: MeiliSearch,
+    opt: Opt,
+    analytics: &'static dyn Analytics,
+) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
-    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone))
-        // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-        .disable_signals();
+    let http_server =
+        HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone, analytics))
+            // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+            .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server

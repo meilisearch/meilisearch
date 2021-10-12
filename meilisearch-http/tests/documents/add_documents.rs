@@ -1,7 +1,7 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
 use chrono::DateTime;
-use meilisearch_http::create_app;
+use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
@@ -19,7 +19,8 @@ async fn add_documents_test_json_content_types() {
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
         true,
-        &server.service.options
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options)
     ))
     .await;
     // post
@@ -63,7 +64,8 @@ async fn error_add_documents_test_bad_content_types() {
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
         true,
-        &server.service.options
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options)
     ))
     .await;
     // post
@@ -129,7 +131,8 @@ async fn error_add_documents_test_no_content_type() {
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
         true,
-        &server.service.options
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options)
     ))
     .await;
     // post

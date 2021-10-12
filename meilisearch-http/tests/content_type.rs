@@ -4,7 +4,7 @@ mod common;
 
 use crate::common::Server;
 use actix_web::test;
-use meilisearch_http::create_app;
+use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 
 #[actix_rt::test]
@@ -40,7 +40,8 @@ async fn error_json_bad_content_type() {
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
         true,
-        &server.service.options
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options)
     ))
     .await;
     for route in routes {
