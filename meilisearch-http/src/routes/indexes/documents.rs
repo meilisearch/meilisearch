@@ -167,12 +167,25 @@ pub async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let content_type = req
+        .headers()
+        .get("Content-type")
+        .map(|s| s.to_str().unwrap_or("unkown"));
+
+    analytics.publish(
+        "Documents Updated".to_string(),
+        json!({
+           "payload_type": content_type,
+           "with_primary_key": params.primary_key,
+           "index_creation": meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
+        }),
+    );
+
     document_addition(
-        req.headers()
-            .get("Content-type")
-            .map(|s| s.to_str().unwrap_or("unkown")),
+        content_type,
         meilisearch,
         path.into_inner().index_uid,
         params.into_inner().primary_key,
