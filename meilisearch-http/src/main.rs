@@ -48,9 +48,8 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
-        let analytics_data = meilisearch.clone();
-        let analytics_opt = opt.clone();
-        tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
+        let analytics = analytics::Analytics::new(&opt, &meilisearch).await;
+        println!("go my analytics back");
     }
 
     print_launch_resume(&opt);

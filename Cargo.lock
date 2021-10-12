@@ -1658,6 +1658,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustls",
+ "segment",
  "serde",
  "serde_json",
  "serde_url_params",
@@ -1677,7 +1678,6 @@ dependencies = [
  "uuid",
  "vergen",
  "walkdir",
- "whoami",
  "zip",
 ]
 
@@ -2538,6 +2538,19 @@ checksum = "b362b83898e0e69f38515b82ee15aa80636befe47c3b6d3d89a911e78fc228ce"
 dependencies = [
  "ring",
  "untrusted",
+]
+
+[[package]]
+name = "segment"
+version = "0.1.1"
+source = "git+https://github.com/meilisearch/segment#656b91e1f7a2c6443e2a8ed59f8942400e9a811e"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
