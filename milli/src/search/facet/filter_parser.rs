@@ -58,10 +58,12 @@ pub struct ParseContext<'a> {
 impl<'a> ParseContext<'a> {
     fn parse_or_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let (input, lhs) = self.parse_and_nom(input)?;
-        let (input, ors) = many0(preceded(tag("OR"), |c| Self::parse_or_nom(self, c)))(input)?;
+        let (input, ors) =
+            many0(preceded(self.ws(tag("OR")), |c| Self::parse_or_nom(self, c)))(input)?;
+
         let expr = ors
             .into_iter()
             .fold(lhs, |acc, branch| FilterCondition::Or(Box::new(acc), Box::new(branch)));
@@ -70,10 +72,16 @@ impl<'a> ParseContext<'a> {
 
     fn parse_and_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let (input, lhs) = self.parse_not_nom(input)?;
-        let (input, ors) = many0(preceded(tag("AND"), |c| Self::parse_and_nom(self, c)))(input)?;
+        // let (input, lhs) = alt((
+        //     delimited(self.ws(char('(')), |c| Self::parse_not_nom(self, c), self.ws(char(')'))),
+        //     |c| self.parse_not_nom(c),
+        // ))(input)?;
+
+        let (input, ors) =
+            many0(preceded(self.ws(tag("AND")), |c| Self::parse_and_nom(self, c)))(input)?;
         let expr = ors
             .into_iter()
             .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
@@ -82,7 +90,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_not_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         alt((
             map(
@@ -98,20 +106,26 @@ impl<'a> ParseContext<'a> {
     fn ws<F, O, E>(&'a self, inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
     where
         F: Fn(&'a str) -> IResult<&'a str, O, E>,
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         delimited(multispace0, inner, multispace0)
     }
 
     fn parse_simple_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + std::fmt::Debug,
     {
-        let operator = alt((tag(">"), tag(">="), tag("="), tag("<"), tag("!="), tag("<=")));
-        let (input, (key, op, value)) =
-            tuple((self.ws(|c| self.parse_key(c)), operator, self.ws(|c| self.parse_key(c))))(
-                input,
-            )?;
+        let operator = alt((tag("<="), tag(">="), tag(">"), tag("="), tag("<"), tag("!=")));
+        let k = tuple((self.ws(|c| self.parse_key(c)), operator, self.ws(|c| self.parse_key(c))))(
+            input,
+        );
+        let (input, (key, op, value)) = match k {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
         let fid = self.parse_fid(input, key)?;
         let r: StdResult<f64, nom::Err<VerboseError<&str>>> = self.parse_numeric(value);
         let k = match op {
@@ -127,7 +141,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_numeric<E, T>(&'a self, input: &'a str) -> StdResult<T, nom::Err<E>>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
         T: std::str::FromStr,
     {
         match input.parse::<T>() {
@@ -148,7 +162,7 @@ impl<'a> ParseContext<'a> {
         value: &'a str,
     ) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let numeric: f64 = self.parse_numeric(value)?;
         let k = match input {
@@ -163,7 +177,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_fid<E>(&'a self, input: &'a str, key: &'a str) -> StdResult<FieldId, nom::Err<E>>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let error = match input.chars().nth(0) {
             Some(ch) => Err(nom::Err::Failure(E::from_char(input, ch))),
@@ -180,7 +194,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_range_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let (input, (key, from, _, to)) = tuple((
             self.ws(|c| self.parse_key(c)),
@@ -193,19 +207,20 @@ impl<'a> ParseContext<'a> {
         let numeric_from: f64 = self.parse_numeric(from)?;
         let numeric_to: f64 = self.parse_numeric(to)?;
         let res = FilterCondition::Operator(fid, Between(numeric_from, numeric_to));
+
         Ok((input, res))
     }
 
     fn parse_geo_radius<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let (input, args) = preceded(
             tag("_geoRadius"),
             delimited(
-                tag("("),
+                char('('),
                 separated_list1(tag(","), self.ws(|c| self.parse_value(c))),
-                tag(")"),
+                char(')'),
             ),
         )(input)?;
 
@@ -236,7 +251,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let l0 = |c| self.parse_geo_radius(c);
         let l1 = |c| self.parse_simple_condition(c);
@@ -247,12 +262,12 @@ impl<'a> ParseContext<'a> {
 
     fn parse_condition_expression<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
-        return alt((
+        alt((
             delimited(self.ws(char('(')), |c| Self::parse_expression(self, c), self.ws(char(')'))),
             |c| Self::parse_condition(self, c),
-        ))(input);
+        ))(input)
     }
 
     fn parse_key<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
@@ -265,7 +280,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_value<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
@@ -277,9 +292,10 @@ impl<'a> ParseContext<'a> {
 
     pub fn parse_expression<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str>,
+        E: ParseError<&'a str> + Debug,
     {
-        self.parse_or_nom(input)
+        let a = self.parse_or_nom(input);
+        a
     }
 }
 
@@ -506,6 +522,24 @@ mod tests {
             Box::new(FilterCondition::Operator(1, LowerThanOrEqual(10.))),
         );
         assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn geo_radius_error() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
 
         // georadius don't have any parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
