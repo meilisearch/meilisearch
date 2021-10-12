@@ -4,7 +4,9 @@ use log::debug;
 use meilisearch_lib::index_controller::IndexSettings;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
+use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
@@ -54,8 +56,14 @@ pub struct IndexCreateRequest {
 pub async fn create_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
+
+    analytics.publish(
+        "Index Created".to_string(),
+        json!({ "with_primary_key": body.primary_key}),
+    );
     let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
     Ok(HttpResponse::Created().json(meta))
 }
