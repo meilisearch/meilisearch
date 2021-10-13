@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use memmap::Mmap;
+use memmap2::Mmap;
 
 /// Wrapper around Mmap allowing to virtualy clone grenad-chunks
 /// in a parallel process like the indexing.

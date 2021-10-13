@@ -868,7 +868,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let file = file.into_std().await;
-        let mmap = unsafe { memmap::Mmap::map(&file).expect("can't map file") };
+        let mmap = unsafe { memmap2::Mmap::map(&file).expect("can't map file") };
 
         let method = match update_method.as_deref() {
             Some("replace") => String::from("replace"),
