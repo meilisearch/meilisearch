@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
 use meilisearch_lib::index_controller::IndexSettings;
@@ -56,6 +56,7 @@ pub struct IndexCreateRequest {
 pub async fn create_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
+    req: HttpRequest,
     analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
@@ -63,6 +64,7 @@ pub async fn create_index(
     analytics.publish(
         "Index Created".to_string(),
         json!({ "with_primary_key": body.primary_key}),
+        Some(&req),
     );
     let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
     Ok(HttpResponse::Created().json(meta))
@@ -98,6 +100,7 @@ pub async fn update_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
+    req: HttpRequest,
     analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
@@ -105,6 +108,7 @@ pub async fn update_index(
     analytics.publish(
         "Index Updated".to_string(),
         json!({ "with_primary_key": body.primary_key}),
+        Some(&req),
     );
     let settings = IndexSettings {
         uid: body.uid,

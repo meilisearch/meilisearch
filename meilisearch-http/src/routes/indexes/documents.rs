@@ -148,6 +148,7 @@ pub async fn add_documents(
            "with_primary_key": params.primary_key,
            "index_creation": meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
         }),
+        Some(&req),
     );
 
     document_addition(
@@ -182,6 +183,7 @@ pub async fn update_documents(
            "with_primary_key": params.primary_key,
            "index_creation": meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
         }),
+        Some(&req),
     );
 
     document_addition(

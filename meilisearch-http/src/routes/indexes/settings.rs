@@ -1,6 +1,6 @@
 use log::debug;
 
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
@@ -15,7 +15,7 @@ macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
             use log::debug;
-            use actix_web::{web, HttpResponse, Resource};
+            use actix_web::{web, HttpResponse, HttpRequest, Resource};
 
             use meilisearch_lib::milli::update::Setting;
             use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
@@ -42,11 +42,12 @@ macro_rules! make_setting_route {
                 meilisearch: GuardedData<Private, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
+                req: HttpRequest,
                 $analytics_var: web::Data<&'static dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let body = body.into_inner();
 
-                $analytics(&body);
+                $analytics(&body, &req);
 
                 let settings = Settings {
                     $attr: match body {
@@ -82,7 +83,7 @@ macro_rules! make_setting_route {
         }
     };
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        make_setting_route!($route, $type, $attr, $camelcase_attr, _analytics, |_| {});
+        make_setting_route!($route, $type, $attr, $camelcase_attr, _analytics, |_, _| {});
     };
 }
 
@@ -92,7 +93,7 @@ make_setting_route!(
     filterable_attributes,
     "filterableAttributes",
     analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>| {
+    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -101,6 +102,7 @@ make_setting_route!(
                 "total": setting.as_ref().map(|filter| filter.len()),
                 "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
             }),
+            Some(&req),
         );
     }
 );
@@ -111,7 +113,7 @@ make_setting_route!(
     sortable_attributes,
     "sortableAttributes",
     analytics,
-    |setting: &Option<std::collections::BTreeSet<String>>| {
+    |setting: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -120,6 +122,7 @@ make_setting_route!(
                 "total": setting.as_ref().map(|sort| sort.len()),
                 "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
             }),
+            Some(&req),
         );
     }
 );
@@ -165,7 +168,7 @@ make_setting_route!(
     ranking_rules,
     "rankingRules",
     analytics,
-    |setting: &Option<Vec<String>>| {
+    |setting: &Option<Vec<String>>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -173,6 +176,7 @@ make_setting_route!(
         json!({
             "sort_position": setting.as_ref().map(|sort| sort.iter().filter(|s| s.contains(":")).count()),
         }),
+        Some(&req),
     );
     }
 );
@@ -205,6 +209,7 @@ pub async fn update_all(
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
+    req: HttpRequest,
     analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = body.into_inner();
@@ -224,6 +229,7 @@ pub async fn update_all(
                 "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")).unwrap_or(false),
             },
         }),
+        Some(&req),
     );
 
     let update = Update::Settings(settings);

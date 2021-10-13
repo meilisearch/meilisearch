@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
@@ -110,6 +110,7 @@ pub async fn search_with_url_query(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
+    req: HttpRequest,
     analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
@@ -127,7 +128,11 @@ pub async fn search_with_url_query(
     assert!(!search_result.exhaustive_nb_hits);
 
     analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
-    analytics.publish("Documents Searched".to_string(), analytics_value);
+    analytics.publish(
+        "Documents Searched".to_string(),
+        analytics_value,
+        Some(&req),
+    );
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -137,6 +142,7 @@ pub async fn search_with_post(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
+    req: HttpRequest,
     analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner();
@@ -154,7 +160,11 @@ pub async fn search_with_post(
     assert!(!search_result.exhaustive_nb_hits);
 
     analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
-    analytics.publish("Documents Searched".to_string(), analytics_value);
+    analytics.publish(
+        "Documents Searched".to_string(),
+        analytics_value,
+        Some(&req),
+    );
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

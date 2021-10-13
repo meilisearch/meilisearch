@@ -1,3 +1,4 @@
+use actix_web::HttpRequest;
 use serde_json::Value;
 use std::fmt::Display;
 use std::fs::read_to_string;
@@ -8,6 +9,8 @@ use crate::Opt;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 mod segment {
     use crate::analytics::Analytics;
+    use actix_web::http::header::USER_AGENT;
+    use actix_web::HttpRequest;
     use meilisearch_lib::index_controller::Stats;
     use meilisearch_lib::MeiliSearch;
     use once_cell::sync::Lazy;
@@ -105,7 +108,7 @@ mod segment {
 
             // batch the launched for the first time track event
             if first_time_run {
-                segment.publish("Launched for the first time".to_string(), json!({}));
+                segment.publish("Launched for the first time".to_string(), json!({}), None);
             }
 
             // start the runtime tick
@@ -142,7 +145,12 @@ mod segment {
 
     #[async_trait::async_trait]
     impl super::Analytics for SegmentAnalytics {
-        fn publish(&'static self, event_name: String, send: Value) {
+        fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>) {
+            let content_type = request
+                .map(|req| req.headers().get(USER_AGENT))
+                .flatten()
+                .map(|header| header.to_str().unwrap_or("unknown").to_string());
+
             tokio::spawn(async move {
                 println!("ANALYTICS pushing {} in the batcher", event_name);
                 let _ = self
@@ -152,6 +160,7 @@ mod segment {
                     .push(Track {
                         user: self.user.clone(),
                         event: event_name.clone(),
+                        context: content_type.map(|user_agent| json!({ "user-agent": user_agent.split(";").map(|u| u.trim()).collect::<Vec<&str>>() })),
                         properties: send,
                         ..Default::default()
                     })
@@ -191,7 +200,7 @@ impl MockAnalytics {
 #[async_trait::async_trait]
 impl Analytics for MockAnalytics {
     /// This is a noop and should be optimized out
-    fn publish(&'static self, _event_name: String, _send: Value) {}
+    fn publish(&'static self, _event_name: String, _send: Value, _request: Option<&HttpRequest>) {}
 }
 
 impl Display for MockAnalytics {
@@ -202,5 +211,5 @@ impl Display for MockAnalytics {
 
 #[async_trait::async_trait]
 pub trait Analytics: Display + Sync + Send {
-    fn publish(&'static self, event_name: String, send: Value);
+    fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>);
 }
