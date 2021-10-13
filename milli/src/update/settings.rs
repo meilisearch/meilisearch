@@ -28,6 +28,21 @@ impl<T> Default for Setting<T> {
 }
 
 impl<T> Setting<T> {
+    pub fn set(self) -> Option<T> {
+        match self {
+            Self::Set(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub const fn as_ref(&self) -> Setting<&T> {
+        match *self {
+            Self::Set(ref value) => Setting::Set(value),
+            Self::Reset => Setting::Reset,
+            Self::NotSet => Setting::NotSet,
+        }
+    }
+
     pub const fn is_not_set(&self) -> bool {
         matches!(self, Self::NotSet)
     }
