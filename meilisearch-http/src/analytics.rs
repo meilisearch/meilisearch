@@ -103,23 +103,7 @@ mod segment {
             });
             let segment = Box::leak(segment);
 
-            // send an identify event
-            let _ = segment
-                .batcher
-                .lock()
-                .await
-                .push(Identify {
-                    user: segment.user.clone(),
-                    // If meilisearch is corrupted at the start we can panic
-                    traits: Self::compute_traits(
-                        &segment.opt,
-                        meilisearch.get_all_stats().await.unwrap(),
-                    ),
-                    ..Default::default()
-                })
-                .await;
-
-            // send the associated track event
+            // batch the launched for the first time track event
             if first_time_run {
                 segment.publish("Launched for the first time".to_string(), json!({}));
             }
@@ -133,9 +117,6 @@ mod segment {
         fn tick(&'static self, meilisearch: MeiliSearch) {
             tokio::spawn(async move {
                 loop {
-                    tokio::time::sleep(Duration::from_secs(60 * 5)).await; // 1 minutes
-                    println!("ANALYTICS: should do things");
-
                     if let Ok(stats) = meilisearch.get_all_stats().await {
                         let traits = Self::compute_traits(&self.opt, stats);
                         let user = self.user.clone();
@@ -152,7 +133,8 @@ mod segment {
                             .await;
                     }
                     let _ = self.batcher.lock().await.flush().await;
-                    println!("sent batch");
+                    println!("ANALYTICS: sent the batch");
+                    tokio::time::sleep(Duration::from_secs(60 * 5)).await; // 5 minutes
                 }
             });
         }
