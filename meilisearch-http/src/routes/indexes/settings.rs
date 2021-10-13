@@ -4,7 +4,9 @@ use actix_web::{web, HttpResponse};
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
+use serde_json::json;
 
+use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
@@ -154,8 +156,26 @@ pub async fn update_all(
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
+    analytics: web::Data<&'static dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = body.into_inner();
+
+    analytics.publish(
+        "Settings Updated".to_string(),
+        json!({
+           "ranking_rules": {
+                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().filter(|s| s.contains(":")).count()),
+            },
+           "sortable_attributes": {
+                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
+                "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")).unwrap_or(false),
+            },
+           "filterable_attributes": {
+                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
+                "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")).unwrap_or(false),
+            },
+        }),
+    );
 
     let update = Update::Settings(settings);
     let update_result = meilisearch
