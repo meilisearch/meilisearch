@@ -1,17 +1,22 @@
 use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
 use std::convert::TryInto;
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
-use heed::types::{CowSlice, OwnedType, SerdeBincode, Str, Unit};
-use heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
+use heed::types::{OwnedType, SerdeBincode, Unit};
+use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use tokio::sync::RwLock;
 
 use crate::task::{Task, TaskContent, TaskEvent, TaskId};
 use crate::Result;
 
-type TaskIdCodec = OwnedType<TaskId>;
+#[allow(clippy::upper_case_acronyms)]
+type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
+
+const UID_TASK_IDS: &str = "uid_task_id";
+const TASKS: &str = "tasks";
 
 enum IndexUidTaskIdCodec {}
 
@@ -47,10 +52,27 @@ impl<'a> BytesDecode<'a> for IndexUidTaskIdCodec {
 struct Store {
     env: Env,
     uids_task_ids: Database<IndexUidTaskIdCodec, Unit>,
-    tasks: Database<TaskIdCodec, SerdeBincode<Task>>,
+    tasks: Database<OwnedType<BEU32>, SerdeBincode<Task>>,
 }
 
 impl Store {
+    fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+        let mut options = EnvOpenOptions::new();
+        options.map_size(size);
+        options.max_dbs(1000);
+        let env = options.open(path)?;
+
+        let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
+        let tasks = env.create_database(Some(TASKS))?;
+
+        Ok(Self {
+            env,
+            uids_task_ids,
+            tasks,
+        })
+
+    }
+
     fn wtxn(&self) -> Result<RwTxn> {
         Ok(self.env.write_txn()?)
     }
@@ -64,26 +86,30 @@ impl Store {
             .tasks
             .lazily_decode_data()
             .last(txn)?
-            .map(|(id, _)| id)
+            .map(|(id, _)| id.get())
             .unwrap_or(0);
         Ok(id)
     }
 
     fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
-        self.tasks.put(txn, &task.id, task)?;
+        self.tasks.put(txn, &BEU32::new(task.id), task)?;
         self.uids_task_ids.put(txn, &(&task.index_uid, task.id), &())?;
 
         Ok(())
     }
 
     fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
-        let task = self.tasks.get(txn, &id)?;
+        let task = self.tasks.get(txn, &BEU32::new(id))?;
         Ok(task)
+    }
+
+    fn task_count(&self, txn: &RoTxn) -> Result<usize> {
+        Ok(self.tasks.len(txn)?)
     }
 
     fn list_updates<'a>(&self, txn: &'a RoTxn, from: Option<TaskId>) -> Result<Box<dyn Iterator<Item = heed::Result<Task>> + 'a>> {
         match from {
-            Some(id) => Ok(Box::new(self.tasks.rev_range(txn, &(..id))?.map(|r| r.map(|(_, t)| t)))),
+            Some(id) => Ok(Box::new(self.tasks.rev_range(txn, &(..BEU32::new(id)))?.map(|r| r.map(|(_, t)| t)))),
             None => Ok(Box::new(self.tasks.rev_iter(txn)?.map(|r| r.map(|(_, t)| t)))),
         }
     }
@@ -178,5 +204,91 @@ impl TaskStore {
                 .collect::<Vec<_>>();
                 Ok(tasks)
         }).await?
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::{BTreeMap, HashMap};
+
+    use quickcheck::TestResult;
+    use quickcheck_macros::quickcheck;
+
+    use super::*;
+
+    #[quickcheck]
+    fn put_retrieve_task(tasks: Vec<Task>) -> TestResult {
+        // if two task have the same id, we discard the test.
+        if tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
+            return TestResult::discard()
+        }
+        let tmp = tempfile::tempdir().unwrap();
+
+        let store = Store::new(tmp.path(), 4096 * 10000000).unwrap();
+
+        let mut txn = store.wtxn().unwrap();
+
+        for task in tasks.iter() {
+            store.put(&mut txn, task).unwrap();
+        }
+
+        txn.commit().unwrap();
+
+        let txn = store.rtxn().unwrap();
+
+        assert_eq!(store.task_count(&txn).unwrap(), tasks.len());
+
+        for task in tasks {
+            let found_task = store.get(&txn, task.id).unwrap().unwrap();
+            assert_eq!(found_task, task);
+        }
+
+        TestResult::passed()
+    }
+
+    #[quickcheck]
+    fn list_updates(tasks: Vec<Task>) -> TestResult {
+        // if two task have the same id, we discard the test.
+        if tasks.is_empty() || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
+            return TestResult::discard()
+        }
+
+        // if two task have the same id, we discard the test.
+        if tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
+            return TestResult::discard()
+        }
+        let tmp = tempfile::tempdir().unwrap();
+
+        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+
+        let mut txn = store.wtxn().unwrap();
+
+        for task in tasks.iter() {
+            store.put(&mut txn, task).unwrap();
+        }
+
+        txn.commit().unwrap();
+
+        let txn = store.rtxn().unwrap();
+        let validator = tasks.into_iter().map(|t| (t.id, t)).collect::<HashMap<_, _>>();
+
+        assert_eq!(store.task_count(&txn).unwrap(), validator.len());
+
+        let iter = store.list_updates(&txn, None)
+            .unwrap()
+            .map(|t| t.unwrap())
+            .map(|t| (t.id, t))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(iter, validator);
+
+        let randid = validator.values().next().unwrap().id;
+
+        store.list_updates(&txn, Some(randid))
+            .unwrap()
+            .map(|t| t.unwrap())
+            .for_each(|t| assert!(t.id < randid, "id: {}, randid: {}", t.id, randid));
+
+        TestResult::passed()
     }
 }
