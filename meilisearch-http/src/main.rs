@@ -126,7 +126,11 @@ Anonymous telemetry:   \"Enabled\""
             );
         }
     }
-    eprintln!("Unique User ID:\t\"{}\"", analytics);
+
+    let analytics = analytics.to_string();
+    if analytics != "" {
+        eprintln!("Unique User ID:\t\"{}\"", analytics);
+    }
 
     eprintln!();
 

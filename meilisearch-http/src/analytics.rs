@@ -182,7 +182,7 @@ impl MockAnalytics {
     pub fn new(opt: &Opt) -> &'static Self {
         let user = read_to_string(opt.db_path.join("user-id"))
             .or_else(|_| read_to_string("/tmp/meilisearch-user-id"))
-            .unwrap_or_else(|_| "No user-id".to_string());
+            .unwrap_or_else(|_| "".to_string());
         let analytics = Box::new(Self { user });
         Box::leak(analytics)
     }
