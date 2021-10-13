@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::fmt::Display;
+use std::fs::read_to_string;
 
 use crate::Opt;
 
@@ -14,6 +15,7 @@ mod segment {
     use segment::{AutoBatcher, Batcher, HttpClient};
     use serde_json::{json, Value};
     use std::fmt::Display;
+    use std::fs;
     use std::time::{Duration, Instant};
     use sysinfo::{DiskExt, System, SystemExt};
     use tokio::sync::Mutex;
@@ -73,12 +75,17 @@ mod segment {
         }
 
         pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
-            // see if there is already a user-id
-            let user_id = std::fs::read_to_string(opt.db_path.join("user-id"));
+            // see if there is already a user-id in the `data.ms`
+            let user_id = fs::read_to_string(opt.db_path.join("user-id"))
+                .or_else(|_| fs::read_to_string("/tmp/meilisearch-user-id"));
             let first_time_run = user_id.is_err();
             // if not, generate a new user-id and save it to the fs
             let user_id = user_id.unwrap_or_else(|_| Uuid::new_v4().to_string());
-            let _ = std::fs::write(opt.db_path.join("user-id"), user_id.as_bytes());
+            let _ = fs::write(opt.db_path.join("user-id"), user_id.as_bytes());
+            let _ = fs::write(
+                opt.db_path.join("/tmp/meilisearch-user-id"),
+                user_id.as_bytes(),
+            );
 
             let client = HttpClient::default();
             let user = User::UserId {
@@ -103,7 +110,7 @@ mod segment {
                 .await
                 .push(Identify {
                     user: segment.user.clone(),
-                    // TODO: TAMO: what should we do when meilisearch is broken at start
+                    // If meilisearch is corrupted at the start we can panic
                     traits: Self::compute_traits(
                         &segment.opt,
                         meilisearch.get_all_stats().await.unwrap(),
@@ -191,7 +198,8 @@ pub struct MockAnalytics {
 
 impl MockAnalytics {
     pub fn new(opt: &Opt) -> &'static Self {
-        let user = std::fs::read_to_string(opt.db_path.join("user-id"))
+        let user = read_to_string(opt.db_path.join("user-id"))
+            .or_else(|_| read_to_string("/tmp/meilisearch-user-id"))
             .unwrap_or_else(|_| "No user-id".to_string());
         let analytics = Box::new(Self { user });
         Box::leak(analytics)
