@@ -9,7 +9,6 @@ use nom::{
     bytes::complete::{tag, take_while1},
     character::complete::{char, multispace0},
     combinator::map,
-    error::ParseError,
     error::VerboseError,
     error::{ContextError, ErrorKind},
     multi::many0,
@@ -50,6 +49,12 @@ impl Operator {
     }
 }
 
+pub trait FilterParserError<'a>:
+    nom::error::ParseError<&'a str> + ContextError<&'a str> + std::fmt::Debug
+{
+}
+impl<'a> FilterParserError<'a> for VerboseError<&'a str> {}
+
 pub struct ParseContext<'a> {
     pub fields_ids_map: &'a FieldsIdsMap,
     pub filterable_fields: &'a HashSet<String>,
@@ -58,7 +63,7 @@ pub struct ParseContext<'a> {
 impl<'a> ParseContext<'a> {
     fn parse_or<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let (input, lhs) = self.parse_and(input)?;
         let (input, ors) = many0(preceded(self.ws(tag("OR")), |c| Self::parse_or(self, c)))(input)?;
@@ -71,7 +76,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_and<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let (input, lhs) = self.parse_not(input)?;
         let (input, ors) =
@@ -84,7 +89,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_not<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         alt((
             map(
@@ -100,14 +105,14 @@ impl<'a> ParseContext<'a> {
     fn ws<F, O, E>(&'a self, inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
     where
         F: Fn(&'a str) -> IResult<&'a str, O, E>,
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         delimited(multispace0, inner, multispace0)
     }
 
     fn parse_simple_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + std::fmt::Debug,
+        E: FilterParserError<'a>,
     {
         let operator = alt((tag("<="), tag(">="), tag(">"), tag("="), tag("<"), tag("!=")));
         let k = tuple((self.ws(|c| self.parse_key(c)), operator, self.ws(|c| self.parse_key(c))))(
@@ -135,7 +140,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_numeric<E, T>(&'a self, input: &'a str) -> StdResult<T, nom::Err<E>>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
         T: std::str::FromStr,
     {
         match input.parse::<T>() {
@@ -156,7 +161,7 @@ impl<'a> ParseContext<'a> {
         value: &'a str,
     ) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let numeric: f64 = self.parse_numeric(value)?;
         let k = match input {
@@ -171,7 +176,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_fid<E>(&'a self, input: &'a str, key: &'a str) -> StdResult<FieldId, nom::Err<E>>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let error = match input.chars().nth(0) {
             Some(ch) => Err(nom::Err::Failure(E::from_char(input, ch))),
@@ -188,7 +193,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_range_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let (input, (key, from, _, to)) = tuple((
             self.ws(|c| self.parse_key(c)),
@@ -207,7 +212,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_geo_radius<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let err_msg_args_incomplete:&'static str  = "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
         let err_msg_args_invalid: &'static str =
@@ -258,7 +263,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let l1 = |c| self.parse_simple_condition(c);
         let l2 = |c| self.parse_range_condition(c);
@@ -269,7 +274,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_condition_expression<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         alt((
             delimited(self.ws(char('(')), |c| Self::parse_expression(self, c), self.ws(char(')'))),
@@ -279,7 +284,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_key<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str>,
+        E: FilterParserError<'a>,
     {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
@@ -287,7 +292,7 @@ impl<'a> ParseContext<'a> {
 
     fn parse_value<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let key = |input| take_while1(Self::is_key_component)(input);
         alt((key, delimited(char('"'), key, char('"'))))(input)
@@ -299,7 +304,7 @@ impl<'a> ParseContext<'a> {
 
     pub fn parse_expression<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
-        E: ParseError<&'a str> + ContextError<&'a str> + Debug,
+        E: FilterParserError<'a>,
     {
         let a = self.parse_or(input);
         a
