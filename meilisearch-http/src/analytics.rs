@@ -15,10 +15,7 @@ mod segment {
     use serde_json::{json, Value};
     use std::fmt::Display;
     use std::time::{Duration, Instant};
-    use sysinfo::DiskExt;
-    use sysinfo::ProcessorExt;
-    use sysinfo::System;
-    use sysinfo::SystemExt;
+    use sysinfo::{DiskExt, System, SystemExt};
     use tokio::sync::Mutex;
     use uuid::Uuid;
 
@@ -35,18 +32,28 @@ mod segment {
     impl SegmentAnalytics {
         fn compute_traits(opt: &Opt, stats: Stats) -> Value {
             static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
-            static SYSTEM: Lazy<Value> = Lazy::new(|| {
+            const SYSTEM: Lazy<Value> = Lazy::new(|| {
                 let mut sys = System::new_all();
                 sys.refresh_all();
+                let kernel_version = sys
+                    .kernel_version()
+                    .map(|k| k.split_once("-").map(|(k, _)| k.to_string()))
+                    .flatten();
                 json!({
-                        "distribution": sys.name().zip(sys.kernel_version()).map(|(name, version)| format!("{}: {}", name, version)),
+                        "distribution": sys.name(),
+                        "kernel_version": kernel_version,
                         "core_number": sys.processors().len(),
                         "ram_size": sys.total_memory(),
-                        "frequency": sys.processors().iter().map(|cpu| cpu.frequency()).sum::<u64>() / sys.processors().len() as u64,
                         "disk_size": sys.disks().iter().map(|disk| disk.available_space()).max(),
                         "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
                 })
             });
+            let infos = json!({
+                "version": env!("CARGO_PKG_VERSION").to_string(),
+                "env": opt.env.clone(),
+                "has_snapshot": opt.schedule_snapshot,
+            });
+
             let number_of_documents = stats
                 .indexes
                 .values()
@@ -59,13 +66,9 @@ mod segment {
                     "database_size": stats.database_size,
                     "indexes_number": stats.indexes.len(),
                     "documents_number": number_of_documents,
-                },
-                "infos": {
-                    "version": env!("CARGO_PKG_VERSION").to_string(),
-                    "env": opt.env.clone(),
-                    "snapshot": opt.schedule_snapshot,
                     "start_since_days": FIRST_START_TIMESTAMP.elapsed().as_secs() / 60 * 60 * 24, // one day
                 },
+                "infos": infos,
             })
         }
 
@@ -123,7 +126,7 @@ mod segment {
         fn tick(&'static self, meilisearch: MeiliSearch) {
             tokio::spawn(async move {
                 loop {
-                    tokio::time::sleep(Duration::from_secs(60)).await; // 1 minutes
+                    tokio::time::sleep(Duration::from_secs(60 * 5)).await; // 1 minutes
                     println!("ANALYTICS: should do things");
 
                     if let Ok(stats) = meilisearch.get_all_stats().await {
@@ -142,6 +145,7 @@ mod segment {
                             .await;
                     }
                     let _ = self.batcher.lock().await.flush().await;
+                    println!("sent batch");
                 }
             });
         }
