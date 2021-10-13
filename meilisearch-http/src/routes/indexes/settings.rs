@@ -12,7 +12,7 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
+    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
             use log::debug;
             use actix_web::{web, HttpResponse, Resource};
@@ -20,6 +20,7 @@ macro_rules! make_setting_route {
             use meilisearch_lib::milli::update::Setting;
             use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
 
+            use crate::analytics::Analytics;
             use crate::error::ResponseError;
             use crate::extractors::authentication::{GuardedData, policies::*};
 
@@ -41,9 +42,14 @@ macro_rules! make_setting_route {
                 meilisearch: GuardedData<Private, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
+                $analytics_var: web::Data<&'static dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                let body = body.into_inner();
+
+                $analytics(&body);
+
                 let settings = Settings {
-                    $attr: match body.into_inner() {
+                    $attr: match body {
                         Some(inner_body) => Setting::Set(inner_body),
                         None => Setting::Reset
                     },
@@ -75,20 +81,47 @@ macro_rules! make_setting_route {
             }
         }
     };
+    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
+        make_setting_route!($route, $type, $attr, $camelcase_attr, _analytics, |_| {});
+    };
 }
 
 make_setting_route!(
     "/filterable-attributes",
     std::collections::BTreeSet<String>,
     filterable_attributes,
-    "filterableAttributes"
+    "filterableAttributes",
+    analytics,
+    |setting: &Option<std::collections::BTreeSet<String>>| {
+        use serde_json::json;
+
+        analytics.publish(
+            "FilterableAttributes Updated".to_string(),
+            json!({
+                "total": setting.as_ref().map(|filter| filter.len()),
+                "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
+            }),
+        );
+    }
 );
 
 make_setting_route!(
     "/sortable-attributes",
     std::collections::BTreeSet<String>,
     sortable_attributes,
-    "sortableAttributes"
+    "sortableAttributes",
+    analytics,
+    |setting: &Option<std::collections::BTreeSet<String>>| {
+        use serde_json::json;
+
+        analytics.publish(
+            "SortableAttributes Updated".to_string(),
+            json!({
+                "total": setting.as_ref().map(|sort| sort.len()),
+                "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
+            }),
+        );
+    }
 );
 
 make_setting_route!(
@@ -126,7 +159,23 @@ make_setting_route!(
     "distinctAttribute"
 );
 
-make_setting_route!("/ranking-rules", Vec<String>, ranking_rules, "rankingRules");
+make_setting_route!(
+    "/ranking-rules",
+    Vec<String>,
+    ranking_rules,
+    "rankingRules",
+    analytics,
+    |setting: &Option<Vec<String>>| {
+        use serde_json::json;
+
+        analytics.publish(
+        "RankingRules Updated".to_string(),
+        json!({
+            "sort_position": setting.as_ref().map(|sort| sort.iter().filter(|s| s.contains(":")).count()),
+        }),
+    );
+    }
+);
 
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
