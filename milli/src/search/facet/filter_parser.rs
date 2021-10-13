@@ -56,13 +56,12 @@ pub struct ParseContext<'a> {
 }
 
 impl<'a> ParseContext<'a> {
-    fn parse_or_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    fn parse_or<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let (input, lhs) = self.parse_and_nom(input)?;
-        let (input, ors) =
-            many0(preceded(self.ws(tag("OR")), |c| Self::parse_or_nom(self, c)))(input)?;
+        let (input, lhs) = self.parse_and(input)?;
+        let (input, ors) = many0(preceded(self.ws(tag("OR")), |c| Self::parse_or(self, c)))(input)?;
 
         let expr = ors
             .into_iter()
@@ -70,25 +69,20 @@ impl<'a> ParseContext<'a> {
         Ok((input, expr))
     }
 
-    fn parse_and_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    fn parse_and<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let (input, lhs) = self.parse_not_nom(input)?;
-        // let (input, lhs) = alt((
-        //     delimited(self.ws(char('(')), |c| Self::parse_not_nom(self, c), self.ws(char(')'))),
-        //     |c| self.parse_not_nom(c),
-        // ))(input)?;
-
+        let (input, lhs) = self.parse_not(input)?;
         let (input, ors) =
-            many0(preceded(self.ws(tag("AND")), |c| Self::parse_and_nom(self, c)))(input)?;
+            many0(preceded(self.ws(tag("AND")), |c| Self::parse_and(self, c)))(input)?;
         let expr = ors
             .into_iter()
             .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
         Ok((input, expr))
     }
 
-    fn parse_not_nom<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    fn parse_not<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
@@ -307,7 +301,7 @@ impl<'a> ParseContext<'a> {
     where
         E: ParseError<&'a str> + ContextError<&'a str> + Debug,
     {
-        let a = self.parse_or_nom(input);
+        let a = self.parse_or(input);
         a
     }
 }

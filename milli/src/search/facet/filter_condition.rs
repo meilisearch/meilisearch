@@ -90,7 +90,7 @@ impl FilterCondition {
                     nom::Err::Failure(x) => x,
                     _ => unreachable!(),
                 };
-                Err(Error::UserError(UserError::InvalidFilterNom {
+                Err(Error::UserError(UserError::InvalidFilter {
                     input: convert_error(expression, ve).to_string(),
                 }))
             }
