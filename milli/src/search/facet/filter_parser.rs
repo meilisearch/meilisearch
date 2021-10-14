@@ -49,6 +49,7 @@ pub trait FilterParserError<'a>:
     nom::error::ParseError<&'a str> + ContextError<&'a str> + std::fmt::Debug
 {
 }
+
 impl<'a> FilterParserError<'a> for VerboseError<&'a str> {}
 
 pub struct ParseContext<'a> {
@@ -211,7 +212,6 @@ impl<'a> ParseContext<'a> {
         E: FilterParserError<'a>,
     {
         let err_msg_args_incomplete= "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
-
         let err_msg_latitude_invalid =
             "_geoRadius. Latitude must be contained between -90 and 90 degrees.";
 
@@ -275,8 +275,7 @@ impl<'a> ParseContext<'a> {
         let l1 = |c| self.parse_simple_condition(c);
         let l2 = |c| self.parse_range_condition(c);
         let l3 = |c| self.parse_geo_radius(c);
-        let (input, condition) = alt((l1, l2, l3))(input)?;
-        Ok((input, condition))
+        alt((l1, l2, l3))(input)
     }
 
     fn parse_condition_expression<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
@@ -313,8 +312,7 @@ impl<'a> ParseContext<'a> {
     where
         E: FilterParserError<'a>,
     {
-        let a = self.parse_or(input);
-        a
+        self.parse_or(input)
     }
 }
 

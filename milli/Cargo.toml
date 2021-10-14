@@ -39,7 +39,7 @@ tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 
 # facet filter parser
-nom = "7"
+nom = "7.0.0"
 
 # documents words self-join
 itertools = "0.10.0"

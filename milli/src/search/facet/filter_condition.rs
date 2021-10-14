@@ -24,9 +24,6 @@ pub enum FilterCondition {
     Empty,
 }
 
-// impl From<std::>
-
-//for nom
 impl FilterCondition {
     pub fn from_array<I, J, A, B>(
         rtxn: &heed::RoTxn,
@@ -72,6 +69,7 @@ impl FilterCondition {
 
         Ok(ands)
     }
+
     pub fn from_str(
         rtxn: &heed::RoTxn,
         index: &Index,
