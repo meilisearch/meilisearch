@@ -8,7 +8,6 @@ use nom::error::{convert_error, VerboseError};
 use roaring::RoaringBitmap;
 
 use self::FilterCondition::*;
-
 use super::filter_parser::{Operator, ParseContext};
 use super::FacetNumberRange;
 use crate::error::{Error, UserError};

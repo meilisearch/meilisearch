@@ -2,22 +2,18 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 
-use super::FilterCondition;
-use crate::{FieldId, FieldsIdsMap};
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{char, multispace0},
-    combinator::map,
-    error::VerboseError,
-    error::{ContextError, ErrorKind},
-    multi::many0,
-    multi::separated_list1,
-    sequence::{delimited, preceded, tuple},
-    IResult,
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take_while1};
+use nom::character::complete::{char, multispace0};
+use nom::combinator::map;
+use nom::error::{ContextError, ErrorKind, VerboseError};
+use nom::multi::{many0, separated_list1};
+use nom::sequence::{delimited, preceded, tuple};
+use nom::IResult;
 
 use self::Operator::*;
+use super::FilterCondition;
+use crate::{FieldId, FieldsIdsMap};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     GreaterThan(f64),
@@ -330,7 +326,8 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::{update::Settings, Index};
+    use crate::update::Settings;
+    use crate::Index;
 
     #[test]
     fn string() {
@@ -623,6 +620,5 @@ mod tests {
         assert!(error
             .to_string()
             .contains("Longitude must be contained between -180 and 180 degrees."));
-
     }
 }
