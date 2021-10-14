@@ -214,9 +214,14 @@ impl<'a> ParseContext<'a> {
     where
         E: FilterParserError<'a>,
     {
-        let err_msg_args_incomplete:&'static str  = "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
-        let err_msg_args_invalid: &'static str =
-            "_geoRadius. Latitude and longitude must be contained between -180 to 180 degrees.";
+        let err_msg_args_incomplete= "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
+
+        let err_msg_latitude_invalid =
+            "_geoRadius. Latitude must be contained between -90 and 90 degrees.";
+
+        let err_msg_longitude_invalid =
+            "_geoRadius. Longitude must be contained between -180 and 180 degrees.";
+
         let (input, args): (&str, Vec<&str>) = match preceded(
             tag("_geoRadius"),
             delimited(
@@ -249,12 +254,18 @@ impl<'a> ParseContext<'a> {
             None => return Ok((input, FilterCondition::Empty)),
         };
 
-        if let Some(_span) = (!(-181.0..181.).contains(&lat))
-            .then(|| &lat)
-            .or((!(-181.0..181.).contains(&lng)).then(|| &lng))
-        {
-            let e = E::from_char(input, '(');
-            return Err(nom::Err::Failure(E::add_context(input, err_msg_args_invalid, e)));
+        if !(-90.0..=90.0).contains(&lat) {
+            return Err(nom::Err::Failure(E::add_context(
+                input,
+                err_msg_latitude_invalid,
+                E::from_char(input, '('),
+            )));
+        } else if !(-180.0..=180.0).contains(&lng) {
+            return Err(nom::Err::Failure(E::add_context(
+                input,
+                err_msg_longitude_invalid,
+                E::from_char(input, '('),
+            )));
         }
 
         let res = FilterCondition::Operator(fid, GeoLowerThan([lat, lng], dis));
@@ -582,20 +593,36 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
 
-        // georadius have a bad latitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-200, 150, 10)");
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-100, 150, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+            .contains("Latitude must be contained between -90 and 90 degrees."));
+
+        // georadius have a bad latitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-90.0000001, 150, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Latitude must be contained between -90 and 90 degrees."));
 
         // georadius have a bad longitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 181, 10)");
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 250, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("Latitude and longitude must be contained between -180 to 180 degrees."));
+            .contains("Longitude must be contained between -180 and 180 degrees."));
+
+        // georadius have a bad longitude
+        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 180.000001, 10)");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Longitude must be contained between -180 and 180 degrees."));
+
     }
 }
