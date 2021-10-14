@@ -35,11 +35,18 @@ RUN     $HOME/.cargo/bin/cargo build --release
 # Run
 FROM    alpine:3.14
 
-RUN     apk add -q --no-cache libgcc tini curl
+ARG     USER=meili
+ENV     HOME /home/${USER}
+ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 
+# download runtime deps as root and create ${USER}
+RUN     apk add -q --no-cache libgcc tini curl \
+        && adduser -D ${USER}
+WORKDIR ${HOME}
+USER    ${USER}
+# copy file as ${USER} to ${HOME}
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
-ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 EXPOSE  7700/tcp
 
 ENTRYPOINT ["tini", "--"]
