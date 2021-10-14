@@ -181,7 +181,7 @@ async fn document_addition(
         vec![
             "application/json".to_string(),
             "application/x-ndjson".to_string(),
-            "application/csv".to_string(),
+            "text/csv".to_string(),
         ]
     });
     let format = match content_type {

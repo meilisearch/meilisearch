@@ -124,7 +124,7 @@ async fn add_documents_test_bad_content_types() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "application/csv""#
+            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "text/csv""#
         )
     );
 
@@ -142,7 +142,7 @@ async fn add_documents_test_bad_content_types() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "application/csv""#
+            r#"The Content-Type "text/plain" is invalid. Accepted values for the Content-Type header are: "application/json", "application/x-ndjson", "text/csv""#
         )
     );
 }
