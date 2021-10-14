@@ -13,7 +13,7 @@ use crate::index::update_handler::UpdateHandler;
 use crate::index::updates::apply_settings_to_builder;
 
 use super::error::Result;
-use super::{Index, Settings, Unchecked};
+use super::{index::Index, Settings, Unchecked};
 
 #[derive(Serialize, Deserialize)]
 struct DumpMeta {

@@ -11,18 +11,28 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
-    #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"text/csv\"")]
-    MissingContentType,
-    #[error("The Content-Type \"{0}\" is invalid. Accepted values for the Content-Type header are: \"application/json\", \"application/x-ndjson\", \"text/csv\"")]
-    InvalidContentType(String),
+    #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
+            .0.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", "))]
+    MissingContentType(Vec<String>),
+    #[error(
+        "The Content-Type \"{0}\" is invalid. Accepted values for the Content-Type header are: {}",
+        .1.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", ")
+    )]
+    InvalidContentType(String, Vec<String>),
 }
 
 impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
-            MeilisearchHttpError::MissingContentType => Code::MissingContentType,
-            MeilisearchHttpError::InvalidContentType(_) => Code::InvalidContentType,
+            MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
+            MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
         }
+    }
+}
+
+impl From<MeilisearchHttpError> for aweb::Error {
+    fn from(other: MeilisearchHttpError) -> Self {
+        aweb::Error::from(ResponseError::from(other))
     }
 }
 
@@ -121,9 +131,8 @@ impl From<QueryPayloadError> for PayloadError {
     }
 }
 
-pub fn payload_error_handler<E>(err: E) -> ResponseError
-where
-    E: Into<PayloadError>,
-{
-    err.into().into()
+impl From<PayloadError> for aweb::Error {
+    fn from(other: PayloadError) -> Self {
+        aweb::Error::from(ResponseError::from(other))
+    }
 }

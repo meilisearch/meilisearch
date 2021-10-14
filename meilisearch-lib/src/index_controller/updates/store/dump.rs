@@ -34,7 +34,7 @@ impl UpdateStore {
         // txn must *always* be acquired after state lock, or it will dead lock.
         let txn = self.env.write_txn()?;
 
-        let uuids = indexes.iter().map(|i| i.uuid).collect();
+        let uuids = indexes.iter().map(|i| i.uuid()).collect();
 
         self.dump_updates(&txn, &uuids, &path)?;
 

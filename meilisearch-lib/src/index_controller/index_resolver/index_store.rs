@@ -17,6 +17,7 @@ use crate::options::IndexerOpts;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
 #[async_trait::async_trait]
+#[cfg_attr(test, mockall::automock)]
 pub trait IndexStore {
     async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
@@ -72,9 +73,10 @@ impl IndexStore for MapIndexStore {
         let index = spawn_blocking(move || -> Result<Index> {
             let index = Index::open(path, index_size, file_store, uuid, update_handler)?;
             if let Some(primary_key) = primary_key {
-                let mut txn = index.write_txn()?;
+                let inner = index.inner();
+                let mut txn = inner.write_txn()?;
 
-                let mut builder = UpdateBuilder::new(0).settings(&mut txn, &index);
+                let mut builder = UpdateBuilder::new(0).settings(&mut txn, index.inner());
                 builder.set_primary_key(primary_key);
                 builder.execute(|_, _| ())?;
 
