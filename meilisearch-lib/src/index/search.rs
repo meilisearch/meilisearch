@@ -556,7 +556,8 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                     .collect(),
             ),
             Value::Number(number) => {
-                let number_string_value = self.format_string(number.to_string(), matcher, format_options);
+                let number_string_value =
+                    self.format_string(number.to_string(), matcher, format_options);
                 Value::String(number_string_value)
             }
             value => value,
@@ -806,7 +807,6 @@ mod test {
         let author = fields.insert("author").unwrap();
         let publication_year = fields.insert("publication_year").unwrap();
 
-
         let mut buf = Vec::new();
         let mut obkv = obkv::KvWriter::new(&mut buf);
 
@@ -832,9 +832,7 @@ mod test {
 
         obkv.insert(
             publication_year,
-            Value::Number(1937.into())
-                .to_string()
-                .as_bytes(),
+            Value::Number(1937.into()).to_string().as_bytes(),
         )
         .unwrap();
 
