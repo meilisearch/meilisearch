@@ -2,8 +2,7 @@
 FROM    alpine:3.14 AS compiler
 
 RUN     apk update --quiet
-RUN     apk add curl
-RUN     apk add build-base
+RUN     apk add -q --no-cache curl build-base
 
 RUN     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
