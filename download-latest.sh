@@ -51,13 +51,13 @@ semverLT() {
     if [ $MAJOR_A -le $MAJOR_B ] && [ $MINOR_A -le $MINOR_B ] && [ $PATCH_A -lt $PATCH_B ]; then
         return 0
     fi
-    if [ "_$SPECIAL_A"  == "_" ] && [ "_$SPECIAL_B"  == "_" ] ; then
+    if [ "_$SPECIAL_A"  == '_' ] && [ "_$SPECIAL_B"  == '_' ] ; then
         return 1
     fi
-    if [ "_$SPECIAL_A"  == "_" ] && [ "_$SPECIAL_B"  != "_" ] ; then
+    if [ "_$SPECIAL_A"  == '_' ] && [ "_$SPECIAL_B"  != '_' ] ; then
         return 1
     fi
-    if [ "_$SPECIAL_A"  != "_" ] && [ "_$SPECIAL_B"  == "_" ] ; then
+    if [ "_$SPECIAL_A"  != '_' ] && [ "_$SPECIAL_B"  == '_' ] ; then
         return 0
     fi
     if [ "_$SPECIAL_A" < "_$SPECIAL_B" ]; then
@@ -86,28 +86,28 @@ get_latest() {
         # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
 
     i=0
-    latest=""
-    current_tag=""
+    latest=''
+    current_tag=''
     for release_info in $releases; do
         if [ $i -eq 0 ]; then # Cheking tag_name
             if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
                 current_tag=$release_info
             else
-                current_tag=""
+                current_tag=''
             fi
             i=1
         elif [ $i -eq 1 ]; then # Checking draft boolean
-            if [ "$release_info" = "true" ]; then
-                current_tag=""
+            if [ "$release_info" = 'true' ]; then
+                current_tag=''
             fi
             i=2
         elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" = "true" ]; then
-                current_tag=""
+            if [ "$release_info" = 'true' ]; then
+                current_tag=''
             fi
             i=0
-            if [ "$current_tag" != "" ]; then # If the current_tag is valid
-                if [ "$latest" = "" ]; then # If there is no latest yet
+            if [ "$current_tag" != '' ]; then # If the current_tag is valid
+                if [ "$latest" = '' ]; then # If there is no latest yet
                     latest="$current_tag"
                 else
                     semverLT $current_tag $latest # Comparing latest and the current tag
