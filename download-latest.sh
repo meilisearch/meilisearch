@@ -179,6 +179,13 @@ failure_usage() {
 # MAIN
 latest="$(get_latest)"
 
+if [ "$latest" = '' ]; then
+    echo ''
+    echo 'Impossible to get the latest stable version of MeiliSearch.'
+    echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch-swift/issues/new/choose'
+    exit 1
+fi
+
 if ! get_os; then
     failure_usage
     exit 1
