@@ -1,8 +1,8 @@
 # Compile
 FROM    alpine:3.14 AS compiler
 
-RUN     apk update --quiet
-RUN     apk add -q --no-cache curl build-base
+RUN     apk update --quiet \
+        && apk add -q --no-cache curl build-base
 
 RUN     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
@@ -39,7 +39,8 @@ ENV     HOME /home/${USER}
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 
 # download runtime deps as root and create ${USER}
-RUN     apk add -q --no-cache libgcc tini curl \
+RUN     apk update --quiet \
+        && apk add -q --no-cache libgcc tini curl \
         && adduser -D ${USER}
 WORKDIR ${HOME}
 USER    ${USER}
