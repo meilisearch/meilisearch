@@ -7,7 +7,6 @@ use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
-use crate::search::ParserRule;
 use crate::{CriterionError, DocumentId, FieldId, SortError};
 
 pub type Object = Map<String, Value>;
@@ -59,9 +58,9 @@ pub enum UserError {
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
-    InvalidFilter(pest::error::Error<ParserRule>),
-    InvalidFilterAttribute(pest::error::Error<ParserRule>),
     InvalidGeoField { document_id: Value, object: Value },
+    InvalidFilter { input: String },
+    InvalidSortName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -208,6 +207,7 @@ impl StdError for InternalError {}
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::InvalidFilter { input } => write!(f, "parser error {}", input),
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
@@ -220,7 +220,6 @@ impl fmt::Display for UserError {
                     name_list
                 )
             }
-            Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
                 "the document with the id: {} contains an invalid _geo field: {}",
@@ -236,7 +235,9 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                     json
                 )
             }
-            Self::InvalidFilterAttribute(error) => error.fmt(f),
+            Self::InvalidSortName { name } => {
+                write!(f, "Invalid syntax for the sort parameter: {}", name)
+            }
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
