@@ -76,7 +76,7 @@ get_latest() {
         if [ -z "$GITHUB_PAT" ]; then
         curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
     else
-        curl -H "Authorization: token ${GITHUB_PAT}" -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
+        curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
     fi
 
     releases=$(cat "$temp_file" | \
