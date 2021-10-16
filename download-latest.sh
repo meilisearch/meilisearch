@@ -72,7 +72,7 @@ semverLT() {
 # Returns the tag of the latest stable release (in terms of semver and not of release date)
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
-    
+
         if [ -z "$GITHUB_PAT" ]; then
         curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
     else
@@ -161,7 +161,7 @@ get_archi() {
 }
 
 success_usage() {
-    printf "$GREEN%s\n$DEFAULT" "MeiliSearch binary successfully downloaded as '$BINARY_NAME' file."
+    printf "$GREEN%s\n$DEFAULT" "MeiliSearch $latest binary successfully downloaded as '$binary_name' file."
     echo ''
     echo 'Run it:'
     echo '    $ ./meilisearch'
@@ -193,16 +193,16 @@ echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
 case "$os" in
     'windows')
         release_file="meilisearch-$os-$archi.exe"
-		BINARY_NAME='meilisearch.exe'
+		binary_name='meilisearch.exe'
 
         ;;
 	*)
 		release_file="meilisearch-$os-$archi"
-		BINARY_NAME='meilisearch'
+		binary_name='meilisearch'
 
 esac
 link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
-mv "$release_file" "$BINARY_NAME"
-chmod 744 "$BINARY_NAME"
+mv "$release_file" "$binary_name"
+chmod 744 "$binary_name"
 success_usage
