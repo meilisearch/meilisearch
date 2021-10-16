@@ -1,4 +1,5 @@
 mod common;
+mod dashboard;
 mod documents;
 mod index;
 mod search;
