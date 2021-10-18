@@ -38,7 +38,7 @@ jobs:
         id: commit_sha
       - name: Set file basename with format "dataset_branch_commitSHA"
         shell: bash
-        run: echo "##[set-output name=basename;]$(echo ${BENCH_NAME}${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})"
+        run: echo "##[set-output name=basename;]$(echo ${BENCH_NAME}_${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})"
         id: file
 
       # Run benchmarks
