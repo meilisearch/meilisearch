@@ -108,7 +108,7 @@ mod segment {
 
             // batch the launched for the first time track event
             if first_time_run {
-                segment.publish("Launched for the first time".to_string(), json!({}), None);
+                segment.publish("Launched".to_string(), json!({}), None);
             }
 
             // start the runtime tick
