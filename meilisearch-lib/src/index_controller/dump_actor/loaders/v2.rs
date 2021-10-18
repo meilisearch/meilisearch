@@ -70,7 +70,7 @@ fn patch_settings(path: impl AsRef<Path>) -> anyhow::Result<()> {
     // We first deserialize the dump meta into a serde_json::Value and change
     // the custom ranking rules settings from the old format to the new format.
     if let Some(ranking_rules) = meta.pointer_mut("/settings/rankingRules") {
-        patch_custon_ranking_rules(ranking_rules);
+        patch_custom_ranking_rules(ranking_rules);
     }
 
     let mut meta_file = OpenOptions::new().truncate(true).write(true).open(path)?;
@@ -105,7 +105,7 @@ fn patch_updates(dir: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Resul
 ///
 /// This is done for compatibility reasons, and to avoid a new dump version,
 /// since the new syntax was introduced soon after the new dump version.
-fn patch_custon_ranking_rules(ranking_rules: &mut Value) {
+fn patch_custom_ranking_rules(ranking_rules: &mut Value) {
     *ranking_rules = match ranking_rules.take() {
         Value::Array(values) => values
             .into_iter()
