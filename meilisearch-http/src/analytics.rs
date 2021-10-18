@@ -47,7 +47,7 @@ mod segment {
                 json!({
                         "distribution": sys.name(),
                         "kernel_version": kernel_version,
-                        "core_number": sys.processors().len(),
+                        "cores": sys.processors().len(),
                         "ram_size": sys.total_memory(),
                         "disk_size": sys.disks().iter().map(|disk| disk.available_space()).max(),
                         "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
