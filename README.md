@@ -37,7 +37,7 @@ It can index a massive amount of documents in not much time, I already achieved 
 
 These metrics are done on a MacBook Pro with the M1 processor.
 
-You can feed the engine with your CSV (comma-seperated, yes) data like this:
+You can feed the engine with your CSV (comma-separated, yes) data like this:
 
 ```bash
 printf "id,name,age\n1,hello,32\n2,kiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
