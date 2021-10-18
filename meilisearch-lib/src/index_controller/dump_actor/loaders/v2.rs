@@ -43,8 +43,9 @@ pub fn load_dump(
         patch_settings(settings_path)?;
     }
 
-    let update_path = src.as_ref().join("updates/data.jsonl");
-    patch_updates(update_path)?;
+    let update_dir = src.as_ref().join("updates");
+    let update_path = update_dir.join("data.jsonl");
+    patch_updates(update_dir, update_path)?;
 
     v3::load_dump(
         meta,
@@ -79,8 +80,8 @@ fn patch_settings(path: impl AsRef<Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn patch_updates(path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let mut output_update_file = NamedTempFile::new()?;
+fn patch_updates(dir: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let mut output_update_file = NamedTempFile::new_in(&dir)?;
     let update_file = File::open(&path)?;
 
     let stream = Deserializer::from_reader(update_file).into_iter::<compat::UpdateEntry>();

@@ -8,7 +8,6 @@ pub mod analytics;
 pub mod helpers;
 pub mod option;
 pub mod routes;
-use std::path::Path;
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
@@ -73,27 +72,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     }
 
     meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
-}
-
-/// Cleans and setup the temporary file folder in the database directory. This must be done after
-/// the meilisearch instance has been created, to not interfere with the snapshot and dump loading.
-pub fn setup_temp_dir(db_path: impl AsRef<Path>) -> anyhow::Result<()> {
-    // Set the tempfile directory in the current db path, to avoid cross device references. Also
-    // remove the previous outstanding files found there
-    //
-    // TODO: if two processes open the same db, one might delete the other tmpdir. Need to make
-    // sure that no one is using it before deleting it.
-    let temp_path = db_path.as_ref().join("tmp");
-    // Ignore error if tempdir doesn't exist
-    let _ = std::fs::remove_dir_all(&temp_path);
-    std::fs::create_dir_all(&temp_path)?;
-    if cfg!(windows) {
-        std::env::set_var("TMP", temp_path);
-    } else {
-        std::env::set_var("TMPDIR", temp_path);
-    }
-
-    Ok(())
 }
 
 pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &Opt) {

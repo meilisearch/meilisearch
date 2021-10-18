@@ -52,7 +52,7 @@ impl UpdateStore {
         uuids: &HashSet<Uuid>,
         path: impl AsRef<Path>,
     ) -> Result<()> {
-        let mut dump_data_file = NamedTempFile::new()?;
+        let mut dump_data_file = NamedTempFile::new_in(&path)?;
 
         self.dump_pending(txn, uuids, &mut dump_data_file, &path)?;
         self.dump_completed(txn, uuids, &mut dump_data_file)?;
