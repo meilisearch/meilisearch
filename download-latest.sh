@@ -51,13 +51,13 @@ semverLT() {
     if [ $MAJOR_A -le $MAJOR_B ] && [ $MINOR_A -le $MINOR_B ] && [ $PATCH_A -lt $PATCH_B ]; then
         return 0
     fi
-    if [ "_$SPECIAL_A"  == "_" ] && [ "_$SPECIAL_B"  == "_" ] ; then
+    if [ "_$SPECIAL_A"  == '_' ] && [ "_$SPECIAL_B"  == '_' ] ; then
         return 1
     fi
-    if [ "_$SPECIAL_A"  == "_" ] && [ "_$SPECIAL_B"  != "_" ] ; then
+    if [ "_$SPECIAL_A"  == '_' ] && [ "_$SPECIAL_B"  != '_' ] ; then
         return 1
     fi
-    if [ "_$SPECIAL_A"  != "_" ] && [ "_$SPECIAL_B"  == "_" ] ; then
+    if [ "_$SPECIAL_A"  != '_' ] && [ "_$SPECIAL_B"  == '_' ] ; then
         return 0
     fi
     if [ "_$SPECIAL_A" < "_$SPECIAL_B" ]; then
@@ -72,7 +72,7 @@ semverLT() {
 # Returns the tag of the latest stable release (in terms of semver and not of release date)
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
-    
+
         if [ -z "$GITHUB_PAT" ]; then
         curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
     else
@@ -86,28 +86,28 @@ get_latest() {
         # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
 
     i=0
-    latest=""
-    current_tag=""
+    latest=''
+    current_tag=''
     for release_info in $releases; do
         if [ $i -eq 0 ]; then # Cheking tag_name
             if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
                 current_tag=$release_info
             else
-                current_tag=""
+                current_tag=''
             fi
             i=1
         elif [ $i -eq 1 ]; then # Checking draft boolean
-            if [ "$release_info" = "true" ]; then
-                current_tag=""
+            if [ "$release_info" = 'true' ]; then
+                current_tag=''
             fi
             i=2
         elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" = "true" ]; then
-                current_tag=""
+            if [ "$release_info" = 'true' ]; then
+                current_tag=''
             fi
             i=0
-            if [ "$current_tag" != "" ]; then # If the current_tag is valid
-                if [ "$latest" = "" ]; then # If there is no latest yet
+            if [ "$current_tag" != '' ]; then # If the current_tag is valid
+                if [ "$latest" = '' ]; then # If there is no latest yet
                     latest="$current_tag"
                 else
                     semverLT $current_tag $latest # Comparing latest and the current tag
@@ -161,7 +161,7 @@ get_archi() {
 }
 
 success_usage() {
-    printf "$GREEN%s\n$DEFAULT" "MeiliSearch binary successfully downloaded as '$BINARY_NAME' file."
+    printf "$GREEN%s\n$DEFAULT" "MeiliSearch $latest binary successfully downloaded as '$binary_name' file."
     echo ''
     echo 'Run it:'
     echo '    $ ./meilisearch'
@@ -179,6 +179,13 @@ failure_usage() {
 # MAIN
 latest="$(get_latest)"
 
+if [ "$latest" = '' ]; then
+    echo ''
+    echo 'Impossible to get the latest stable version of MeiliSearch.'
+    echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch-swift/issues/new/choose'
+    exit 1
+fi
+
 if ! get_os; then
     failure_usage
     exit 1
@@ -193,16 +200,16 @@ echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
 case "$os" in
     'windows')
         release_file="meilisearch-$os-$archi.exe"
-		BINARY_NAME='meilisearch.exe'
+		binary_name='meilisearch.exe'
 
         ;;
 	*)
 		release_file="meilisearch-$os-$archi"
-		BINARY_NAME='meilisearch'
+		binary_name='meilisearch'
 
 esac
 link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
-mv "$release_file" "$BINARY_NAME"
-chmod 744 "$BINARY_NAME"
+mv "$release_file" "$binary_name"
+chmod 744 "$binary_name"
 success_usage
