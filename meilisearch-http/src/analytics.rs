@@ -143,7 +143,17 @@ mod segment {
                             })
                             .await;
                     }
-                    let _ = self.batcher.lock().await.flush().await;
+                    let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await)
+                        .into_event(self.user.clone(), "Documents Searched GET".to_string());
+                    let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await)
+                        .into_event(self.user.clone(), "Documents Searched POST".to_string());
+                    // keep the lock on the batcher just for these three operations
+                    {
+                        let mut batcher = self.batcher.lock().await;
+                        let _ = batcher.push(get_search).await;
+                        let _ = batcher.push(post_search).await;
+                        let _ = self.batcher.lock().await.flush().await;
+                    }
                     println!("ANALYTICS: sent the batch");
                     tokio::time::sleep(Duration::from_secs(60 * 5)).await; // 5 minutes
                 }
