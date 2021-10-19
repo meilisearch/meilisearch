@@ -116,8 +116,7 @@ pub async fn search_with_url_query(
     debug!("called with params: {:?}", params);
     let query: SearchQuery = params.into_inner().into();
 
-    let mut analytics_value = extract_analytics_from_query(&query);
-    analytics_value["http_method"] = json!("get");
+    analytics.start_get_search(&query, &req);
 
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
@@ -127,12 +126,7 @@ pub async fn search_with_url_query(
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
 
-    analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
-    analytics.publish(
-        "Documents Searched".to_string(),
-        analytics_value,
-        Some(&req),
-    );
+    analytics.end_post_search(search_result.processing_time_ms as usize);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -148,8 +142,7 @@ pub async fn search_with_post(
     let query = params.into_inner();
     debug!("search called with params: {:?}", query);
 
-    let mut analytics_value = extract_analytics_from_query(&query);
-    analytics_value["http_method"] = json!("post");
+    analytics.start_post_search(&query, &req);
 
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
@@ -159,33 +152,10 @@ pub async fn search_with_post(
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
 
-    analytics_value["response_time"] = json!(search_result.processing_time_ms as u64);
-    analytics.publish(
-        "Documents Searched".to_string(),
-        analytics_value,
-        Some(&req),
-    );
+    analytics.end_post_search(search_result.processing_time_ms as usize);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
-}
-
-fn extract_analytics_from_query(query: &SearchQuery) -> Value {
-    json!({
-        "sort": {
-            "total": query.sort.as_ref().map(|sort| sort.len()),
-            "has_geoPoint": query.sort.as_ref().map(|sort| sort.iter().any(|sort| sort.starts_with("_geoPoint"))),
-        },
-        "filter": {
-            "has_geoRadius": query.filter.as_ref().map(|filter| filter.to_string().contains("_geoRadius")),
-            // "syntax": 42,
-        },
-        "pagination": {
-            "offset": query.offset,
-            "limit": query.limit,
-        },
-        "terms_number": query.q.as_ref().map(|q| q.split_whitespace().count()).unwrap_or_default(),
-    })
 }
 
 #[cfg(test)]
