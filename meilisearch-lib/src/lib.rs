@@ -11,7 +11,7 @@ pub use index_controller::MeiliSearch;
 pub use milli;
 
 mod compression;
-mod document_formats;
+pub mod document_formats;
 
 use walkdir::WalkDir;
 

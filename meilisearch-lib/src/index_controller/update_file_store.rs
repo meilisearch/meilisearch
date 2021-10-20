@@ -149,7 +149,7 @@ impl UpdateFileStore {
         // for jsonl for example...)
         while let Some((index, document)) = document_reader.next_document_with_index()? {
             for (field_id, content) in document.iter() {
-                if let Some(field_name) = index.get_by_left(&field_id) {
+                if let Some(field_name) = index.name(field_id) {
                     let content = serde_json::from_slice(content)?;
                     document_buffer.insert(field_name.to_string(), content);
                 }

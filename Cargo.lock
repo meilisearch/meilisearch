@@ -1763,13 +1763,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 
 [[package]]
-name = "memmap"
-version = "0.7.0"
+name = "memmap2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
+checksum = "4647a11b578fead29cdbb34d4adef8dd3dc35b876c9c6d5240d83f205abfe96e"
 dependencies = [
  "libc",
- "winapi",
 ]
 
 [[package]]
@@ -1783,8 +1782,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.17.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.17.3#1e8acaa20b323a198229ad8ede96d045072e45c8"
+version = "0.19.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.19.0#d7943fe22553b8205b86c32a0f2656d9e42de351"
 dependencies = [
  "bimap",
  "bincode",
@@ -1793,6 +1792,7 @@ dependencies = [
  "chrono",
  "concat-arrays",
  "crossbeam-channel",
+ "csv",
  "either",
  "flate2",
  "fst",
@@ -1807,7 +1807,7 @@ dependencies = [
  "log",
  "logging_timer",
  "meilisearch-tokenizer",
- "memmap",
+ "memmap2",
  "obkv",
  "once_cell",
  "ordered-float",
