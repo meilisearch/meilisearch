@@ -143,19 +143,32 @@ mod segment {
                             })
                             .await;
                     }
-                    let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await)
-                        .into_event(self.user.clone(), "Documents Searched GET".to_string());
-                    let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await)
-                        .into_event(self.user.clone(), "Documents Searched POST".to_string());
+                    println!("ANALYTICS: taking the lock on the search batcher");
+                    let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await);
+                    let get_search = (get_search.total_received != 0).then(|| {
+                        get_search
+                            .into_event(self.user.clone(), "Document Searched GET".to_string())
+                    });
+                    let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await);
+                    let post_search = (post_search.total_received != 0).then(|| {
+                        post_search
+                            .into_event(self.user.clone(), "Document Searched POST".to_string())
+                    });
                     // keep the lock on the batcher just for these three operations
                     {
+                        println!("ANALYTICS: taking the lock on the batcher");
                         let mut batcher = self.batcher.lock().await;
-                        let _ = batcher.push(get_search).await;
-                        let _ = batcher.push(post_search).await;
-                        let _ = self.batcher.lock().await.flush().await;
+                        if let Some(get_search) = get_search {
+                            let _ = batcher.push(get_search).await;
+                        }
+                        if let Some(post_search) = post_search {
+                            let _ = batcher.push(post_search).await;
+                        }
+                        println!("ANALYTICS: Sending the batch");
+                        let _ = batcher.flush().await;
                     }
                     println!("ANALYTICS: sent the batch");
-                    tokio::time::sleep(Duration::from_secs(60 * 5)).await; // 5 minutes
+                    tokio::time::sleep(Duration::from_secs(60 * 2)).await; // 2 minutes
                 }
             });
         }
@@ -291,7 +304,7 @@ mod segment {
 
         fn end_post_search(&'static self, process_time: usize) {
             tokio::spawn(async move {
-                let mut search_batcher = self.get_search_batcher.lock().await;
+                let mut search_batcher = self.post_search_batcher.lock().await;
                 search_batcher.total_succeeded += 1;
                 search_batcher.time_spent.push(process_time);
             });
@@ -361,22 +374,22 @@ mod segment {
 
             let properties = json!({
                 "requests": {
-                    "99th_response_time":  self.time_spent.len() as f64 / self.time_spent.iter().sum::<usize>() as f64,
+                    "99th_response_time":  format!("{:.2}", self.time_spent.iter().sum::<usize>() as f64 / self.time_spent.len() as f64),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,
                 },
                 "sort": {
                     "with_geoPoint": self.sort_with_geo_point,
-                    "avg_criteria_number": self.sort_total_number_of_criteria as f64 / self.sort_sum_of_criteria_terms as f64,
+                    "avg_criteria_number": format!("{:.2}", self.sort_sum_of_criteria_terms as f64 / self.sort_total_number_of_criteria as f64),
                 },
                 "filter": {
                    "with_geoRadius": self.filter_with_geo_radius,
-                   "avg_criteria_number": self.filter_total_number_of_criteria as f64 / self.filter_sum_of_criteria_terms as f64,
+                   "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "q": {
-                   "avg_terms_number": self.total_number_of_q as f64 / self.sum_of_terms_count as f64,
+                   "avg_terms_number": format!("{:.2}", self.sum_of_terms_count as f64 / self.total_number_of_q as f64),
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
