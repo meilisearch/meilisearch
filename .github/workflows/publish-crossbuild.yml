@@ -22,17 +22,6 @@ jobs:
             linker: gcc-aarch64-linux-gnu
             use-cross: true
             asset_name: meilisearch-linux-aarch64
-          - build: aarch64
-            os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            linker: gcc-aarch64-linux-gnu
-            use-cross: true
-            asset_name: meilisearch-linux-aarch64-musl
-          - build: linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            use-cross: true
-            asset_name: meilisearch-linux-amd64-musl
     steps:
 
       - name: Checkout repository
@@ -68,32 +57,12 @@ jobs:
           echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
           echo RUSTFLAGS="-Clink-arg=-fuse-ld=gold" >> $GITHUB_ENV
 
-      - name: Configure target aarch64 MUSL
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        # env:
-        #   JEMALLOC_SYS_WITH_LG_PAGE: 16
-        run: |
-          sudo apt-get install -y musl-tools
-          echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
-
-      - name: Configure target x86_64 MUSL
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt-get install -y musl-tools
-
       - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
           command: build
           use-cross: ${{ matrix.use-cross }}
           args: --release --target ${{ matrix.target }}
-
-      # Strip debuginfo for target aarch64 GNU
-      # MUSL binary are static linked
-      - name: Strip debuginfo for target aarch64 GNU
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          /usr/bin/aarch64-linux-gnu-strip --strip-debug --target=elf64-littleaarch64 target/${{ matrix.target }}/release/meilisearch -o target/${{ matrix.target }}/release/meilisearch-stripped
 
       - name: List target output files
         run: ls -lR ./target
@@ -104,12 +73,4 @@ jobs:
           repo_token: ${{ secrets.PUBLISH_TOKEN }}
           file: target/${{ matrix.target }}/release/meilisearch
           asset_name: ${{ matrix.asset_name }}
-          tag: ${{ github.ref }}
-      - name: Upload stripped binary to release (aarch64 GNU only)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        uses: svenstaro/upload-release-action@v1-release
-        with:
-          repo_token: ${{ secrets.PUBLISH_TOKEN }}
-          file: target/${{ matrix.target }}/release/meilisearch-stripped
-          asset_name: ${{ matrix.asset_name }}-stripped
           tag: ${{ github.ref }}
