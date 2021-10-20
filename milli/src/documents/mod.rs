@@ -92,7 +92,8 @@ macro_rules! documents {
         let documents = serde_json::json!($data);
         let mut writer = std::io::Cursor::new(Vec::new());
         let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-        builder.add_documents(documents).unwrap();
+        let documents = serde_json::to_vec(&documents).unwrap();
+        builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
         builder.finish().unwrap();
 
         writer.set_position(0);
@@ -124,7 +125,8 @@ mod test {
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(json).unwrap();
+        todo!();
+        //builder.add_documents(json).unwrap();
 
         builder.finish().unwrap();
 
@@ -153,8 +155,9 @@ mod test {
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(doc1).unwrap();
-        builder.add_documents(doc2).unwrap();
+        todo!();
+        //builder.add_documents(doc1).unwrap();
+        //builder.add_documents(doc2).unwrap();
 
         builder.finish().unwrap();
 
@@ -182,7 +185,8 @@ mod test {
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(docs).unwrap();
+        todo!();
+        //builder.add_documents(docs).unwrap();
 
         builder.finish().unwrap();
 
@@ -210,11 +214,13 @@ mod test {
             { "tata": "hello" },
         ]]);
 
-        assert!(builder.add_documents(docs).is_err());
+        todo!();
+        //assert!(builder.add_documents(docs).is_err());
 
         let docs = json!("hello");
 
-        assert!(builder.add_documents(docs).is_err());
+        todo!();
+        //assert!(builder.add_documents(docs).is_err());
     }
 
     #[test]

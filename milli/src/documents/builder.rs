@@ -1,9 +1,13 @@
+use std::collections::BTreeMap;
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use serde::ser::Serialize;
+use serde::Deserializer;
+use serde_json::Value;
 
-use super::serde::DocumentSerializer;
+use crate::FieldId;
+
+use super::serde::DocumentVisitor;
 use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
@@ -24,7 +28,12 @@ use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 /// builder.finish().unwrap();
 /// ```
 pub struct DocumentBatchBuilder<W> {
-    serializer: DocumentSerializer<W>,
+    inner: ByteCounter<W>,
+    index: DocumentsBatchIndex,
+    obkv_buffer: Vec<u8>,
+    value_buffer: Vec<u8>,
+    values: BTreeMap<FieldId, Value>,
+    count: usize,
 }
 
 impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
@@ -34,27 +43,33 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
         // add space to write the offset of the metadata at the end of the writer
         writer.write_u64::<BigEndian>(0)?;
 
-        let serializer =
-            DocumentSerializer { writer, buffer: Vec::new(), index, count: 0, allow_seq: true };
+        let this = Self {
+            inner: writer,
+            index,
+            obkv_buffer: Vec::new(),
+            value_buffer: Vec::new(),
+            values: BTreeMap::new(),
+            count: 0,
+        };
 
-        Ok(Self { serializer })
+        Ok(this)
     }
 
     /// Returns the number of documents that have been written to the builder.
     pub fn len(&self) -> usize {
-        self.serializer.count
+        self.count
     }
 
     /// This method must be called after the document addition is terminated. It will put the
     /// metadata at the end of the file, and write the metadata offset at the beginning on the
     /// file.
     pub fn finish(self) -> Result<(), Error> {
-        let DocumentSerializer {
-            writer: ByteCounter { mut writer, count: offset },
+        let Self {
+            inner: ByteCounter { mut writer, count: offset },
             index,
             count,
             ..
-        } = self.serializer;
+        } = self;
 
         let meta = DocumentsMetadata { count, index };
 
@@ -68,13 +83,106 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
         Ok(())
     }
 
-    /// Adds documents to the builder.
-    ///
-    /// The internal index is updated with the fields found
-    /// in the documents. Document must either be a map or a sequences of map, anything else will
-    /// fail.
-    pub fn add_documents<T: Serialize>(&mut self, document: T) -> Result<(), Error> {
-        document.serialize(&mut self.serializer)?;
+
+    /// Extends the builder with json documents from a reader.
+    pub fn extend_from_json<R: io::Read>(&mut self, reader: R) -> Result<(), Error> {
+        let mut de = serde_json::Deserializer::from_reader(reader);
+
+        let mut visitor = DocumentVisitor {
+            inner: &mut self.inner,
+            index: &mut self.index,
+            obkv_buffer: &mut self.obkv_buffer,
+            value_buffer: &mut self.value_buffer,
+            values: &mut self.values,
+            count: &mut self.count,
+        };
+
+        de.deserialize_any(&mut visitor).unwrap();
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Cursor;
+
+    use crate::documents::DocumentBatchReader;
+
+    use super::*;
+
+    #[test]
+    fn add_single_documents_json() {
+        let mut cursor = Cursor::new(Vec::new());
+        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+
+        let json = serde_json::json!({
+            "id": 1,
+            "field": "hello!",
+        });
+
+        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
+
+        let json = serde_json::json!({
+            "blabla": false,
+            "field": "hello!",
+            "id": 1,
+        });
+
+        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
+
+        assert_eq!(builder.len(), 2);
+
+        builder.finish().unwrap();
+
+        cursor.set_position(0);
+
+        let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
+
+        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        assert_eq!(index.len(), 3);
+        assert_eq!(document.iter().count(), 2);
+
+        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        assert_eq!(index.len(), 3);
+        assert_eq!(document.iter().count(), 3);
+
+        assert!(reader.next_document_with_index().unwrap().is_none());
+    }
+
+    #[test]
+    fn add_documents_seq_json() {
+        let mut cursor = Cursor::new(Vec::new());
+        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+
+        let json = serde_json::json!([{
+            "id": 1,
+            "field": "hello!",
+        },{
+            "blabla": false,
+            "field": "hello!",
+            "id": 1,
+        }
+        ]);
+
+        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
+
+        assert_eq!(builder.len(), 2);
+
+        builder.finish().unwrap();
+
+        cursor.set_position(0);
+
+        let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
+
+        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        assert_eq!(index.len(), 3);
+        assert_eq!(document.iter().count(), 2);
+
+        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        assert_eq!(index.len(), 3);
+        assert_eq!(document.iter().count(), 3);
+
+        assert!(reader.next_document_with_index().unwrap().is_none());
     }
 }

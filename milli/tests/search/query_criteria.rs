@@ -409,7 +409,8 @@ fn criteria_ascdesc() {
             "age": age,
         });
 
-        batch_builder.add_documents(json).unwrap();
+        todo!();
+        //batch_builder.add_documents(json).unwrap();
     });
 
     batch_builder.finish().unwrap();

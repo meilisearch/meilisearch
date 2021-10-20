@@ -68,7 +68,8 @@ mod test {
                 "txts": sample_txts[..(rng.gen_range(0..3))],
                 "cat-ints": sample_ints[..(rng.gen_range(0..3))],
             });
-            builder.add_documents(doc).unwrap();
+            todo!()
+            //builder.add_documents(doc).unwrap();
         }
 
         builder.finish().unwrap();
