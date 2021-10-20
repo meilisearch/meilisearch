@@ -60,7 +60,6 @@ mod segment {
                 })
             });
             let infos = json!({
-                "version": env!("CARGO_PKG_VERSION").to_string(),
                 "env": opt.env.clone(),
                 "has_snapshot": opt.schedule_snapshot,
             });
@@ -137,6 +136,11 @@ mod segment {
                             .lock()
                             .await
                             .push(Identify {
+                                context: Some(json!({
+                                    "app": {
+                                        "version": env!("CARGO_PKG_VERSION").to_string(),
+                                    },
+                                })),
                                 user,
                                 traits,
                                 ..Default::default()
