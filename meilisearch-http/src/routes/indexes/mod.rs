@@ -63,7 +63,7 @@ pub async fn create_index(
 
     analytics.publish(
         "Index Created".to_string(),
-        json!({ "with_primary_key": body.primary_key}),
+        json!({ "primary_key": body.primary_key}),
         Some(&req),
     );
     let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
@@ -107,7 +107,7 @@ pub async fn update_index(
     let body = body.into_inner();
     analytics.publish(
         "Index Updated".to_string(),
-        json!({ "with_primary_key": body.primary_key}),
+        json!({ "primary_key": body.primary_key}),
         Some(&req),
     );
     let settings = IndexSettings {
