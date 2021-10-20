@@ -3,8 +3,8 @@ status = [
     'Tests on macos-latest',
     'Tests on windows-latest',
     'Run Clippy',
-    'Run Rustfmt'
+    'Run Rustfmt',
+    'Milestone Check'
 ]
-pr_status = ['Milestone Check']
 # 3 hours timeout
 timeout-sec = 10800

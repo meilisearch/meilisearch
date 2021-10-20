@@ -1,0 +1,18 @@
+on:
+  pull_request:
+    branches:
+      - main
+      - release-v*
+      - stable
+  push:
+    # trying and staging branches are for Bors config
+    branches:
+      - trying
+      - staging
+
+jobs:
+  check-milestones:
+    name: 'Milestone check'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: siimon/milestone-check-action@releases/v2
