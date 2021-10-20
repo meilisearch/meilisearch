@@ -1,3 +1,5 @@
+name: 'PR status'
+
 on:
   pull_request:
     branches:
