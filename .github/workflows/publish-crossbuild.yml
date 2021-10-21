@@ -1,4 +1,4 @@
-name: Release using cross build
+Publish aarch64 binary
 
 on:
   release:
