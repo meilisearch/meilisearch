@@ -469,6 +469,54 @@ mod tests {
                 Fc::from_str(&rtxn, &index, "NOT _geoRadius(12, 13, 14)"),
                 Fc::Operator(3, Operator::GeoGreaterThan([12., 13.], 14.)),
             ),
+            // test simple `or` and `and`
+            (
+                Fc::from_str(&rtxn, &index, "channel = ponce AND 'dog race' != 'bernese mountain'"),
+                Fc::And(
+                    Box::new(Fc::Operator(0, Operator::Equal(None, S("ponce")))),
+                    Box::new(Fc::Operator(1, Operator::NotEqual(None, S("bernese mountain")))),
+                ),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "channel = ponce OR 'dog race' != 'bernese mountain'"),
+                Fc::Or(
+                    Box::new(Fc::Operator(0, Operator::Equal(None, S("ponce")))),
+                    Box::new(Fc::Operator(1, Operator::NotEqual(None, S("bernese mountain")))),
+                ),
+            ),
+            (
+                Fc::from_str(
+                    &rtxn,
+                    &index,
+                    "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000",
+                ),
+                Fc::Or(
+                    Box::new(Fc::And(
+                        Box::new(Fc::Operator(0, Operator::Equal(None, S("ponce")))),
+                        Box::new(Fc::Operator(1, Operator::NotEqual(None, S("bernese mountain")))),
+                    )),
+                    Box::new(Fc::Operator(2, Operator::GreaterThan(1000.))),
+                ),
+            ),
+            // test parenthesis
+            /*
+            (
+                Fc::from_str(
+                    &rtxn,
+                    &index,
+                    "(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)",
+                ),
+                Fc::And(
+                Box::new(Fc::Or(
+                    Box::new(Fc::And(
+                        Box::new(Fc::Operator(0, Operator::Equal(None, S("ponce")))),
+                        Box::new(Fc::Operator(1, Operator::NotEqual(None, S("bernese mountain")))),
+                    )),
+                    Box::new(Fc::Operator(2, Operator::GreaterThan(1000.))),
+                )),
+                    Box::new(Fc::Operator(3, Operator::GeoLowerThan([12., 13.], 14.))))
+            ),
+            */
         ];
 
         for (result, expected) in test_case {
