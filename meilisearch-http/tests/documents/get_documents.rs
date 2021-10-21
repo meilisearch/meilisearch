@@ -13,11 +13,20 @@ async fn get_unexisting_index_single_document() {
 }
 
 #[actix_rt::test]
-async fn get_unexisting_document() {
+async fn error_get_unexisting_document() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
-    let (_response, code) = index.get_document(1, None).await;
+    let (response, code) = index.get_document(1, None).await;
+
+    let expected_response = json!({
+        "message": "Document 1 not found.",
+        "code": "document_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#document_not_found"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 404);
 }
 
@@ -47,12 +56,21 @@ async fn get_document() {
 }
 
 #[actix_rt::test]
-async fn get_unexisting_index_all_documents() {
+async fn error_get_unexisting_index_all_documents() {
     let server = Server::new().await;
-    let (_response, code) = server
+    let (response, code) = server
         .index("test")
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
+
+    let expected_response = json!({
+        "message": "Index test not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 404);
 }
 
