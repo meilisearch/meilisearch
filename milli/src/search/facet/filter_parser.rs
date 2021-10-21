@@ -365,6 +365,10 @@ mod tests {
                 Fc::from_str(&rtxn, &index, "channel = Ponce"),
                 Fc::Operator(0, Operator::Equal(None, S("ponce"))),
             ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers = 12"),
+                Fc::Operator(2, Operator::Equal(Some(12.), S("12"))),
+            ),
             // test all the quotes and simple quotes
             (
                 Fc::from_str(&rtxn, &index, "channel = 'Mister Mv'"),
