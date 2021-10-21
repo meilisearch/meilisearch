@@ -253,6 +253,7 @@ impl<'a> ParseContext<'a> {
 
         let fid = match self.fields_ids_map.id("_geo") {
             Some(fid) => fid,
+            // TODO send an error
             None => return Ok((input, FilterCondition::Empty)),
         };
 
@@ -361,9 +362,12 @@ mod tests {
         map.insert("channel");
         map.insert("dog race");
         map.insert("subscribers");
+        map.insert("_geo");
         index.put_fields_ids_map(&mut wtxn, &map).unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset! { S("channel"), S("dog race"), S("subscribers") });
+        builder.set_filterable_fields(
+            hashset! { S("channel"), S("dog race"), S("subscribers"), S("_geo") },
+        );
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
@@ -459,11 +463,11 @@ mod tests {
             ),
             (
                 Fc::from_str(&rtxn, &index, "_geoRadius(12, 13, 14)"),
-                Fc::Operator(2, Operator::GeoLowerThan([12., 13.], 14.)),
+                Fc::Operator(3, Operator::GeoLowerThan([12., 13.], 14.)),
             ),
             (
                 Fc::from_str(&rtxn, &index, "NOT _geoRadius(12, 13, 14)"),
-                Fc::Operator(2, Operator::GeoGreaterThan([12., 13.], 14.)),
+                Fc::Operator(3, Operator::GeoGreaterThan([12., 13.], 14.)),
             ),
         ];
 
