@@ -359,25 +359,124 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut map = index.fields_ids_map(&wtxn).unwrap();
         map.insert("channel");
+        map.insert("dog race");
+        map.insert("subscribers");
         index.put_fields_ids_map(&mut wtxn, &map).unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset! { S("channel") });
+        builder.set_filterable_fields(hashset! { S("channel"), S("dog race"), S("subscribers") });
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
-        // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_str(&rtxn, &index, "channel = Ponce").unwrap();
-        let expected = FilterCondition::Operator(0, Operator::Equal(None, S("ponce")));
-        assert_eq!(condition, expected);
 
-        let condition = FilterCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
-        let expected = FilterCondition::Operator(0, Operator::NotEqual(None, S("ponce")));
-        assert_eq!(condition, expected);
+        use FilterCondition as Fc;
+        let test_case = [
+            // simple test
+            (
+                Fc::from_str(&rtxn, &index, "channel = Ponce"),
+                Fc::Operator(0, Operator::Equal(None, S("ponce"))),
+            ),
+            // test all the quotes and simple quotes
+            (
+                Fc::from_str(&rtxn, &index, "channel = 'Mister Mv'"),
+                Fc::Operator(0, Operator::Equal(None, S("mister mv"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "channel = \"Mister Mv\""),
+                Fc::Operator(0, Operator::Equal(None, S("mister mv"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "'dog race' = Borzoi"),
+                Fc::Operator(1, Operator::Equal(None, S("borzoi"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "\"dog race\" = Chusky"),
+                Fc::Operator(1, Operator::Equal(None, S("chusky"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "\"dog race\" = \"Bernese Mountain\""),
+                Fc::Operator(1, Operator::Equal(None, S("bernese mountain"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "'dog race' = 'Bernese Mountain'"),
+                Fc::Operator(1, Operator::Equal(None, S("bernese mountain"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "\"dog race\" = 'Bernese Mountain'"),
+                Fc::Operator(1, Operator::Equal(None, S("bernese mountain"))),
+            ),
+            // test all the operators
+            (
+                Fc::from_str(&rtxn, &index, "channel != ponce"),
+                Fc::Operator(0, Operator::NotEqual(None, S("ponce"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT channel = ponce"),
+                Fc::Operator(0, Operator::NotEqual(None, S("ponce"))),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers < 1000"),
+                Fc::Operator(2, Operator::LowerThan(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers > 1000"),
+                Fc::Operator(2, Operator::GreaterThan(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers <= 1000"),
+                Fc::Operator(2, Operator::LowerThanOrEqual(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers >= 1000"),
+                Fc::Operator(2, Operator::GreaterThanOrEqual(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT subscribers < 1000"),
+                Fc::Operator(2, Operator::GreaterThanOrEqual(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT subscribers > 1000"),
+                Fc::Operator(2, Operator::LowerThanOrEqual(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT subscribers <= 1000"),
+                Fc::Operator(2, Operator::GreaterThan(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT subscribers >= 1000"),
+                Fc::Operator(2, Operator::LowerThan(1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "subscribers 100 TO 1000"),
+                Fc::Operator(2, Operator::Between(100., 1000.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT subscribers 100 TO 1000"),
+                Fc::Or(
+                    Box::new(Fc::Operator(2, Operator::LowerThan(100.))),
+                    Box::new(Fc::Operator(2, Operator::GreaterThan(1000.))),
+                ),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "_geoRadius(12, 13, 14)"),
+                Fc::Operator(2, Operator::GeoLowerThan([12., 13.], 14.)),
+            ),
+            (
+                Fc::from_str(&rtxn, &index, "NOT _geoRadius(12, 13, 14)"),
+                Fc::Operator(2, Operator::GeoGreaterThan([12., 13.], 14.)),
+            ),
+        ];
 
-        let condition = FilterCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
-        let expected = FilterCondition::Operator(0, Operator::NotEqual(None, S("ponce")));
-        assert_eq!(condition, expected);
+        for (result, expected) in test_case {
+            assert!(
+                result.is_ok(),
+                "Filter {:?} was supposed to be parsed but failed with the following error: `{}`",
+                expected,
+                result.unwrap_err()
+            );
+            let filter = result.unwrap();
+            assert_eq!(filter, expected,);
+        }
     }
 
     #[test]
