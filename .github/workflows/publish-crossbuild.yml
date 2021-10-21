@@ -8,7 +8,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish-to-github:
+  publish-aarch64:
     name: Publish to Github
     runs-on: ${{ matrix.os }}
     continue-on-error: false
