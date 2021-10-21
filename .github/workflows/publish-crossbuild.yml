@@ -22,8 +22,8 @@ jobs:
             linker: gcc-aarch64-linux-gnu
             use-cross: true
             asset_name: meilisearch-linux-aarch64
-    steps:
 
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v2
 
