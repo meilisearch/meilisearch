@@ -16,20 +16,20 @@ use crate::heed_codec::facet::{
 };
 use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum FilterCondition {
-    Operator(FieldId, Operator),
+#[derive(Debug, Clone)]
+pub enum FilterCondition<'a> {
+    Operator(FieldId, Operator<'a>),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
     Empty,
 }
 
-impl FilterCondition {
-    pub fn from_array<I, J, A, B>(
+impl<'a> FilterCondition<'a> {
+    pub fn from_array<I, J, A: 'a, B: 'a>(
         rtxn: &heed::RoTxn,
         index: &Index,
         array: I,
-    ) -> Result<Option<FilterCondition>>
+    ) -> Result<Option<FilterCondition<'a>>>
     where
         I: IntoIterator<Item = Either<J, B>>,
         J: IntoIterator<Item = A>,
@@ -73,8 +73,8 @@ impl FilterCondition {
     pub fn from_str(
         rtxn: &heed::RoTxn,
         index: &Index,
-        expression: &str,
-    ) -> Result<FilterCondition> {
+        expression: &'a str,
+    ) -> Result<FilterCondition<'a>> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields(rtxn)?;
         let ctx =
@@ -93,7 +93,7 @@ impl FilterCondition {
             }
         }
     }
-    pub fn negate(self) -> FilterCondition {
+    pub fn negate(self) -> FilterCondition<'a> {
         match self {
             Operator(fid, op) => match op.negate() {
                 (op, None) => Operator(fid, op),
@@ -106,7 +106,7 @@ impl FilterCondition {
     }
 }
 
-impl FilterCondition {
+impl<'a> FilterCondition<'a> {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_number_levels(
@@ -221,7 +221,7 @@ impl FilterCondition {
         numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
         strings_db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
         field_id: FieldId,
-        operator: &Operator,
+        operator: &Operator<'a>,
     ) -> Result<RoaringBitmap> {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the

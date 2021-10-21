@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 //! BNF grammar:
 //!
 //! ```text
@@ -7,8 +6,8 @@
 //! and            = not (~ "AND" not)*
 //! not            = ("NOT" | "!") not | primary
 //! primary        = (WS* ~ "("  expression ")" ~ WS*) | condition | to | geoRadius
-//! to             = value value TO value
 //! condition      = value ("==" | ">" ...) value
+//! to             = value value TO value
 //! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" (word | spaces)* "\""
@@ -16,61 +15,24 @@
 //! geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
 //! ```
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FilterCondition<'a> {
-    Operator { fid: Token<'a>, op: Operator<'a> },
-    Or(Box<Self>, Box<Self>),
-    And(Box<Self>, Box<Self>),
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
-    GeoGreaterThan { point: [Token<'a>; 2], radius: Token<'a> },
-    Empty,
-}
-
-impl<'a> FilterCondition<'a> {
-    pub fn negate(self) -> FilterCondition<'a> {
-        use FilterCondition::*;
-
-        match self {
-            Operator { fid, op } => match op.negate() {
-                (op, None) => Operator { fid, op },
-                (a, Some(b)) => {
-                    Or(Operator { fid: fid.clone(), op: a }.into(), Operator { fid, op: b }.into())
-                }
-            },
-            Or(a, b) => And(a.negate().into(), b.negate().into()),
-            And(a, b) => Or(a.negate().into(), b.negate().into()),
-            Empty => Empty,
-            GeoLowerThan { point, radius } => GeoGreaterThan { point, radius },
-            GeoGreaterThan { point, radius } => GeoLowerThan { point, radius },
-        }
-    }
-
-    pub fn parse(input: &'a str) -> IResult<Span, Self> {
-        let span = Span::new(input);
-        parse_expression(span)
-    }
-}
-
-use std::collections::HashSet;
+mod condition;
+mod value;
 use std::fmt::Debug;
-use std::result::Result as StdResult;
 
+pub use condition::{parse_condition, parse_to, Condition};
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till, take_while1};
+use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0};
 use nom::combinator::map;
-use nom::error::{ContextError, ErrorKind, ParseError, VerboseError};
+use nom::error::{ContextError, ParseError};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
-use nom::sequence::{delimited, preceded, tuple};
+use nom::sequence::{delimited, preceded};
 use nom::IResult;
 use nom_locate::LocatedSpan;
+pub(crate) use value::parse_value;
 
-use self::Operator::*;
-
-pub enum FilterError {
-    AttributeNotFilterable(String),
-}
+type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
@@ -90,41 +52,48 @@ impl<'a> From<Span<'a>> for Token<'a> {
     }
 }
 
-type Span<'a> = LocatedSpan<&'a str>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Operator<'a> {
-    GreaterThan(Token<'a>),
-    GreaterThanOrEqual(Token<'a>),
-    Equal(Token<'a>),
-    NotEqual(Token<'a>),
-    LowerThan(Token<'a>),
-    LowerThanOrEqual(Token<'a>),
-    Between { from: Token<'a>, to: Token<'a> },
+pub enum FilterCondition<'a> {
+    Condition { fid: Token<'a>, op: Condition<'a> },
+    Or(Box<Self>, Box<Self>),
+    And(Box<Self>, Box<Self>),
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
+    GeoGreaterThan { point: [Token<'a>; 2], radius: Token<'a> },
+    Empty,
 }
 
-impl<'a> Operator<'a> {
-    /// This method can return two operations in case it must express
-    /// an OR operation for the between case (i.e. `TO`).
-    pub fn negate(self) -> (Self, Option<Self>) {
+impl<'a> FilterCondition<'a> {
+    pub fn negate(self) -> FilterCondition<'a> {
+        use FilterCondition::*;
+
         match self {
-            GreaterThan(n) => (LowerThanOrEqual(n), None),
-            GreaterThanOrEqual(n) => (LowerThan(n), None),
-            Equal(s) => (NotEqual(s), None),
-            NotEqual(s) => (Equal(s), None),
-            LowerThan(n) => (GreaterThanOrEqual(n), None),
-            LowerThanOrEqual(n) => (GreaterThan(n), None),
-            Between { from, to } => (LowerThan(from), Some(GreaterThan(to))),
+            Condition { fid, op } => match op.negate() {
+                (op, None) => Condition { fid, op },
+                (a, Some(b)) => Or(
+                    Condition { fid: fid.clone(), op: a }.into(),
+                    Condition { fid, op: b }.into(),
+                ),
+            },
+            Or(a, b) => And(a.negate().into(), b.negate().into()),
+            And(a, b) => Or(a.negate().into(), b.negate().into()),
+            Empty => Empty,
+            GeoLowerThan { point, radius } => GeoGreaterThan { point, radius },
+            GeoGreaterThan { point, radius } => GeoLowerThan { point, radius },
         }
+    }
+
+    pub fn parse(input: &'a str) -> IResult<Span, Self> {
+        let span = Span::new(input);
+        parse_expression(span)
     }
 }
 
-pub trait FilterParserError<'a>:
-    nom::error::ParseError<&'a str> + ContextError<&'a str> + std::fmt::Debug
-{
+// remove OPTIONAL whitespaces before AND after the the provided parser
+fn ws<'a, O>(
+    inner: impl FnMut(Span<'a>) -> IResult<Span, O>,
+) -> impl FnMut(Span<'a>) -> IResult<Span, O> {
+    delimited(multispace0, inner, multispace0)
 }
-
-impl<'a> FilterParserError<'a> for VerboseError<&'a str> {}
 
 /// and            = not (~ "AND" not)*
 fn parse_or(input: Span) -> IResult<Span, FilterCondition> {
@@ -151,60 +120,6 @@ fn parse_not(input: Span) -> IResult<Span, FilterCondition> {
     alt((map(preceded(alt((tag("!"), tag("NOT"))), |c| parse_not(c)), |e| e.negate()), |c| {
         parse_primary(c)
     }))(input)
-}
-
-fn ws<'a, O>(
-    inner: impl FnMut(Span<'a>) -> IResult<Span, O>,
-) -> impl FnMut(Span<'a>) -> IResult<Span, O> {
-    delimited(multispace0, inner, multispace0)
-}
-
-/// condition      = value ("==" | ">" ...) value
-fn parse_condition(input: Span) -> IResult<Span, FilterCondition> {
-    let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
-    let (input, (key, op, value)) =
-        tuple((|c| parse_value(c), operator, |c| parse_value(c)))(input)?;
-
-    let fid = key.into();
-
-    // TODO
-    match *op.fragment() {
-        "=" => {
-            let k = FilterCondition::Operator { fid, op: Equal(value.into()) };
-            Ok((input, k))
-        }
-        "!=" => {
-            let k = FilterCondition::Operator { fid, op: NotEqual(value.into()) };
-            Ok((input, k))
-        }
-        ">" | "<" | "<=" | ">=" => {
-            let k = match *op.fragment() {
-                ">" => FilterCondition::Operator { fid, op: GreaterThan(value.into()) },
-                "<" => FilterCondition::Operator { fid, op: LowerThan(value.into()) },
-                "<=" => FilterCondition::Operator { fid, op: LowerThanOrEqual(value.into()) },
-                ">=" => FilterCondition::Operator { fid, op: GreaterThanOrEqual(value.into()) },
-                _ => unreachable!(),
-            };
-            Ok((input, k))
-        }
-        _ => unreachable!(),
-    }
-}
-
-/// to             = value value TO value
-fn parse_to(input: Span) -> IResult<Span, FilterCondition> {
-    let (input, (key, from, _, to)) =
-        tuple((ws(|c| parse_value(c)), ws(|c| parse_value(c)), tag("TO"), ws(|c| parse_value(c))))(
-            input,
-        )?;
-
-    Ok((
-        input,
-        FilterCondition::Operator {
-            fid: key.into(),
-            op: Between { from: from.into(), to: to.into() },
-        },
-    ))
 }
 
 /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
@@ -262,40 +177,17 @@ fn parse_primary(input: Span) -> IResult<Span, FilterCondition> {
     ))(input)
 }
 
-/// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
-fn parse_value(input: Span) -> IResult<Span, Span> {
-    // singleQuoted   = "'" .* all but quotes "'"
-    let simple_quoted_key = |input| take_till(|c: char| c == '\'')(input);
-    // doubleQuoted   = "\"" (word | spaces)* "\""
-    let quoted_key = |input| take_till(|c: char| c == '"')(input);
-    // word           = (alphanumeric | _ | - | .)+
-    let word = |input| take_while1(is_key_component)(input);
-
-    alt((
-        ws(delimited(char('\''), simple_quoted_key, char('\''))),
-        ws(delimited(char('"'), quoted_key, char('"'))),
-        ws(word),
-    ))(input)
-}
-
-fn is_key_component(c: char) -> bool {
-    c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
-}
-
 /// expression     = or
 pub fn parse_expression(input: Span) -> IResult<Span, FilterCondition> {
     parse_or(input)
 }
 
 #[cfg(test)]
-mod tests {
-    use big_s::S;
-    use maplit::hashset;
-
+pub mod tests {
     use super::*;
 
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
-    fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
+    pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
         // if the string is empty we still need to return 1 for the line number
         let lines = before.is_empty().then(|| 1).unwrap_or_else(|| before.lines().count());
         let offset = before.chars().count();
@@ -306,149 +198,148 @@ mod tests {
     fn parse() {
         use FilterCondition as Fc;
 
-        // new_from_raw_offset is unsafe
         let test_case = [
             // simple test
             (
                 "channel = Ponce",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "channel"),
-                    op: Operator::Equal(rtok("channel = ", "Ponce")),
+                    op: Condition::Equal(rtok("channel = ", "Ponce")),
                 },
             ),
             (
                 "subscribers = 12",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::Equal(rtok("subscribers = ", "12")),
+                    op: Condition::Equal(rtok("subscribers = ", "12")),
                 },
             ),
             // test all the quotes and simple quotes
             (
                 "channel = 'Mister Mv'",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "channel"),
-                    op: Operator::Equal(rtok("channel = '", "Mister Mv")),
+                    op: Condition::Equal(rtok("channel = '", "Mister Mv")),
                 },
             ),
             (
                 "channel = \"Mister Mv\"",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "channel"),
-                    op: Operator::Equal(rtok("channel = \"", "Mister Mv")),
+                    op: Condition::Equal(rtok("channel = \"", "Mister Mv")),
                 },
             ),
             (
                 "'dog race' = Borzoi",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("'", "dog race"),
-                    op: Operator::Equal(rtok("'dog race' = ", "Borzoi")),
+                    op: Condition::Equal(rtok("'dog race' = ", "Borzoi")),
                 },
             ),
             (
                 "\"dog race\" = Chusky",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("\"", "dog race"),
-                    op: Operator::Equal(rtok("\"dog race\" = ", "Chusky")),
+                    op: Condition::Equal(rtok("\"dog race\" = ", "Chusky")),
                 },
             ),
             (
                 "\"dog race\" = \"Bernese Mountain\"",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("\"", "dog race"),
-                    op: Operator::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
+                    op: Condition::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
                 },
             ),
             (
                 "'dog race' = 'Bernese Mountain'",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("'", "dog race"),
-                    op: Operator::Equal(rtok("'dog race' = '", "Bernese Mountain")),
+                    op: Condition::Equal(rtok("'dog race' = '", "Bernese Mountain")),
                 },
             ),
             (
                 "\"dog race\" = 'Bernese Mountain'",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("\"", "dog race"),
-                    op: Operator::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
+                    op: Condition::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
                 },
             ),
             // test all the operators
             (
                 "channel != ponce",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "channel"),
-                    op: Operator::NotEqual(rtok("channel != ", "ponce")),
+                    op: Condition::NotEqual(rtok("channel != ", "ponce")),
                 },
             ),
             (
                 "NOT channel = ponce",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("NOT ", "channel"),
-                    op: Operator::NotEqual(rtok("NOT channel = ", "ponce")),
+                    op: Condition::NotEqual(rtok("NOT channel = ", "ponce")),
                 },
             ),
             (
                 "subscribers < 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::LowerThan(rtok("subscribers < ", "1000")),
+                    op: Condition::LowerThan(rtok("subscribers < ", "1000")),
                 },
             ),
             (
                 "subscribers > 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::GreaterThan(rtok("subscribers > ", "1000")),
+                    op: Condition::GreaterThan(rtok("subscribers > ", "1000")),
                 },
             ),
             (
                 "subscribers <= 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::LowerThanOrEqual(rtok("subscribers <= ", "1000")),
+                    op: Condition::LowerThanOrEqual(rtok("subscribers <= ", "1000")),
                 },
             ),
             (
                 "subscribers >= 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::GreaterThanOrEqual(rtok("subscribers >= ", "1000")),
+                    op: Condition::GreaterThanOrEqual(rtok("subscribers >= ", "1000")),
                 },
             ),
             (
                 "NOT subscribers < 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Operator::GreaterThanOrEqual(rtok("NOT subscribers < ", "1000")),
+                    op: Condition::GreaterThanOrEqual(rtok("NOT subscribers < ", "1000")),
                 },
             ),
             (
                 "NOT subscribers > 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Operator::LowerThanOrEqual(rtok("NOT subscribers > ", "1000")),
+                    op: Condition::LowerThanOrEqual(rtok("NOT subscribers > ", "1000")),
                 },
             ),
             (
                 "NOT subscribers <= 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Operator::GreaterThan(rtok("NOT subscribers <= ", "1000")),
+                    op: Condition::GreaterThan(rtok("NOT subscribers <= ", "1000")),
                 },
             ),
             (
                 "NOT subscribers >= 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Operator::LowerThan(rtok("NOT subscribers >= ", "1000")),
+                    op: Condition::LowerThan(rtok("NOT subscribers >= ", "1000")),
                 },
             ),
             (
                 "subscribers 100 TO 1000",
-                Fc::Operator {
+                Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Operator::Between {
+                    op: Condition::Between {
                         from: rtok("subscribers ", "100"),
                         to: rtok("subscribers 100 TO ", "1000"),
                     },
@@ -457,14 +348,14 @@ mod tests {
             (
                 "NOT subscribers 100 TO 1000",
                 Fc::Or(
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("NOT ", "subscribers"),
-                        op: Operator::LowerThan(rtok("NOT subscribers ", "100")),
+                        op: Condition::LowerThan(rtok("NOT subscribers ", "100")),
                     }
                     .into(),
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("NOT ", "subscribers"),
-                        op: Operator::GreaterThan(rtok("NOT subscribers 100 TO ", "1000")),
+                        op: Condition::GreaterThan(rtok("NOT subscribers 100 TO ", "1000")),
                     }
                     .into(),
                 ),
@@ -487,14 +378,14 @@ mod tests {
             (
                 "channel = ponce AND 'dog race' != 'bernese mountain'",
                 Fc::And(
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("", "channel"),
-                        op: Operator::Equal(rtok("channel = ", "ponce")),
+                        op: Condition::Equal(rtok("channel = ", "ponce")),
                     }
                     .into(),
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("channel = ponce AND '", "dog race"),
-                        op: Operator::NotEqual(rtok(
+                        op: Condition::NotEqual(rtok(
                             "channel = ponce AND 'dog race' != '",
                             "bernese mountain",
                         )),
@@ -505,14 +396,14 @@ mod tests {
             (
                 "channel = ponce OR 'dog race' != 'bernese mountain'",
                 Fc::Or(
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("", "channel"),
-                        op: Operator::Equal(rtok("channel = ", "ponce")),
+                        op: Condition::Equal(rtok("channel = ", "ponce")),
                     }
                     .into(),
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok("channel = ponce OR '", "dog race"),
-                        op: Operator::NotEqual(rtok(
+                        op: Condition::NotEqual(rtok(
                             "channel = ponce OR 'dog race' != '",
                             "bernese mountain",
                         )),
@@ -524,14 +415,14 @@ mod tests {
                 "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000",
                 Fc::Or(
                     Fc::And(
-                        Fc::Operator {
+                        Fc::Condition {
                             fid: rtok("", "channel"),
-                            op: Operator::Equal(rtok("channel = ", "ponce")),
+                            op: Condition::Equal(rtok("channel = ", "ponce")),
                         }
                         .into(),
-                        Fc::Operator {
+                        Fc::Condition {
                             fid: rtok("channel = ponce AND '", "dog race"),
-                            op: Operator::NotEqual(rtok(
+                            op: Condition::NotEqual(rtok(
                                 "channel = ponce AND 'dog race' != '",
                                 "bernese mountain",
                             )),
@@ -539,12 +430,12 @@ mod tests {
                         .into(),
                     )
                     .into(),
-                    Fc::Operator {
+                    Fc::Condition {
                         fid: rtok(
                             "channel = ponce AND 'dog race' != 'bernese mountain' OR ",
                             "subscribers",
                         ),
-                        op: Operator::GreaterThan(rtok(
+                        op: Condition::GreaterThan(rtok(
                             "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ",
                             "1000",
                         )),
@@ -556,10 +447,10 @@ mod tests {
             (
                     "channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )",
                     Fc::And(
-                        Fc::Operator { fid: rtok("", "channel"), op: Operator::Equal(rtok("channel = ", "ponce")) }.into(),
+                        Fc::Condition { fid: rtok("", "channel"), op: Condition::Equal(rtok("channel = ", "ponce")) }.into(),
                         Fc::Or(
-                            Fc::Operator { fid: rtok("channel = ponce AND ( '", "dog race"), op: Operator::NotEqual(rtok("channel = ponce AND ( 'dog race' != '", "bernese mountain"))}.into(),
-                            Fc::Operator { fid: rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Operator::GreaterThan(rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
+                            Fc::Condition { fid: rtok("channel = ponce AND ( '", "dog race"), op: Condition::NotEqual(rtok("channel = ponce AND ( 'dog race' != '", "bernese mountain"))}.into(),
+                            Fc::Condition { fid: rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
                     ).into()),
             ),
             (
@@ -567,44 +458,14 @@ mod tests {
                 Fc::And(
                     Fc::Or(
                         Fc::And(
-                            Fc::Operator { fid: rtok("(", "channel"), op: Operator::Equal(rtok("(channel = ", "ponce")) }.into(),
-                            Fc::Operator { fid: rtok("(channel = ponce AND '", "dog race"), op: Operator::NotEqual(rtok("(channel = ponce AND 'dog race' != '", "bernese mountain")) }.into(),
+                            Fc::Condition { fid: rtok("(", "channel"), op: Condition::Equal(rtok("(channel = ", "ponce")) }.into(),
+                            Fc::Condition { fid: rtok("(channel = ponce AND '", "dog race"), op: Condition::NotEqual(rtok("(channel = ponce AND 'dog race' != '", "bernese mountain")) }.into(),
                         ).into(),
-                        Fc::Operator { fid: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Operator::GreaterThan(rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
+                        Fc::Condition { fid: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
                     ).into(),
                     Fc::GeoLowerThan { point: [rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(", "12"), rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, ", "13")], radius: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, ", "14") }.into()
                 )
             )
-        ];
-
-        for (input, expected) in test_case {
-            let result = Fc::parse(input);
-
-            assert!(
-                result.is_ok(),
-                "Filter `{:?}` was supposed to be parsed but failed with the following error: `{}`",
-                expected,
-                result.unwrap_err()
-            );
-            let filter = result.unwrap().1;
-            assert_eq!(filter, expected, "Filter `{}` failed.", input);
-        }
-    }
-
-    #[test]
-    fn name() {
-        use FilterCondition as Fc;
-
-        // new_from_raw_offset is unsafe
-        let test_case = [
-            // simple test
-            (
-                "channel=Ponce",
-                Fc::Operator {
-                    fid: rtok("", "channel"),
-                    op: Operator::Equal(rtok("channel = ", "Ponce")),
-                },
-            ),
         ];
 
         for (input, expected) in test_case {

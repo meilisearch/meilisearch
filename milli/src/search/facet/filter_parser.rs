@@ -28,25 +28,38 @@ use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, tuple};
 use nom::IResult;
+use nom_locate::LocatedSpan;
 
 use self::Operator::*;
 use super::FilterCondition;
 use crate::{FieldId, FieldsIdsMap};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    GreaterThan(f64),
-    GreaterThanOrEqual(f64),
-    Equal(Option<f64>, String),
-    NotEqual(Option<f64>, String),
-    LowerThan(f64),
-    LowerThanOrEqual(f64),
-    Between(f64, f64),
-    GeoLowerThan([f64; 2], f64),
-    GeoGreaterThan([f64; 2], f64),
+pub enum FilterError {
+    AttributeNotFilterable(String),
 }
 
-impl Operator {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Token<'a> {
+    pub position: Span<'a>,
+    pub inner: &'a str,
+}
+
+type Span<'a> = LocatedSpan<&'a str>;
+
+#[derive(Debug, Clone)]
+pub enum Operator<'a> {
+    GreaterThan(Token<'a>),
+    GreaterThanOrEqual(Token<'a>),
+    Equal(Option<Token<'a>>, Token<'a>),
+    NotEqual(Option<Token<'a>>, Token<'a>),
+    LowerThan(Token<'a>),
+    LowerThanOrEqual(Token<'a>),
+    Between(Token<'a>, Token<'a>),
+    GeoLowerThan([Token<'a>; 2], Token<'a>),
+    GeoGreaterThan([Token<'a>; 2], Token<'a>),
+}
+
+impl<'a> Operator<'a> {
     /// This method can return two operations in case it must express
     /// an OR operation for the between case (i.e. `TO`).
     pub fn negate(self) -> (Self, Option<Self>) {
@@ -180,16 +193,13 @@ impl<'a> ParseContext<'a> {
     where
         E: FilterParserError<'a>,
     {
-        let error = match input.chars().nth(0) {
-            Some(ch) => Err(nom::Err::Failure(E::from_char(input, ch))),
-            None => Err(nom::Err::Failure(E::from_error_kind(input, ErrorKind::Eof))),
-        };
-        if !self.filterable_fields.contains(key) {
-            return error;
-        }
         match self.fields_ids_map.id(key) {
-            Some(fid) => Ok(fid),
-            None => error,
+            Some(fid) if self.filterable_fields.contains(key) => Ok(fid),
+            _ => Err(nom::Err::Failure(E::add_context(
+                input,
+                "Attribute is not filterable",
+                E::from_char(input, 'T'),
+            ))),
         }
     }
 

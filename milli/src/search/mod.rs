@@ -34,7 +34,8 @@ mod query_tree;
 
 pub struct Search<'a> {
     query: Option<String>,
-    filter: Option<FilterCondition>,
+    // this should be linked to the String in the query
+    filter: Option<FilterCondition<'a>>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
