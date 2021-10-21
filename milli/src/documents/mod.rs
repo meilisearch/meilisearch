@@ -17,7 +17,38 @@ pub use reader::DocumentBatchReader;
 use crate::FieldId;
 
 /// A bidirectional map that links field ids to their name in a document batch.
-pub type DocumentsBatchIndex = BiHashMap<FieldId, String>;
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct DocumentsBatchIndex(pub BiHashMap<FieldId, String>);
+
+impl DocumentsBatchIndex {
+    /// Insert the field in the map, or return it's field id if it doesn't already exists.
+    pub fn insert(&mut self, field:  &str) -> FieldId {
+        match self.0.get_by_right(field) {
+            Some(field_id) => *field_id,
+            None => {
+                let field_id = self.0.len() as FieldId;
+                self.0.insert(field_id, field.to_string());
+                field_id
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=(&FieldId, &String)> {
+        self.0.iter()
+    }
+
+    pub fn get_id(&self, id: FieldId) -> Option<&String> {
+        self.0.get_by_left(&id)
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DocumentsMetadata {

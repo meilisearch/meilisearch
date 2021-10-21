@@ -75,7 +75,7 @@ fn create_fields_mapping(
         .collect()
 }
 
-fn find_primary_key(index: &bimap::BiHashMap<u16, String>) -> Option<&str> {
+fn find_primary_key(index: &DocumentsBatchIndex) -> Option<&str> {
     index
         .iter()
         .sorted_by_key(|(k, _)| *k)
@@ -179,7 +179,7 @@ impl Transform<'_, '_> {
                         if !self.autogenerate_docids {
                             let mut json = Map::new();
                             for (key, value) in document.iter() {
-                                let key = addition_index.get_by_left(&key).cloned();
+                                let key = addition_index.get_id(key).cloned();
                                 let value = serde_json::from_slice::<Value>(&value).ok();
 
                                 if let Some((k, v)) = key.zip(value) {
@@ -544,7 +544,7 @@ mod test {
     mod primary_key_inference {
         use bimap::BiHashMap;
 
-        use crate::update::index_documents::transform::find_primary_key;
+        use crate::{documents::DocumentsBatchIndex, update::index_documents::transform::find_primary_key};
 
         #[test]
         fn primary_key_infered_on_first_field() {
@@ -557,7 +557,7 @@ mod test {
                 map.insert(4, "fakeId".to_string());
                 map.insert(0, "realId".to_string());
 
-                assert_eq!(find_primary_key(&map), Some("realId"));
+                assert_eq!(find_primary_key(&DocumentsBatchIndex(map)), Some("realId"));
             }
         }
     }

@@ -31,17 +31,9 @@ impl<'a, 'de> Visitor<'de> for FieldIdResolver<'a> {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: serde::de::Error, {
-            let field_id = match self.0.get_by_right(v) {
-                Some(field_id) => *field_id,
-                None => {
-                    let field_id = self.0.len() as FieldId;
-                    self.0.insert(field_id, v.to_string());
-                    field_id
-                }
-            };
-
-            Ok(field_id)
+        E: serde::de::Error,
+    {
+            Ok(self.0.insert(v))
     }
 
     fn expecting(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
