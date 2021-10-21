@@ -1,9 +1,26 @@
+//! BNF grammar:
+//!
+//! ```text
+//! expression     = or
+//! or             = and (~ "OR" ~ and)
+//! and            = not (~ "AND" not)*
+//! not            = ("NOT" | "!") not | primary
+//! primary        = (WS* ~ "("  expression ")" ~ WS*) | condition | to | geoRadius
+//! to             = value value TO value
+//! condition      = value ("==" | ">" ...) value
+//! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
+//! singleQuoted   = "'" .* all but quotes "'"
+//! doubleQuoted   = "\"" (word | spaces)* "\""
+//! word           = (alphanumeric | _ | - | .)+
+//! geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
+//! ```
+
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till, take_till1, take_while1};
+use nom::bytes::complete::{tag, take_till, take_while1};
 use nom::character::complete::{char, multispace0};
 use nom::combinator::map;
 use nom::error::{ContextError, ErrorKind, VerboseError};
@@ -60,12 +77,14 @@ pub struct ParseContext<'a> {
 }
 
 impl<'a> ParseContext<'a> {
+    /// and            = not (~ "AND" not)*
     fn parse_or<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
         let (input, lhs) = self.parse_and(input)?;
-        let (input, ors) = many0(preceded(self.ws(tag("OR")), |c| Self::parse_or(self, c)))(input)?;
+        let (input, ors) =
+            many0(preceded(self.ws(tag("OR")), |c| Self::parse_and(self, c)))(input)?;
 
         let expr = ors
             .into_iter()
@@ -78,49 +97,40 @@ impl<'a> ParseContext<'a> {
         E: FilterParserError<'a>,
     {
         let (input, lhs) = self.parse_not(input)?;
-        let (input, ors) =
-            many0(preceded(self.ws(tag("AND")), |c| Self::parse_and(self, c)))(input)?;
+        let (input, ors) = many0(preceded(self.ws(tag("AND")), |c| self.parse_not(c)))(input)?;
         let expr = ors
             .into_iter()
             .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
         Ok((input, expr))
     }
 
+    /// not            = ("NOT" | "!") not | primary
     fn parse_not<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
         alt((
-            map(
-                preceded(alt((self.ws(tag("!")), self.ws(tag("NOT")))), |c| {
-                    Self::parse_condition_expression(self, c)
-                }),
-                |e| e.negate(),
-            ),
-            |c| Self::parse_condition_expression(self, c),
+            map(preceded(alt((tag("!"), tag("NOT"))), |c| self.parse_not(c)), |e| e.negate()),
+            |c| self.parse_primary(c),
         ))(input)
     }
 
     fn ws<F, O, E>(&'a self, inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
     where
-        F: Fn(&'a str) -> IResult<&'a str, O, E>,
+        F: FnMut(&'a str) -> IResult<&'a str, O, E>,
         E: FilterParserError<'a>,
     {
         delimited(multispace0, inner, multispace0)
     }
 
-    fn parse_simple_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    /// condition      = value ("==" | ">" ...) value
+    fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
         let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
-        let k = tuple((self.ws(|c| self.parse_key(c)), operator, self.ws(|c| self.parse_value(c))))(
-            input,
-        );
-        let (input, (key, op, value)) = match k {
-            Ok(o) => o,
-            Err(e) => return Err(e),
-        };
+        let (input, (key, op, value)) =
+            tuple((|c| self.parse_value(c), operator, |c| self.parse_value(c)))(input)?;
 
         let fid = self.parse_fid(input, key)?;
         let r: StdResult<f64, nom::Err<VerboseError<&str>>> = self.parse_numeric(value);
@@ -137,7 +147,17 @@ impl<'a> ParseContext<'a> {
                 );
                 Ok((input, k))
             }
-            ">" | "<" | "<=" | ">=" => self.parse_numeric_unary_condition(op, fid, value),
+            ">" | "<" | "<=" | ">=" => {
+                let numeric: f64 = self.parse_numeric(value)?;
+                let k = match op {
+                    ">" => FilterCondition::Operator(fid, GreaterThan(numeric)),
+                    "<" => FilterCondition::Operator(fid, LowerThan(numeric)),
+                    "<=" => FilterCondition::Operator(fid, LowerThanOrEqual(numeric)),
+                    ">=" => FilterCondition::Operator(fid, GreaterThanOrEqual(numeric)),
+                    _ => unreachable!(),
+                };
+                Ok((input, k))
+            }
             _ => unreachable!(),
         }
     }
@@ -154,26 +174,6 @@ impl<'a> ParseContext<'a> {
                 None => Err(nom::Err::Failure(E::from_error_kind(input, ErrorKind::Eof))),
             },
         }
-    }
-
-    fn parse_numeric_unary_condition<E>(
-        &'a self,
-        input: &'a str,
-        fid: u16,
-        value: &'a str,
-    ) -> IResult<&'a str, FilterCondition, E>
-    where
-        E: FilterParserError<'a>,
-    {
-        let numeric: f64 = self.parse_numeric(value)?;
-        let k = match input {
-            ">" => FilterCondition::Operator(fid, GreaterThan(numeric)),
-            "<" => FilterCondition::Operator(fid, LowerThan(numeric)),
-            "<=" => FilterCondition::Operator(fid, LowerThanOrEqual(numeric)),
-            ">=" => FilterCondition::Operator(fid, GreaterThanOrEqual(numeric)),
-            _ => unreachable!(),
-        };
-        Ok((input, k))
     }
 
     fn parse_fid<E>(&'a self, input: &'a str, key: &'a str) -> StdResult<FieldId, nom::Err<E>>
@@ -193,12 +193,13 @@ impl<'a> ParseContext<'a> {
         }
     }
 
-    fn parse_range_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
+    /// to             = value value TO value
+    fn parse_to<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
         let (input, (key, from, _, to)) = tuple((
-            self.ws(|c| self.parse_key(c)),
+            self.ws(|c| self.parse_value(c)),
             self.ws(|c| self.parse_value(c)),
             tag("TO"),
             self.ws(|c| self.parse_value(c)),
@@ -212,6 +213,7 @@ impl<'a> ParseContext<'a> {
         Ok((input, res))
     }
 
+    /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
     fn parse_geo_radius<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
@@ -224,7 +226,8 @@ impl<'a> ParseContext<'a> {
             "_geoRadius. Longitude must be contained between -180 and 180 degrees.";
 
         let parsed = preceded::<_, _, _, E, _, _>(
-            tag("_geoRadius"),
+            // TODO: forbid spaces between _geoRadius and parenthesis
+            self.ws(tag("_geoRadius")),
             delimited(
                 char('('),
                 separated_list1(tag(","), self.ws(|c| recognize_float(c))),
@@ -275,54 +278,35 @@ impl<'a> ParseContext<'a> {
         Ok((input, res))
     }
 
-    fn parse_condition<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
-    where
-        E: FilterParserError<'a>,
-    {
-        let l1 = |c| self.parse_simple_condition(c);
-        let l2 = |c| self.parse_range_condition(c);
-        let l3 = |c| self.parse_geo_radius(c);
-        alt((l1, l2, l3))(input)
-    }
-
-    fn parse_condition_expression<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
+    /// primary        = (WS* ~ "("  expression ")" ~ WS*) | condition | to | geoRadius
+    fn parse_primary<E>(&'a self, input: &'a str) -> IResult<&str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
         alt((
-            delimited(self.ws(char('(')), |c| Self::parse_expression(self, c), self.ws(char(')'))),
-            |c| Self::parse_condition(self, c),
+            delimited(self.ws(char('(')), |c| self.parse_expression(c), self.ws(char(')'))),
+            |c| self.parse_condition(c),
+            |c| self.parse_to(c),
+            |c| self.parse_geo_radius(c),
         ))(input)
     }
 
-    fn parse_key<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
-    where
-        E: FilterParserError<'a>,
-    {
-        let key = |input| take_while1(Self::is_key_component)(input);
-        let simple_quoted_key = |input| take_till(|c: char| c == '\'')(input);
-        let quoted_key = |input| take_till(|c: char| c == '"')(input);
-
-        alt((
-            delimited(char('\''), simple_quoted_key, char('\'')),
-            delimited(char('"'), quoted_key, char('"')),
-            key,
-        ))(input)
-    }
-
+    /// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
     fn parse_value<E>(&'a self, input: &'a str) -> IResult<&'a str, &'a str, E>
     where
         E: FilterParserError<'a>,
     {
-        let key =
-            |input| take_till1(|c: char| c.is_ascii_whitespace() || c == '(' || c == ')')(input);
+        // singleQuoted   = "'" .* all but quotes "'"
         let simple_quoted_key = |input| take_till(|c: char| c == '\'')(input);
+        // doubleQuoted   = "\"" (word | spaces)* "\""
         let quoted_key = |input| take_till(|c: char| c == '"')(input);
+        // word           = (alphanumeric | _ | - | .)+
+        let word = |input| take_while1(Self::is_key_component)(input);
 
         alt((
-            delimited(char('\''), simple_quoted_key, char('\'')),
-            delimited(char('"'), quoted_key, char('"')),
-            key,
+            self.ws(delimited(char('\''), simple_quoted_key, char('\''))),
+            self.ws(delimited(char('"'), quoted_key, char('"'))),
+            self.ws(word),
         ))(input)
     }
 
@@ -330,11 +314,12 @@ impl<'a> ParseContext<'a> {
         c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
     }
 
+    /// expression     = or
     pub fn parse_expression<E>(&'a self, input: &'a str) -> IResult<&'a str, FilterCondition, E>
     where
         E: FilterParserError<'a>,
     {
-        alt((|input| self.parse_or(input), |input| self.parse_and(input)))(input)
+        self.parse_or(input)
     }
 }
 
@@ -499,7 +484,19 @@ mod tests {
                 ),
             ),
             // test parenthesis
-            /*
+            (
+                Fc::from_str(
+                    &rtxn,
+                    &index,
+                    "channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )",
+                ),
+                    Fc::And(
+                        Box::new(Fc::Operator(0, Operator::Equal(None, S("ponce")))),
+                        Box::new(Fc::Or(
+                            Box::new(Fc::Operator(1, Operator::NotEqual(None, S("bernese mountain")))),
+                            Box::new(Fc::Operator(2, Operator::GreaterThan(1000.))),
+                    ))),
+            ),
             (
                 Fc::from_str(
                     &rtxn,
@@ -516,7 +513,6 @@ mod tests {
                 )),
                     Box::new(Fc::Operator(3, Operator::GeoLowerThan([12., 13.], 14.))))
             ),
-            */
         ];
 
         for (result, expected) in test_case {
