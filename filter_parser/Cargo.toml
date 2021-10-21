@@ -1,0 +1,15 @@
+[package]
+name = "filter_parser"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nom = "7.0.0"
+nom_locate = "4.0.0"
+
+[dev-dependencies]
+big_s = "1.0.2"
+maplit = "1.0.2"
+rand = "0.8.3"
