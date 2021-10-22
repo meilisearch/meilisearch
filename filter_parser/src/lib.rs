@@ -91,6 +91,9 @@ impl<'a> FilterCondition<'a> {
     }
 
     pub fn parse<E: FPError<'a>>(input: &'a str) -> Result<Self, E> {
+        if input.trim().is_empty() {
+            return Ok(Self::Empty);
+        }
         let span = Span::new(input);
         parse_expression::<'a, E>(span).finish().map(|(_rem, output)| output)
     }
