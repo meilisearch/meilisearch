@@ -2,10 +2,11 @@ use std::fmt::Debug;
 use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
-use filter_parser::{Condition, FilterCondition, Span, Token};
+use filter_parser::{Condition, FilterCondition, FilterParserError, Span, Token};
 use heed::types::DecodeIgnore;
 use log::debug;
-use nom::error::{convert_error, VerboseError};
+use nom::error::{ErrorKind, VerboseError};
+use nom_greedyerror::{convert_error, GreedyError};
 use roaring::RoaringBitmap;
 
 use super::FacetNumberRange;
@@ -20,12 +21,14 @@ pub struct Filter<'a> {
     condition: FilterCondition<'a>,
 }
 
+impl<'a> From<VerboseError<Span<'a>>> for Error {
+    fn from(nom_error: VerboseError<Span<'a>>) -> Self {
+        UserError::InvalidFilter { input: nom_error.to_string() }.into()
+    }
+}
+
 impl<'a> Filter<'a> {
-    pub fn from_array<I, J>(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        array: I,
-    ) -> Result<Option<FilterCondition<'a>>>
+    pub fn from_array<I, J>(array: I) -> Result<Option<Self>>
     where
         I: IntoIterator<Item = Either<J, &'a str>>,
         J: IntoIterator<Item = &'a str>,
@@ -37,8 +40,7 @@ impl<'a> Filter<'a> {
                 Either::Left(array) => {
                     let mut ors = None;
                     for rule in array {
-                        let condition =
-                            FilterCondition::parse::<VerboseError<Span>>(rule.as_ref()).unwrap();
+                        let condition = Self::from_str(rule.as_ref())?.condition;
                         ors = match ors.take() {
                             Some(ors) => {
                                 Some(FilterCondition::Or(Box::new(ors), Box::new(condition)))
@@ -57,8 +59,7 @@ impl<'a> Filter<'a> {
                     }
                 }
                 Either::Right(rule) => {
-                    let condition =
-                        FilterCondition::parse::<VerboseError<Span>>(rule.as_ref()).unwrap();
+                    let condition = Self::from_str(rule.as_ref())?.condition;
                     ands = match ands.take() {
                         Some(ands) => {
                             Some(FilterCondition::And(Box::new(ands), Box::new(condition)))
@@ -69,29 +70,16 @@ impl<'a> Filter<'a> {
             }
         }
 
-        Ok(ands)
+        Ok(ands.map(|ands| Self { condition: ands }))
     }
 
-    pub fn from_str(rtxn: &heed::RoTxn, index: &Index, expression: &'a str) -> Result<Self> {
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let filterable_fields = index.filterable_fields(rtxn)?;
-        // TODO TAMO
-        let condition = FilterCondition::parse::<VerboseError<Span>>(expression).ok().unwrap();
-        /*
-        let condition = match FilterCondition::parse::<VerboseError<Span>>(expression) {
+    pub fn from_str(expression: &'a str) -> Result<Self> {
+        let condition = match FilterCondition::parse::<GreedyError<Span, ErrorKind>>(expression) {
             Ok(fc) => Ok(fc),
-            Err(e) => {
-                let ve = match e {
-                    nom::Err::Error(x) => x,
-                    nom::Err::Failure(x) => x,
-                    _ => unreachable!(),
-                };
-                Err(Error::UserError(UserError::InvalidFilter {
-                    input: convert_error(Span::new(expression), ve).to_string(),
-                }))
-            }
-        };
-        */
+            Err(e) => Err(Error::UserError(UserError::InvalidFilter {
+                input: convert_error(Span::new(expression), e).to_string(),
+            })),
+        }?;
         Ok(Self { condition })
     }
 }
@@ -345,7 +333,8 @@ impl<'a> Filter<'a> {
                 let rhs = Self::evaluate(&(rhs.as_ref().clone()).into(), rtxn, index)?;
                 Ok(lhs & rhs)
             }
-            Empty => Ok(RoaringBitmap::new()),
+            FilterCondition::Empty => Ok(RoaringBitmap::new()),
+            _ => panic!("do the geosearch"),
         }
     }
 }

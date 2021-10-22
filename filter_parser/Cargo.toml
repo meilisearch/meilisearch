@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 nom = "7.0.0"
 nom_locate = "4.0.0"
+nom-greedyerror = "0.4.0"

@@ -41,6 +41,7 @@ uuid = { version = "0.8.2", features = ["v4"] }
 # facet filter parser
 filter_parser = { path = "../filter_parser" }
 nom = "7.0.0"
+nom-greedyerror = "0.4.0"
 
 # documents words self-join
 itertools = "0.10.0"

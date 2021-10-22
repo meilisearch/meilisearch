@@ -24,17 +24,19 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0};
 use nom::combinator::map;
-use nom::error::{ContextError, Error, VerboseError};
+use nom::error::{ContextError, Error, ErrorKind, VerboseError};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, tuple};
 use nom::{Finish, IResult};
+use nom_greedyerror::GreedyError;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 pub trait FilterParserError<'a>: nom::error::ParseError<Span<'a>> + ContextError<Span<'a>> {}
+impl<'a> FilterParserError<'a> for GreedyError<Span<'a>, ErrorKind> {}
 impl<'a> FilterParserError<'a> for VerboseError<Span<'a>> {}
 impl<'a> FilterParserError<'a> for Error<Span<'a>> {}
 
