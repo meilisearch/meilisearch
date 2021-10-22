@@ -24,7 +24,8 @@ use milli::documents::DocumentBatchReader;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
 use milli::{
-    obkv_to_json, CompressionType, FilterCondition, Index, MatchingWords, SearchResult, SortError,
+    obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, Index, MatchingWords,
+    SearchResult, SortError,
 };
 use once_cell::sync::OnceCell;
 use rayon::ThreadPool;
@@ -739,7 +740,7 @@ async fn main() -> anyhow::Result<()> {
 
             let filters = match query.filters {
                 Some(condition) if !condition.trim().is_empty() => {
-                    Some(FilterCondition::from_str(&rtxn, &index, &condition).unwrap())
+                    Some(MilliFilter::from_str(&condition).unwrap())
                 }
                 _otherwise => None,
             };
@@ -747,7 +748,7 @@ async fn main() -> anyhow::Result<()> {
             let facet_filters = match query.facet_filters {
                 Some(array) => {
                     let eithers = array.into_iter().map(Into::into);
-                    FilterCondition::from_array(&rtxn, &index, eithers).unwrap()
+                    MilliFilter::from_array(eithers).unwrap()
                 }
                 _otherwise => None,
             };

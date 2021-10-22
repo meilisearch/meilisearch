@@ -1,3 +1,5 @@
+pub use filter_parser::{Condition, FilterCondition};
+
 pub use self::facet_distribution::FacetDistribution;
 pub use self::facet_number::{FacetNumberIter, FacetNumberRange, FacetNumberRevRange};
 pub use self::facet_string::FacetStringIter;

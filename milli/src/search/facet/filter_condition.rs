@@ -3,7 +3,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use std::str::FromStr;
 
 use either::Either;
-use filter_parser::{Condition, FilterCondition, FilterParserError, Span, Token};
+pub use filter_parser::{Condition, FilterCondition, FilterParserError, Span, Token};
 use heed::types::DecodeIgnore;
 use log::debug;
 use nom::error::{ErrorKind, VerboseError};
@@ -209,7 +209,7 @@ impl<'a> Filter<'a> {
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
-        // TODO TAMO: return good error when we can't parse a span
+
         let (left, right) = match operator {
             Condition::GreaterThan(val) => (Excluded(parse(val)?), Included(f64::MAX)),
             Condition::GreaterThanOrEqual(val) => (Included(parse(val)?), Included(f64::MAX)),
@@ -315,10 +315,15 @@ impl<'a> Filter<'a> {
 
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
-                // TODO: parse fid
-                let _ = fid;
-                let fid = 42;
-                Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
+                let filterable_fields = index.fields_ids_map(rtxn)?;
+                if let Some(fid) = filterable_fields.id(fid.inner) {
+                    Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
+                } else {
+                    // TODO TAMO: update the error message
+                    return Err(UserError::InvalidFilter {
+                        input: format!("Bad filter, available filters are {:?}", filterable_fields),
+                    })?;
+                }
             }
             FilterCondition::Or(lhs, rhs) => {
                 let lhs = Self::evaluate(&(lhs.as_ref().clone()).into(), rtxn, index)?;
