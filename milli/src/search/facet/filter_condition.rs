@@ -253,36 +253,7 @@ impl<'a> Filter<'a> {
                     rtxn, index, numbers_db, strings_db, field_id, &operator,
                 )?;
                 return Ok((all_numbers_ids | all_strings_ids) - docids);
-            } /*
-                          Condition::GeoLowerThan(base_point, distance) => {
-                              let rtree = match index.geo_rtree(rtxn)? {
-                                  Some(rtree) => rtree,
-                                  None => return Ok(RoaringBitmap::new()),
-                              };
-
-                              let result = rtree
-                                  .nearest_neighbor_iter(base_point)
-                                  .take_while(|point| {
-                                      distance_between_two_points(base_point, point.geom()) < *distance
-                                  })
-                                  .map(|point| point.data)
-                                  .collect();
-
-                              return Ok(result);
-                          }
-                          Condition::GeoGreaterThan(point, distance) => {
-                              let result = Self::evaluate_operator(
-                                  rtxn,
-                                  index,
-                                  numbers_db,
-                                  strings_db,
-                                  field_id,
-                                  &Condition::GeoLowerThan(point.clone(), *distance),
-                              )?;
-                              let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
-                              return Ok(geo_faceted_doc_ids - result);
-                          }
-              */
+            }
         };
 
         // Ask for the biggest value that can exist for this specific field, if it exists
@@ -337,8 +308,34 @@ impl<'a> Filter<'a> {
                 Ok(lhs & rhs)
             }
             FilterCondition::Empty => Ok(RoaringBitmap::new()),
-            // TODO: TAMO
-            _ => panic!("do the geosearch"),
+            FilterCondition::GeoLowerThan { point, radius } => {
+                let base_point = [parse(&point[0])?, parse(&point[1])?];
+                let radius = parse(&radius)?;
+                let rtree = match index.geo_rtree(rtxn)? {
+                    Some(rtree) => rtree,
+                    None => return Ok(RoaringBitmap::new()),
+                };
+
+                let result = rtree
+                    .nearest_neighbor_iter(&base_point)
+                    .take_while(|point| {
+                        distance_between_two_points(&base_point, point.geom()) < radius
+                    })
+                    .map(|point| point.data)
+                    .collect();
+
+                return Ok(result);
+            }
+            FilterCondition::GeoGreaterThan { point, radius } => {
+                let result = Self::evaluate(
+                    &FilterCondition::GeoLowerThan { point: point.clone(), radius: radius.clone() }
+                        .into(),
+                    rtxn,
+                    index,
+                )?;
+                let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
+                return Ok(geo_faceted_doc_ids - result);
+            }
         }
     }
 }
