@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::ops::Bound::{self, Excluded, Included};
+use std::str::FromStr;
 
 use either::Either;
 use filter_parser::{Condition, FilterCondition, FilterParserError, Span, Token};
@@ -25,6 +26,10 @@ impl<'a> From<VerboseError<Span<'a>>> for Error {
     fn from(nom_error: VerboseError<Span<'a>>) -> Self {
         UserError::InvalidFilter { input: nom_error.to_string() }.into()
     }
+}
+
+fn parse<T: FromStr>(tok: &Token) -> Result<T> {
+    Ok(tok.inner.parse().ok().unwrap())
 }
 
 impl<'a> Filter<'a> {
@@ -206,19 +211,11 @@ impl<'a> Filter<'a> {
         // field id and the level.
         // TODO TAMO: return good error when we can't parse a span
         let (left, right) = match operator {
-            Condition::GreaterThan(val) => {
-                (Excluded(val.inner.parse::<f64>().unwrap()), Included(f64::MAX))
-            }
-            Condition::GreaterThanOrEqual(val) => {
-                (Included(val.inner.parse::<f64>().unwrap()), Included(f64::MAX))
-            }
-            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.inner.parse().unwrap())),
-            Condition::LowerThanOrEqual(val) => {
-                (Included(f64::MIN), Included(val.inner.parse().unwrap()))
-            }
-            Condition::Between { from, to } => {
-                (Included(from.inner.parse::<f64>().unwrap()), Included(to.inner.parse().unwrap()))
-            }
+            Condition::GreaterThan(val) => (Excluded(parse(val)?), Included(f64::MAX)),
+            Condition::GreaterThanOrEqual(val) => (Included(parse(val)?), Included(f64::MAX)),
+            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(parse(val)?)),
+            Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(parse(val)?)),
+            Condition::Between { from, to } => (Included(parse(from)?), Included(parse(to)?)),
             Condition::Equal(val) => {
                 let (_original_value, string_docids) =
                     strings_db.get(rtxn, &(field_id, val.inner))?.unwrap_or_default();
@@ -334,6 +331,7 @@ impl<'a> Filter<'a> {
                 Ok(lhs & rhs)
             }
             FilterCondition::Empty => Ok(RoaringBitmap::new()),
+            // TODO: TAMO
             _ => panic!("do the geosearch"),
         }
     }
