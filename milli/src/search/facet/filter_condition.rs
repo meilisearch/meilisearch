@@ -29,7 +29,18 @@ impl<'a> From<VerboseError<Span<'a>>> for Error {
 }
 
 fn parse<T: FromStr>(tok: &Token) -> Result<T> {
-    Ok(tok.inner.parse().ok().unwrap())
+    match tok.inner.parse::<T>() {
+        Ok(t) => Ok(t),
+        Err(_e) => Err(UserError::InvalidFilter {
+            input: format!(
+                "Could not parse `{}` at line {} and offset {}",
+                tok.inner,
+                tok.position.location_line(),
+                tok.position.get_column()
+            ),
+        }
+        .into()),
+    }
 }
 
 impl<'a> Filter<'a> {
@@ -291,10 +302,28 @@ impl<'a> Filter<'a> {
                 if let Some(fid) = filterable_fields.id(&fid.inner.to_lowercase()) {
                     Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
                 } else {
-                    // TODO TAMO: update the error message
-                    return Err(UserError::InvalidFilter {
-                        input: format!("Bad filter, available filters are {:?}", filterable_fields),
-                    })?;
+                    match fid.inner {
+                        // TODO update the error messages according to the spec
+                        "_geo" => {
+                            return Err(UserError::InvalidFilter { input: format!("Tried to use _geo in a filter, you probably wanted to use _geoRadius(latitude, longitude, radius)") })?;
+                        }
+                        "_geoDistance" => {
+                            return Err(UserError::InvalidFilter {
+                                input: format!("Reserved field _geoDistance"),
+                            })?;
+                        }
+                        fid if fid.starts_with("_geoPoint(") => {
+                            return Err(UserError::InvalidFilter { input: format!("_geoPoint only available in sort. You wanted to use _geoRadius") })?;
+                        }
+                        fid => {
+                            return Err(UserError::InvalidFilter {
+                                input: format!(
+                                    "Bad filter {}, available filters are {:?}",
+                                    fid, filterable_fields
+                                ),
+                            })?;
+                        }
+                    }
                 }
             }
             FilterCondition::Or(lhs, rhs) => {
