@@ -309,22 +309,32 @@ impl<'a> Filter<'a> {
             }
             FilterCondition::Empty => Ok(RoaringBitmap::new()),
             FilterCondition::GeoLowerThan { point, radius } => {
-                let base_point = [parse(&point[0])?, parse(&point[1])?];
-                let radius = parse(&radius)?;
-                let rtree = match index.geo_rtree(rtxn)? {
-                    Some(rtree) => rtree,
-                    None => return Ok(RoaringBitmap::new()),
-                };
+                let filterable_fields = index.fields_ids_map(rtxn)?;
+                if filterable_fields.id("_geo").is_some() {
+                    let base_point = [parse(&point[0])?, parse(&point[1])?];
+                    // TODO TAMO: ensure lat is between -90 and 90
+                    // TODO TAMO: ensure lng is between -180 and 180
+                    let radius = parse(&radius)?;
+                    let rtree = match index.geo_rtree(rtxn)? {
+                        Some(rtree) => rtree,
+                        None => return Ok(RoaringBitmap::new()),
+                    };
 
-                let result = rtree
-                    .nearest_neighbor_iter(&base_point)
-                    .take_while(|point| {
-                        distance_between_two_points(&base_point, point.geom()) < radius
-                    })
-                    .map(|point| point.data)
-                    .collect();
+                    let result = rtree
+                        .nearest_neighbor_iter(&base_point)
+                        .take_while(|point| {
+                            distance_between_two_points(&base_point, point.geom()) < radius
+                        })
+                        .map(|point| point.data)
+                        .collect();
 
-                return Ok(result);
+                    Ok(result)
+                } else {
+                    // TODO TAMO: update the error message
+                    return Err(UserError::InvalidFilter {
+                        input: format!("You tried to use _geo in a filter, you probably wanted to use _geoRadius"),
+                    })?;
+                }
             }
             FilterCondition::GeoGreaterThan { point, radius } => {
                 let result = Self::evaluate(
@@ -334,7 +344,7 @@ impl<'a> Filter<'a> {
                     index,
                 )?;
                 let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
-                return Ok(geo_faceted_doc_ids - result);
+                Ok(geo_faceted_doc_ids - result)
             }
         }
     }
