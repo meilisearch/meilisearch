@@ -217,8 +217,9 @@ impl<'a> Filter<'a> {
             Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(parse(val)?)),
             Condition::Between { from, to } => (Included(parse(from)?), Included(parse(to)?)),
             Condition::Equal(val) => {
-                let (_original_value, string_docids) =
-                    strings_db.get(rtxn, &(field_id, val.inner))?.unwrap_or_default();
+                let (_original_value, string_docids) = strings_db
+                    .get(rtxn, &(field_id, &val.inner.to_lowercase()))?
+                    .unwrap_or_default();
                 let number = val.inner.parse::<f64>().ok();
                 let number_docids = match number {
                     Some(n) => {
@@ -316,7 +317,7 @@ impl<'a> Filter<'a> {
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
                 let filterable_fields = index.fields_ids_map(rtxn)?;
-                if let Some(fid) = filterable_fields.id(fid.inner) {
+                if let Some(fid) = filterable_fields.id(&fid.inner.to_lowercase()) {
                     Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
                 } else {
                     // TODO TAMO: update the error message
