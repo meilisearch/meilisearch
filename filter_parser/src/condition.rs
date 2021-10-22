@@ -12,6 +12,7 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::error::ParseError;
 use nom::sequence::tuple;
 use nom::IResult;
 use Condition::*;
@@ -46,14 +47,15 @@ impl<'a> Condition<'a> {
 }
 
 /// condition      = value ("==" | ">" ...) value
-pub fn parse_condition(input: Span) -> IResult<Span, FilterCondition> {
+pub fn parse_condition<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, FilterCondition, E> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
     let (input, (key, op, value)) =
         tuple((|c| parse_value(c), operator, |c| parse_value(c)))(input)?;
 
     let fid = key;
 
-    // TODO
     match *op.fragment() {
         "=" => {
             let k = FilterCondition::Condition { fid, op: Equal(value) };
@@ -78,7 +80,7 @@ pub fn parse_condition(input: Span) -> IResult<Span, FilterCondition> {
 }
 
 /// to             = value value TO value
-pub fn parse_to(input: Span) -> IResult<Span, FilterCondition> {
+pub fn parse_to<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     let (input, (key, from, _, to)) =
         tuple((ws(|c| parse_value(c)), ws(|c| parse_value(c)), tag("TO"), ws(|c| parse_value(c))))(
             input,

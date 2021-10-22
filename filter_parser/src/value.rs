@@ -1,13 +1,14 @@
 use nom::branch::alt;
 use nom::bytes::complete::{take_till, take_while1};
 use nom::character::complete::char;
+use nom::error::ParseError;
 use nom::sequence::delimited;
 use nom::IResult;
 
 use crate::{ws, Span, Token};
 
 /// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
-pub fn parse_value(input: Span) -> IResult<Span, Token> {
+pub fn parse_value<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Token, E> {
     // singleQuoted   = "'" .* all but quotes "'"
     let simple_quoted_key = |input| take_till(|c: char| c == '\'')(input);
     // doubleQuoted   = "\"" (word | spaces)* "\""
@@ -29,6 +30,8 @@ fn is_key_component(c: char) -> bool {
 
 #[cfg(test)]
 pub mod tests {
+    use nom::error::Error;
+
     use super::*;
     use crate::tests::rtok;
 
@@ -56,7 +59,7 @@ pub mod tests {
 
         for (input, expected) in test_case {
             let input = Span::new(input);
-            let result = parse_value(input);
+            let result = parse_value::<Error<Span>>(input);
 
             assert!(
                 result.is_ok(),
