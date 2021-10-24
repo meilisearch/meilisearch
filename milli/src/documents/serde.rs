@@ -11,8 +11,18 @@ use serde::de::SeqAccess;
 use serde::de::Visitor;
 use serde_json::Value;
 
+use super::Error;
 use super::{ByteCounter, DocumentsBatchIndex};
 use crate::FieldId;
+
+macro_rules! tri {
+    ($e:expr) => {
+        match $e {
+            Ok(r) => r,
+            Err(e) => return Ok(Err(e.into())),
+        }
+    };
+}
 
 struct FieldIdResolver<'a>(&'a mut DocumentsBatchIndex);
 
@@ -36,8 +46,8 @@ impl<'a, 'de> Visitor<'de> for FieldIdResolver<'a> {
             Ok(self.0.insert(v))
     }
 
-    fn expecting(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "a string")
     }
 }
 
@@ -64,22 +74,22 @@ pub struct DocumentVisitor<'a, W> {
 
 impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
     /// This Visitor value is nothing, since it write the value to a file.
-    type Value = ();
+    type Value = Result<(), Error>;
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
     {
-        while let Some(_) = seq.next_element_seed(&mut *self)? { }
+        while let Some(v) = seq.next_element_seed(&mut *self)? { tri!(v) }
 
-        Ok(())
+        Ok(Ok(()))
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,
     {
-        while let Some((key, value)) = map.next_entry_seed(FieldIdResolver(&mut *self.index), ValueDeserializer).unwrap() {
+        while let Some((key, value)) = map.next_entry_seed(FieldIdResolver(&mut *self.index), ValueDeserializer)? {
             self.values.insert(key, value);
         }
 
@@ -88,19 +98,19 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
         for (key, value) in self.values.iter() {
             self.value_buffer.clear();
             // This is guaranteed to work
-            serde_json::to_writer(Cursor::new(&mut *self.value_buffer), value).unwrap();
-            obkv.insert(*key, &self.value_buffer).unwrap();
+            tri!(serde_json::to_writer(Cursor::new(&mut *self.value_buffer), value));
+            tri!(obkv.insert(*key, &self.value_buffer));
         }
 
-        let reader = obkv.into_inner().unwrap().into_inner();
+        let reader = tri!(obkv.into_inner()).into_inner();
 
-        self.inner.write_u32::<byteorder::BigEndian>(reader.len() as u32).unwrap();
-        self.inner.write_all(reader).unwrap();
+        tri!(self.inner.write_u32::<byteorder::BigEndian>(reader.len() as u32));
+        tri!(self.inner.write_all(reader));
 
         *self.count += 1;
         self.values.clear();
 
-        Ok(())
+        Ok(Ok(()))
     }
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -111,7 +121,7 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
 impl<'a, 'de, W> DeserializeSeed<'de> for &mut DocumentVisitor<'a, W>
 where W: Write,
 {
-    type Value = ();
+    type Value = Result<(), Error>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where

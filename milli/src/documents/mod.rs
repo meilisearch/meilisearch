@@ -7,7 +7,9 @@ mod builder;
 mod reader;
 mod serde;
 
-use std::{fmt, io};
+use std::num::ParseFloatError;
+use std::io;
+use std::fmt::{self, Debug};
 
 use ::serde::{Deserialize, Serialize};
 use bimap::BiHashMap;
@@ -81,12 +83,20 @@ impl<W: io::Write> io::Write for ByteCounter<W> {
 
 #[derive(Debug)]
 pub enum Error {
+    ParseFloat(std::num::ParseFloatError),
     InvalidDocumentFormat,
     Custom(String),
     JsonError(serde_json::Error),
+    CsvError(csv::Error),
     Serialize(bincode::Error),
     Io(io::Error),
     DocumentTooLarge,
+}
+
+impl From<csv::Error> for Error {
+    fn from(e: csv::Error) -> Self {
+        Self::CsvError(e)
+    }
 }
 
 impl From<io::Error> for Error {
@@ -101,15 +111,29 @@ impl From<bincode::Error> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(other: serde_json::Error) -> Self {
+        Self::JsonError(other)
+    }
+}
+
+impl From<ParseFloatError> for Error {
+    fn from(other: ParseFloatError) -> Self {
+        Self::ParseFloat(other)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Error::ParseFloat(e) => write!(f, "{}", e),
             Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
             Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
             Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),
-            Error::Io(e) => e.fmt(f),
+            Error::Io(e) => write!(f, "{}", e),
             Error::DocumentTooLarge => f.write_str("Provided document is too large (>2Gib)"),
-            Error::Serialize(e) => e.fmt(f),
+            Error::Serialize(e) => write!(f, "{}", e),
+            Error::CsvError(e) => write!(f, "{}", e),
         }
     }
 }

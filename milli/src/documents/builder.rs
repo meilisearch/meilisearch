@@ -87,18 +87,13 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             count: &mut self.count,
         };
 
-        de.deserialize_any(&mut visitor).map_err(Error::JsonError)?;
-
-        Ok(())
+        de.deserialize_any(&mut visitor).map_err(Error::JsonError)?
     }
 
-    /// Extends the builder with json documents from a reader.
+    /// Creates a builder from a reader of CSV documents.
     ///
-    /// This method can be only called once and is mutually exclusive with extend from json. This
-    /// is because the fields in a csv are always guaranteed to come in order, and permits some
-    /// optimizations.
-    ///
-    /// From csv takes care to call finish in the end.
+    /// Since all fields in a csv documents are guaranteed to be ordered, we are able to perform
+    /// optimisations, and extending from another CSV is not allowed.
     pub fn from_csv<R: io::Read>(reader: R, writer: W) -> Result<Self, Error> {
 
         let mut this = Self::new(writer)?;
@@ -108,8 +103,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
         let mut records = csv::Reader::from_reader(reader);
 
         let headers = records
-            .headers()
-            .unwrap()
+            .headers()?
             .into_iter()
             .map(parse_csv_header)
             .map(|(k, t)| (this.index.insert(&k), t))
@@ -123,11 +117,11 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
                     let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
                     for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
                         let value = match ty {
-                            AllowedType::Number => value.parse::<f64>().map(Value::from).unwrap(),
+                            AllowedType::Number => value.parse::<f64>().map(Value::from)?,
                             AllowedType::String => Value::String(value.to_string()),
                         };
 
-                        serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value).unwrap();
+                        serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value)?;
                         writer.insert(*fid, &this.value_buffer)?;
                         this.value_buffer.clear();
                     }
