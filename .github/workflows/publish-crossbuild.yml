@@ -1,4 +1,4 @@
-Publish aarch64 binary
+name: Publish aarch64 binary
 
 on:
   release:
