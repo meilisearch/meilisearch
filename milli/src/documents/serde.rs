@@ -98,6 +98,7 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
         self.inner.write_all(reader).unwrap();
 
         *self.count += 1;
+        self.values.clear();
 
         Ok(())
     }

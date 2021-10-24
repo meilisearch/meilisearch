@@ -877,8 +877,8 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-        todo!();
-        //builder.add_documents(big_object).unwrap();
+        let big_object = Cursor::new(serde_json::to_vec(&big_object).unwrap());
+        builder.extend_from_json(big_object).unwrap();
         builder.finish().unwrap();
         cursor.set_position(0);
         let content = DocumentBatchReader::from_reader(cursor).unwrap();

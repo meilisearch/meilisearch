@@ -135,6 +135,8 @@ macro_rules! documents {
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
+
     use serde_json::{json, Value};
 
     use super::*;
@@ -151,13 +153,14 @@ mod test {
             "bool": true
         });
 
+        let json = serde_json::to_vec(&json).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        todo!();
-        //builder.add_documents(json).unwrap();
+        builder.extend_from_json(Cursor::new(json)).unwrap();
 
         builder.finish().unwrap();
 
@@ -181,14 +184,16 @@ mod test {
             "toto": false,
         });
 
+        let doc1 = serde_json::to_vec(&doc1).unwrap();
+        let doc2 = serde_json::to_vec(&doc2).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        todo!();
-        //builder.add_documents(doc1).unwrap();
-        //builder.add_documents(doc2).unwrap();
+        builder.extend_from_json(Cursor::new(doc1)).unwrap();
+        builder.extend_from_json(Cursor::new(doc2)).unwrap();
 
         builder.finish().unwrap();
 
@@ -211,13 +216,14 @@ mod test {
             { "tata": "hello" },
         ]);
 
+        let docs = serde_json::to_vec(&docs).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        todo!();
-        //builder.add_documents(docs).unwrap();
+        builder.extend_from_json(Cursor::new(docs)).unwrap();
 
         builder.finish().unwrap();
 
@@ -245,13 +251,13 @@ mod test {
             { "tata": "hello" },
         ]]);
 
-        todo!();
-        //assert!(builder.add_documents(docs).is_err());
+        let docs = serde_json::to_vec(&docs).unwrap();
+        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
 
         let docs = json!("hello");
+        let docs = serde_json::to_vec(&docs).unwrap();
 
-        todo!();
-        //assert!(builder.add_documents(docs).is_err());
+        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
     }
 
     #[test]

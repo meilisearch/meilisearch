@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::io;
 use std::io::Cursor;
 use std::io::Write;
@@ -18,18 +17,6 @@ use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 ///
 /// The writer used by the DocumentBatchBuilder can be read using a `DocumentBatchReader` to
 /// iterate other the documents.
-///
-/// ## example:
-/// ```
-/// use milli::documents::DocumentBatchBuilder;
-/// use serde_json::json;
-/// use std::io::Cursor;
-///
-/// let mut writer = Cursor::new(Vec::new());
-/// let mut builder = DocumentBatchBuilder::new(&mut writer).unwrap();
-/// builder.add_documents(json!({"id": 1, "name": "foo"})).unwrap();
-/// builder.finish().unwrap();
-/// ```
 pub struct DocumentBatchBuilder<W> {
     inner: ByteCounter<W>,
     index: DocumentsBatchIndex,
@@ -100,7 +87,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             count: &mut self.count,
         };
 
-        de.deserialize_any(&mut visitor).unwrap();
+        de.deserialize_any(&mut visitor).map_err(Error::JsonError)?;
 
         Ok(())
     }
@@ -112,10 +99,11 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
     /// optimizations.
     ///
     /// From csv takes care to call finish in the end.
-    pub fn from_csv<R: io::Read>(mut self, reader: R) -> Result<(), Error> {
+    pub fn from_csv<R: io::Read>(reader: R, writer: W) -> Result<Self, Error> {
 
+        let mut this = Self::new(writer)?;
         // Ensure that this is the first and only addition made with this builder
-        debug_assert!(self.index.is_empty());
+        debug_assert!(this.index.is_empty());
 
         let mut records = csv::Reader::from_reader(reader);
 
@@ -124,40 +112,37 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             .unwrap()
             .into_iter()
             .map(parse_csv_header)
-            .map(|(k, t)| (self.index.insert(&k), t))
-            .collect::<HashMap<_, _>>();
+            .map(|(k, t)| (this.index.insert(&k), t))
+            .collect::<BTreeMap<_, _>>();
 
         let records = records.into_records();
 
-        dbg!(&headers);
         for record in records {
             match record {
                 Ok(record) => {
-                    let mut writer = obkv::KvWriter::new(Cursor::new(&mut self.obkv_buffer));
+                    let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
                     for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
                         let value = match ty {
                             AllowedType::Number => value.parse::<f64>().map(Value::from).unwrap(),
                             AllowedType::String => Value::String(value.to_string()),
                         };
 
-                        serde_json::to_writer(Cursor::new(&mut self.value_buffer), dbg!(&value)).unwrap();
-                        writer.insert(*fid, &self.value_buffer)?;
-                        self.value_buffer.clear();
+                        serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value).unwrap();
+                        writer.insert(*fid, &this.value_buffer)?;
+                        this.value_buffer.clear();
                     }
 
-                    self.inner.write_u32::<BigEndian>(self.obkv_buffer.len() as u32)?;
-                    self.inner.write_all(&self.obkv_buffer)?;
+                    this.inner.write_u32::<BigEndian>(this.obkv_buffer.len() as u32)?;
+                    this.inner.write_all(&this.obkv_buffer)?;
 
-                    self.obkv_buffer.clear();
-                    self.count += 1;
+                    this.obkv_buffer.clear();
+                    this.count += 1;
                 },
                 Err(_) => panic!(),
             }
         }
 
-        self.finish()?;
-
-        Ok(())
+        Ok(this)
     }
 }
 
@@ -265,17 +250,15 @@ mod test {
     #[test]
     fn add_documents_csv() {
         let mut cursor = Cursor::new(Vec::new());
-        let builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
         let csv = "id:number,field:string\n1,hello!\n2,blabla";
 
-        builder.from_csv(Cursor::new(csv.as_bytes())).unwrap();
+        let builder = DocumentBatchBuilder::from_csv(Cursor::new(csv.as_bytes()), &mut cursor).unwrap();
+        builder.finish().unwrap();
 
         cursor.set_position(0);
 
         let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
-
-        dbg!(reader.len());
 
         let (index, document) = reader.next_document_with_index().unwrap().unwrap();
         assert_eq!(index.len(), 2);
