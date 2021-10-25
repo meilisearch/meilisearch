@@ -153,28 +153,18 @@ mod segment {
                             })
                             .await;
                     }
-                    println!("ANALYTICS: taking the lock on the search batcher");
-                    let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await);
-                    let get_search = (get_search.total_received != 0).then(|| {
-                        get_search
-                            .into_event(self.user.clone(), "Document Searched GET".to_string())
-                    });
-                    let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await);
-                    let post_search = (post_search.total_received != 0).then(|| {
-                        post_search
-                            .into_event(self.user.clone(), "Document Searched POST".to_string())
-                    });
+                    println!("ANALYTICS: taking the lock on the search batchers");
+                    let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await)
+                        .into_event(&self.user, "Document Searched GET");
+                    let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await)
+                        .into_event(&self.user, "Document Searched POST");
+                    println!("ANALYTICS: taking the lock on the documents batchers");
                     let add_documents =
-                        std::mem::take(&mut *self.documents_added_batcher.lock().await);
-                    let add_documents = (add_documents.updated).then(|| {
-                        add_documents.into_event(self.user.clone(), "Documents Added".to_string())
-                    });
+                        std::mem::take(&mut *self.documents_added_batcher.lock().await)
+                            .into_event(&self.user, "Documents Added");
                     let update_documents =
-                        std::mem::take(&mut *self.documents_updated_batcher.lock().await);
-                    let update_documents = (update_documents.updated).then(|| {
-                        update_documents
-                            .into_event(self.user.clone(), "Documents Updated".to_string())
-                    });
+                        std::mem::take(&mut *self.documents_updated_batcher.lock().await)
+                            .into_event(&self.user, "Documents Updated");
                     // keep the lock on the batcher just for these three operations
                     {
                         println!("ANALYTICS: taking the lock on the batcher");
@@ -458,42 +448,46 @@ mod segment {
                 .collect()
         }
 
-        pub fn into_event(mut self, user: User, event_name: String) -> Track {
-            let context = Some(json!({ "user-agent": self.user_agents}));
-            let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
-            self.time_spent.drain(percentile_99th as usize..);
+        pub fn into_event(mut self, user: &User, event_name: &str) -> Option<Track> {
+            if self.total_received == 0 {
+                None
+            } else {
+                let context = Some(json!({ "user-agent": self.user_agents}));
+                let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
+                self.time_spent.drain(percentile_99th as usize..);
 
-            let properties = json!({
-                "requests": {
-                    "99th_response_time":  format!("{:.2}", self.time_spent.iter().sum::<usize>() as f64 / self.time_spent.len() as f64),
-                    "total_succeeded": self.total_succeeded,
-                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
-                    "total_received": self.total_received,
-                },
-                "sort": {
-                    "with_geoPoint": self.sort_with_geo_point,
-                    "avg_criteria_number": format!("{:.2}", self.sort_sum_of_criteria_terms as f64 / self.sort_total_number_of_criteria as f64),
-                },
-                "filter": {
-                   "with_geoRadius": self.filter_with_geo_radius,
-                   "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
-                   "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
-                },
-                "q": {
-                   "avg_terms_number": format!("{:.2}", self.sum_of_terms_count as f64 / self.total_number_of_q as f64),
-                },
-                "pagination": {
-                   "max_limit": self.max_limit,
-                   "max_offset": self.max_offset,
-                },
-            });
+                let properties = json!({
+                    "requests": {
+                        "99th_response_time":  format!("{:.2}", self.time_spent.iter().sum::<usize>() as f64 / self.time_spent.len() as f64),
+                        "total_succeeded": self.total_succeeded,
+                        "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
+                        "total_received": self.total_received,
+                    },
+                    "sort": {
+                        "with_geoPoint": self.sort_with_geo_point,
+                        "avg_criteria_number": format!("{:.2}", self.sort_sum_of_criteria_terms as f64 / self.sort_total_number_of_criteria as f64),
+                    },
+                    "filter": {
+                       "with_geoRadius": self.filter_with_geo_radius,
+                       "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
+                       "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                    },
+                    "q": {
+                       "avg_terms_number": format!("{:.2}", self.sum_of_terms_count as f64 / self.total_number_of_q as f64),
+                    },
+                    "pagination": {
+                       "max_limit": self.max_limit,
+                       "max_offset": self.max_offset,
+                    },
+                });
 
-            Track {
-                user,
-                event: event_name,
-                context,
-                properties,
-                ..Default::default()
+                Some(Track {
+                    user: user.clone(),
+                    event: event_name.to_string(),
+                    context,
+                    properties,
+                    ..Default::default()
+                })
             }
         }
     }
@@ -512,21 +506,25 @@ mod segment {
     }
 
     impl DocumentsBatcher {
-        pub fn into_event(mut self, user: User, event_name: String) -> Track {
-            let context = Some(json!({ "user-agent": self.user_agents}));
+        pub fn into_event(mut self, user: &User, event_name: &str) -> Option<Track> {
+            if self.updated {
+                None
+            } else {
+                let context = Some(json!({ "user-agent": self.user_agents}));
 
-            let properties = json!({
-                "payload_type": self.content_types,
-                "primary_key": self.primary_keys,
-                "index_creation": self.index_creation,
-            });
+                let properties = json!({
+                    "payload_type": self.content_types,
+                    "primary_key": self.primary_keys,
+                    "index_creation": self.index_creation,
+                });
 
-            Track {
-                user,
-                event: event_name,
-                context,
-                properties,
-                ..Default::default()
+                Some(Track {
+                    user: user.clone(),
+                    event: event_name.to_string(),
+                    context,
+                    properties,
+                    ..Default::default()
+                })
             }
         }
     }
