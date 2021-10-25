@@ -83,7 +83,11 @@ impl<W: io::Write> io::Write for ByteCounter<W> {
 
 #[derive(Debug)]
 pub enum Error {
-    ParseFloat(std::num::ParseFloatError),
+    ParseFloat {
+        error: std::num::ParseFloatError,
+        line: usize,
+        value: String,
+    },
     InvalidDocumentFormat,
     Custom(String),
     JsonError(serde_json::Error),
@@ -117,16 +121,10 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<ParseFloatError> for Error {
-    fn from(other: ParseFloatError) -> Self {
-        Self::ParseFloat(other)
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::ParseFloat(e) => write!(f, "{}", e),
+            Error::ParseFloat { error, line, value} => write!(f, "Error parsing number {:?} at line {}: {}", value, line, error),
             Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
             Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
             Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),

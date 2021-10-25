@@ -115,14 +115,17 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             .map(|(k, t)| (this.index.insert(&k), t))
             .collect::<BTreeMap<_, _>>();
 
-        let records = records.into_records();
-
-        for record in records {
+        for (i, record) in records.into_records().enumerate() {
             let record = record?;
             let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
             for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
                 let value = match ty {
-                    AllowedType::Number => value.parse::<f64>().map(Value::from)?,
+                    AllowedType::Number => value.parse::<f64>().map(Value::from).map_err(|error| Error::ParseFloat {
+                        error,
+                        // +1 for the header offset.
+                        line: i + 1,
+                        value: value.to_string(),
+                    })?,
                     AllowedType::String => Value::String(value.to_string()),
                 };
 
