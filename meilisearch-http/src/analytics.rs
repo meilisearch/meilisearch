@@ -53,8 +53,8 @@ mod segment {
         batcher: Mutex<AutoBatcher>,
         post_search_batcher: Mutex<SearchBatcher>,
         get_search_batcher: Mutex<SearchBatcher>,
-        documents_added_batcher: Mutex<DocumentsBatcher>,
-        documents_updated_batcher: Mutex<DocumentsBatcher>,
+        add_documents_batcher: Mutex<DocumentsBatcher>,
+        update_documents_batcher: Mutex<DocumentsBatcher>,
     }
 
     impl SegmentAnalytics {
@@ -127,8 +127,8 @@ mod segment {
                 batcher,
                 post_search_batcher: Mutex::new(SearchBatcher::default()),
                 get_search_batcher: Mutex::new(SearchBatcher::default()),
-                documents_added_batcher: Mutex::new(DocumentsBatcher::default()),
-                documents_updated_batcher: Mutex::new(DocumentsBatcher::default()),
+                add_documents_batcher: Mutex::new(DocumentsBatcher::default()),
+                update_documents_batcher: Mutex::new(DocumentsBatcher::default()),
             });
             let segment = Box::leak(segment);
 
@@ -173,14 +173,14 @@ mod segment {
                         .into_event(&self.user, "Document Searched POST");
                     println!("ANALYTICS: taking the lock on the documents batchers");
                     let add_documents =
-                        std::mem::take(&mut *self.documents_added_batcher.lock().await)
+                        std::mem::take(&mut *self.add_documents_batcher.lock().await)
                             .into_event(&self.user, "Documents Added");
                     let update_documents =
-                        std::mem::take(&mut *self.documents_updated_batcher.lock().await)
+                        std::mem::take(&mut *self.update_documents_batcher.lock().await)
                             .into_event(&self.user, "Documents Updated");
                     // keep the lock on the batcher just for these three operations
                     {
-                        println!("ANALYTICS: taking the lock on the batcher");
+                        println!("ANALYTICS: taking the lock on the batchers");
                         let mut batcher = self.batcher.lock().await;
                         if let Some(get_search) = get_search {
                             let _ = batcher.push(get_search).await;
@@ -377,7 +377,7 @@ mod segment {
             request: &HttpRequest,
         ) {
             self.batch_documents(
-                &self.documents_added_batcher,
+                &self.add_documents_batcher,
                 documents_query,
                 index_creation,
                 request,
@@ -391,7 +391,7 @@ mod segment {
             request: &HttpRequest,
         ) {
             self.batch_documents(
-                &self.documents_updated_batcher,
+                &self.update_documents_batcher,
                 documents_query,
                 index_creation,
                 request,
