@@ -16,7 +16,20 @@ use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 /// format used by milli.
 ///
 /// The writer used by the DocumentBatchBuilder can be read using a `DocumentBatchReader` to
-/// iterate other the documents.
+/// iterate over the documents.
+///
+/// ## example:
+/// ```
+/// use milli::documents::DocumentBatchBuilder;
+/// use serde_json::json;
+/// use std::io::Cursor;
+///
+/// let json = r##"{"id": 1, "name": "foo"}"##;
+/// let mut writer = Cursor::new(Vec::new());
+/// let mut builder = DocumentBatchBuilder::new(&mut writer).unwrap();
+/// builder.extend_from_json(Cursor::new(json.as_bytes())).unwrap();
+/// builder.finish().unwrap();
+/// ```
 pub struct DocumentBatchBuilder<W> {
     inner: ByteCounter<W>,
     index: DocumentsBatchIndex,
