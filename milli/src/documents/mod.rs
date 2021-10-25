@@ -47,7 +47,7 @@ impl DocumentsBatchIndex {
         self.0.iter()
     }
 
-    pub fn get_id(&self, id: FieldId) -> Option<&String> {
+    pub fn name(&self, id: FieldId) -> Option<&String> {
         self.0.get_by_left(&id)
     }
 }

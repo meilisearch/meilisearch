@@ -179,7 +179,7 @@ impl Transform<'_, '_> {
                         if !self.autogenerate_docids {
                             let mut json = Map::new();
                             for (key, value) in document.iter() {
-                                let key = addition_index.get_id(key).cloned();
+                                let key = addition_index.name(key).cloned();
                                 let value = serde_json::from_slice::<Value>(&value).ok();
 
                                 if let Some((k, v)) = key.zip(value) {

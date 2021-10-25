@@ -54,12 +54,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
     /// metadata at the end of the file, and write the metadata offset at the beginning on the
     /// file.
     pub fn finish(self) -> Result<(), Error> {
-        let Self {
-            inner: ByteCounter { mut writer, count: offset },
-            index,
-            count,
-            ..
-        } = self;
+        let Self { inner: ByteCounter { mut writer, count: offset }, index, count, .. } = self;
 
         let meta = DocumentsMetadata { count, index };
 
@@ -72,7 +67,6 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
 
         Ok(())
     }
-
 
     /// Extends the builder with json documents from a reader.
     pub fn extend_from_json<R: io::Read>(&mut self, reader: R) -> Result<(), Error> {
@@ -95,7 +89,6 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
     /// Since all fields in a csv documents are guaranteed to be ordered, we are able to perform
     /// optimisations, and extending from another CSV is not allowed.
     pub fn from_csv<R: io::Read>(reader: R, writer: W) -> Result<Self, Error> {
-
         let mut this = Self::new(writer)?;
         // Ensure that this is the first and only addition made with this builder
         debug_assert!(this.index.is_empty());
@@ -112,28 +105,24 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
         let records = records.into_records();
 
         for record in records {
-            match record {
-                Ok(record) => {
-                    let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
-                    for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
-                        let value = match ty {
-                            AllowedType::Number => value.parse::<f64>().map(Value::from)?,
-                            AllowedType::String => Value::String(value.to_string()),
-                        };
+            let record = record?;
+            let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
+            for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
+                let value = match ty {
+                    AllowedType::Number => value.parse::<f64>().map(Value::from)?,
+                    AllowedType::String => Value::String(value.to_string()),
+                };
 
-                        serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value)?;
-                        writer.insert(*fid, &this.value_buffer)?;
-                        this.value_buffer.clear();
-                    }
-
-                    this.inner.write_u32::<BigEndian>(this.obkv_buffer.len() as u32)?;
-                    this.inner.write_all(&this.obkv_buffer)?;
-
-                    this.obkv_buffer.clear();
-                    this.count += 1;
-                },
-                Err(_) => panic!(),
+                serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value)?;
+                writer.insert(*fid, &this.value_buffer)?;
+                this.value_buffer.clear();
             }
+
+            this.inner.write_u32::<BigEndian>(this.obkv_buffer.len() as u32)?;
+            this.inner.write_all(&this.obkv_buffer)?;
+
+            this.obkv_buffer.clear();
+            this.count += 1;
         }
 
         Ok(this)
@@ -162,9 +151,24 @@ fn parse_csv_header(header: &str) -> (String, AllowedType) {
 mod test {
     use std::io::Cursor;
 
+    use serde_json::{json, Map};
+
     use crate::documents::DocumentBatchReader;
 
     use super::*;
+
+    fn obkv_to_value(obkv: &obkv::KvReader<FieldId>, index: &DocumentsBatchIndex) -> Value {
+        let mut map = Map::new();
+
+        for (fid, value) in obkv.iter() {
+            let field_name = index.name(fid).unwrap().clone();
+            let value: Value = serde_json::from_slice(value).unwrap();
+
+            map.insert(field_name, value);
+        }
+
+        Value::Object(map)
+    }
 
     #[test]
     fn add_single_documents_json() {
@@ -247,7 +251,8 @@ mod test {
 
         let csv = "id:number,field:string\n1,hello!\n2,blabla";
 
-        let builder = DocumentBatchBuilder::from_csv(Cursor::new(csv.as_bytes()), &mut cursor).unwrap();
+        let builder =
+            DocumentBatchBuilder::from_csv(Cursor::new(csv.as_bytes()), &mut cursor).unwrap();
         builder.finish().unwrap();
 
         cursor.set_position(0);
@@ -262,5 +267,266 @@ mod test {
         assert_eq!(document.iter().count(), 2);
 
         assert!(reader.next_document_with_index().unwrap().is_none());
+    }
+
+    #[test]
+    fn simple_csv_document() {
+        let documents = r#"city,country,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city": "Boston",
+                "country": "United States",
+                "pop": "4628910",
+            })
+        );
+
+        assert!(reader.next_document_with_index().unwrap().is_none());
+    }
+
+    #[test]
+    fn coma_in_field() {
+        let documents = r#"city,country,pop
+"Boston","United, States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city": "Boston",
+                "country": "United, States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[test]
+    fn quote_in_field() {
+        let documents = r#"city,country,pop
+"Boston","United"" States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city": "Boston",
+                "country": "United\" States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[test]
+    fn integer_in_field() {
+        let documents = r#"city,country,pop:number
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city": "Boston",
+                "country": "United States",
+                "pop": 4628910.0,
+            })
+        );
+    }
+
+    #[test]
+    fn float_in_field() {
+        let documents = r#"city,country,pop:number
+"Boston","United States","4628910.01""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city": "Boston",
+                "country": "United States",
+                "pop": 4628910.01,
+            })
+        );
+    }
+
+    #[test]
+    fn several_colon_in_header() {
+        let documents = r#"city:love:string,country:state,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city:love": "Boston",
+                "country:state": "United States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[test]
+    fn ending_by_colon_in_header() {
+        let documents = r#"city:,country,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city:": "Boston",
+                "country": "United States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[test]
+    fn starting_by_colon_in_header() {
+        let documents = r#":city,country,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                ":city": "Boston",
+                "country": "United States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[ignore]
+    #[test]
+    fn starting_by_colon_in_header2() {
+        let documents = r#":string,country,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+
+        assert!(reader.next_document_with_index().is_err());
+    }
+
+    #[test]
+    fn double_colon_in_header() {
+        let documents = r#"city::string,country,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
+        let val = obkv_to_value(&doc, index);
+
+        assert_eq!(
+            val,
+            json!({
+                "city:": "Boston",
+                "country": "United States",
+                "pop": "4628910",
+            })
+        );
+    }
+
+    #[test]
+    fn bad_type_in_header() {
+        let documents = r#"city,country:number,pop
+"Boston","United States","4628910""#;
+
+        let mut buf = Vec::new();
+        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
+    }
+
+    #[test]
+    fn bad_column_count1() {
+        let documents = r#"city,country,pop
+"Boston","United States","4628910", "too much""#;
+
+        let mut buf = Vec::new();
+        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
+    }
+
+    #[test]
+    fn bad_column_count2() {
+        let documents = r#"city,country,pop
+"Boston","United States""#;
+
+        let mut buf = Vec::new();
+        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
     }
 }
