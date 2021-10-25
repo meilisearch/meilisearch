@@ -205,7 +205,7 @@ mod segment {
 
         fn start_search(
             &'static self,
-            getter: impl Fn(&'static Self) -> &'static Mutex<SearchBatcher> + Send + Sync + 'static,
+            batcher: &'static Mutex<SearchBatcher>,
             query: &SearchQuery,
             request: &HttpRequest,
         ) {
@@ -262,7 +262,7 @@ mod segment {
                     - 1;
 
                 println!("Batching a search");
-                let mut search_batcher = getter(self).lock().await;
+                let mut search_batcher = batcher.lock().await;
                 user_agent.into_iter().for_each(|ua| {
                     search_batcher.user_agents.insert(ua);
                 });
@@ -347,7 +347,7 @@ mod segment {
         }
 
         fn start_get_search(&'static self, query: &SearchQuery, request: &HttpRequest) {
-            self.start_search(|s| &s.get_search_batcher, query, request)
+            self.start_search(&self.get_search_batcher, query, request)
         }
 
         fn end_get_search(&'static self, process_time: usize) {
@@ -359,7 +359,7 @@ mod segment {
         }
 
         fn start_post_search(&'static self, query: &SearchQuery, request: &HttpRequest) {
-            self.start_search(|s| &s.post_search_batcher, query, request)
+            self.start_search(&self.post_search_batcher, query, request)
         }
 
         fn end_post_search(&'static self, process_time: usize) {
@@ -500,7 +500,7 @@ mod segment {
     }
 
     impl DocumentsBatcher {
-        pub fn into_event(mut self, user: &User, event_name: &str) -> Option<Track> {
+        pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
             if self.updated {
                 None
             } else {
