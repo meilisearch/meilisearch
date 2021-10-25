@@ -2,7 +2,7 @@ use batch::Batch;
 
 pub mod batch;
 pub mod task;
-pub mod store;
+pub mod task_store;
 pub mod scheduler;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Sync + Send>>;

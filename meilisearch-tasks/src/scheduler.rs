@@ -7,11 +7,11 @@ use crate::batch::Batch;
 use crate::task::TaskEvent;
 use crate::{Result, TaskPerformer};
 
-#[cfg(not(test))]
-use crate::store::TaskStore;
 
 #[cfg(test)]
-use test::TaskStore;
+use crate::task_store::test::MockTaskStore as TaskStore;
+#[cfg(not(test))]
+use crate::task_store::TaskStore;
 
 /// The scheduler roles is to perform batches of tasks one at a time. It will monitor the TaskStore
 /// for new tasks, put them in a batch, and process the batch as soon as possible.
@@ -81,42 +81,9 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
 mod test {
     use nelson::Mocker;
 
-    use crate::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
-    use crate::MockTaskPerformer;
-
     use super::*;
+    use crate::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
 
-    pub enum TaskStore {
-        Real(crate::store::TaskStore),
-        Mock(Arc<Mocker>),
-    }
-
-    impl TaskStore {
-        pub fn mock(mocker: Mocker) -> Self {
-            Self::Mock(Arc::new(mocker))
-        }
-
-        pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
-            match self {
-                TaskStore::Real(s) => s.update_tasks(tasks).await,
-                TaskStore::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
-            }
-        }
-
-        pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>> {
-            match self {
-                TaskStore::Real(s) => s.get_task(id).await,
-                TaskStore::Mock(m) => unsafe { m.get::<_, Result<Option<Task>>>("get_task").call(id) },
-            }
-        }
-
-        pub async fn peek_pending(&self) -> Option<TaskId> {
-            match self {
-                TaskStore::Real(s) => s.peek_pending().await,
-                TaskStore::Mock(m) => unsafe { m.get::<_, Option<TaskId>>("peek_pending").call(()) },
-            }
-        }
-    }
 
     #[tokio::test]
     async fn test_prepare_batch_full() {
