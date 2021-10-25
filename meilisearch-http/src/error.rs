@@ -42,8 +42,11 @@ pub struct ResponseError {
     #[serde(skip)]
     code: StatusCode,
     message: String,
+    #[serde(rename = "code")]
     error_code: String,
+    #[serde(rename = "type")]
     error_type: String,
+    #[serde(rename = "link")]
     error_link: String,
 }
 
