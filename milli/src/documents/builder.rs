@@ -1,16 +1,14 @@
 use std::collections::BTreeMap;
 use std::io;
-use std::io::Cursor;
-use std::io::Write;
+use std::io::{Cursor, Write};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use serde::Deserializer;
 use serde_json::Value;
 
-use crate::FieldId;
-
 use super::serde::DocumentVisitor;
 use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
+use crate::FieldId;
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
 /// format used by milli.
@@ -27,7 +25,7 @@ use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 /// let json = r##"{"id": 1, "name": "foo"}"##;
 /// let mut writer = Cursor::new(Vec::new());
 /// let mut builder = DocumentBatchBuilder::new(&mut writer).unwrap();
-/// builder.extend_from_json(Cursor::new(json.as_bytes())).unwrap();
+/// builder.extend_from_json(&mut json.as_bytes()).unwrap();
 /// builder.finish().unwrap();
 /// ```
 pub struct DocumentBatchBuilder<W> {
@@ -46,16 +44,14 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
         // add space to write the offset of the metadata at the end of the writer
         writer.write_u64::<BigEndian>(0)?;
 
-        let this = Self {
+        Ok(Self {
             inner: writer,
             index,
             obkv_buffer: Vec::new(),
             value_buffer: Vec::new(),
             values: BTreeMap::new(),
             count: 0,
-        };
-
-        Ok(this)
+        })
     }
 
     /// Returns the number of documents that have been written to the builder.
@@ -117,27 +113,31 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
 
         for (i, record) in records.into_records().enumerate() {
             let record = record?;
-            let mut writer = obkv::KvWriter::new(Cursor::new(&mut this.obkv_buffer));
+            this.obkv_buffer.clear();
+            let mut writer = obkv::KvWriter::new(&mut this.obkv_buffer);
             for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
                 let value = match ty {
-                    AllowedType::Number => value.parse::<f64>().map(Value::from).map_err(|error| Error::ParseFloat {
-                        error,
-                        // +1 for the header offset.
-                        line: i + 1,
-                        value: value.to_string(),
-                    })?,
+                    AllowedType::Number => {
+                        value.parse::<f64>().map(Value::from).map_err(|error| {
+                            Error::ParseFloat {
+                                error,
+                                // +1 for the header offset.
+                                line: i + 1,
+                                value: value.to_string(),
+                            }
+                        })?
+                    }
                     AllowedType::String => Value::String(value.to_string()),
                 };
 
+                this.value_buffer.clear();
                 serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value)?;
                 writer.insert(*fid, &this.value_buffer)?;
-                this.value_buffer.clear();
             }
 
             this.inner.write_u32::<BigEndian>(this.obkv_buffer.len() as u32)?;
             this.inner.write_all(&this.obkv_buffer)?;
 
-            this.obkv_buffer.clear();
             this.count += 1;
         }
 
@@ -156,7 +156,8 @@ fn parse_csv_header(header: &str) -> (String, AllowedType) {
     match header.rsplit_once(':') {
         Some((field_name, field_type)) => match field_type {
             "string" => (field_name.to_string(), AllowedType::String),
-            "number" => (field_name.to_string(), AllowedType::Number), // if the pattern isn't reconized, we keep the whole field.
+            "number" => (field_name.to_string(), AllowedType::Number),
+            // if the pattern isn't reconized, we keep the whole field.
             _otherwise => (header.to_string(), AllowedType::String),
         },
         None => (header.to_string(), AllowedType::String),
@@ -169,9 +170,8 @@ mod test {
 
     use serde_json::{json, Map};
 
-    use crate::documents::DocumentBatchReader;
-
     use super::*;
+    use crate::documents::DocumentBatchReader;
 
     fn obkv_to_value(obkv: &obkv::KvReader<FieldId>, index: &DocumentsBatchIndex) -> Value {
         let mut map = Map::new();
@@ -525,7 +525,9 @@ mod test {
 "Boston","United States","4628910""#;
 
         let mut buf = Vec::new();
-        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
+        assert!(
+            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
+        );
     }
 
     #[test]
@@ -534,7 +536,9 @@ mod test {
 "Boston","United States","4628910", "too much""#;
 
         let mut buf = Vec::new();
-        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
+        assert!(
+            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
+        );
     }
 
     #[test]
@@ -543,6 +547,8 @@ mod test {
 "Boston","United States""#;
 
         let mut buf = Vec::new();
-        assert!(DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err());
+        assert!(
+            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
+        );
     }
 }

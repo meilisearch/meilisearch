@@ -7,9 +7,8 @@ mod builder;
 mod reader;
 mod serde;
 
-use std::num::ParseFloatError;
-use std::io;
 use std::fmt::{self, Debug};
+use std::io;
 
 use ::serde::{Deserialize, Serialize};
 use bimap::BiHashMap;
@@ -24,7 +23,7 @@ pub struct DocumentsBatchIndex(pub BiHashMap<FieldId, String>);
 
 impl DocumentsBatchIndex {
     /// Insert the field in the map, or return it's field id if it doesn't already exists.
-    pub fn insert(&mut self, field:  &str) -> FieldId {
+    pub fn insert(&mut self, field: &str) -> FieldId {
         match self.0.get_by_right(field) {
             Some(field_id) => *field_id,
             None => {
@@ -43,7 +42,7 @@ impl DocumentsBatchIndex {
         self.0.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=(&FieldId, &String)> {
+    pub fn iter(&self) -> bimap::hash::Iter<FieldId, String> {
         self.0.iter()
     }
 
@@ -83,11 +82,7 @@ impl<W: io::Write> io::Write for ByteCounter<W> {
 
 #[derive(Debug)]
 pub enum Error {
-    ParseFloat {
-        error: std::num::ParseFloatError,
-        line: usize,
-        value: String,
-    },
+    ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
     InvalidDocumentFormat,
     Custom(String),
     JsonError(serde_json::Error),
@@ -124,7 +119,9 @@ impl From<serde_json::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::ParseFloat { error, line, value} => write!(f, "Error parsing number {:?} at line {}: {}", value, line, error),
+            Error::ParseFloat { error, line, value } => {
+                write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
+            }
             Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
             Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
             Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),

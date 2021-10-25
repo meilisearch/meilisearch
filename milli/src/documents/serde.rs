@@ -1,18 +1,13 @@
 use std::collections::BTreeMap;
-use std::io::Cursor;
-use std::io::Write;
 use std::fmt;
+use std::io::{Cursor, Write};
 
 use byteorder::WriteBytesExt;
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
-use serde::de::DeserializeSeed;
-use serde::de::MapAccess;
-use serde::de::SeqAccess;
-use serde::de::Visitor;
 use serde_json::Value;
 
-use super::Error;
-use super::{ByteCounter, DocumentsBatchIndex};
+use super::{ByteCounter, DocumentsBatchIndex, Error};
 use crate::FieldId;
 
 macro_rules! tri {
@@ -31,8 +26,9 @@ impl<'a, 'de> DeserializeSeed<'de> for FieldIdResolver<'a> {
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            deserializer.deserialize_str(self)
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(self)
     }
 }
 
@@ -43,7 +39,7 @@ impl<'a, 'de> Visitor<'de> for FieldIdResolver<'a> {
     where
         E: serde::de::Error,
     {
-            Ok(self.0.insert(v))
+        Ok(self.0.insert(v))
     }
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -58,8 +54,9 @@ impl<'de> DeserializeSeed<'de> for ValueDeserializer {
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            serde_json::Value::deserialize(deserializer)
+        D: serde::Deserializer<'de>,
+    {
+        serde_json::Value::deserialize(deserializer)
     }
 }
 
@@ -80,7 +77,9 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
     where
         A: SeqAccess<'de>,
     {
-        while let Some(v) = seq.next_element_seed(&mut *self)? { tri!(v) }
+        while let Some(v) = seq.next_element_seed(&mut *self)? {
+            tri!(v)
+        }
 
         Ok(Ok(()))
     }
@@ -89,7 +88,9 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
     where
         A: MapAccess<'de>,
     {
-        while let Some((key, value)) = map.next_entry_seed(FieldIdResolver(&mut *self.index), ValueDeserializer)? {
+        while let Some((key, value)) =
+            map.next_entry_seed(FieldIdResolver(&mut *self.index), ValueDeserializer)?
+        {
             self.values.insert(key, value);
         }
 
@@ -119,13 +120,15 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
 }
 
 impl<'a, 'de, W> DeserializeSeed<'de> for &mut DocumentVisitor<'a, W>
-where W: Write,
+where
+    W: Write,
 {
     type Value = Result<(), Error>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            deserializer.deserialize_map(self)
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(self)
     }
 }

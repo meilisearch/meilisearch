@@ -544,7 +544,8 @@ mod test {
     mod primary_key_inference {
         use bimap::BiHashMap;
 
-        use crate::{documents::DocumentsBatchIndex, update::index_documents::transform::find_primary_key};
+        use crate::documents::DocumentsBatchIndex;
+        use crate::update::index_documents::transform::find_primary_key;
 
         #[test]
         fn primary_key_infered_on_first_field() {

@@ -906,8 +906,9 @@ mod tests {
 
         let mut cursor = Cursor::new(Vec::new());
 
+        let big_object = serde_json::to_string(&big_object).unwrap();
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-        builder.add_documents(big_object).unwrap();
+        builder.extend_from_json(&mut big_object.as_bytes()).unwrap();
         builder.finish().unwrap();
         cursor.set_position(0);
         let content = DocumentBatchReader::from_reader(cursor).unwrap();
