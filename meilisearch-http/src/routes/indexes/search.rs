@@ -3,7 +3,7 @@ use log::debug;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::analytics::Analytics;
 use crate::error::ResponseError;

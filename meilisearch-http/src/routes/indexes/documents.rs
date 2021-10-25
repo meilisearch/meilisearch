@@ -123,7 +123,7 @@ pub async fn get_all_documents(
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    primary_key: Option<String>,
+    pub primary_key: Option<String>,
 }
 
 pub async fn add_documents(

@@ -14,7 +14,7 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::ApiKeys;
 
 mod dump;
-mod indexes;
+pub mod indexes;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("/health").route(web::get().to(get_health)))
