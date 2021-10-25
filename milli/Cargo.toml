@@ -39,7 +39,8 @@ tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 
 # facet filter parser
-nom = "7.0.0"
+pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
+pest_derive = "2.1.0"
 
 # documents words self-join
 itertools = "0.10.0"
