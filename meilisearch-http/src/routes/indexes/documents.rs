@@ -8,7 +8,7 @@ use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::analytics::Analytics;
@@ -141,14 +141,10 @@ pub async fn add_documents(
         .map(|s| s.to_str().unwrap_or("unkown"));
     let params = params.into_inner();
 
-    analytics.publish(
-        "Documents Added".to_string(),
-        json!({
-           "payload_type": content_type,
-           "with_primary_key": params.primary_key,
-           "index_creation": meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
-        }),
-        Some(&req),
+    analytics.add_documents(
+        &params,
+        meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
+        &req,
     );
 
     document_addition(
@@ -176,14 +172,10 @@ pub async fn update_documents(
         .get("Content-type")
         .map(|s| s.to_str().unwrap_or("unkown"));
 
-    analytics.publish(
-        "Documents Updated".to_string(),
-        json!({
-           "payload_type": content_type,
-           "with_primary_key": params.primary_key,
-           "index_creation": meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
-        }),
-        Some(&req),
+    analytics.update_documents(
+        &params,
+        meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
+        &req,
     );
 
     document_addition(
