@@ -32,6 +32,7 @@ fn find_user_id(db_path: &Path) -> Option<String> {
         .or_else(|| fs::read_to_string(&config_user_id_path(db_path)?).ok())
 }
 
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
 /// Write the user-id in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-user-id`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &str) {
     let _ = fs::write(db_path.join("user-id"), user_id.as_bytes());
