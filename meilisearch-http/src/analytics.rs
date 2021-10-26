@@ -552,7 +552,7 @@ pub struct MockAnalytics {
 
 impl MockAnalytics {
     pub fn new(opt: &Opt) -> &'static Self {
-        let user = find_user_id(&opt.db_path).unwrap_or(String::new());
+        let user = find_user_id(&opt.db_path).unwrap_or_default();
         let analytics = Box::new(Self { user });
         Box::leak(analytics)
     }

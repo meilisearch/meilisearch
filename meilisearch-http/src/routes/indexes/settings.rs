@@ -102,7 +102,7 @@ make_setting_route!(
                 "total": setting.as_ref().map(|filter| filter.len()),
                 "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
             }),
-            Some(&req),
+            Some(req),
         );
     }
 );
@@ -122,7 +122,7 @@ make_setting_route!(
                 "total": setting.as_ref().map(|sort| sort.len()),
                 "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
             }),
-            Some(&req),
+            Some(req),
         );
     }
 );
@@ -174,9 +174,9 @@ make_setting_route!(
         analytics.publish(
         "RankingRules Updated".to_string(),
         json!({
-            "sort_position": setting.as_ref().map(|sort| sort.iter().filter(|s| s.contains(":")).count()),
+            "sort_position": setting.as_ref().map(|sort| sort.iter().filter(|s| s.contains(':')).count()),
         }),
-        Some(&req),
+        Some(req),
     );
     }
 );
@@ -218,7 +218,7 @@ pub async fn update_all(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().filter(|s| s.contains(":")).count()),
+                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().filter(|s| s.contains(':')).count()),
             },
            "sortable_attributes": {
                 "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),

@@ -128,7 +128,7 @@ Anonymous telemetry:   \"Enabled\""
     }
 
     let analytics = analytics.to_string();
-    if analytics != "" {
+    if !analytics.is_empty() {
         eprintln!("Unique User ID:\t\"{}\"", analytics);
     }
 
