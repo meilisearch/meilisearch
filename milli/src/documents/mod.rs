@@ -7,7 +7,8 @@ mod builder;
 mod reader;
 mod serde;
 
-use std::{fmt, io};
+use std::fmt::{self, Debug};
+use std::io;
 
 use ::serde::{Deserialize, Serialize};
 use bimap::BiHashMap;
@@ -17,7 +18,38 @@ pub use reader::DocumentBatchReader;
 use crate::FieldId;
 
 /// A bidirectional map that links field ids to their name in a document batch.
-pub type DocumentsBatchIndex = BiHashMap<FieldId, String>;
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct DocumentsBatchIndex(pub BiHashMap<FieldId, String>);
+
+impl DocumentsBatchIndex {
+    /// Insert the field in the map, or return it's field id if it doesn't already exists.
+    pub fn insert(&mut self, field: &str) -> FieldId {
+        match self.0.get_by_right(field) {
+            Some(field_id) => *field_id,
+            None => {
+                let field_id = self.0.len() as FieldId;
+                self.0.insert(field_id, field.to_string());
+                field_id
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> bimap::hash::Iter<FieldId, String> {
+        self.0.iter()
+    }
+
+    pub fn name(&self, id: FieldId) -> Option<&String> {
+        self.0.get_by_left(&id)
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DocumentsMetadata {
@@ -50,12 +82,20 @@ impl<W: io::Write> io::Write for ByteCounter<W> {
 
 #[derive(Debug)]
 pub enum Error {
+    ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
     InvalidDocumentFormat,
     Custom(String),
     JsonError(serde_json::Error),
+    CsvError(csv::Error),
     Serialize(bincode::Error),
     Io(io::Error),
     DocumentTooLarge,
+}
+
+impl From<csv::Error> for Error {
+    fn from(e: csv::Error) -> Self {
+        Self::CsvError(e)
+    }
 }
 
 impl From<io::Error> for Error {
@@ -70,15 +110,25 @@ impl From<bincode::Error> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(other: serde_json::Error) -> Self {
+        Self::JsonError(other)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Error::ParseFloat { error, line, value } => {
+                write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
+            }
             Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
             Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
             Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),
-            Error::Io(e) => e.fmt(f),
+            Error::Io(e) => write!(f, "{}", e),
             Error::DocumentTooLarge => f.write_str("Provided document is too large (>2Gib)"),
-            Error::Serialize(e) => e.fmt(f),
+            Error::Serialize(e) => write!(f, "{}", e),
+            Error::CsvError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -92,7 +142,8 @@ macro_rules! documents {
         let documents = serde_json::json!($data);
         let mut writer = std::io::Cursor::new(Vec::new());
         let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-        builder.add_documents(documents).unwrap();
+        let documents = serde_json::to_vec(&documents).unwrap();
+        builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
         builder.finish().unwrap();
 
         writer.set_position(0);
@@ -103,6 +154,8 @@ macro_rules! documents {
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
+
     use serde_json::{json, Value};
 
     use super::*;
@@ -119,12 +172,14 @@ mod test {
             "bool": true
         });
 
+        let json = serde_json::to_vec(&json).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(json).unwrap();
+        builder.extend_from_json(Cursor::new(json)).unwrap();
 
         builder.finish().unwrap();
 
@@ -148,13 +203,16 @@ mod test {
             "toto": false,
         });
 
+        let doc1 = serde_json::to_vec(&doc1).unwrap();
+        let doc2 = serde_json::to_vec(&doc2).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(doc1).unwrap();
-        builder.add_documents(doc2).unwrap();
+        builder.extend_from_json(Cursor::new(doc1)).unwrap();
+        builder.extend_from_json(Cursor::new(doc2)).unwrap();
 
         builder.finish().unwrap();
 
@@ -177,12 +235,14 @@ mod test {
             { "tata": "hello" },
         ]);
 
+        let docs = serde_json::to_vec(&docs).unwrap();
+
         let mut v = Vec::new();
         let mut cursor = io::Cursor::new(&mut v);
 
         let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
 
-        builder.add_documents(docs).unwrap();
+        builder.extend_from_json(Cursor::new(docs)).unwrap();
 
         builder.finish().unwrap();
 
@@ -210,11 +270,13 @@ mod test {
             { "tata": "hello" },
         ]]);
 
-        assert!(builder.add_documents(docs).is_err());
+        let docs = serde_json::to_vec(&docs).unwrap();
+        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
 
         let docs = json!("hello");
+        let docs = serde_json::to_vec(&docs).unwrap();
 
-        assert!(builder.add_documents(docs).is_err());
+        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
     }
 
     #[test]

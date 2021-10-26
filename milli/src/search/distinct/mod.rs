@@ -68,7 +68,9 @@ mod test {
                 "txts": sample_txts[..(rng.gen_range(0..3))],
                 "cat-ints": sample_ints[..(rng.gen_range(0..3))],
             });
-            builder.add_documents(doc).unwrap();
+
+            let doc = Cursor::new(serde_json::to_vec(&doc).unwrap());
+            builder.extend_from_json(doc).unwrap();
         }
 
         builder.finish().unwrap();
