@@ -189,7 +189,7 @@ mod segment {
                                         "version": env!("CARGO_PKG_VERSION").to_string(),
                                     },
                                 })),
-                                user: user.clone(),
+                                user: self.user.clone(),
                                 traits: Self::compute_traits(&self.opt, stats),
                                 ..Default::default()
                             })
