@@ -20,22 +20,27 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
     db_path
         .canonicalize()
         .ok()
-        .map(|path| path.join("user-id").display().to_string().replace("/", "-"))
+        .map(|path| {
+            path.join("instance-uid")
+                .display()
+                .to_string()
+                .replace("/", "-")
+        })
         .zip(MEILISEARCH_CONFIG_PATH.as_ref())
         .map(|(filename, config_path)| config_path.join(filename))
 }
 
-/// Look for the user-id in the `data.ms` or in `~/.config/MeiliSearch/path-to-db-user-id`
+/// Look for the instance-uid in the `data.ms` or in `~/.config/MeiliSearch/path-to-db-instance-uid`
 fn find_user_id(db_path: &Path) -> Option<String> {
-    fs::read_to_string(db_path.join("user-id"))
+    fs::read_to_string(db_path.join("instance-uid"))
         .ok()
         .or_else(|| fs::read_to_string(&config_user_id_path(db_path)?).ok())
 }
 
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
-/// Write the user-id in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-user-id`. Ignore the errors.
+/// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &str) {
-    let _ = fs::write(db_path.join("user-id"), user_id.as_bytes());
+    let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
     if let Some((meilisearch_config_path, user_id_path)) = MEILISEARCH_CONFIG_PATH
         .as_ref()
         .zip(config_user_id_path(db_path))
