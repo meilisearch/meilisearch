@@ -137,10 +137,8 @@ mod segment {
         }
 
         pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
-            // see if there is already a user-id in the `data.ms` or in `/tmp/path-to-db-user-id`
             let user_id = super::find_user_id(&opt.db_path);
             let first_time_run = user_id.is_none();
-            // if not, generate a new user-id and save it to the fs
             let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
             super::write_user_id(&opt.db_path, &user_id);
 
@@ -168,10 +166,7 @@ mod segment {
             if first_time_run {
                 segment.publish("Launched".to_string(), json!({}), None);
             }
-
-            // start the runtime tick
             segment.tick(meilisearch.clone());
-
             segment
         }
 
@@ -179,8 +174,6 @@ mod segment {
             tokio::spawn(async move {
                 loop {
                     if let Ok(stats) = meilisearch.get_all_stats().await {
-                        let traits = Self::compute_traits(&self.opt, stats);
-                        let user = self.user.clone();
                         let _ = self
                             .batcher
                             .lock()
@@ -191,8 +184,8 @@ mod segment {
                                         "version": env!("CARGO_PKG_VERSION").to_string(),
                                     },
                                 })),
-                                user,
-                                traits,
+                                user: user.clone(),
+                                traits: Self::compute_traits(&self.opt, stats),
                                 ..Default::default()
                             })
                             .await;
@@ -207,7 +200,7 @@ mod segment {
                     let update_documents =
                         std::mem::take(&mut *self.update_documents_batcher.lock().await)
                             .into_event(&self.user, "Documents Updated");
-                    // keep the lock on the batcher just for these three operations
+                    // keep the lock on the batcher just for these five operations
                     {
                         let mut batcher = self.batcher.lock().await;
                         if let Some(get_search) = get_search {
