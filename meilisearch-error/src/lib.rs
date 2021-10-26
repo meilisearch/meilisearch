@@ -62,6 +62,7 @@ pub enum Code {
 
     MaxFieldsLimitExceeded,
     MissingDocumentId,
+    InvalidDocumentId,
 
     Facet,
     Filter,
@@ -76,6 +77,7 @@ pub enum Code {
     InvalidToken,
     MissingAuthorizationHeader,
     NotFound,
+    TaskNotFound,
     PayloadTooLarge,
     RetrieveDocument,
     SearchDocuments,
@@ -99,7 +101,7 @@ impl Code {
             // index related errors
             // create index is thrown on internal error while creating an index.
             CreateIndex => ErrCode::internal("index_creation_failed", StatusCode::BAD_REQUEST),
-            IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::BAD_REQUEST),
+            IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::CONFLICT),
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
@@ -113,7 +115,7 @@ impl Code {
             MissingPrimaryKey => ErrCode::invalid("missing_primary_key", StatusCode::BAD_REQUEST),
             // error thrown when trying to set an already existing primary key
             PrimaryKeyAlreadyPresent => {
-                ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST)
+                ErrCode::invalid("index_primary_key_already_exists", StatusCode::BAD_REQUEST)
             }
             // invalid ranking rule
             InvalidRankingRule => ErrCode::invalid("invalid_request", StatusCode::BAD_REQUEST),
@@ -123,6 +125,7 @@ impl Code {
                 ErrCode::invalid("max_fields_limit_exceeded", StatusCode::BAD_REQUEST)
             }
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
+            InvalidDocumentId => ErrCode::invalid("invalid_document_id", StatusCode::BAD_REQUEST),
 
             // error related to facets
             Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
@@ -142,6 +145,7 @@ impl Code {
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
+            TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
             RetrieveDocument => {

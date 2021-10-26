@@ -8,10 +8,17 @@ async fn search_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
 
+    let expected_response = json!({
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+    });
+
     index
         .search(json!({"q": "hello"}), |response, code| {
-            assert_eq!(code, 404, "{}", response);
-            assert_eq!(response["errorCode"], "index_not_found");
+            assert_eq!(code, 404);
+            assert_eq!(response, expected_response);
         })
         .await;
 }
@@ -24,7 +31,7 @@ async fn search_unexisting_parameter() {
     index
         .search(json!({"marin": "hello"}), |response, code| {
             assert_eq!(code, 400, "{}", response);
-            assert_eq!(response["errorCode"], "bad_request");
+            assert_eq!(response["code"], "bad_request");
         })
         .await;
 }
@@ -43,13 +50,13 @@ async fn filter_invalid_syntax_object() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: :syntaxErrorHelper:REPLACE_ME.",
+        "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": {"title": "Glass"}}), |response, code| {
+        .search(json!({"filter": "title & Glass"}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -70,19 +77,16 @@ async fn filter_invalid_syntax_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: :syntaxErrorHelper:REPLACE_ME.",
+        "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(
-            json!({"filter": [[["title = Glass"]]]}),
-            |response, code| {
-                assert_eq!(response, expected_response);
-                assert_eq!(code, 400);
-            },
-        )
+        .search(json!({"filter": [["title & Glass"]]}), |response, code| {
+            assert_eq!(response, expected_response);
+            assert_eq!(code, 400);
+        })
         .await;
 }
 
@@ -100,7 +104,7 @@ async fn filter_invalid_syntax_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: :syntaxErrorHelper:REPLACE_ME.",
+        "message": "Invalid syntax for the filter parameter: ` --> 1:15\n  |\n1 | title = Glass XOR title = Glass\n  |               ^---\n  |\n  = expected EOI, and, or or`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -130,7 +134,7 @@ async fn filter_invalid_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Attribute many is not filterable. Available filterable attributes are: title.",
+        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -157,7 +161,7 @@ async fn filter_invalid_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Attribute many is not filterable. Available filterable attributes are: title.",
+        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -184,7 +188,7 @@ async fn filter_reserved_geo_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geo is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -211,7 +215,7 @@ async fn filter_reserved_geo_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geo is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -238,7 +242,7 @@ async fn filter_reserved_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geoDistance is a reserved keyword and thus can't be used as a filter expression.",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -268,7 +272,7 @@ async fn filter_reserved_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geoDistance is a reserved keyword and thus can't be used as a filter expression.",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -298,7 +302,7 @@ async fn sort_geo_reserved_attribute() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geo is a reserved keyword and thus can't be used as a filter expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
         "code": "invalid_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_sort"
@@ -330,7 +334,7 @@ async fn sort_reserved_attribute() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "_geoDistance is a reserved keyword and thus can't be used as a filter expression.",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
         "code": "invalid_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_sort"
@@ -362,7 +366,7 @@ async fn sort_unsortable_attribute() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Attribute title is not sortable. Available sortable attributes are: id.",
+        "message": "Attribute `title` is not sortable. Available sortable attributes are: `id`.",
         "code": "invalid_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_sort"
@@ -394,7 +398,7 @@ async fn sort_invalid_syntax() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the sort parameter: :syntaxErrorHelper:REPLACE_ME.",
+        "message": "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `title`.",
         "code": "invalid_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_sort"
@@ -419,7 +423,7 @@ async fn sort_unset_ranking_rule() {
 
     index
         .update_settings(
-            json!({"sortableAttributes": ["id"], "rankingRules": ["proximity", "exactness"]}),
+            json!({"sortableAttributes": ["title"], "rankingRules": ["proximity", "exactness"]}),
         )
         .await;
 
@@ -436,7 +440,7 @@ async fn sort_unset_ranking_rule() {
     index
         .search(
             json!({
-                "sort": ["title"]
+                "sort": ["title:asc"]
             }),
             |response, code| {
                 assert_eq!(response, expected_response);

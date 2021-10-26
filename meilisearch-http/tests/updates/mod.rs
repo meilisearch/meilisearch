@@ -7,7 +7,7 @@ async fn error_get_update_unexisting_index() {
     let (response, code) = server.index("test").get_update(0).await;
 
     let expected_response = json!({
-        "message": "Index test not found.",
+        "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -25,7 +25,7 @@ async fn error_get_unexisting_update_status() {
     let (response, code) = index.get_update(0).await;
 
     let expected_response = json!({
-        "message": "Task 0 not found.",
+        "message": "Task `0` not found.",
         "code": "task_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#task_not_found"
@@ -60,7 +60,7 @@ async fn error_list_updates_unexisting_index() {
     let (response, code) = server.index("test").list_updates().await;
 
     let expected_response = json!({
-        "message": "Index test not found.",
+        "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"

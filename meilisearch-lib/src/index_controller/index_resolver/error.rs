@@ -3,6 +3,7 @@ use std::fmt;
 use meilisearch_error::{Code, ErrorCode};
 use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
+use uuid::Uuid;
 
 use crate::{error::MilliError, index::error::IndexError};
 
@@ -12,17 +13,19 @@ pub type Result<T> = std::result::Result<T, IndexResolverError>;
 pub enum IndexResolverError {
     #[error("{0}")]
     IndexError(#[from] IndexError),
-    #[error("Index already exists")]
-    IndexAlreadyExists,
-    #[error("Index {0} not found")]
+    #[error("Index `{0}` already exists.")]
+    IndexAlreadyExists(String),
+    #[error("Index `{0}` not found.")]
     UnexistingIndex(String),
     #[error("A primary key is already present. It's impossible to update it")]
     ExistingPrimaryKey,
-    #[error("Internal Error: {0}")]
+    #[error("Internal Error: `{0}`")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Internal Error: Index uuid `{0}` is already assigned.")]
+    UUIdAlreadyExists(Uuid),
     #[error("{0}")]
     Milli(#[from] milli::Error),
-    #[error("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")]
+    #[error("`{0}` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).")]
     BadlyFormatted(String),
 }
 
@@ -53,10 +56,11 @@ impl ErrorCode for IndexResolverError {
     fn error_code(&self) -> Code {
         match self {
             IndexResolverError::IndexError(e) => e.error_code(),
-            IndexResolverError::IndexAlreadyExists => Code::IndexAlreadyExists,
+            IndexResolverError::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             IndexResolverError::UnexistingIndex(_) => Code::IndexNotFound,
             IndexResolverError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,
             IndexResolverError::Internal(_) => Code::Internal,
+            IndexResolverError::UUIdAlreadyExists(_) => Code::Internal,
             IndexResolverError::Milli(e) => MilliError(e).error_code(),
             IndexResolverError::BadlyFormatted(_) => Code::InvalidIndexUid,
         }

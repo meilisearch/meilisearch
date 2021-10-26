@@ -87,7 +87,7 @@ async fn error_delete_batch_unexisting_index() {
     let server = Server::new().await;
     let (response, code) = server.index("test").delete_batch(vec![]).await;
     let expected_response = json!({
-        "message": "Index test not found.",
+        "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"

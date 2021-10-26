@@ -30,7 +30,7 @@ async fn error_get_unexisting_index() {
     let (response, code) = index.get().await;
 
     let expected_response = json!({
-        "message": "Index test not found.",
+        "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"

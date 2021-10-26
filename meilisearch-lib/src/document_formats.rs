@@ -25,9 +25,9 @@ impl fmt::Display for PayloadType {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DocumentFormatError {
-    #[error("Internal error: {0}")]
+    #[error("Internal error!: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("The {1} payload provided is malformed. {0}.")]
+    #[error("The `{1}` payload provided is malformed. `{0}`.")]
     MalformedPayload(
         Box<dyn std::error::Error + Send + Sync + 'static>,
         PayloadType,
@@ -55,18 +55,18 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// reads csv from input and write an obkv batch to writer.
-pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
-    DocumentBatchBuilder::from_csv(input, writer)
-        .map_err(|e| (PayloadType::Csv, e))?
-        .finish()
-        .map_err(|e| (PayloadType::Csv, e))?;
+    let builder =
+        DocumentBatchBuilder::from_csv(input, writer).map_err(|e| (PayloadType::Csv, e))?;
+    let document_count = builder.len();
+    builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
-    Ok(())
+    Ok(document_count)
 }
 
 /// reads jsonl from input and write an obkv batch to writer.
-pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut reader = BufReader::new(input);
     let writer = BufWriter::new(writer);
 
@@ -80,19 +80,22 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
         buf.clear();
     }
 
+    let document_count = builder.len();
+
     builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
 
-    Ok(())
+    Ok(document_count)
 }
 
 /// reads json from input and write an obkv batch to writer.
-pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
     let mut builder = DocumentBatchBuilder::new(writer).map_err(|e| (PayloadType::Json, e))?;
     builder
         .extend_from_json(input)
         .map_err(|e| (PayloadType::Json, e))?;
+    let document_count = builder.len();
     builder.finish().map_err(|e| (PayloadType::Json, e))?;
 
-    Ok(())
+    Ok(document_count)
 }

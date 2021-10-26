@@ -64,7 +64,7 @@ impl IndexStore for MapIndexStore {
         }
         let path = self.path.join(format!("{}", uuid));
         if path.exists() {
-            return Err(IndexResolverError::IndexAlreadyExists);
+            return Err(IndexResolverError::UUIdAlreadyExists(uuid));
         }
 
         let index_size = self.index_size;

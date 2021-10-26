@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
 use crate::Update;
 
-use super::error::{IndexError, Result};
+use super::error::Result;
 use super::index::{Index, IndexMeta};
 
 fn serialize_with_wildcard<S>(
@@ -222,9 +222,6 @@ impl Index {
         match primary_key {
             Some(primary_key) => {
                 let mut txn = self.write_txn()?;
-                if self.primary_key(&txn)?.is_some() {
-                    return Err(IndexError::ExistingPrimaryKey);
-                }
                 let mut builder = UpdateBuilder::new(0).settings(&mut txn, self);
                 builder.set_primary_key(primary_key);
                 builder.execute(|_, _| ())?;
