@@ -37,6 +37,7 @@ FROM    alpine:3.14
 ARG     USER=meili
 ENV     HOME /home/${USER}
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
+ENV     MEILI_SERVER_PROVIDER docker
 
 # download runtime deps as root and create ${USER}
 RUN     apk update --quiet \
