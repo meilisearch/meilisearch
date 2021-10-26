@@ -187,7 +187,11 @@ impl Transform<'_, '_> {
                                 }
                             }
 
-                            return Err(UserError::MissingDocumentId { document: json }.into());
+                            return Err(UserError::MissingDocumentId {
+                                primary_key: primary_key_name,
+                                document: json,
+                            }
+                            .into());
                         }
 
                         let uuid =

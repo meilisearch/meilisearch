@@ -28,12 +28,12 @@ impl fmt::Display for AscDescError {
                 write!(f, "Longitude must be contained between -180 and 180 degrees.",)
             }
             Self::InvalidSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}.", name)
+                write!(f, "invalid asc/desc syntax for `{}`.", name)
             }
             Self::ReservedKeyword { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a asc/desc rule.",
+                    "`{}` is a reserved keyword and thus can't be used as a asc/desc rule.",
                     name
                 )
             }
@@ -192,18 +192,18 @@ impl fmt::Display for SortError {
             Self::BadGeoPointUsage { name } => {
                 write!(
                     f,
-                    "invalid syntax for the `_geoPoint` parameter: `{}`. \
+                    "Invalid syntax for the `_geoPoint` parameter: `{}`. \
                     Usage: `_geoPoint(latitude, longitude):asc`.",
                     name
                 )
             }
             Self::InvalidName { name } => {
-                write!(f, "invalid syntax for the sort parameter `{}`.", name)
+                write!(f, "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
             }
             Self::ReservedName { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression.",
+                    "`{}` is a reserved keyword and thus can't be used as a sort expression.",
                     name
                 )
             }
@@ -211,7 +211,7 @@ impl fmt::Display for SortError {
                 write!(
                     f,
                     "`{}` is a reserved keyword and thus can't be used as a sort expression. \
-                    Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates.",
+                    Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
                     name,
                 )
             }
