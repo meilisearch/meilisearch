@@ -224,7 +224,7 @@ mod segment {
                         }
                         let _ = batcher.flush().await;
                     }
-                    tokio::time::sleep(Duration::from_secs(60 * 2)).await; // 2 minutes
+                    tokio::time::sleep(Duration::from_secs(60 * 60)).await; // one hour
                 }
             });
         }
