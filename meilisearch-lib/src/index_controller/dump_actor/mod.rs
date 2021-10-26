@@ -17,6 +17,7 @@ use super::index_resolver::index_store::IndexStore;
 use super::index_resolver::uuid_store::UuidStore;
 use super::index_resolver::IndexResolver;
 use super::updates::UpdateSender;
+use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::index_controller::dump_actor::loaders::{v2, v3};
@@ -223,6 +224,7 @@ pub fn load_dump(
 
 struct DumpTask<U, I> {
     path: PathBuf,
+    analytics_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
     update_sender: UpdateSender,
     uid: String,
@@ -247,6 +249,7 @@ where
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
+        analytics::write_dump(&self.analytics_path, &temp_dump_path.join("user-id"));
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
         let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
@@ -339,6 +342,8 @@ mod test {
 
         let task = DumpTask {
             path: tmp.path().to_owned(),
+            // this should do nothing
+            analytics_path: tmp.path().join("user-id"),
             index_resolver,
             update_sender,
             uid: String::from("test"),
@@ -367,6 +372,8 @@ mod test {
 
         let task = DumpTask {
             path: tmp.path().to_owned(),
+            // this should do nothing
+            analytics_path: tmp.path().join("user-id"),
             index_resolver,
             update_sender,
             uid: String::from("test"),

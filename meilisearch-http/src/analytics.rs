@@ -7,7 +7,7 @@ use platform_dirs::AppDirs;
 use serde_json::Value;
 use std::fmt::Display;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The MeiliSearch config dir:
 /// `~/.config/MeiliSearch` on *NIX or *BSD.
@@ -16,8 +16,8 @@ use std::path::PathBuf;
 static MEILISEARCH_CONFIG_PATH: Lazy<Option<PathBuf>> =
     Lazy::new(|| AppDirs::new(Some("MeiliSearch"), false).map(|appdir| appdir.config_dir));
 
-fn config_user_id_path(opt: &Opt) -> Option<PathBuf> {
-    opt.db_path
+fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
+    db_path
         .canonicalize()
         .ok()
         .map(|path| path.join("user-id").display().to_string().replace("/", "-"))
@@ -26,19 +26,18 @@ fn config_user_id_path(opt: &Opt) -> Option<PathBuf> {
 }
 
 /// Look for the user-id in the `data.ms` or in `~/.config/MeiliSearch/path-to-db-user-id`
-fn find_user_id(opt: &Opt) -> Option<String> {
-    fs::read_to_string(opt.db_path.join("user-id"))
+fn find_user_id(db_path: &Path) -> Option<String> {
+    fs::read_to_string(db_path.join("user-id"))
         .ok()
-        .or_else(|| fs::read_to_string(&config_user_id_path(opt)?).ok())
+        .or_else(|| fs::read_to_string(&config_user_id_path(db_path)?).ok())
 }
 
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
 /// Write the user-id in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-user-id`. Ignore the errors.
-fn write_user_id(opt: &Opt, user_id: &str) {
-    let _ = fs::write(opt.db_path.join("user-id"), user_id.as_bytes());
+fn write_user_id(db_path: &Path, user_id: &str) {
+    let _ = fs::write(db_path.join("user-id"), user_id.as_bytes());
     if let Some((meilisearch_config_path, user_id_path)) = MEILISEARCH_CONFIG_PATH
         .as_ref()
-        .zip(config_user_id_path(opt))
+        .zip(config_user_id_path(db_path))
     {
         println!("{}", user_id_path.display());
         let _ = fs::create_dir_all(&meilisearch_config_path);
@@ -139,11 +138,11 @@ mod segment {
 
         pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
             // see if there is already a user-id in the `data.ms` or in `/tmp/path-to-db-user-id`
-            let user_id = super::find_user_id(opt);
+            let user_id = super::find_user_id(&opt.db_path);
             let first_time_run = user_id.is_none();
             // if not, generate a new user-id and save it to the fs
             let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-            super::write_user_id(opt, &user_id);
+            super::write_user_id(&opt.db_path, &user_id);
 
             let client = HttpClient::default();
             let user = User::UserId {
@@ -569,7 +568,7 @@ pub struct MockAnalytics {
 
 impl MockAnalytics {
     pub fn new(opt: &Opt) -> &'static Self {
-        let user = find_user_id(opt).unwrap_or(String::new());
+        let user = find_user_id(&opt.db_path).unwrap_or(String::new());
         let analytics = Box::new(Self { user });
         Box::leak(analytics)
     }

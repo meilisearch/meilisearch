@@ -169,8 +169,10 @@ impl IndexControllerBuilder {
         let dump_path = self
             .dump_dst
             .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        let analytics_path = db_path.as_ref().join("user-id");
         let dump_handle = dump_actor::DumpActorHandleImpl::new(
             dump_path,
+            analytics_path,
             index_resolver.clone(),
             update_sender.clone(),
             index_size,
