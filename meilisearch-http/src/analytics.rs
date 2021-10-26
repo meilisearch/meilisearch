@@ -40,7 +40,6 @@ fn write_user_id(db_path: &Path, user_id: &str) {
         .as_ref()
         .zip(config_user_id_path(db_path))
     {
-        println!("{}", user_id_path.display());
         let _ = fs::create_dir_all(&meilisearch_config_path);
         let _ = fs::write(user_id_path, user_id.as_bytes());
     }
@@ -182,7 +181,6 @@ mod segment {
                     if let Ok(stats) = meilisearch.get_all_stats().await {
                         let traits = Self::compute_traits(&self.opt, stats);
                         let user = self.user.clone();
-                        println!("ANALYTICS: Pushing our identify tick");
                         let _ = self
                             .batcher
                             .lock()
@@ -199,12 +197,10 @@ mod segment {
                             })
                             .await;
                     }
-                    println!("ANALYTICS: taking the lock on the search batchers");
                     let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await)
                         .into_event(&self.user, "Document Searched GET");
                     let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await)
                         .into_event(&self.user, "Document Searched POST");
-                    println!("ANALYTICS: taking the lock on the documents batchers");
                     let add_documents =
                         std::mem::take(&mut *self.add_documents_batcher.lock().await)
                             .into_event(&self.user, "Documents Added");
@@ -213,7 +209,6 @@ mod segment {
                             .into_event(&self.user, "Documents Updated");
                     // keep the lock on the batcher just for these three operations
                     {
-                        println!("ANALYTICS: taking the lock on the batchers");
                         let mut batcher = self.batcher.lock().await;
                         if let Some(get_search) = get_search {
                             let _ = batcher.push(get_search).await;
@@ -227,10 +222,8 @@ mod segment {
                         if let Some(update_documents) = update_documents {
                             let _ = batcher.push(update_documents).await;
                         }
-                        println!("ANALYTICS: Sending the batch");
                         let _ = batcher.flush().await;
                     }
-                    println!("ANALYTICS: sent the batch");
                     tokio::time::sleep(Duration::from_secs(60 * 2)).await; // 2 minutes
                 }
             });
@@ -294,7 +287,6 @@ mod segment {
                     .count()
                     - 1;
 
-                println!("Batching a search");
                 let mut search_batcher = batcher.lock().await;
                 user_agent.into_iter().for_each(|ua| {
                     search_batcher.user_agents.insert(ua);
@@ -362,7 +354,6 @@ mod segment {
                 .map(|header| header.to_str().unwrap_or("unknown").to_string());
 
             tokio::spawn(async move {
-                println!("ANALYTICS pushing {} in the batcher", event_name);
                 let _ = self
                     .batcher
                     .lock()
@@ -375,7 +366,6 @@ mod segment {
                         ..Default::default()
                     })
                     .await;
-                println!("ANALYTICS {} pushed", event_name);
             });
         }
 
