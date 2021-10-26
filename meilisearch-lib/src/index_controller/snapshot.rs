@@ -8,6 +8,7 @@ use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 
+use crate::analytics;
 use crate::compression::from_tar_gz;
 use crate::index_controller::updates::UpdateMsg;
 
@@ -21,6 +22,7 @@ pub struct SnapshotService<U, I> {
     update_sender: UpdateSender,
     snapshot_period: Duration,
     snapshot_path: PathBuf,
+    db_path: PathBuf,
     db_name: String,
 }
 
@@ -34,6 +36,7 @@ where
         update_sender: UpdateSender,
         snapshot_period: Duration,
         snapshot_path: PathBuf,
+        db_path: PathBuf,
         db_name: String,
     ) -> Self {
         Self {
@@ -41,6 +44,7 @@ where
             update_sender,
             snapshot_period,
             snapshot_path,
+            db_path,
             db_name,
         }
     }
@@ -70,6 +74,8 @@ where
             .index_resolver
             .snapshot(temp_snapshot_path.clone())
             .await?;
+
+        analytics::copy_user_id(&self.db_path, &temp_snapshot_path.clone());
 
         if indexes.is_empty() {
             return Ok(());
@@ -211,6 +217,8 @@ mod test {
             update_sender,
             Duration::from_millis(100),
             snapshot_path.path().to_owned(),
+            // this should do nothing
+            snapshot_path.path().to_owned(),
             "data.ms".to_string(),
         );
 
@@ -242,6 +250,8 @@ mod test {
             index_resolver,
             update_sender,
             Duration::from_millis(100),
+            snapshot_path.path().to_owned(),
+            // this should do nothing
             snapshot_path.path().to_owned(),
             "data.ms".to_string(),
         );
@@ -291,6 +301,8 @@ mod test {
             index_resolver,
             update_sender,
             Duration::from_millis(100),
+            snapshot_path.path().to_owned(),
+            // this should do nothing
             snapshot_path.path().to_owned(),
             "data.ms".to_string(),
         );

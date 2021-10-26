@@ -25,7 +25,7 @@ pub fn load_dump(
     IndexResolver::load_dump(src.as_ref(), &dst, index_db_size, indexing_options)?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
     UpdateStore::load_dump(&src, &dst, update_db_size)?;
-    analytics::load_dump(src.as_ref(), dst.as_ref());
+    analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
     info!("Loading indexes.");
 

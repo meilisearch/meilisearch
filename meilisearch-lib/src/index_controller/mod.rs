@@ -189,6 +189,7 @@ impl IndexControllerBuilder {
                     .ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
                 self.snapshot_dir
                     .ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
+                db_path.as_ref().into(),
                 db_path
                     .as_ref()
                     .file_name()

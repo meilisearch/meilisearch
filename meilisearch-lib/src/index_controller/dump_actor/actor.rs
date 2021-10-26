@@ -121,8 +121,8 @@ where
         ret.send(Ok(info)).expect("Dump actor is dead");
 
         let task = DumpTask {
-            path: self.dump_path.clone(),
-            analytics_path: self.analytics_path.clone(),
+            dump_path: self.dump_path.clone(),
+            db_path: self.analytics_path.clone(),
             index_resolver: self.index_resolver.clone(),
             update_sender: self.update.clone(),
             uid: uid.clone(),

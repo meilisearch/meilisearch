@@ -223,8 +223,8 @@ pub fn load_dump(
 }
 
 struct DumpTask<U, I> {
-    path: PathBuf,
-    analytics_path: PathBuf,
+    dump_path: PathBuf,
+    db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
     update_sender: UpdateSender,
     uid: String,
@@ -240,7 +240,7 @@ where
     async fn run(self) -> Result<()> {
         trace!("Performing dump.");
 
-        create_dir_all(&self.path).await?;
+        create_dir_all(&self.dump_path).await?;
 
         let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
@@ -249,7 +249,7 @@ where
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
-        analytics::write_dump(&self.analytics_path, &temp_dump_path.join("user-id"));
+        analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
         let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
@@ -257,11 +257,11 @@ where
         UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
             to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 
-            let dump_path = self.path.join(self.uid).with_extension("dump");
+            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
             temp_dump_file.persist(&dump_path)?;
 
             Ok(dump_path)
@@ -341,9 +341,9 @@ mod test {
             create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
         let task = DumpTask {
-            path: tmp.path().to_owned(),
+            dump_path: tmp.path().into(),
             // this should do nothing
-            analytics_path: tmp.path().join("user-id"),
+            db_path: tmp.path().into(),
             index_resolver,
             update_sender,
             uid: String::from("test"),
@@ -371,9 +371,9 @@ mod test {
             create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
         let task = DumpTask {
-            path: tmp.path().to_owned(),
+            dump_path: tmp.path().into(),
             // this should do nothing
-            analytics_path: tmp.path().join("user-id"),
+            db_path: tmp.path().into(),
             index_resolver,
             update_sender,
             uid: String::from("test"),
