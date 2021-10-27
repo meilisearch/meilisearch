@@ -55,6 +55,7 @@ fn write_user_id(db_path: &Path, user_id: &str) {
 mod segment {
     use crate::analytics::Analytics;
     use crate::routes::indexes::documents::UpdateDocumentsQuery;
+    use crate::Opt;
     use actix_web::http::header::USER_AGENT;
     use actix_web::HttpRequest;
     use http::header::CONTENT_TYPE;
@@ -71,8 +72,6 @@ mod segment {
     use sysinfo::{DiskExt, System, SystemExt};
     use tokio::sync::Mutex;
     use uuid::Uuid;
-
-    use crate::Opt;
 
     const SEGMENT_API_KEY: &str = "vHi89WrNDckHSQssyUJqLvIyp2QFITSC";
 
@@ -222,7 +221,8 @@ mod segment {
                         }
                         let _ = batcher.flush().await;
                     }
-                    tokio::time::sleep(Duration::from_secs(60 * 60)).await; // one hour
+                    const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
+                    tokio::time::sleep(INTERVAL).await;
                 }
             });
         }
