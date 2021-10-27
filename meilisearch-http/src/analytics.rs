@@ -344,7 +344,6 @@ mod segment {
         }
     }
 
-    #[async_trait::async_trait]
     impl super::Analytics for SegmentAnalytics {
         fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>) {
             let content_type = request
@@ -564,7 +563,6 @@ impl MockAnalytics {
     }
 }
 
-#[async_trait::async_trait]
 impl Analytics for MockAnalytics {
     // These methods are noop and should be optimized out
     fn publish(&'static self, _event_name: String, _send: Value, _request: Option<&HttpRequest>) {}
@@ -594,7 +592,6 @@ impl Display for MockAnalytics {
     }
 }
 
-#[async_trait::async_trait]
 pub trait Analytics: Display + Sync + Send {
     /// The method used to publish most analytics that do not need to be batched every hours
     fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>);
