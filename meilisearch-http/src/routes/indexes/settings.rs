@@ -35,7 +35,7 @@ macro_rules! make_setting_route {
                 let update = Update::Settings(settings);
                 let update_status = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
                 debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
             }
 
             pub async fn update(
@@ -60,7 +60,7 @@ macro_rules! make_setting_route {
                 let update = Update::Settings(settings);
                 let update_status = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
                 debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
             }
 
             pub async fn get(
@@ -256,7 +256,7 @@ pub async fn update_all(
     let update_result = meilisearch
         .register_update(index_uid.into_inner(), update, true)
         .await?;
-    let json = serde_json::json!({ "updateId": update_result.id() });
+    let json = serde_json::json!({ "updateId": update_result });
     debug!("returns: {:?}", json);
     Ok(HttpResponse::Accepted().json(json))
 }
@@ -280,7 +280,7 @@ pub async fn delete_all(
     let update_result = data
         .register_update(index_uid.into_inner(), update, false)
         .await?;
-    let json = serde_json::json!({ "updateId": update_result.id() });
+    let json = serde_json::json!({ "updateId": update_result });
     debug!("returns: {:?}", json);
     Ok(HttpResponse::Accepted().json(json))
 }

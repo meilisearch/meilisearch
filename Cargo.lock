@@ -1762,18 +1762,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-tasks"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "heed",
- "serde",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "meilisearch-tokenizer"
 version = "0.2.5"
 source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.5#c0b5cf741ed9485147f2cbe523f2214d4fa4c395"
