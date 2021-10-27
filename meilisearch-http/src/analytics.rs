@@ -1,13 +1,15 @@
-use crate::routes::indexes::documents::UpdateDocumentsQuery;
-use crate::Opt;
+use std::fmt::Display;
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use actix_web::HttpRequest;
 use meilisearch_lib::index::SearchQuery;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
 use serde_json::Value;
-use std::fmt::Display;
-use std::fs;
-use std::path::{Path, PathBuf};
+
+use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::Opt;
 
 /// The MeiliSearch config dir:
 /// `~/.config/MeiliSearch` on *NIX or *BSD.
@@ -53,9 +55,10 @@ fn write_user_id(db_path: &Path, user_id: &str) {
 // if we are in release mode and the feature analytics was enabled
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 mod segment {
-    use crate::analytics::Analytics;
-    use crate::routes::indexes::documents::UpdateDocumentsQuery;
-    use crate::Opt;
+    use std::collections::{HashMap, HashSet};
+    use std::fmt::Display;
+    use std::time::{Duration, Instant};
+
     use actix_web::http::header::USER_AGENT;
     use actix_web::HttpRequest;
     use http::header::CONTENT_TYPE;
@@ -67,12 +70,13 @@ mod segment {
     use segment::message::{Identify, Track, User};
     use segment::{AutoBatcher, Batcher, HttpClient};
     use serde_json::{json, Value};
-    use std::collections::{HashMap, HashSet};
-    use std::fmt::Display;
-    use std::time::{Duration, Instant};
     use sysinfo::{DiskExt, System, SystemExt};
     use tokio::sync::Mutex;
     use uuid::Uuid;
+
+    use crate::analytics::Analytics;
+    use crate::routes::indexes::documents::UpdateDocumentsQuery;
+    use crate::Opt;
 
     const SEGMENT_API_KEY: &str = "vHi89WrNDckHSQssyUJqLvIyp2QFITSC";
 
