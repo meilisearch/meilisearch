@@ -56,7 +56,7 @@ rand = "0.8.4"
 rayon = "1.5.1"
 regex = "1.5.4"
 rustls = "0.19.1"
-segment = { git = "https://github.com/meilisearch/segment", optional = true }
+segment = { version = "0.1.1", optional = true }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version = "1.0.67", features = ["preserve_order"] }
 sha2 = "0.9.6"
