@@ -129,7 +129,7 @@ Anonymous telemetry:   \"Enabled\""
 
     let analytics = analytics.to_string();
     if !analytics.is_empty() {
-        eprintln!("Unique User ID:\t\"{}\"", analytics);
+        eprintln!("Instance UID:\t\"{}\"", analytics);
     }
 
     eprintln!();
