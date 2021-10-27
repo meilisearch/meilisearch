@@ -172,12 +172,12 @@ make_setting_route!(
         use serde_json::json;
 
         analytics.publish(
-        "RankingRules Updated".to_string(),
-        json!({
-            "sort_position": setting.as_ref().map(|sort| sort.iter().filter(|s| s.contains(':')).count()),
-        }),
-        Some(req),
-    );
+            "RankingRules Updated".to_string(),
+            json!({
+                "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
+            }),
+            Some(req),
+        );
     }
 );
 
@@ -218,7 +218,7 @@ pub async fn update_all(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().filter(|s| s.contains(':')).count()),
+                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
             },
            "sortable_attributes": {
                 "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
