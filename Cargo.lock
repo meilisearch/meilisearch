@@ -2583,9 +2583,9 @@ dependencies = [
 
 [[package]]
 name = "segment"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fe736985d17620db13ef750190a3172ff4ab0cec12e4507aa80b329e1a191c3"
+checksum = "9bdcc286fff0e7c5ccd46c06a301c7a8a848b06acedc6983707bd311eb358002"
 dependencies = [
  "async-trait",
  "chrono",
