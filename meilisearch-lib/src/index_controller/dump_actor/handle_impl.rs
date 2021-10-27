@@ -10,7 +10,7 @@ use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};
 
 #[derive(Clone)]
 pub struct DumpActorHandleImpl {
-    sender: mpsc::Sender<DumpMsg>,
+    pub sender: mpsc::Sender<DumpMsg>,
 }
 
 #[async_trait::async_trait]

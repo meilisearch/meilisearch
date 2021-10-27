@@ -18,20 +18,28 @@ use crate::task_store::TaskStore;
 ///
 /// When a batch is currently processing, the scheduler is just waiting.
 pub struct Scheduler<P> {
-    store: Arc<TaskStore>,
+    store: TaskStore,
     performer: Arc<P>,
 
-    /// The inderval at which the the `TaskStore` should be checked for new updates
+    /// The interval at which the the `TaskStore` should be checked for new updates
     task_store_check_interval: Duration,
 }
 
 impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
-    async fn run(self) {
+    pub fn new(
+        store: TaskStore,
+        performer: Arc<P>,
+        task_store_check_interval: Duration,
+        ) -> Self {
+        Self { store, performer, task_store_check_interval }
+    }
+
+    pub async fn run(self) {
         loop {
             match self.prepare_batch().await.unwrap() {
                 Some(batch) => {
                     let performer = self.performer.clone();
-                    let batch_result = tokio::task::spawn_blocking(move || performer.process(batch).unwrap()).await.unwrap();
+                    let batch_result = performer.process(batch).await.unwrap();
                     self.handle_batch_result(batch_result).await.unwrap();
                 }
                 None => {
@@ -83,7 +91,7 @@ mod test {
 
     use super::*;
     use crate::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
-
+    use crate::MockTaskPerformer;
 
     #[tokio::test]
     async fn test_prepare_batch_full() {

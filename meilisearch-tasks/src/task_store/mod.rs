@@ -1,10 +1,12 @@
 mod store;
 
 use std::collections::{HashSet, VecDeque};
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
 use tokio::sync::RwLock;
+use log::debug;
 
 use crate::task::{Task, TaskContent, TaskEvent, TaskId};
 use crate::Result;
@@ -14,13 +16,21 @@ pub use store::test::MockStore as Store;
 #[cfg(not(test))]
 pub use store::Store;
 
+#[derive(Clone)]
 pub struct TaskStore {
     store: Arc<Store>,
     pending_queue: Arc<RwLock<VecDeque<TaskId>>>,
 }
 
 impl TaskStore {
+    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+        let store = Arc::new(Store::new(path, size)?);
+        let pending_queue = Arc::default();
+        Ok(Self { store, pending_queue })
+    }
+
     pub async fn register(&self, index_uid: String, content: TaskContent) -> Result<Task> {
+        debug!("registering update: {:?}", content);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
             let mut txn = store.wtxn()?;
@@ -39,6 +49,7 @@ impl TaskStore {
 
             Ok(task)
         }).await??;
+
 
         self.pending_queue.write().await.push_back(task.id);
 
@@ -112,12 +123,17 @@ pub mod test {
 
     use nelson::Mocker;
 
+    #[derive(Clone)]
     pub enum MockTaskStore {
         Real(TaskStore),
         Mock(Arc<Mocker>),
     }
 
     impl MockTaskStore {
+        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+            Ok(Self::Real(TaskStore::new(path, size)?))
+        }
+
         pub fn mock(mocker: Mocker) -> Self {
             Self::Mock(Arc::new(mocker))
         }
