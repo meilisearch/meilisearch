@@ -135,7 +135,7 @@ mod segment {
                     "database_size": stats.database_size,
                     "indexes_number": stats.indexes.len(),
                     "documents_number": number_of_documents,
-                    "start_since_days": FIRST_START_TIMESTAMP.elapsed().as_secs() / 60 * 60 * 24, // one day
+                    "start_since_days": FIRST_START_TIMESTAMP.elapsed().as_secs() / (60 * 60 * 24), // one day
                 },
                 "infos": infos,
             })
