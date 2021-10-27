@@ -27,7 +27,7 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
                 .replace("/", "-")
         })
         .zip(MEILISEARCH_CONFIG_PATH.as_ref())
-        .map(|(filename, config_path)| config_path.join(filename))
+        .map(|(filename, config_path)| config_path.join(filename.trim_start_matches('-')))
 }
 
 /// Look for the instance-uid in the `data.ms` or in `~/.config/MeiliSearch/path-to-db-instance-uid`
