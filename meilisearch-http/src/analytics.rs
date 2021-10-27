@@ -338,6 +338,7 @@ mod segment {
                     lock.primary_keys.insert(primary_key);
                 }
                 lock.index_creation |= index_creation;
+                lock.updated = true;
                 // drop the lock here
             });
         }
@@ -522,7 +523,7 @@ mod segment {
 
     impl DocumentsBatcher {
         pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
-            if self.updated {
+            if !self.updated {
                 None
             } else {
                 let context = Some(json!({ "user-agent": self.user_agents}));
