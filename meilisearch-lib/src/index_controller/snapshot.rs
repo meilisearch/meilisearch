@@ -81,7 +81,7 @@ where
             .snapshot_path
             .join(format!("{}.snapshot", self.db_name));
         let snapshot_path = spawn_blocking(move || -> anyhow::Result<PathBuf> {
-            let temp_snapshot_file = tempfile::NamedTempFile::new()?;
+            let temp_snapshot_file = tempfile::NamedTempFile::new_in(&snapshot_dir)?;
             let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
             crate::compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
             temp_snapshot_file.persist(&snapshot_path)?;

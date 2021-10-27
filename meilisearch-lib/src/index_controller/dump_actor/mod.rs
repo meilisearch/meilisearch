@@ -253,7 +253,7 @@ where
         UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new()?;
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.path)?;
             to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 

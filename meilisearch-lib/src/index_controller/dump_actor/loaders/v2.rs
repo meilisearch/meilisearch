@@ -43,8 +43,9 @@ pub fn load_dump(
         patch_settings(settings_path)?;
     }
 
-    let update_path = src.as_ref().join("updates/data.jsonl");
-    patch_updates(update_path)?;
+    let update_dir = src.as_ref().join("updates");
+    let update_path = update_dir.join("data.jsonl");
+    patch_updates(update_dir, update_path)?;
 
     v3::load_dump(
         meta,
@@ -69,7 +70,7 @@ fn patch_settings(path: impl AsRef<Path>) -> anyhow::Result<()> {
     // We first deserialize the dump meta into a serde_json::Value and change
     // the custom ranking rules settings from the old format to the new format.
     if let Some(ranking_rules) = meta.pointer_mut("/settings/rankingRules") {
-        patch_custon_ranking_rules(ranking_rules);
+        patch_custom_ranking_rules(ranking_rules);
     }
 
     let mut meta_file = OpenOptions::new().truncate(true).write(true).open(path)?;
@@ -79,8 +80,8 @@ fn patch_settings(path: impl AsRef<Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn patch_updates(path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let mut output_update_file = NamedTempFile::new()?;
+fn patch_updates(dir: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let mut output_update_file = NamedTempFile::new_in(&dir)?;
     let update_file = File::open(&path)?;
 
     let stream = Deserializer::from_reader(update_file).into_iter::<compat::UpdateEntry>();
@@ -104,7 +105,7 @@ fn patch_updates(path: impl AsRef<Path>) -> anyhow::Result<()> {
 ///
 /// This is done for compatibility reasons, and to avoid a new dump version,
 /// since the new syntax was introduced soon after the new dump version.
-fn patch_custon_ranking_rules(ranking_rules: &mut Value) {
+fn patch_custom_ranking_rules(ranking_rules: &mut Value) {
     *ranking_rules = match ranking_rules.take() {
         Value::Array(values) => values
             .into_iter()

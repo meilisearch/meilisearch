@@ -46,10 +46,6 @@ async fn main() -> anyhow::Result<()> {
 
     let meilisearch = setup_meilisearch(&opt)?;
 
-    // Setup the temp directory to be in the db folder. This is important, since temporary file
-    // don't support to be persisted accross filesystem boundaries.
-    meilisearch_http::setup_temp_dir(&opt.db_path)?;
-
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     if !opt.no_analytics {
         let analytics_data = meilisearch.clone();

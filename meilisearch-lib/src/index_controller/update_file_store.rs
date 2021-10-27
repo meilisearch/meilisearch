@@ -107,7 +107,7 @@ impl UpdateFileStore {
     ///
     /// A call to `persist` is needed to persist the file in the database.
     pub fn new_update(&self) -> Result<(Uuid, UpdateFile)> {
-        let file = NamedTempFile::new()?;
+        let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::new_v4();
         let path = self.path.join(uuid.to_string());
         let update_file = UpdateFile { file, path };
@@ -141,7 +141,7 @@ impl UpdateFileStore {
         dst.push(&uuid_string);
 
         let update_file = File::open(update_file_path)?;
-        let mut dst_file = NamedTempFile::new()?;
+        let mut dst_file = NamedTempFile::new_in(&dump_path)?;
         let mut document_reader = DocumentBatchReader::from_reader(update_file)?;
 
         let mut document_buffer = Map::new();
@@ -149,7 +149,7 @@ impl UpdateFileStore {
         // for jsonl for example...)
         while let Some((index, document)) = document_reader.next_document_with_index()? {
             for (field_id, content) in document.iter() {
-                if let Some(field_name) = index.get_by_left(&field_id) {
+                if let Some(field_name) = index.name(field_id) {
                     let content = serde_json::from_slice(content)?;
                     document_buffer.insert(field_name.to_string(), content);
                 }

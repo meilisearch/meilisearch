@@ -1,0 +1,76 @@
+name: Publish aarch64 binary
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish-aarch64:
+    name: Publish to Github
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build: aarch64
+            os: ubuntu-18.04
+            target: aarch64-unknown-linux-gnu
+            linker: gcc-aarch64-linux-gnu
+            use-cross: true
+            asset_name: meilisearch-linux-aarch64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Installing Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: APT update
+        run: |
+          sudo apt update
+
+      - name: Install target specific tools
+        if: matrix.use-cross
+        run: |
+          sudo apt-get install -y ${{ matrix.linker }}
+
+      - name: Configure target aarch64 GNU
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        ## Environment variable is not passed using env:
+        ## LD gold won't work with MUSL
+        # env:
+        #   JEMALLOC_SYS_WITH_LG_PAGE: 16
+        #   RUSTFLAGS: '-Clink-arg=-fuse-ld=gold'
+        run: |
+          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
+          echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
+          echo RUSTFLAGS="-Clink-arg=-fuse-ld=gold" >> $GITHUB_ENV
+
+      - name: Cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          use-cross: ${{ matrix.use-cross }}
+          args: --release --target ${{ matrix.target }}
+
+      - name: List target output files
+        run: ls -lR ./target
+
+      - name: Upload the binary to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.PUBLISH_TOKEN }}
+          file: target/${{ matrix.target }}/release/meilisearch
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}
