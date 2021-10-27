@@ -63,6 +63,7 @@ mod segment {
     use meilisearch_lib::index_controller::Stats;
     use meilisearch_lib::MeiliSearch;
     use once_cell::sync::Lazy;
+    use regex::Regex;
     use segment::message::{Identify, Track, User};
     use segment::{AutoBatcher, Batcher, HttpClient};
     use serde_json::{json, Value};
@@ -82,7 +83,7 @@ mod segment {
             .map(|header| header.to_str().ok())
             .flatten()
             .unwrap_or("unknown")
-            .split(";")
+            .split(';')
             .map(str::trim)
             .map(ToString::to_string)
             .collect()
@@ -252,15 +253,17 @@ mod segment {
             // to avoid blocking the search we are going to do the heavier computation and take the
             // batcher's mutex in an async task
             tokio::spawn(async move {
+                const RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
+
                 let filtered = filter.is_some() as usize;
                 let syntax = match filter.as_ref() {
                     Some(Value::String(_)) => "string".to_string(),
                     Some(Value::Array(values)) => {
-                        if values.iter().map(|v| v.to_string()).any(|s| {
-                            s.contains(['=', '<', '>', '!'].as_ref())
-                                || s.contains("_geoRadius")
-                                || s.contains("TO")
-                        }) {
+                        if values
+                            .iter()
+                            .map(|v| v.to_string())
+                            .any(|s| RE.is_match(&s))
+                        {
                             "mixed".to_string()
                         } else {
                             "array".to_string()
@@ -270,20 +273,7 @@ mod segment {
                 };
                 let stringified_filters = filter.map_or(String::new(), |v| v.to_string());
                 let filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
-                let filter_number_of_criteria = stringified_filters
-                    .split("!=")
-                    .map(|s| s.split("<="))
-                    .flatten()
-                    .map(|s| s.split(">="))
-                    .flatten()
-                    .map(|s| s.split(['=', '<', '>', '!'].as_ref()))
-                    .flatten()
-                    .map(|s| s.split("_geoRadius("))
-                    .flatten()
-                    .map(|s| s.split("TO"))
-                    .flatten()
-                    .count()
-                    - 1;
+                let filter_number_of_criteria = RE.split(&stringified_filters).count();
 
                 let mut search_batcher = batcher.lock().await;
                 user_agent.into_iter().for_each(|ua| {
