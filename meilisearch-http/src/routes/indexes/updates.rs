@@ -13,15 +13,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("{update_id}").route(web::get().to(get_update_status)));
 }
 
-/*
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct UpdateIndexRequest {
-    uid: Option<String>,
-    primary_key: Option<String>,
-}
-*/
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateIndexResponse {
