@@ -755,39 +755,13 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
         let rtxn = index.read_txn().unwrap();
 
-        let error = FilterCondition::from_str(&rtxn, &index, "_geo = 12").unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, "_geo = 12").is_err());
 
-        let error =
-            FilterCondition::from_str(&rtxn, &index, r#"_geoDistance <= 1000"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoDistance` is a reserved keyword and thus can't be used as a filter expression."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoDistance <= 1000"#).is_err());
 
-        let error = FilterCondition::from_str(&rtxn, &index, r#"_geoPoint > 5"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoPoint > 5"#).is_err());
 
-        let error =
-            FilterCondition::from_str(&rtxn, &index, r#"_geoPoint(12, 16) > 5"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoPoint(12, 16) > 5"#).is_err());
     }
 
     #[test]
@@ -803,15 +777,6 @@ mod tests {
         builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        // _geo is not filterable
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 12, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("attribute `_geo` is not filterable, available filterable attributes are:"),);
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
