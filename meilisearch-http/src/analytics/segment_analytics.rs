@@ -297,25 +297,27 @@ impl SegmentAnalytics {
 }
 
 impl super::Analytics for SegmentAnalytics {
-    fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>) {
-        let content_type = request
+    fn publish(&'static self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
+        let user_agent = request
             .map(|req| req.headers().get(USER_AGENT))
             .flatten()
-            .map(|header| header.to_str().unwrap_or("unknown").to_string());
+            .map(|header| header.to_str().unwrap_or("unknown"))
+            .map(|s| s.split(';').map(str::trim).collect::<Vec<&str>>());
+
+        send["user-agent"] = json!(user_agent);
 
         tokio::spawn(async move {
             let _ = self
-                    .batcher
-                    .lock()
-                    .await
-                    .push(Track {
-                        user: self.user.clone(),
-                        event: event_name.clone(),
-                        context: content_type.map(|user_agent| json!({ "user-agent": user_agent.split(";").map(str::trim).collect::<Vec<&str>>() })),
-                        properties: send,
-                        ..Default::default()
-                    })
-                    .await;
+                .batcher
+                .lock()
+                .await
+                .push(Track {
+                    user: self.user.clone(),
+                    event: event_name.clone(),
+                    properties: send,
+                    ..Default::default()
+                })
+                .await;
         });
     }
 
@@ -419,11 +421,11 @@ impl SearchBatcher {
         if self.total_received == 0 {
             None
         } else {
-            let context = Some(json!({ "user-agent": self.user_agents}));
             let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
             self.time_spent.drain(percentile_99th as usize..);
 
             let properties = json!({
+                "user-agent": self.user_agents,
                 "requests": {
                     "99th_response_time":  format!("{:.2}", self.time_spent.iter().sum::<usize>() as f64 / self.time_spent.len() as f64),
                     "total_succeeded": self.total_succeeded,
@@ -451,7 +453,6 @@ impl SearchBatcher {
             Some(Track {
                 user: user.clone(),
                 event: event_name.to_string(),
-                context,
                 properties,
                 ..Default::default()
             })
@@ -477,9 +478,8 @@ impl DocumentsBatcher {
         if !self.updated {
             None
         } else {
-            let context = Some(json!({ "user-agent": self.user_agents}));
-
             let properties = json!({
+                "user-agent": self.user_agents,
                 "payload_type": self.content_types,
                 "primary_key": self.primary_keys,
                 "index_creation": self.index_creation,
@@ -488,7 +488,6 @@ impl DocumentsBatcher {
             Some(Track {
                 user: user.clone(),
                 event: event_name.to_string(),
-                context,
                 properties,
                 ..Default::default()
             })
