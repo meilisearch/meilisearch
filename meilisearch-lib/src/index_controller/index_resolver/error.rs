@@ -22,7 +22,7 @@ pub enum IndexResolverError {
     #[error("Internal Error: `{0}`")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("Internal Error: Index uuid `{0}` is already assigned.")]
-    UUIdAlreadyExists(Uuid),
+    UuidAlreadyExists(Uuid),
     #[error("{0}")]
     Milli(#[from] milli::Error),
     #[error("`{0}` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).")]
@@ -60,7 +60,7 @@ impl ErrorCode for IndexResolverError {
             IndexResolverError::UnexistingIndex(_) => Code::IndexNotFound,
             IndexResolverError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,
             IndexResolverError::Internal(_) => Code::Internal,
-            IndexResolverError::UUIdAlreadyExists(_) => Code::Internal,
+            IndexResolverError::UuidAlreadyExists(_) => Code::Internal,
             IndexResolverError::Milli(e) => MilliError(e).error_code(),
             IndexResolverError::BadlyFormatted(_) => Code::InvalidIndexUid,
         }
