@@ -62,7 +62,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
     /// This method must be called after the document addition is terminated. It will put the
     /// metadata at the end of the file, and write the metadata offset at the beginning on the
     /// file.
-    pub fn finish(self) -> Result<(), Error> {
+    pub fn finish(self) -> Result<usize, Error> {
         let Self { inner: ByteCounter { mut writer, count: offset }, index, count, .. } = self;
 
         let meta = DocumentsMetadata { count, index };
@@ -74,7 +74,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
 
         writer.flush()?;
 
-        Ok(())
+        Ok(count)
     }
 
     /// Extends the builder with json documents from a reader.
