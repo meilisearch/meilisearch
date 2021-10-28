@@ -1665,6 +1665,7 @@ dependencies = [
  "log",
  "meilisearch-error",
  "meilisearch-lib",
+ "meilisearch-tasks",
  "meilisearch-tokenizer",
  "mime",
  "num_cpus",
@@ -1759,6 +1760,19 @@ dependencies = [
  "uuid",
  "walkdir",
  "whoami",
+]
+
+[[package]]
+name = "meilisearch-tasks"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "heed",
+ "log",
+ "serde",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

@@ -8,11 +8,8 @@ use std::path::Path;
 use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
-<<<<<<< HEAD
 use log::error;
-=======
 use meilisearch_tasks::task::TaskResult;
->>>>>>> e7be3e12 (integrate meilisearch_tasks in meilisearch_lib)
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
@@ -172,7 +169,6 @@ where
         if !is_index_uid_valid(&uid) {
             return Err(IndexResolverError::BadlyFormatted(uid));
         }
-<<<<<<< HEAD
         let uuid = Uuid::new_v4();
         let index = self.index_store.create(uuid, primary_key).await?;
         match self.index_uuid_store.insert(uid, uuid).await {
@@ -187,18 +183,6 @@ where
                 Err(e)
             }
             Ok(()) => Ok(index),
-=======
-
-        match self.get_index(uid).await {
-            Ok(index) => Ok(index),
-            Err(IndexResolverError::UnexistingIndex(uid)) => {
-                let uuid = Uuid::new_v4();
-                let index = self.index_store.create(uuid, primary_key).await?;
-                self.index_uuid_store.insert(uid, uuid).await?;
-                Ok(index)
-            }
-            Err(e) => Err(e)
->>>>>>> e7be3e12 (integrate meilisearch_tasks in meilisearch_lib)
         }
     }
 
