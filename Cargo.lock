@@ -1783,7 +1783,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.19.0"
-source = "git+https://github.com/meilisearch/milli.git?branch=update-error-format#3599df77f05f4e89a28c0160411e95a840e0b227"
+source = "git+https://github.com/meilisearch/milli.git?branch=update-error-format#ed6db196810f78632758fc386f8a7f5f6cd6f357"
 dependencies = [
  "bimap",
  "bincode",
