@@ -122,14 +122,14 @@ Thank you for using MeiliSearch!
 
 We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
-Anonymous telemetry:   \"Enabled\""
+Anonymous telemetry:\t\"Enabled\""
             );
         }
     }
 
     let analytics = analytics.to_string();
     if !analytics.is_empty() {
-        eprintln!("Instance UID:\t\"{}\"", analytics);
+        eprintln!("Instance UID:\t\t\"{}\"", analytics);
     }
 
     eprintln!();
