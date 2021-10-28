@@ -99,7 +99,7 @@ make_setting_route!(
         analytics.publish(
             "FilterableAttributes Updated".to_string(),
             json!({
-                "total": setting.as_ref().map(|filter| filter.len()),
+                "total": setting.as_ref().map(|filter| filter.len()).unwrap_or(0),
                 "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
             }),
             Some(req),
@@ -119,7 +119,7 @@ make_setting_route!(
         analytics.publish(
             "SortableAttributes Updated".to_string(),
             json!({
-                "total": setting.as_ref().map(|sort| sort.len()),
+                "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
                 "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
             }),
             Some(req),
@@ -221,11 +221,11 @@ pub async fn update_all(
                 "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
             },
            "sortable_attributes": {
-                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
+                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()).unwrap_or(0),
                 "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")).unwrap_or(false),
             },
            "filterable_attributes": {
-                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
+                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()).unwrap_or(0),
                 "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")).unwrap_or(false),
             },
         }),
