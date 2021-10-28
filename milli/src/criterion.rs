@@ -19,21 +19,25 @@ impl fmt::Display for CriterionError {
         match self {
             Self::InvalidName { name } => write!(f, "invalid ranking rule {}", name),
             Self::ReservedName { name } => {
-                write!(f, "{} is a reserved keyword and thus can't be used as a ranking rule", name)
+                write!(
+                    f,
+                    "`{}` is a reserved keyword and thus can't be used as a ranking rule",
+                    name
+                )
             }
             Self::ReservedNameForSort { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a ranking rule. \
-{} can only be used for sorting at search time",
+                    "`{}` is a reserved keyword and thus can't be used as a ranking rule. \
+`{}` can only be used for sorting at search time",
                     name, name
                 )
             }
             Self::ReservedNameForFilter { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a ranking rule. \
-{} can only be used for filtering at search time",
+                    "`{}` is a reserved keyword and thus can't be used as a ranking rule. \
+`{}` can only be used for filtering at search time",
                     name, name
                 )
             }

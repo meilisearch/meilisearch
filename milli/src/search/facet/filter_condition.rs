@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use either::Either;
 use heed::types::DecodeIgnore;
-use itertools::Itertools;
 use log::debug;
 use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
@@ -17,7 +16,7 @@ use self::FilterCondition::*;
 use self::Operator::*;
 use super::parser::{FilterParser, Rule, PREC_CLIMBER};
 use super::FacetNumberRange;
-use crate::error::UserError;
+use crate::error::FilterError;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
@@ -117,8 +116,7 @@ impl FilterCondition {
     ) -> Result<FilterCondition> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_fields = index.filterable_fields(rtxn)?;
-        let lexed =
-            FilterParser::parse(Rule::prgm, expression).map_err(UserError::InvalidFilter)?;
+        let lexed = FilterParser::parse(Rule::prgm, expression).map_err(FilterError::Syntax)?;
         FilterCondition::from_pairs(&fields_ids_map, &filterable_fields, lexed)
     }
 
@@ -169,15 +167,11 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         if !filterable_fields.contains("_geo") {
-            return Err(UserError::InvalidFilterAttribute(PestError::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!(
-                    "attribute `_geo` is not filterable, available filterable attributes are: {}",
-                    filterable_fields.iter().join(", "),
-                ),
-                },
-                item.as_span(),
-            )))?;
+            return Err(FilterError::InvalidAttribute {
+                field: "_geo".to_string(),
+                valid_fields: filterable_fields.into_iter().cloned().collect(),
+            }
+            .into());
         }
         let mut items = item.into_inner();
         let fid = match fields_ids_map.id("_geo") {
@@ -194,27 +188,27 @@ impl FilterCondition {
             .map(|param| (param.clone(), param.as_span()))
             .map(|(param, span)| pest_parse(param).0.map(|arg| (arg, span)))
             .collect::<StdResult<Vec<(f64, _)>, _>>()
-            .map_err(UserError::InvalidFilter)?;
+            .map_err(FilterError::Syntax)?;
         if parameters.len() != 3 {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
+            return Err(FilterError::Syntax(PestError::new_from_span(
                         ErrorVariant::CustomError {
-                            message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
+                            message: format!("The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"),
                         },
                         // we want to point to the last parameters and if there was no parameters we
                         // point to the parenthesis
                         parameters.last().map(|param| param.1.clone()).unwrap_or(param_span),
-            )))?;
+            )).into());
         }
         let (lat, lng, distance) = (&parameters[0], &parameters[1], parameters[2].0);
         if !(-90.0..=90.0).contains(&lat.0) {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
+            return Err(FilterError::Syntax(PestError::new_from_span(
                 ErrorVariant::CustomError {
                     message: format!("Latitude must be contained between -90 and 90 degrees."),
                 },
                 lat.1.clone(),
             )))?;
         } else if !(-180.0..=180.0).contains(&lng.0) {
-            return Err(UserError::InvalidFilter(PestError::new_from_span(
+            return Err(FilterError::Syntax(PestError::new_from_span(
                 ErrorVariant::CustomError {
                     message: format!("Longitude must be contained between -180 and 180 degrees."),
                 },
@@ -230,9 +224,7 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
@@ -240,8 +232,8 @@ impl FilterCondition {
         let (lresult, _) = pest_parse(items.next().unwrap());
         let (rresult, _) = pest_parse(items.next().unwrap());
 
-        let lvalue = lresult.map_err(UserError::InvalidFilter)?;
-        let rvalue = rresult.map_err(UserError::InvalidFilter)?;
+        let lvalue = lresult.map_err(FilterError::Syntax)?;
+        let rvalue = rresult.map_err(FilterError::Syntax)?;
 
         Ok(Operator(fid, Between(lvalue, rvalue)))
     }
@@ -252,9 +244,7 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
@@ -272,16 +262,14 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
+        let value = result.map_err(FilterError::Syntax)?;
 
         Ok(Operator(fid, GreaterThan(value)))
     }
@@ -292,16 +280,14 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
+        let value = result.map_err(FilterError::Syntax)?;
 
         Ok(Operator(fid, GreaterThanOrEqual(value)))
     }
@@ -312,16 +298,14 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
+        let value = result.map_err(FilterError::Syntax)?;
 
         Ok(Operator(fid, LowerThan(value)))
     }
@@ -332,16 +316,14 @@ impl FilterCondition {
         item: Pair<Rule>,
     ) -> Result<FilterCondition> {
         let mut items = item.into_inner();
-        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)
-            .map_err(UserError::InvalidFilterAttribute)?
-        {
+        let fid = match field_id(fields_ids_map, filterable_fields, &mut items)? {
             Some(fid) => fid,
             None => return Ok(Empty),
         };
 
         let value = items.next().unwrap();
         let (result, _svalue) = pest_parse(value);
-        let value = result.map_err(UserError::InvalidFilter)?;
+        let value = result.map_err(FilterError::Syntax)?;
 
         Ok(Operator(fid, LowerThanOrEqual(value)))
     }
@@ -598,43 +580,27 @@ fn field_id(
     fields_ids_map: &FieldsIdsMap,
     filterable_fields: &HashSet<String>,
     items: &mut Pairs<Rule>,
-) -> StdResult<Option<FieldId>, PestError<Rule>> {
+) -> StdResult<Option<FieldId>, FilterError> {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
     if key.as_rule() == Rule::reserved {
-        let message = match key.as_str() {
+        return match key.as_str() {
             key if key.starts_with("_geoPoint") => {
-                format!(
-                    "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. \
-                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
-                )
+                Err(FilterError::ReservedKeyword { field: "_geoPoint".to_string(), context: Some("Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.".to_string()) })
             }
-            key @ "_geo" => {
-                format!(
-                    "`{}` is a reserved keyword and thus can't be used as a filter expression. \
-                    Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates.",
-                    key
-                )
+            "_geo" => {
+                Err(FilterError::ReservedKeyword { field: "_geo".to_string(), context: Some("Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.".to_string()) })
             }
-            key => format!(
-                "`{}` is a reserved keyword and thus can't be used as a filter expression.",
-                key
-            ),
+            key =>
+                Err(FilterError::ReservedKeyword { field: key.to_string(), context: None }),
         };
-        return Err(PestError::new_from_span(ErrorVariant::CustomError { message }, key.as_span()));
     }
 
     if !filterable_fields.contains(key.as_str()) {
-        return Err(PestError::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!(
-                    "attribute `{}` is not filterable, available filterable attributes are: {}.",
-                    key.as_str(),
-                    filterable_fields.iter().join(", "),
-                ),
-            },
-            key.as_span(),
-        ));
+        return Err(FilterError::InvalidAttribute {
+            field: key.as_str().to_string(),
+            valid_fields: filterable_fields.into_iter().cloned().collect(),
+        });
     }
 
     Ok(fields_ids_map.id(key.as_str()))
@@ -789,39 +755,13 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
         let rtxn = index.read_txn().unwrap();
 
-        let error = FilterCondition::from_str(&rtxn, &index, "_geo = 12").unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, "_geo = 12").is_err());
 
-        let error =
-            FilterCondition::from_str(&rtxn, &index, r#"_geoDistance <= 1000"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoDistance` is a reserved keyword and thus can't be used as a filter expression."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoDistance <= 1000"#).is_err());
 
-        let error = FilterCondition::from_str(&rtxn, &index, r#"_geoPoint > 5"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoPoint > 5"#).is_err());
 
-        let error =
-            FilterCondition::from_str(&rtxn, &index, r#"_geoPoint(12, 16) > 5"#).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` built-in rule to filter on `_geo` field coordinates."),
-            "{}",
-            error.to_string()
-        );
+        assert!(FilterCondition::from_str(&rtxn, &index, r#"_geoPoint(12, 16) > 5"#).is_err());
     }
 
     #[test]
@@ -837,15 +777,6 @@ mod tests {
         builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
         builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        // _geo is not filterable
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 12, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("attribute `_geo` is not filterable, available filterable attributes are:"),);
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, 0);
@@ -898,26 +829,34 @@ mod tests {
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius don't have any parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius don't have enough parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2)");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius have too many parameters
         let result =
             FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius have a bad latitude
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-100, 150, 10)");

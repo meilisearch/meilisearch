@@ -28,12 +28,12 @@ impl fmt::Display for AscDescError {
                 write!(f, "Longitude must be contained between -180 and 180 degrees.",)
             }
             Self::InvalidSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for {}.", name)
+                write!(f, "Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
             }
             Self::ReservedKeyword { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a asc/desc rule.",
+                    "`{}` is a reserved keyword and thus can't be used as a asc/desc rule.",
                     name
                 )
             }
@@ -192,18 +192,18 @@ impl fmt::Display for SortError {
             Self::BadGeoPointUsage { name } => {
                 write!(
                     f,
-                    "invalid syntax for the `_geoPoint` parameter: `{}`. \
-                    Usage: `_geoPoint(latitude, longitude):asc`.",
+                    "Invalid syntax for the geo parameter: expected expression formated like \
+                    `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{}`.",
                     name
                 )
             }
             Self::InvalidName { name } => {
-                write!(f, "invalid syntax for the sort parameter `{}`.", name)
+                write!(f, "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
             }
             Self::ReservedName { name } => {
                 write!(
                     f,
-                    "{} is a reserved keyword and thus can't be used as a sort expression.",
+                    "`{}` is a reserved keyword and thus can't be used as a sort expression.",
                     name
                 )
             }
@@ -211,7 +211,7 @@ impl fmt::Display for SortError {
                 write!(
                     f,
                     "`{}` is a reserved keyword and thus can't be used as a sort expression. \
-                    Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates.",
+                    Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
                     name,
                 )
             }
@@ -315,52 +315,6 @@ mod tests {
                 req,
                 res,
                 expected_error
-            );
-        }
-    }
-
-    #[test]
-    fn sort_error_message() {
-        let errors = [
-            (
-                AscDescError::InvalidSyntax { name: S("truc:machin") },
-                S("invalid syntax for the sort parameter `truc:machin`."),
-            ),
-            (
-                AscDescError::InvalidSyntax { name: S("hello:world") },
-                S("invalid syntax for the sort parameter `hello:world`."),
-            ),
-            (
-                AscDescError::ReservedKeyword { name: S("_geo") },
-                S("`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates."),
-            ),
-            (
-                AscDescError::ReservedKeyword { name: S("_geoDistance") },
-                S("_geoDistance is a reserved keyword and thus can't be used as a sort expression.")
-            ),
-            (
-                AscDescError::ReservedKeyword { name: S("_geoRadius(12, 13)") },
-                S("`_geoRadius` is a reserved keyword and thus can't be used as a sort expression. Use the `_geoPoint(latitude, longitude)` built-in rule to sort on `_geo` field coordinates."),
-            ),
-            (
-                AscDescError::InvalidLatitude,
-                S("Latitude must be contained between -90 and 90 degrees."),
-            ),
-            (
-                AscDescError::InvalidLongitude,
-                S("Longitude must be contained between -180 and 180 degrees."),
-            ),
-        ];
-
-        for (asc_desc_error, expected_message) in errors {
-            let sort_error = SortError::from(asc_desc_error);
-            assert_eq!(
-                sort_error.to_string(),
-                expected_message,
-                "was expecting {} for the error {:?} but instead got {}",
-                expected_message,
-                sort_error,
-                sort_error.to_string()
             );
         }
     }

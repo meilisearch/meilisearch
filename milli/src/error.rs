@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::{fmt, io, str};
@@ -58,22 +58,27 @@ pub enum UserError {
     CriterionError(CriterionError),
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
-    InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
-    InvalidFilter(pest::error::Error<ParserRule>),
-    InvalidFilterAttribute(pest::error::Error<ParserRule>),
+    InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
+    InvalidFilter(FilterError),
     InvalidGeoField { document_id: Value, object: Value },
-    InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
+    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
     MaxDatabaseSizeReached,
-    MissingDocumentId { document: Object },
+    MissingDocumentId { primary_key: String, document: Object },
     MissingPrimaryKey,
     NoSpaceLeftOnDevice,
-    PrimaryKeyCannotBeChanged,
-    PrimaryKeyCannotBeReset,
+    PrimaryKeyCannotBeChanged(String),
     SerdeJson(serde_json::Error),
     SortError(SortError),
     UnknownInternalDocumentId { document_id: DocumentId },
+}
+
+#[derive(Debug)]
+pub enum FilterError {
+    InvalidAttribute { field: String, valid_fields: BTreeSet<String> },
+    ReservedKeyword { field: String, context: Option<String> },
+    Syntax(pest::error::Error<ParserRule>),
 }
 
 impl From<io::Error> for Error {
@@ -160,6 +165,12 @@ impl From<UserError> for Error {
     }
 }
 
+impl From<FilterError> for Error {
+    fn from(error: FilterError) -> Error {
+        Error::UserError(UserError::InvalidFilter(error))
+    }
+}
+
 impl From<SerializationError> for Error {
     fn from(error: SerializationError) -> Error {
         Error::InternalError(InternalError::Serialization(error))
@@ -169,7 +180,7 @@ impl From<SerializationError> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::InternalError(error) => write!(f, "internal: {}", error),
+            Self::InternalError(error) => write!(f, "internal: {}.", error),
             Self::IoError(error) => error.fmt(f),
             Self::UserError(error) => error.fmt(f),
         }
@@ -182,15 +193,15 @@ impl fmt::Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::DatabaseMissingEntry { db_name, key } => {
-                write!(f, "missing {} in the {} database", key.unwrap_or("key"), db_name)
+                write!(f, "Missing {} in the {} database.", key.unwrap_or("key"), db_name)
             }
             Self::FieldIdMapMissingEntry(error) => error.fmt(f),
             Self::Fst(error) => error.fmt(f),
             Self::GrenadInvalidCompressionType => {
-                f.write_str("invalid compression type have been specified to grenad")
+                f.write_str("Invalid compression type have been specified to grenad.")
             }
             Self::IndexingMergingKeys { process } => {
-                write!(f, "invalid merge while processing {}", process)
+                write!(f, "Invalid merge while processing {}.", process)
             }
             Self::Serialization(error) => error.fmt(f),
             Self::InvalidDatabaseTyping => HeedError::InvalidDatabaseTyping.fmt(f),
@@ -208,67 +219,100 @@ impl StdError for InternalError {}
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
+            Self::AttributeLimitReached => f.write_str("Maximum number of attributes reached."),
             Self::CriterionError(error) => write!(f, "{}", error),
-            Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),
+            Self::DocumentLimitReached => f.write_str("Maximum number of documents reached."),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
                 let name_list =
                     invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
                 write!(
                     f,
-                    "invalid facet distribution, the fields {} are not set as filterable",
+                    "Invalid facet distribution, the fields `{}` are not set as filterable.",
                     name_list
                 )
             }
             Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidGeoField { document_id, object } => write!(
                 f,
-                "the document with the id: {} contains an invalid _geo field: {}",
+                "The document with the id: `{}` contains an invalid _geo field: `{}`.",
                 document_id, object
             ),
             Self::InvalidDocumentId { document_id } => {
-                let json = serde_json::to_string(document_id).unwrap();
+                let document_id = match document_id {
+                    Value::String(id) => id.clone(),
+                    _ => document_id.to_string(),
+                };
                 write!(
                     f,
-                    "document identifier is invalid {}, \
-a document id can be of type integer or string \
-only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)",
-                    json
+                    "Document identifier `{}` is invalid. \
+A document identifier can be of type integer or string, \
+only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
+                    document_id
                 )
             }
-            Self::InvalidFilterAttribute(error) => error.fmt(f),
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
                 write!(
                     f,
-                    "Attribute {} is not sortable, available sortable attributes are: {}",
+                    "Attribute `{}` is not sortable. Available sortable attributes are: `{}`.",
                     field, valid_names
                 )
             }
             Self::SortRankingRuleMissing => f.write_str(
-                "You must specify where \"sort\" is listed in the \
-rankingRules setting to use the sort parameter at search time",
+                "The sort ranking rule must be specified in the \
+ranking rules settings to use the sort parameter at search time.",
             ),
-            Self::MissingDocumentId { document } => {
+            Self::MissingDocumentId { primary_key, document } => {
                 let json = serde_json::to_string(document).unwrap();
-                write!(f, "document doesn't have an identifier {}", json)
+                write!(f, "Document doesn't have a `{}` attribute: `{}`.", primary_key, json)
             }
-            Self::MissingPrimaryKey => f.write_str("missing primary key"),
-            Self::MaxDatabaseSizeReached => f.write_str("maximum database size reached"),
+            Self::MissingPrimaryKey => f.write_str("Missing primary key."),
+            Self::MaxDatabaseSizeReached => f.write_str("Maximum database size reached."),
             // TODO where can we find it instead of writing the text ourselves?
-            Self::NoSpaceLeftOnDevice => f.write_str("no space left on device"),
-            Self::InvalidStoreFile => f.write_str("store file is not a valid database file"),
-            Self::PrimaryKeyCannotBeChanged => {
-                f.write_str("primary key cannot be changed if the database contains documents")
-            }
-            Self::PrimaryKeyCannotBeReset => {
-                f.write_str("primary key cannot be reset if the database contains documents")
+            Self::NoSpaceLeftOnDevice => f.write_str("No space left on device."),
+            Self::InvalidStoreFile => f.write_str("Store file is not a valid database file."),
+            Self::PrimaryKeyCannotBeChanged(primary_key) => {
+                write!(f, "Index already has a primary key: `{}`.", primary_key)
             }
             Self::SerdeJson(error) => error.fmt(f),
             Self::SortError(error) => write!(f, "{}", error),
             Self::UnknownInternalDocumentId { document_id } => {
-                write!(f, "an unknown internal document id have been used ({})", document_id)
+                write!(f, "An unknown internal document id have been used: `{}`.", document_id)
+            }
+        }
+    }
+}
+
+impl fmt::Display for FilterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidAttribute { field, valid_fields } => write!(
+                f,
+                "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
+                field,
+                valid_fields
+                    .clone()
+                    .into_iter()
+                    .reduce(|left, right| left + "`, `" + &right)
+                    .unwrap_or_default()
+            ),
+            Self::ReservedKeyword { field, context: Some(context) } => {
+                write!(
+                    f,
+                    "`{}` is a reserved keyword and thus can't be used as a filter expression. {}",
+                    field, context
+                )
+            }
+            Self::ReservedKeyword { field, context: None } => {
+                write!(
+                    f,
+                    "`{}` is a reserved keyword and thus can't be used as a filter expression.",
+                    field
+                )
+            }
+            Self::Syntax(syntax_helper) => {
+                write!(f, "Invalid syntax for the filter parameter: `{}`.", syntax_helper)
             }
         }
     }

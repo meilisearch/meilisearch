@@ -465,7 +465,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     self.index.put_primary_key(self.wtxn, primary_key)?;
                     Ok(())
                 } else {
-                    Err(UserError::PrimaryKeyCannotBeChanged.into())
+                    let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
+                    Err(UserError::PrimaryKeyCannotBeChanged(primary_key.to_string()).into())
                 }
             }
             Setting::Reset => {
@@ -473,7 +474,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     self.index.delete_primary_key(self.wtxn)?;
                     Ok(())
                 } else {
-                    Err(UserError::PrimaryKeyCannotBeReset.into())
+                    let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
+                    Err(UserError::PrimaryKeyCannotBeChanged(primary_key.to_string()).into())
                 }
             }
             Setting::NotSet => Ok(()),
@@ -1105,7 +1107,7 @@ mod tests {
         builder.reset_primary_key();
 
         let err = builder.execute(|_, _| ()).unwrap_err();
-        assert!(matches!(err, Error::UserError(UserError::PrimaryKeyCannotBeReset)));
+        assert!(matches!(err, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
         wtxn.abort().unwrap();
 
         // But if we clear the database...
