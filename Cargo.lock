@@ -1782,8 +1782,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.19.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.19.0#d7943fe22553b8205b86c32a0f2656d9e42de351"
+version = "0.20.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.20.0#5a6d22d4ec51dda0aba94b314e1b5a38af9400a2"
 dependencies = [
  "bimap",
  "bincode",

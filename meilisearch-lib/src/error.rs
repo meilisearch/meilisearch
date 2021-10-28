@@ -37,19 +37,17 @@ impl ErrorCode for MilliError<'_> {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
                     | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidDocumentId { .. }
                     | UserError::InvalidStoreFile
                     | UserError::NoSpaceLeftOnDevice
-                    | UserError::DocumentLimitReached => Code::Internal,
+                    | UserError::DocumentLimitReached
+                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
-                    UserError::InvalidFilterAttribute(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                    UserError::InvalidDocumentId { .. } => Code::InvalidDocumentId,
                     UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
-                    UserError::PrimaryKeyCannotBeChanged => Code::PrimaryKeyAlreadyPresent,
-                    UserError::PrimaryKeyCannotBeReset => Code::PrimaryKeyAlreadyPresent,
+                    UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
                     UserError::SortRankingRuleMissing => Code::Sort,
-                    UserError::UnknownInternalDocumentId { .. } => Code::DocumentNotFound,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::Sort,
                     UserError::CriterionError(_) => Code::InvalidRankingRule,

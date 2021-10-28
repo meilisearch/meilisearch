@@ -731,7 +731,7 @@ mod test {
                 mocker
                     .when::<Processing, std::result::Result<Processed, Failed>>("handle_update")
                     .once()
-                    .then(|update| Err(update.fail(IndexError::ExistingPrimaryKey)));
+                    .then(|update| Err(update.fail(IndexError::DocumentNotFound("1".to_string()))));
 
                 Box::pin(ok(Some(Index::faux(mocker))))
             });

@@ -9,7 +9,7 @@ pub type Result<T> = std::result::Result<T, DumpActorError>;
 pub enum DumpActorError {
     #[error("Another dump is already in progress")]
     DumpAlreadyRunning,
-    #[error("Dump `{0}` not found")]
+    #[error("Dump `{0}` not found.")]
     DumpDoesNotExist(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),

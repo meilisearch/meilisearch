@@ -100,7 +100,7 @@ impl HeedUuidStore {
         let mut txn = env.write_txn()?;
 
         if db.get(&txn, &name)?.is_some() {
-            return Err(IndexResolverError::IndexAlreadyExists);
+            return Err(IndexResolverError::IndexAlreadyExists(name));
         }
 
         db.put(&mut txn, &name, uuid.as_bytes())?;

@@ -222,10 +222,11 @@ mod test {
         setup();
 
         let mut uuid_store = MockUuidStore::new();
-        uuid_store
-            .expect_snapshot()
-            .once()
-            .returning(move |_| Box::pin(err(IndexResolverError::IndexAlreadyExists)));
+        uuid_store.expect_snapshot().once().returning(move |_| {
+            Box::pin(err(IndexResolverError::IndexAlreadyExists(
+                "test".to_string(),
+            )))
+        });
 
         let mut index_store = MockIndexStore::new();
         index_store.expect_get().never();
@@ -264,9 +265,9 @@ mod test {
         let mut indexes = uuids.clone().into_iter().map(|uuid| {
             let mocker = Mocker::default();
             // index returns random error
-            mocker
-                .when("snapshot")
-                .then(|_: &Path| -> IndexResult<()> { Err(IndexError::ExistingPrimaryKey) });
+            mocker.when("snapshot").then(|_: &Path| -> IndexResult<()> {
+                Err(IndexError::DocumentNotFound("1".to_string()))
+            });
             mocker.when("uuid").then(move |_: ()| uuid);
             Index::faux(mocker)
         });

@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
-            .0.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", "))]
+            .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]
     MissingContentType(Vec<String>),
     #[error(
-        "The Content-Type \"{0}\" is invalid. Accepted values for the Content-Type header are: {}",
-        .1.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", ")
+        "The Content-Type `{0}` is invalid. Accepted values for the Content-Type header are: {}",
+        .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
 }
@@ -42,8 +42,11 @@ pub struct ResponseError {
     #[serde(skip)]
     code: StatusCode,
     message: String,
+    #[serde(rename = "code")]
     error_code: String,
+    #[serde(rename = "type")]
     error_type: String,
+    #[serde(rename = "link")]
     error_link: String,
 }
 
