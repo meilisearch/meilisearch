@@ -65,7 +65,7 @@ pub struct SegmentAnalytics {
 impl SegmentAnalytics {
     fn compute_traits(opt: &Opt, stats: Stats) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
-        const SYSTEM: Lazy<Value> = Lazy::new(|| {
+        static SYSTEM: Lazy<Value> = Lazy::new(|| {
             let mut sys = System::new_all();
             sys.refresh_all();
             let kernel_version = sys
@@ -111,9 +111,7 @@ impl SegmentAnalytics {
         write_user_id(&opt.db_path, &user_id);
 
         let client = HttpClient::default();
-        let user = User::UserId {
-            user_id: user_id.clone(),
-        };
+        let user = User::UserId { user_id };
         let batcher = Mutex::new(AutoBatcher::new(
             client,
             Batcher::new(None),
@@ -215,7 +213,7 @@ impl SegmentAnalytics {
         // to avoid blocking the search we are going to do the heavier computation and take the
         // batcher's mutex in an async task
         tokio::spawn(async move {
-            const RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
+            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
 
             let filtered = filter.is_some() as usize;
             let syntax = match filter.as_ref() {
