@@ -99,8 +99,10 @@ make_setting_route!(
         analytics.publish(
             "FilterableAttributes Updated".to_string(),
             json!({
-                "total": setting.as_ref().map(|filter| filter.len()).unwrap_or(0),
-                "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
+                "filterable_attributes": {
+                    "total": setting.as_ref().map(|filter| filter.len()).unwrap_or(0),
+                    "has_geo": setting.as_ref().map(|filter| filter.contains("_geo")).unwrap_or(false),
+                }
             }),
             Some(req),
         );
@@ -119,8 +121,10 @@ make_setting_route!(
         analytics.publish(
             "SortableAttributes Updated".to_string(),
             json!({
-                "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
-                "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
+                "sortable_attributes": {
+                    "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
+                    "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
+                },
             }),
             Some(req),
         );
@@ -138,7 +142,21 @@ make_setting_route!(
     "/searchable-attributes",
     Vec<String>,
     searchable_attributes,
-    "searchableAttributes"
+    "searchableAttributes",
+    analytics,
+    |setting: &Option<Vec<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "SearchableAttributes Updated".to_string(),
+            json!({
+                "searchable_attributes": {
+                    "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
