@@ -192,7 +192,9 @@ make_setting_route!(
         analytics.publish(
             "RankingRules Updated".to_string(),
             json!({
-                "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
+                "ranking_rules": {
+                    "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
+                }
             }),
             Some(req),
         );
