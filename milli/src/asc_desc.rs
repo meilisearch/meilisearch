@@ -28,7 +28,7 @@ impl fmt::Display for AscDescError {
                 write!(f, "Longitude must be contained between -180 and 180 degrees.",)
             }
             Self::InvalidSyntax { name } => {
-                write!(f, "invalid asc/desc syntax for `{}`.", name)
+                write!(f, "Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
             }
             Self::ReservedKeyword { name } => {
                 write!(
@@ -192,8 +192,8 @@ impl fmt::Display for SortError {
             Self::BadGeoPointUsage { name } => {
                 write!(
                     f,
-                    "Invalid syntax for the `_geoPoint` parameter: `{}`. \
-                    Usage: `_geoPoint(latitude, longitude):asc`.",
+                    "Invalid syntax for the geo parameter: expected expression formated like \
+                    `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{}`.",
                     name
                 )
             }
