@@ -8,7 +8,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use actix_web::HttpRequest;
-use meilisearch_lib::index::SearchQuery;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
 use serde_json::Value;
@@ -20,12 +19,16 @@ pub use mock_analytics::MockAnalytics;
 // if we are in debug mode OR the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
 #[cfg(any(debug_assertions, not(feature = "analytics")))]
-pub type SegmentAnalytics = MockAnalytics;
+pub type SegmentAnalytics = mock_analytics::MockAnalytics;
+#[cfg(any(debug_assertions, not(feature = "analytics")))]
+pub type SearchAggregator = mock_analytics::SearchAggregator;
 
 // if we are in release mode and the feature analytics was enabled
 // we use the real analytics
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+pub type SearchAggregator = segment_analytics::SearchAggregator;
 
 /// The MeiliSearch config dir:
 /// `~/.config/MeiliSearch` on *NIX or *BSD.
@@ -59,17 +62,13 @@ pub trait Analytics: Display + Sync + Send {
     /// The method used to publish most analytics that do not need to be batched every hours
     fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>);
 
-    /// This method should be called to batch a get search request
-    fn start_get_search(&'static self, query: &SearchQuery, request: &HttpRequest);
-    /// This method should be called once a get search request has succeeded
-    fn end_get_search(&'static self, process_time: usize);
+    /// This method should be called to aggergate a get search
+    fn get_search(&'static self, aggregate: SearchAggregator);
 
-    /// This method should be called to batch a get search request
-    fn start_post_search(&'static self, query: &SearchQuery, request: &HttpRequest);
-    /// This method should be called once a post search request has succeeded
-    fn end_post_search(&'static self, process_time: usize);
+    /// This method should be called to aggregate a post search
+    fn post_search(&'static self, aggregate: SearchAggregator);
 
-    // this method should be called to batch a add documents request
+    // this method should be called to aggregate a add documents request
     fn add_documents(
         &'static self,
         documents_query: &UpdateDocumentsQuery,

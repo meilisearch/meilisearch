@@ -5,7 +5,7 @@ use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::analytics::Analytics;
+use crate::analytics::{Analytics, SearchAggregator};
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
@@ -116,7 +116,7 @@ pub async fn search_with_url_query(
     debug!("called with params: {:?}", params);
     let query: SearchQuery = params.into_inner().into();
 
-    analytics.start_get_search(&query, &req);
+    let mut aggregate = SearchAggregator::from_query(&query, &req);
 
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
@@ -126,7 +126,8 @@ pub async fn search_with_url_query(
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
 
-    analytics.end_post_search(search_result.processing_time_ms as usize);
+    aggregate.finish(&search_result);
+    analytics.get_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -142,7 +143,7 @@ pub async fn search_with_post(
     let query = params.into_inner();
     debug!("search called with params: {:?}", query);
 
-    analytics.start_post_search(&query, &req);
+    let mut aggregate = SearchAggregator::from_query(&query, &req);
 
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
@@ -152,7 +153,8 @@ pub async fn search_with_post(
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
 
-    analytics.end_post_search(search_result.processing_time_ms as usize);
+    aggregate.finish(&search_result);
+    analytics.post_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use http::header::CONTENT_TYPE;
-use meilisearch_lib::index::SearchQuery;
+use meilisearch_lib::index::{SearchQuery, SearchResult};
 use meilisearch_lib::index_controller::Stats;
 use meilisearch_lib::MeiliSearch;
 use once_cell::sync::Lazy;
@@ -16,7 +16,8 @@ use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
 use serde_json::{json, Value};
 use sysinfo::{DiskExt, System, SystemExt};
-use tokio::sync::Mutex;
+use tokio::select;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
@@ -52,17 +53,125 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .collect()
 }
 
+pub enum Message {
+    BatchMessage(Track),
+    AggregateGetSearch(SearchAggregator),
+    AggregatePostSearch(SearchAggregator),
+    AggregateAddDocuments(DocumentsAggregator),
+    AggregateUpdateDocuments(DocumentsAggregator),
+}
+
 pub struct SegmentAnalytics {
     user: User,
-    opt: Opt,
-    batcher: Mutex<AutoBatcher>,
-    post_search_batcher: Mutex<SearchBatcher>,
-    get_search_batcher: Mutex<SearchBatcher>,
-    add_documents_batcher: Mutex<DocumentsBatcher>,
-    update_documents_batcher: Mutex<DocumentsBatcher>,
+    sender: Sender<Message>,
 }
 
 impl SegmentAnalytics {
+    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
+        let user_id = super::find_user_id(&opt.db_path);
+        let first_time_run = user_id.is_none();
+        let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        write_user_id(&opt.db_path, &user_id);
+
+        let client = HttpClient::default();
+        let user = User::UserId { user_id };
+        let batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
+
+        let (sender, inbox) = mpsc::channel(100); // How many analytics can we bufferize
+
+        let segment = Box::new(Segment {
+            inbox,
+            user: user.clone(),
+            opt: opt.clone(),
+            batcher,
+            post_search_aggregator: SearchAggregator::default(),
+            get_search_aggregator: SearchAggregator::default(),
+            add_documents_aggregator: DocumentsAggregator::default(),
+            update_documents_aggregator: DocumentsAggregator::default(),
+        });
+        tokio::spawn(segment.run(meilisearch.clone()));
+
+        let ret = Box::new(Self { user, sender });
+        let ret = Box::leak(ret);
+        // batch the launched for the first time track event
+        if first_time_run {
+            ret.publish("Launched".to_string(), json!({}), None);
+        }
+
+        ret
+    }
+}
+
+impl Display for SegmentAnalytics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.user)
+    }
+}
+
+impl super::Analytics for SegmentAnalytics {
+    fn publish(&'static self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
+        let user_agent = request
+            .map(|req| req.headers().get(USER_AGENT))
+            .flatten()
+            .map(|header| header.to_str().unwrap_or("unknown"))
+            .map(|s| s.split(';').map(str::trim).collect::<Vec<&str>>());
+
+        send["user-agent"] = json!(user_agent);
+        let event = Track {
+            user: self.user.clone(),
+            event: event_name.clone(),
+            properties: send,
+            ..Default::default()
+        };
+        let _ = self.sender.try_send(Message::BatchMessage(event.into()));
+    }
+    fn get_search(&'static self, aggregate: SearchAggregator) {
+        let _ = self.sender.try_send(Message::AggregateGetSearch(aggregate));
+    }
+
+    fn post_search(&'static self, aggregate: SearchAggregator) {
+        let _ = self
+            .sender
+            .try_send(Message::AggregatePostSearch(aggregate));
+    }
+
+    fn add_documents(
+        &'static self,
+        documents_query: &UpdateDocumentsQuery,
+        index_creation: bool,
+        request: &HttpRequest,
+    ) {
+        let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
+        let _ = self
+            .sender
+            .try_send(Message::AggregateAddDocuments(aggregate));
+    }
+
+    fn update_documents(
+        &'static self,
+        documents_query: &UpdateDocumentsQuery,
+        index_creation: bool,
+        request: &HttpRequest,
+    ) {
+        let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
+        let _ = self
+            .sender
+            .try_send(Message::AggregateUpdateDocuments(aggregate));
+    }
+}
+
+pub struct Segment {
+    inbox: Receiver<Message>,
+    user: User,
+    opt: Opt,
+    batcher: AutoBatcher,
+    get_search_aggregator: SearchAggregator,
+    post_search_aggregator: SearchAggregator,
+    add_documents_aggregator: DocumentsAggregator,
+    update_documents_aggregator: DocumentsAggregator,
+}
+
+impl Segment {
     fn compute_traits(opt: &Opt, stats: Stats) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
@@ -104,282 +213,74 @@ impl SegmentAnalytics {
         })
     }
 
-    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
-        let user_id = super::find_user_id(&opt.db_path);
-        let first_time_run = user_id.is_none();
-        let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-        write_user_id(&opt.db_path, &user_id);
-
-        let client = HttpClient::default();
-        let user = User::UserId { user_id };
-        let batcher = Mutex::new(AutoBatcher::new(
-            client,
-            Batcher::new(None),
-            SEGMENT_API_KEY.to_string(),
-        ));
-        let segment = Box::new(Self {
-            user,
-            opt: opt.clone(),
-            batcher,
-            post_search_batcher: Mutex::new(SearchBatcher::default()),
-            get_search_batcher: Mutex::new(SearchBatcher::default()),
-            add_documents_batcher: Mutex::new(DocumentsBatcher::default()),
-            update_documents_batcher: Mutex::new(DocumentsBatcher::default()),
-        });
-        let segment = Box::leak(segment);
-
-        // batch the launched for the first time track event
-        if first_time_run {
-            segment.publish("Launched".to_string(), json!({}), None);
+    async fn run(mut self, meilisearch: MeiliSearch) {
+        println!("CALLED");
+        const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
+        loop {
+            let mut interval = tokio::time::interval(INTERVAL);
+            select! {
+                _ = interval.tick() => {
+                    println!("TRIGGERED");
+                    self.tick(meilisearch.clone()).await;
+                },
+                msg = self.inbox.recv() => {
+                    match msg {
+                        Some(Message::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
+                        Some(Message::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
+                        Some(Message::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
+                        Some(Message::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
+                        Some(Message::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        None => (),
+                    }
+                }
+            }
         }
-        segment.tick(meilisearch.clone());
-        segment
     }
 
-    fn tick(&'static self, meilisearch: MeiliSearch) {
-        tokio::spawn(async move {
-            loop {
-                if let Ok(stats) = meilisearch.get_all_stats().await {
-                    let _ = self
-                        .batcher
-                        .lock()
-                        .await
-                        .push(Identify {
-                            context: Some(json!({
-                                "app": {
-                                    "version": env!("CARGO_PKG_VERSION").to_string(),
-                                },
-                            })),
-                            user: self.user.clone(),
-                            traits: Self::compute_traits(&self.opt, stats),
-                            ..Default::default()
-                        })
-                        .await;
-                }
-                let get_search = std::mem::take(&mut *self.get_search_batcher.lock().await)
-                    .into_event(&self.user, "Document Searched GET");
-                let post_search = std::mem::take(&mut *self.post_search_batcher.lock().await)
-                    .into_event(&self.user, "Document Searched POST");
-                let add_documents = std::mem::take(&mut *self.add_documents_batcher.lock().await)
-                    .into_event(&self.user, "Documents Added");
-                let update_documents =
-                    std::mem::take(&mut *self.update_documents_batcher.lock().await)
-                        .into_event(&self.user, "Documents Updated");
-                // keep the lock on the batcher just for these five operations
-                {
-                    let mut batcher = self.batcher.lock().await;
-                    if let Some(get_search) = get_search {
-                        let _ = batcher.push(get_search).await;
-                    }
-                    if let Some(post_search) = post_search {
-                        let _ = batcher.push(post_search).await;
-                    }
-                    if let Some(add_documents) = add_documents {
-                        let _ = batcher.push(add_documents).await;
-                    }
-                    if let Some(update_documents) = update_documents {
-                        let _ = batcher.push(update_documents).await;
-                    }
-                    let _ = batcher.flush().await;
-                }
-                const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
-                tokio::time::sleep(INTERVAL).await;
-            }
-        });
-    }
-
-    fn start_search(
-        &'static self,
-        batcher: &'static Mutex<SearchBatcher>,
-        query: &SearchQuery,
-        request: &HttpRequest,
-    ) {
-        let user_agent = extract_user_agents(request);
-        let sorted = query.sort.is_some() as usize;
-        let sort_with_geo_point = query
-            .sort
-            .as_ref()
-            .map_or(false, |s| s.iter().any(|s| s.contains("_geoPoint(")));
-        let sort_criteria_terms = query.sort.as_ref().map_or(0, |s| s.len());
-
-        // since there is quite a bit of computation made on the filter we are going to do that in the async task
-        let filter = query.filter.clone();
-        let queried = query.q.is_some();
-        let nb_terms = query.q.as_ref().map_or(0, |s| s.split_whitespace().count());
-
-        let max_limit = query.limit;
-        let max_offset = query.offset.unwrap_or_default();
-
-        // to avoid blocking the search we are going to do the heavier computation and take the
-        // batcher's mutex in an async task
-        tokio::spawn(async move {
-            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
-
-            let filtered = filter.is_some() as usize;
-            let syntax = match filter.as_ref() {
-                Some(Value::String(_)) => "string".to_string(),
-                Some(Value::Array(values)) => {
-                    if values
-                        .iter()
-                        .map(|v| v.to_string())
-                        .any(|s| RE.is_match(&s))
-                    {
-                        "mixed".to_string()
-                    } else {
-                        "array".to_string()
-                    }
-                }
-                _ => "none".to_string(),
-            };
-            let stringified_filters = filter.map_or(String::new(), |v| v.to_string());
-            let filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
-            let filter_number_of_criteria = RE.split(&stringified_filters).count();
-
-            let mut search_batcher = batcher.lock().await;
-            user_agent.into_iter().for_each(|ua| {
-                search_batcher.user_agents.insert(ua);
-            });
-            search_batcher.total_received += 1;
-
-            // sort
-            search_batcher.sort_with_geo_point |= sort_with_geo_point;
-            search_batcher.sort_sum_of_criteria_terms += sort_criteria_terms;
-            search_batcher.sort_total_number_of_criteria += sorted;
-
-            // filter
-            search_batcher.filter_with_geo_radius |= filter_with_geo_radius;
-            search_batcher.filter_sum_of_criteria_terms += filter_number_of_criteria;
-            search_batcher.filter_total_number_of_criteria += filtered as usize;
-            *search_batcher.used_syntax.entry(syntax).or_insert(0) += 1;
-
-            // q
-            search_batcher.sum_of_terms_count += nb_terms;
-            search_batcher.total_number_of_q += queried as usize;
-
-            // pagination
-            search_batcher.max_limit = search_batcher.max_limit.max(max_limit);
-            search_batcher.max_offset = search_batcher.max_offset.max(max_offset);
-        });
-    }
-
-    fn batch_documents(
-        &'static self,
-        batcher: &'static Mutex<DocumentsBatcher>,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        let user_agents = extract_user_agents(request);
-        let primary_key = documents_query.primary_key.clone();
-        let content_type = request
-            .headers()
-            .get(CONTENT_TYPE)
-            .map(|s| s.to_str().unwrap_or("unkown"))
-            .unwrap()
-            .to_string();
-
-        tokio::spawn(async move {
-            let mut lock = batcher.lock().await;
-            for user_agent in user_agents {
-                lock.user_agents.insert(user_agent);
-            }
-            lock.content_types.insert(content_type);
-            if let Some(primary_key) = primary_key {
-                lock.primary_keys.insert(primary_key);
-            }
-            lock.index_creation |= index_creation;
-            lock.updated = true;
-            // drop the lock here
-        });
-    }
-}
-
-impl super::Analytics for SegmentAnalytics {
-    fn publish(&'static self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
-        let user_agent = request
-            .map(|req| req.headers().get(USER_AGENT))
-            .flatten()
-            .map(|header| header.to_str().unwrap_or("unknown"))
-            .map(|s| s.split(';').map(str::trim).collect::<Vec<&str>>());
-
-        send["user-agent"] = json!(user_agent);
-
-        tokio::spawn(async move {
+    async fn tick(&mut self, meilisearch: MeiliSearch) {
+        println!("SENDING  A TICK");
+        if let Ok(stats) = meilisearch.get_all_stats().await {
             let _ = self
                 .batcher
-                .lock()
-                .await
-                .push(Track {
+                .push(Identify {
+                    context: Some(json!({
+                        "app": {
+                            "version": env!("CARGO_PKG_VERSION").to_string(),
+                        },
+                    })),
                     user: self.user.clone(),
-                    event: event_name.clone(),
-                    properties: send,
+                    traits: Self::compute_traits(&self.opt, stats),
                     ..Default::default()
                 })
                 .await;
-        });
-    }
+        }
+        let get_search = std::mem::take(&mut self.get_search_aggregator)
+            .into_event(&self.user, "Document Searched GET");
+        let post_search = std::mem::take(&mut self.post_search_aggregator)
+            .into_event(&self.user, "Document Searched POST");
+        let add_documents = std::mem::take(&mut self.add_documents_aggregator)
+            .into_event(&self.user, "Documents Added");
+        let update_documents = std::mem::take(&mut self.update_documents_aggregator)
+            .into_event(&self.user, "Documents Updated");
 
-    fn start_get_search(&'static self, query: &SearchQuery, request: &HttpRequest) {
-        self.start_search(&self.get_search_batcher, query, request)
-    }
-
-    fn end_get_search(&'static self, process_time: usize) {
-        tokio::spawn(async move {
-            let mut search_batcher = self.get_search_batcher.lock().await;
-            search_batcher.total_succeeded += 1;
-            search_batcher.time_spent.push(process_time);
-        });
-    }
-
-    fn start_post_search(&'static self, query: &SearchQuery, request: &HttpRequest) {
-        self.start_search(&self.post_search_batcher, query, request)
-    }
-
-    fn end_post_search(&'static self, process_time: usize) {
-        tokio::spawn(async move {
-            let mut search_batcher = self.post_search_batcher.lock().await;
-            search_batcher.total_succeeded += 1;
-            search_batcher.time_spent.push(process_time);
-        });
-    }
-
-    fn add_documents(
-        &'static self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        self.batch_documents(
-            &self.add_documents_batcher,
-            documents_query,
-            index_creation,
-            request,
-        )
-    }
-
-    fn update_documents(
-        &'static self,
-        documents_query: &UpdateDocumentsQuery,
-        index_creation: bool,
-        request: &HttpRequest,
-    ) {
-        self.batch_documents(
-            &self.update_documents_batcher,
-            documents_query,
-            index_creation,
-            request,
-        )
-    }
-}
-
-impl Display for SegmentAnalytics {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.user)
+        if let Some(get_search) = get_search {
+            let _ = self.batcher.push(get_search).await;
+        }
+        if let Some(post_search) = post_search {
+            let _ = self.batcher.push(post_search).await;
+        }
+        if let Some(add_documents) = add_documents {
+            let _ = self.batcher.push(add_documents).await;
+        }
+        if let Some(update_documents) = update_documents {
+            let _ = self.batcher.push(update_documents).await;
+        }
+        let _ = self.batcher.flush().await;
     }
 }
 
 #[derive(Default)]
-pub struct SearchBatcher {
+pub struct SearchAggregator {
     // context
     user_agents: HashSet<String>,
 
@@ -414,7 +315,90 @@ pub struct SearchBatcher {
     max_offset: usize,
 }
 
-impl SearchBatcher {
+impl SearchAggregator {
+    pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
+        let mut ret = Self::default();
+        ret.total_received = 1;
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+
+        if let Some(ref sort) = query.sort {
+            ret.sort_total_number_of_criteria = 1;
+            ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
+            ret.sort_sum_of_criteria_terms = sort.len();
+        }
+
+        if let Some(ref filter) = query.filter {
+            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
+            ret.filter_total_number_of_criteria = 1;
+
+            let syntax = match filter {
+                Value::String(_) => "string".to_string(),
+                Value::Array(values) => {
+                    if values
+                        .iter()
+                        .map(|v| v.to_string())
+                        .any(|s| RE.is_match(&s))
+                    {
+                        "mixed".to_string()
+                    } else {
+                        "array".to_string()
+                    }
+                }
+                _ => "none".to_string(),
+            };
+            // convert the string to a HashMap
+            ret.used_syntax.insert(syntax, 1);
+
+            let stringified_filters = filter.to_string();
+            ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
+            ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
+        }
+
+        if let Some(ref q) = query.q {
+            ret.total_number_of_q = 1;
+            ret.sum_of_terms_count = q.split_whitespace().count();
+        }
+
+        ret.max_limit = query.limit;
+        ret.max_offset = query.offset.unwrap_or_default();
+
+        ret
+    }
+
+    pub fn finish(&mut self, result: &SearchResult) {
+        self.total_succeeded += 1;
+        self.time_spent.push(result.processing_time_ms as usize);
+    }
+
+    /// Aggregate one [SearchAggregator] into another.
+    pub fn aggregate(&mut self, mut other: Self) {
+        // context
+        for user_agent in other.user_agents.into_iter() {
+            self.user_agents.insert(user_agent);
+        }
+        // request
+        self.total_received += other.total_received;
+        self.total_succeeded += other.total_succeeded;
+        self.time_spent.append(&mut other.time_spent);
+        // sort
+        self.sort_with_geo_point |= other.sort_with_geo_point;
+        self.sort_sum_of_criteria_terms += other.sort_sum_of_criteria_terms;
+        self.sort_total_number_of_criteria += other.sort_total_number_of_criteria;
+        // filter
+        self.filter_with_geo_radius |= other.filter_with_geo_radius;
+        self.filter_sum_of_criteria_terms += other.filter_sum_of_criteria_terms;
+        self.filter_total_number_of_criteria += other.filter_total_number_of_criteria;
+        for (key, value) in other.used_syntax.into_iter() {
+            *self.used_syntax.entry(key).or_insert(0) += value;
+        }
+        // q
+        self.sum_of_terms_count += other.sum_of_terms_count;
+        self.total_number_of_q += other.total_number_of_q;
+        // pagination
+        self.max_limit = self.max_limit.max(other.max_limit);
+        self.max_offset = self.max_offset.max(other.max_offset);
+    }
+
     pub fn into_event(mut self, user: &User, event_name: &str) -> Option<Track> {
         if self.total_received == 0 {
             None
@@ -459,7 +443,7 @@ impl SearchBatcher {
 }
 
 #[derive(Default)]
-pub struct DocumentsBatcher {
+pub struct DocumentsAggregator {
     // set to true when at least one request was received
     updated: bool,
 
@@ -471,7 +455,47 @@ pub struct DocumentsBatcher {
     index_creation: bool,
 }
 
-impl DocumentsBatcher {
+impl DocumentsAggregator {
+    pub fn from_query(
+        documents_query: &UpdateDocumentsQuery,
+        index_creation: bool,
+        request: &HttpRequest,
+    ) -> Self {
+        let mut ret = Self::default();
+
+        ret.updated = true;
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        if let Some(primary_key) = documents_query.primary_key.clone() {
+            ret.primary_keys.insert(primary_key);
+        }
+        let content_type = request
+            .headers()
+            .get(CONTENT_TYPE)
+            .map(|s| s.to_str().unwrap_or("unkown"))
+            .unwrap()
+            .to_string();
+        ret.content_types.insert(content_type);
+        ret.index_creation = index_creation;
+
+        ret
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        self.updated |= other.updated;
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents.into_iter() {
+            self.user_agents.insert(user_agent);
+        }
+        for primary_key in other.primary_keys.into_iter() {
+            self.primary_keys.insert(primary_key);
+        }
+        for content_type in other.content_types.into_iter() {
+            self.content_types.insert(content_type);
+        }
+        self.index_creation |= other.index_creation;
+    }
+
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
         if !self.updated {
             None
