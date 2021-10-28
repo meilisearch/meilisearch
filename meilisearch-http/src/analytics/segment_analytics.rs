@@ -214,13 +214,12 @@ impl Segment {
     }
 
     async fn run(mut self, meilisearch: MeiliSearch) {
-        println!("CALLED");
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
+        let mut interval = tokio::time::interval(INTERVAL);
+
         loop {
-            let mut interval = tokio::time::interval(INTERVAL);
             select! {
                 _ = interval.tick() => {
-                    println!("TRIGGERED");
                     self.tick(meilisearch.clone()).await;
                 },
                 msg = self.inbox.recv() => {
@@ -238,7 +237,6 @@ impl Segment {
     }
 
     async fn tick(&mut self, meilisearch: MeiliSearch) {
-        println!("SENDING  A TICK");
         if let Ok(stats) = meilisearch.get_all_stats().await {
             let _ = self
                 .batcher
