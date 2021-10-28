@@ -141,7 +141,7 @@ impl Code {
             InvalidGeoField => {
                 ErrCode::authentication("invalid_geo_field", StatusCode::BAD_REQUEST)
             }
-            InvalidToken => ErrCode::authentication("invalid_token", StatusCode::FORBIDDEN),
+            InvalidToken => ErrCode::authentication("invalid_api_key", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
