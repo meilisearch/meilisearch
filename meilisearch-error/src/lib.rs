@@ -41,7 +41,7 @@ impl fmt::Display for ErrorType {
         match self {
             InternalError => write!(f, "internal"),
             InvalidRequestError => write!(f, "invalid_request"),
-            AuthenticationError => write!(f, "authentication"),
+            AuthenticationError => write!(f, "auth"),
         }
     }
 }
