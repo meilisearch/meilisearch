@@ -143,7 +143,7 @@ pub async fn add_documents(
 
     analytics.add_documents(
         &params,
-        meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
+        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
         &req,
     );
 
@@ -174,7 +174,7 @@ pub async fn update_documents(
 
     analytics.update_documents(
         &params,
-        meilisearch.get_index(path.index_uid.clone()).await.is_ok(),
+        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
         &req,
     );
 
