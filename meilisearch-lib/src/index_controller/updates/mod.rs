@@ -178,7 +178,7 @@ impl UpdateLoop {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
-                    }
+                    };
 
                     update_file.persist()?;
 

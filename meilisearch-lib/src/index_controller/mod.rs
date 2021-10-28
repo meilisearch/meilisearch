@@ -12,7 +12,7 @@ use futures::Stream;
 use futures::StreamExt;
 use log::info;
 use meilisearch_tasks::create_task_store;
-use meilisearch_tasks::task::DocumentAdditionMergeStrategy;
+use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, Task};
 use meilisearch_tasks::task::DocumentDeletion;
 use meilisearch_tasks::task::TaskContent;
 use meilisearch_tasks::task::TaskId;
@@ -332,7 +332,7 @@ where
                     }
                 }
                 let (content_uuid, mut update_file) = self.update_file_store.new_update().unwrap();
-                tokio::task::spawn_blocking(move || -> Result<_> {
+                let documents_count = tokio::task::spawn_blocking(move || -> Result<_> {
                     // check if the payload is empty, and return an error
                     if buffer.is_empty() {
                         todo!("empty payload error")
@@ -340,15 +340,15 @@ where
                     }
 
                     let reader = Cursor::new(buffer);
-                    match format {
+                    let count = match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file).unwrap(),
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file).unwrap(),
                         DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file).unwrap(),
-                    }
+                    };
 
                     update_file.persist().unwrap();
 
-                    Ok(())
+                    Ok(count)
                 })
                 .await.unwrap().unwrap();
 
@@ -356,6 +356,7 @@ where
                     content_uuid,
                     merge_strategy: DocumentAdditionMergeStrategy::ReplaceDocument,
                     primary_key,
+                    documents_count,
                 }
             },
         };

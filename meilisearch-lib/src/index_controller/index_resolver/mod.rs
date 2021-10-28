@@ -40,7 +40,7 @@ where U: UuidStore,
             task.events.push(TaskEvent::Processing(Utc::now()));
 
             let result = match &task.content {
-                TaskContent::DocumentAddition { content_uuid, merge_strategy, primary_key } =>  {
+                TaskContent::DocumentAddition { content_uuid, merge_strategy, primary_key, .. } =>  {
                     let method = match merge_strategy {
                         DocumentAdditionMergeStrategy::UpdateDocument => IndexDocumentsMethod::UpdateDocuments,
                         DocumentAdditionMergeStrategy::ReplaceDocument => IndexDocumentsMethod::ReplaceDocuments,

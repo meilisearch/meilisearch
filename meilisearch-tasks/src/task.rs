@@ -56,11 +56,10 @@ pub enum TaskContent {
         content_uuid: Uuid,
         merge_strategy: DocumentAdditionMergeStrategy,
         primary_key: Option<String>,
+        documents_count: usize,
     },
     DocumentDeletion(DocumentDeletion),
-
     IndexDeletion,
-
     SettingsUpdate,
 }
 
@@ -88,6 +87,7 @@ mod test {
                 content_uuid: Uuid::new_v4(),
                 merge_strategy: DocumentAdditionMergeStrategy::arbitrary(g),
                 primary_key: Option::arbitrary(g),
+                documents_count: usize::arbitrary(g),
             },
                2 => Self::DocumentDeletion(DocumentDeletion::arbitrary(g)),
                3 => Self::IndexDeletion,

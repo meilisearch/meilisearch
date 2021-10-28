@@ -69,7 +69,7 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
 
     builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
-    Ok(())
+    Ok(count)
 }
 
 /// reads jsonl from input and write an obkv batch to writer.
