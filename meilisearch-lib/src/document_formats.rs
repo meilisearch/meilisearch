@@ -32,6 +32,8 @@ pub enum DocumentFormatError {
         Box<dyn std::error::Error + Send + Sync + 'static>,
         PayloadType,
     ),
+    #[error("The `{0}` payload must contain at least one document.")]
+    EmptyPayload(PayloadType),
 }
 
 impl From<(PayloadType, milli::documents::Error)> for DocumentFormatError {
@@ -48,6 +50,7 @@ impl ErrorCode for DocumentFormatError {
         match self {
             DocumentFormatError::Internal(_) => Code::Internal,
             DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
+            DocumentFormatError::EmptyPayload(_) => Code::MalformedPayload,
         }
     }
 }
@@ -55,18 +58,22 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// reads csv from input and write an obkv batch to writer.
-pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let writer = BufWriter::new(writer);
     let builder =
         DocumentBatchBuilder::from_csv(input, writer).map_err(|e| (PayloadType::Csv, e))?;
-    let document_count = builder.len();
+
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Csv));
+    }
+
     builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
-    Ok(document_count)
+    Ok(())
 }
 
 /// reads jsonl from input and write an obkv batch to writer.
-pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let mut reader = BufReader::new(input);
     let writer = BufWriter::new(writer);
 
@@ -80,22 +87,28 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
         buf.clear();
     }
 
-    let document_count = builder.len();
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Ndjson));
+    }
 
     builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
 
-    Ok(document_count)
+    Ok(())
 }
 
 /// reads json from input and write an obkv batch to writer.
-pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let writer = BufWriter::new(writer);
     let mut builder = DocumentBatchBuilder::new(writer).map_err(|e| (PayloadType::Json, e))?;
     builder
         .extend_from_json(input)
         .map_err(|e| (PayloadType::Json, e))?;
-    let document_count = builder.len();
+
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Json));
+    }
+
     builder.finish().map_err(|e| (PayloadType::Json, e))?;
 
-    Ok(document_count)
+    Ok(())
 }

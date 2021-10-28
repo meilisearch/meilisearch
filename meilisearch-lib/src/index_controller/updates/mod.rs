@@ -174,18 +174,15 @@ impl UpdateLoop {
                     }
 
                     let reader = Cursor::new(buffer);
-                    let document_count = match format {
+                    match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
                         DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
-                    };
-
-                    if document_count > 0 {
-                        update_file.persist()?;
-                        Ok(())
-                    } else {
-                        Err(UpdateLoopError::MissingPayload(format))
                     }
+
+                    update_file.persist()?;
+
+                    Ok(())
                 })
                 .await??;
 

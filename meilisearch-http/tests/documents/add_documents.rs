@@ -695,10 +695,10 @@ async fn error_add_no_documents() {
     let (response, code) = index.add_documents(json!([]), None).await;
 
     let expected_response = json!({
-        "message": "A json payload is missing.",
-        "code": "missing_payload",
+        "message": "The `json` payload must contain at least one document.",
+        "code": "malformed_payload",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing_payload"
+        "link": "https://docs.meilisearch.com/errors#malformed_payload"
     });
 
     assert_eq!(response, expected_response);
