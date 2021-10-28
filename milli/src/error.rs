@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::{fmt, io, str};
@@ -58,10 +58,10 @@ pub enum UserError {
     CriterionError(CriterionError),
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
-    InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
+    InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
     InvalidFilter(FilterError),
     InvalidGeoField { document_id: Value, object: Value },
-    InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
+    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
     MaxDatabaseSizeReached,
@@ -76,7 +76,7 @@ pub enum UserError {
 
 #[derive(Debug)]
 pub enum FilterError {
-    InvalidAttribute { field: String, valid_fields: HashSet<String> },
+    InvalidAttribute { field: String, valid_fields: BTreeSet<String> },
     ReservedKeyword { field: String, context: Option<String> },
     Syntax(pest::error::Error<ParserRule>),
 }

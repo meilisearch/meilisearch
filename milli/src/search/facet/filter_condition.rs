@@ -169,7 +169,7 @@ impl FilterCondition {
         if !filterable_fields.contains("_geo") {
             return Err(FilterError::InvalidAttribute {
                 field: "_geo".to_string(),
-                valid_fields: filterable_fields.clone(),
+                valid_fields: filterable_fields.into_iter().cloned().collect(),
             }
             .into());
         }
@@ -192,7 +192,7 @@ impl FilterCondition {
         if parameters.len() != 3 {
             return Err(FilterError::Syntax(PestError::new_from_span(
                         ErrorVariant::CustomError {
-                            message: format!("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"),
+                            message: format!("The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"),
                         },
                         // we want to point to the last parameters and if there was no parameters we
                         // point to the parenthesis
@@ -599,7 +599,7 @@ fn field_id(
     if !filterable_fields.contains(key.as_str()) {
         return Err(FilterError::InvalidAttribute {
             field: key.as_str().to_string(),
-            valid_fields: filterable_fields.clone(),
+            valid_fields: filterable_fields.into_iter().cloned().collect(),
         });
     }
 
@@ -829,26 +829,34 @@ mod tests {
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius don't have any parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius don't have enough parameters
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2)");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius have too many parameters
         let result =
             FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
+        assert!(error.to_string().contains(
+            "The _geoRadius filter expect three arguments: _geoRadius(latitude, longitude, radius)"
+        ));
 
         // georadius have a bad latitude
         let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-100, 150, 10)");
