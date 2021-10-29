@@ -57,7 +57,7 @@ pub async fn create_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
 
@@ -101,7 +101,7 @@ pub async fn update_index(
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let body = body.into_inner();

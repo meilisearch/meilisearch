@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let (analytics, user) = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
-        analytics::MockAnalytics::new(&opt)
+        analytics::create_(&opt)
     };
     #[cfg(any(debug_assertions, not(feature = "analytics")))]
     let (analytics, user) = analytics::MockAnalytics::new(&opt);

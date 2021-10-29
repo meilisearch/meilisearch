@@ -20,7 +20,7 @@ async fn add_documents_test_json_content_types() {
         &server.service.meilisearch,
         true,
         &server.service.options,
-        analytics::MockAnalytics::new(&server.service.options)
+        analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
     // post
@@ -65,7 +65,7 @@ async fn error_add_documents_test_bad_content_types() {
         &server.service.meilisearch,
         true,
         &server.service.options,
-        analytics::MockAnalytics::new(&server.service.options)
+        analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
     // post
@@ -132,7 +132,7 @@ async fn error_add_documents_test_no_content_type() {
         &server.service.meilisearch,
         true,
         &server.service.options,
-        analytics::MockAnalytics::new(&server.service.options)
+        analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
     // post

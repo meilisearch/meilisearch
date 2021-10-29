@@ -22,6 +22,7 @@ impl SearchAggregator {
 }
 
 impl MockAnalytics {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opt: &Opt) -> (Arc<dyn Analytics>, String) {
         let user = find_user_id(&opt.db_path).unwrap_or_default();
         (Arc::new(Self), user)

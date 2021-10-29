@@ -119,11 +119,15 @@ impl super::Analytics for SegmentAnalytics {
             properties: send,
             ..Default::default()
         };
-        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event.into()));
+        let _ = self
+            .sender
+            .try_send(AnalyticsMsg::BatchMessage(event.into()));
     }
 
     fn get_search(&self, aggregate: SearchAggregator) {
-        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
+        let _ = self
+            .sender
+            .try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
     }
 
     fn post_search(&self, aggregate: SearchAggregator) {

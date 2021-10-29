@@ -16,7 +16,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub async fn create_dump(
     meilisearch: GuardedData<Private, MeiliSearch>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
 

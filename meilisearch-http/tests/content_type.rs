@@ -41,7 +41,7 @@ async fn error_json_bad_content_type() {
         &server.service.meilisearch,
         true,
         &server.service.options,
-        analytics::MockAnalytics::new(&server.service.options)
+        analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
     for route in routes {

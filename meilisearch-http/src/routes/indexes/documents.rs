@@ -132,7 +132,7 @@ pub async fn add_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let content_type = req
@@ -164,7 +164,7 @@ pub async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let content_type = req

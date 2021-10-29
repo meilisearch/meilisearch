@@ -43,7 +43,7 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
-                $analytics_var: web::Data<&'static dyn Analytics>,
+                $analytics_var: web::Data< dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let body = body.into_inner();
 
@@ -230,7 +230,7 @@ pub async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = body.into_inner();
 

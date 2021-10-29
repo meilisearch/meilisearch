@@ -111,7 +111,7 @@ pub async fn search_with_url_query(
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let query: SearchQuery = params.into_inner().into();
@@ -138,7 +138,7 @@ pub async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
     req: HttpRequest,
-    analytics: web::Data<&'static dyn Analytics>,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner();
     debug!("search called with params: {:?}", query);
