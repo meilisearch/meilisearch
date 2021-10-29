@@ -1,12 +1,12 @@
 use std::env;
+use std::sync::Arc;
 
 use actix_web::HttpServer;
+use meilisearch_http::analytics;
+use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
 use structopt::StructOpt;
-
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
-use meilisearch_http::analytics;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -47,25 +47,32 @@ async fn main() -> anyhow::Result<()> {
     let meilisearch = setup_meilisearch(&opt)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    if !opt.no_analytics {
-        let analytics_data = meilisearch.clone();
-        let analytics_opt = opt.clone();
-        tokio::task::spawn(analytics::analytics_sender(analytics_data, analytics_opt));
-    }
+    let (analytics, user) = if !opt.no_analytics {
+        analytics::SegmentAnalytics::new(&opt, &meilisearch).await
+    } else {
+        analytics::MockAnalytics::new(&opt)
+    };
+    #[cfg(any(debug_assertions, not(feature = "analytics")))]
+    let (analytics, user) = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt);
+    print_launch_resume(&opt, &user);
 
-    run_http(meilisearch, opt).await?;
+    run_http(meilisearch, opt, analytics).await?;
 
     Ok(())
 }
 
-async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
+async fn run_http(
+    data: MeiliSearch,
+    opt: Opt,
+    analytics: Arc<dyn Analytics>,
+) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
-    let http_server = HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone))
-        // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-        .disable_signals();
+    let http_server =
+        HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone, analytics.clone()))
+            // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+            .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
@@ -78,7 +85,7 @@ async fn run_http(data: MeiliSearch, opt: Opt) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt) {
+pub fn print_launch_resume(opt: &Opt, user: &str) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -116,9 +123,13 @@ Thank you for using MeiliSearch!
 
 We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
-Anonymous telemetry:   \"Enabled\""
+Anonymous telemetry:\t\"Enabled\""
             );
         }
+    }
+
+    if !user.is_empty() {
+        eprintln!("Instance UID:\t\t\"{}\"", user);
     }
 
     eprintln!();

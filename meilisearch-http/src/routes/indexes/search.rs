@@ -1,10 +1,11 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::analytics::{Analytics, SearchAggregator};
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
@@ -109,9 +110,14 @@ pub async fn search_with_url_query(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQueryGet>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let query = params.into_inner().into();
+    let query: SearchQuery = params.into_inner().into();
+
+    let mut aggregate = SearchAggregator::from_query(&query, &req);
+
     let search_result = meilisearch
         .search(path.into_inner().index_uid, query)
         .await?;
@@ -119,6 +125,9 @@ pub async fn search_with_url_query(
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
+
+    aggregate.finish(&search_result);
+    analytics.get_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -128,15 +137,24 @@ pub async fn search_with_post(
     meilisearch: GuardedData<Public, MeiliSearch>,
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("search called with params: {:?}", params);
+    let query = params.into_inner();
+    debug!("search called with params: {:?}", query);
+
+    let mut aggregate = SearchAggregator::from_query(&query, &req);
+
     let search_result = meilisearch
-        .search(path.into_inner().index_uid, params.into_inner())
+        .search(path.into_inner().index_uid, query)
         .await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
+
+    aggregate.finish(&search_result);
+    analytics.post_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

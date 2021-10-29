@@ -3,16 +3,17 @@
 pub mod error;
 #[macro_use]
 pub mod extractors;
-#[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub mod analytics;
 pub mod helpers;
 pub mod option;
 pub mod routes;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::AuthConfig;
 use actix_web::error::JsonPayloadError;
+use analytics::Analytics;
 use error::PayloadError;
 use http::header::CONTENT_TYPE;
 pub use option::Opt;
@@ -74,10 +75,16 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
 }
 
-pub fn configure_data(config: &mut web::ServiceConfig, data: MeiliSearch, opt: &Opt) {
+pub fn configure_data(
+    config: &mut web::ServiceConfig,
+    data: MeiliSearch,
+    opt: &Opt,
+    analytics: Arc<dyn Analytics>,
+) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(data)
+        .app_data(web::Data::from(analytics))
         .app_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
@@ -168,7 +175,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 
 #[macro_export]
 macro_rules! create_app {
-    ($data:expr, $enable_frontend:expr, $opt:expr) => {{
+    ($data:expr, $enable_frontend:expr, $opt:expr, $analytics:expr) => {{
         use actix_cors::Cors;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
@@ -178,7 +185,7 @@ macro_rules! create_app {
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()
-            .configure(|s| configure_data(s, $data.clone(), &$opt))
+            .configure(|s| configure_data(s, $data.clone(), &$opt, $analytics))
             .configure(|s| configure_auth(s, &$opt))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
