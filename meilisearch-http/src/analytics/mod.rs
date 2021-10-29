@@ -3,7 +3,6 @@ mod mock_analytics;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 mod segment_analytics;
 
-use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -58,26 +57,26 @@ fn find_user_id(db_path: &Path) -> Option<String> {
         .or_else(|| fs::read_to_string(&config_user_id_path(db_path)?).ok())
 }
 
-pub trait Analytics: Display + Sync + Send {
+pub trait Analytics: Sync + Send {
     /// The method used to publish most analytics that do not need to be batched every hours
-    fn publish(&'static self, event_name: String, send: Value, request: Option<&HttpRequest>);
+    fn publish(&self, event_name: String, send: Value, request: Option<&HttpRequest>);
 
     /// This method should be called to aggergate a get search
-    fn get_search(&'static self, aggregate: SearchAggregator);
+    fn get_search(&self, aggregate: SearchAggregator);
 
     /// This method should be called to aggregate a post search
-    fn post_search(&'static self, aggregate: SearchAggregator);
+    fn post_search(&self, aggregate: SearchAggregator);
 
     // this method should be called to aggregate a add documents request
     fn add_documents(
-        &'static self,
+        &self,
         documents_query: &UpdateDocumentsQuery,
         index_creation: bool,
         request: &HttpRequest,
     );
     // this method should be called to batch a update documents request
     fn update_documents(
-        &'static self,
+        &self,
         documents_query: &UpdateDocumentsQuery,
         index_creation: bool,
         request: &HttpRequest,

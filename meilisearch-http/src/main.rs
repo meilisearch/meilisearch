@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Arc;
 
 use actix_web::HttpServer;
 use meilisearch_http::analytics;
@@ -46,15 +47,15 @@ async fn main() -> anyhow::Result<()> {
     let meilisearch = setup_meilisearch(&opt)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, &meilisearch).await as &'static dyn Analytics
+    let (analytics, user) = if !opt.no_analytics {
+        analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
-        analytics::MockAnalytics::new(&opt) as &'static dyn Analytics
+        analytics::MockAnalytics::new(&opt)
     };
     #[cfg(any(debug_assertions, not(feature = "analytics")))]
-    let analytics = analytics::MockAnalytics::new(&opt);
+    let (analytics, user) = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt, analytics);
+    print_launch_resume(&opt, &user);
 
     run_http(meilisearch, opt, analytics).await?;
 
@@ -64,12 +65,12 @@ async fn main() -> anyhow::Result<()> {
 async fn run_http(
     data: MeiliSearch,
     opt: Opt,
-    analytics: &'static dyn Analytics,
+    analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let http_server =
-        HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone, analytics))
+        HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone, analytics.clone()))
             // Disable signals allows the server to terminate immediately when a user enter CTRL-C
             .disable_signals();
 
@@ -84,7 +85,7 @@ async fn run_http(
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, analytics: &'static dyn Analytics) {
+pub fn print_launch_resume(opt: &Opt, user: &str) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -127,9 +128,8 @@ Anonymous telemetry:\t\"Enabled\""
         }
     }
 
-    let analytics = analytics.to_string();
-    if !analytics.is_empty() {
-        eprintln!("Instance UID:\t\t\"{}\"", analytics);
+    if !user.is_empty() {
+        eprintln!("Instance UID:\t\t\"{}\"", user);
     }
 
     eprintln!();

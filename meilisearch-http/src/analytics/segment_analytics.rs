@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
@@ -53,7 +53,7 @@ pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
         .collect()
 }
 
-pub enum Message {
+pub enum AnalyticsMsg {
     BatchMessage(Track),
     AggregateGetSearch(SearchAggregator),
     AggregatePostSearch(SearchAggregator),
@@ -62,12 +62,12 @@ pub enum Message {
 }
 
 pub struct SegmentAnalytics {
+    sender: Sender<AnalyticsMsg>,
     user: User,
-    sender: Sender<Message>,
 }
 
 impl SegmentAnalytics {
-    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> &'static Self {
+    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> (Arc<dyn Analytics>, String) {
         let user_id = super::find_user_id(&opt.db_path);
         let first_time_run = user_id.is_none();
         let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -91,25 +91,21 @@ impl SegmentAnalytics {
         });
         tokio::spawn(segment.run(meilisearch.clone()));
 
-        let ret = Box::new(Self { user, sender });
-        let ret = Box::leak(ret);
+        let this = Self {
+            sender,
+            user: user.clone(),
+        };
         // batch the launched for the first time track event
         if first_time_run {
-            ret.publish("Launched".to_string(), json!({}), None);
+            this.publish("Launched".to_string(), json!({}), None);
         }
 
-        ret
-    }
-}
-
-impl Display for SegmentAnalytics {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.user)
+        (Arc::new(this), user.to_string())
     }
 }
 
 impl super::Analytics for SegmentAnalytics {
-    fn publish(&'static self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
+    fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
         let user_agent = request
             .map(|req| req.headers().get(USER_AGENT))
             .flatten()
@@ -123,20 +119,21 @@ impl super::Analytics for SegmentAnalytics {
             properties: send,
             ..Default::default()
         };
-        let _ = self.sender.try_send(Message::BatchMessage(event.into()));
-    }
-    fn get_search(&'static self, aggregate: SearchAggregator) {
-        let _ = self.sender.try_send(Message::AggregateGetSearch(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event.into()));
     }
 
-    fn post_search(&'static self, aggregate: SearchAggregator) {
+    fn get_search(&self, aggregate: SearchAggregator) {
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
+    }
+
+    fn post_search(&self, aggregate: SearchAggregator) {
         let _ = self
             .sender
-            .try_send(Message::AggregatePostSearch(aggregate));
+            .try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
     }
 
     fn add_documents(
-        &'static self,
+        &self,
         documents_query: &UpdateDocumentsQuery,
         index_creation: bool,
         request: &HttpRequest,
@@ -144,11 +141,11 @@ impl super::Analytics for SegmentAnalytics {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self
             .sender
-            .try_send(Message::AggregateAddDocuments(aggregate));
+            .try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
     }
 
     fn update_documents(
-        &'static self,
+        &self,
         documents_query: &UpdateDocumentsQuery,
         index_creation: bool,
         request: &HttpRequest,
@@ -156,12 +153,12 @@ impl super::Analytics for SegmentAnalytics {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self
             .sender
-            .try_send(Message::AggregateUpdateDocuments(aggregate));
+            .try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
     }
 }
 
 pub struct Segment {
-    inbox: Receiver<Message>,
+    inbox: Receiver<AnalyticsMsg>,
     user: User,
     opt: Opt,
     batcher: AutoBatcher,
@@ -224,11 +221,11 @@ impl Segment {
                 },
                 msg = self.inbox.recv() => {
                     match msg {
-                        Some(Message::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
-                        Some(Message::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
-                        Some(Message::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
-                        Some(Message::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
-                        Some(Message::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
+                        Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
                         None => (),
                     }
                 }

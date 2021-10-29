@@ -7,6 +7,7 @@ pub mod analytics;
 pub mod helpers;
 pub mod option;
 pub mod routes;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
@@ -78,12 +79,12 @@ pub fn configure_data(
     config: &mut web::ServiceConfig,
     data: MeiliSearch,
     opt: &Opt,
-    analytics: &'static dyn Analytics,
+    analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(data)
-        .app_data(web::Data::new(analytics))
+        .app_data(web::Data::from(analytics))
         .app_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
