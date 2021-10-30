@@ -42,6 +42,7 @@ mod index_resolver;
 mod snapshot;
 pub mod update_file_store;
 pub mod updates;
+mod versioning;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
 pub type MeiliSearch =
@@ -136,6 +137,11 @@ impl IndexControllerBuilder {
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
+        let db_exists = db_path.as_ref().exists();
+        if db_exists {
+            versioning::check_version_file(db_path.as_ref())?;
+        }
+
         if let Some(ref path) = self.import_snapshot {
             info!("Loading from snapshot {:?}", path);
             load_snapshot(
@@ -155,6 +161,9 @@ impl IndexControllerBuilder {
         }
 
         std::fs::create_dir_all(db_path.as_ref())?;
+
+        // Create or overwrite the version file for this DB
+        versioning::create_version_file(db_path.as_ref())?;
 
         let index_resolver = Arc::new(create_index_resolver(
             &db_path,
