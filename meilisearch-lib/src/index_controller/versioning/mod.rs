@@ -39,29 +39,34 @@ pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
             file.read_to_string(&mut version)?;
 
             // Take the first uncommented line in the file
-            let version = version.lines()
-                .filter(|line| !line.starts_with('#'))
-                .nth(0)
+            let version = version
+                .lines()
+                .find(|line| !line.starts_with('#'))
                 .ok_or(VersionFileError::EmptyVersionFile)?;
 
             let version_components = version.split('.').collect::<Vec<_>>();
             let (major, minor, patch) = match &version_components[..] {
                 [major, minor] => (major.to_string(), minor.to_string(), "XX".to_string()),
                 [major, minor, patch] => (major.to_string(), minor.to_string(), patch.to_string()),
-                [major, minor, patch @ .. ] => (major.to_string(), minor.to_string(), patch.join(".")),
+                [major, minor, patch @ ..] => {
+                    (major.to_string(), minor.to_string(), patch.join("."))
+                }
                 _ => return Err(VersionFileError::MalformedVersionFile.into()),
             };
 
             if major != VERSION_MAJOR || minor != VERSION_MINOR {
-                return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
+                return Err(VersionFileError::VersionMismatch {
+                    major,
+                    minor,
+                    patch,
+                }
+                .into());
             }
         }
         Err(error) => {
             return match error.kind() {
-                ErrorKind::NotFound => {
-                    Err(VersionFileError::MissingVersionFile.into())
-                }
-                _ => Err(error.into())
+                ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile.into()),
+                _ => Err(error.into()),
             }
         }
     }
