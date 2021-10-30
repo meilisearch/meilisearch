@@ -18,11 +18,19 @@ async fn create_and_delete_index() {
 }
 
 #[actix_rt::test]
-async fn delete_unexisting_index() {
+async fn error_delete_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.delete().await;
+    let (response, code) = index.delete().await;
 
+    let expected_response = json!({
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 404);
 }
 

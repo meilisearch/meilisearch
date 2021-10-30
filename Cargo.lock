@@ -850,6 +850,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs-next"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf36e65a80337bea855cd4ef9b8401ffce06a7baedf2e85ec467b1ac3f6e82b6"
+dependencies = [
+ "cfg-if 1.0.0",
+ "dirs-sys-next",
+]
+
+[[package]]
+name = "dirs-sys-next"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ebda144c4fe02d1f7ea1a7d9641b6fc6b580adcfa024ae48797ecdeb6825b4d"
+dependencies = [
+ "libc",
+ "redox_users",
+ "winapi",
+]
+
+[[package]]
 name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1608,7 +1629,7 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "meilisearch-error"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "actix-http",
  "serde",
@@ -1616,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -1653,11 +1674,13 @@ dependencies = [
  "parking_lot",
  "paste",
  "pin-project",
+ "platform-dirs",
  "rand",
  "rayon",
  "regex",
  "reqwest",
  "rustls",
+ "segment",
  "serde",
  "serde_json",
  "serde_url_params",
@@ -1677,13 +1700,12 @@ dependencies = [
  "uuid",
  "vergen",
  "walkdir",
- "whoami",
  "zip",
 ]
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -1782,8 +1804,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.19.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.19.0#d7943fe22553b8205b86c32a0f2656d9e42de351"
+version = "0.20.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.20.0#5a6d22d4ec51dda0aba94b314e1b5a38af9400a2"
 dependencies = [
  "bimap",
  "bincode",
@@ -2173,6 +2195,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c9b1041b4387893b91ee6746cddfc28516aff326a3519fb2adf820932c5e6cb"
 
 [[package]]
+name = "platform-dirs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e188d043c1a692985f78b5464853a263f1a27e5bd6322bad3a4078ee3c998a38"
+dependencies = [
+ "dirs-next",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2351,6 +2382,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528532f3d801c87aec9def2add9ca802fe569e44a544afe633765267840abe64"
+dependencies = [
+ "getrandom",
+ "redox_syscall",
 ]
 
 [[package]]
@@ -2538,6 +2579,20 @@ checksum = "b362b83898e0e69f38515b82ee15aa80636befe47c3b6d3d89a911e78fc228ce"
 dependencies = [
  "ring",
  "untrusted",
+]
+
+[[package]]
+name = "segment"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bdcc286fff0e7c5ccd46c06a301c7a8a848b06acedc6983707bd311eb358002"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

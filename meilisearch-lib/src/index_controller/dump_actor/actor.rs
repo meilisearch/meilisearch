@@ -22,6 +22,7 @@ pub struct DumpActor<U, I> {
     index_resolver: Arc<IndexResolver<U, I>>,
     update: UpdateSender,
     dump_path: PathBuf,
+    analytics_path: PathBuf,
     lock: Arc<Mutex<()>>,
     dump_infos: Arc<RwLock<HashMap<String, DumpInfo>>>,
     update_db_size: usize,
@@ -43,6 +44,7 @@ where
         index_resolver: Arc<IndexResolver<U, I>>,
         update: UpdateSender,
         dump_path: impl AsRef<Path>,
+        analytics_path: impl AsRef<Path>,
         index_db_size: usize,
         update_db_size: usize,
     ) -> Self {
@@ -53,6 +55,7 @@ where
             index_resolver,
             update,
             dump_path: dump_path.as_ref().into(),
+            analytics_path: analytics_path.as_ref().into(),
             dump_infos,
             lock,
             index_db_size,
@@ -118,7 +121,8 @@ where
         ret.send(Ok(info)).expect("Dump actor is dead");
 
         let task = DumpTask {
-            path: self.dump_path.clone(),
+            dump_path: self.dump_path.clone(),
+            db_path: self.analytics_path.clone(),
             index_resolver: self.index_resolver.clone(),
             update_sender: self.update.clone(),
             uid: uid.clone(),

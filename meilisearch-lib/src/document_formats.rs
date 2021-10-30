@@ -25,13 +25,15 @@ impl fmt::Display for PayloadType {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DocumentFormatError {
-    #[error("Internal error: {0}")]
+    #[error("Internal error!: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("{0}. The {1} payload provided is malformed.")]
+    #[error("The `{1}` payload provided is malformed. `{0}`.")]
     MalformedPayload(
         Box<dyn std::error::Error + Send + Sync + 'static>,
         PayloadType,
     ),
+    #[error("The `{0}` payload must contain at least one document.")]
+    EmptyPayload(PayloadType),
 }
 
 impl From<(PayloadType, milli::documents::Error)> for DocumentFormatError {
@@ -48,6 +50,7 @@ impl ErrorCode for DocumentFormatError {
         match self {
             DocumentFormatError::Internal(_) => Code::Internal,
             DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
+            DocumentFormatError::EmptyPayload(_) => Code::MalformedPayload,
         }
     }
 }
@@ -57,10 +60,14 @@ internal_error!(DocumentFormatError: io::Error);
 /// reads csv from input and write an obkv batch to writer.
 pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     let writer = BufWriter::new(writer);
-    DocumentBatchBuilder::from_csv(input, writer)
-        .map_err(|e| (PayloadType::Csv, e))?
-        .finish()
-        .map_err(|e| (PayloadType::Csv, e))?;
+    let builder =
+        DocumentBatchBuilder::from_csv(input, writer).map_err(|e| (PayloadType::Csv, e))?;
+
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Csv));
+    }
+
+    builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
     Ok(())
 }
@@ -80,6 +87,10 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
         buf.clear();
     }
 
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Ndjson));
+    }
+
     builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
 
     Ok(())
@@ -92,6 +103,11 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
     builder
         .extend_from_json(input)
         .map_err(|e| (PayloadType::Json, e))?;
+
+    if builder.len() == 0 {
+        return Err(DocumentFormatError::EmptyPayload(PayloadType::Json));
+    }
+
     builder.finish().map_err(|e| (PayloadType::Json, e))?;
 
     Ok(())

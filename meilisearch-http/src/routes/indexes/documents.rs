@@ -11,6 +11,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::analytics::Analytics;
 use crate::error::{MeilisearchHttpError, ResponseError};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
@@ -122,7 +123,7 @@ pub async fn get_all_documents(
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    primary_key: Option<String>,
+    pub primary_key: Option<String>,
 }
 
 pub async fn add_documents(
@@ -131,15 +132,26 @@ pub async fn add_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let content_type = req
+        .headers()
+        .get("Content-type")
+        .map(|s| s.to_str().unwrap_or("unkown"));
+    let params = params.into_inner();
+
+    analytics.add_documents(
+        &params,
+        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
+        &req,
+    );
+
     document_addition(
-        req.headers()
-            .get("Content-type")
-            .map(|s| s.to_str().unwrap_or("unkown")),
+        content_type,
         meilisearch,
-        path.into_inner().index_uid,
-        params.into_inner().primary_key,
+        path.index_uid.clone(),
+        params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
     )
@@ -152,12 +164,22 @@ pub async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let content_type = req
+        .headers()
+        .get("Content-type")
+        .map(|s| s.to_str().unwrap_or("unkown"));
+
+    analytics.update_documents(
+        &params,
+        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
+        &req,
+    );
+
     document_addition(
-        req.headers()
-            .get("Content-type")
-            .map(|s| s.to_str().unwrap_or("unkown")),
+        content_type,
         meilisearch,
         path.into_inner().index_uid,
         params.into_inner().primary_key,

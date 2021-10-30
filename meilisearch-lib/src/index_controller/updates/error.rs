@@ -14,7 +14,7 @@ pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::large_enum_variant)]
 pub enum UpdateLoopError {
-    #[error("Update {0} not found.")]
+    #[error("Task `{0}` not found.")]
     UnexistingUpdate(u64),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
@@ -24,9 +24,8 @@ pub enum UpdateLoopError {
     FatalUpdateStoreError,
     #[error("{0}")]
     DocumentFormatError(#[from] DocumentFormatError),
-    // TODO: The reference to actix has to go.
-    #[error("{0}")]
-    PayloadError(#[from] actix_web::error::PayloadError),
+    #[error("The provided payload reached the size limit.")]
+    PayloadTooLarge,
     #[error("A {0} payload is missing.")]
     MissingPayload(DocumentAdditionFormat),
     #[error("{0}")]
@@ -48,6 +47,15 @@ impl From<tokio::sync::oneshot::error::RecvError> for UpdateLoopError {
     }
 }
 
+impl From<actix_web::error::PayloadError> for UpdateLoopError {
+    fn from(other: actix_web::error::PayloadError) -> Self {
+        match other {
+            actix_web::error::PayloadError::Overflow => Self::PayloadTooLarge,
+            _ => Self::Internal(Box::new(other)),
+        }
+    }
+}
+
 internal_error!(
     UpdateLoopError: heed::Error,
     std::io::Error,
@@ -59,14 +67,11 @@ internal_error!(
 impl ErrorCode for UpdateLoopError {
     fn error_code(&self) -> Code {
         match self {
-            Self::UnexistingUpdate(_) => Code::NotFound,
+            Self::UnexistingUpdate(_) => Code::TaskNotFound,
             Self::Internal(_) => Code::Internal,
             Self::FatalUpdateStoreError => Code::Internal,
             Self::DocumentFormatError(error) => error.error_code(),
-            Self::PayloadError(error) => match error {
-                actix_web::error::PayloadError::Overflow => Code::PayloadTooLarge,
-                _ => Code::Internal,
-            },
+            Self::PayloadTooLarge => Code::PayloadTooLarge,
             Self::MissingPayload(_) => Code::MissingPayload,
             Self::IndexError(e) => e.error_code(),
         }

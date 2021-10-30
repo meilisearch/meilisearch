@@ -1,5 +1,6 @@
 use crate::common::Server;
 use chrono::DateTime;
+use serde_json::json;
 
 #[actix_rt::test]
 async fn update_primary_key() {
@@ -39,26 +40,48 @@ async fn update_nothing() {
     assert_eq!(response, update);
 }
 
-// TODO: partial test since we are testing error, amd error is not yet fully implemented in
-// transplant
 #[actix_rt::test]
-async fn update_existing_primary_key() {
+async fn error_update_existing_primary_key() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.create(Some("primary")).await;
+    let (_response, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 201);
 
-    let (_update, code) = index.update(Some("primary2")).await;
+    let documents = json!([
+        {
+            "id": "11",
+            "content": "foobar"
+        }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_update_id(0).await;
 
+    let (response, code) = index.update(Some("primary")).await;
+
+    let expected_response = json!({
+        "message": "Index already has a primary key: `id`.",
+        "code": "index_primary_key_already_exists",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_already_exists"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 400);
 }
 
-// TODO: partial test since we are testing error, amd error is not yet fully implemented in
-// transplant
 #[actix_rt::test]
-async fn test_unexisting_index() {
+async fn error_update_unexisting_index() {
     let server = Server::new().await;
-    let (_response, code) = server.index("test").update(None).await;
+    let (response, code) = server.index("test").update(None).await;
+
+    let expected_response = json!({
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 404);
 }

@@ -1,10 +1,12 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
 use meilisearch_lib::index_controller::IndexSettings;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
+use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
@@ -54,8 +56,16 @@ pub struct IndexCreateRequest {
 pub async fn create_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let body = body.into_inner();
+
+    analytics.publish(
+        "Index Created".to_string(),
+        json!({ "primary_key": body.primary_key}),
+        Some(&req),
+    );
     let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
     Ok(HttpResponse::Created().json(meta))
 }
@@ -90,9 +100,16 @@ pub async fn update_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let body = body.into_inner();
+    analytics.publish(
+        "Index Updated".to_string(),
+        json!({ "primary_key": body.primary_key}),
+        Some(&req),
+    );
     let settings = IndexSettings {
         uid: body.uid,
         primary_key: body.primary_key,

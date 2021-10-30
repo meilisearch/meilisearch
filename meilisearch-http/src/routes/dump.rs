@@ -1,8 +1,10 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
+use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
@@ -13,7 +15,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 pub async fn create_dump(
     meilisearch: GuardedData<Private, MeiliSearch>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
+
     let res = meilisearch.create_dump().await?;
 
     debug!("returns: {:?}", res);

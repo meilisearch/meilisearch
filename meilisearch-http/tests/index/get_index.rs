@@ -1,4 +1,5 @@
 use crate::common::Server;
+use serde_json::json;
 use serde_json::Value;
 
 #[actix_rt::test]
@@ -21,15 +22,21 @@ async fn create_and_get_index() {
     assert_eq!(response.as_object().unwrap().len(), 5);
 }
 
-// TODO: partial test since we are testing error, and error is not yet fully implemented in
-// transplant
 #[actix_rt::test]
-async fn get_unexisting_index() {
+async fn error_get_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_response, code) = index.get().await;
+    let (response, code) = index.get().await;
 
+    let expected_response = json!({
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+    });
+
+    assert_eq!(response, expected_response);
     assert_eq!(code, 404);
 }
 

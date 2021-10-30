@@ -4,11 +4,11 @@ mod common;
 
 use crate::common::Server;
 use actix_web::test;
-use meilisearch_http::create_app;
+use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 
 #[actix_rt::test]
-async fn strict_json_bad_content_type() {
+async fn error_json_bad_content_type() {
     let routes = [
         // all the POST routes except the dumps that can be created without any body or content-type
         // and the search that is not a strict json
@@ -40,7 +40,8 @@ async fn strict_json_bad_content_type() {
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
         true,
-        &server.service.options
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
     for route in routes {
@@ -69,10 +70,10 @@ async fn strict_json_bad_content_type() {
         assert_eq!(
             response,
             json!({
-                    "message": r#"A Content-Type header is missing. Accepted values for the Content-Type header are: "application/json""#,
-                    "errorCode": "missing_content_type",
-                    "errorType": "invalid_request_error",
-                    "errorLink": "https://docs.meilisearch.com/errors#missing_content_type",
+                    "message": r#"A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`"#,
+                    "code": "missing_content_type",
+                    "type": "invalid_request",
+                    "link": "https://docs.meilisearch.com/errors#missing_content_type",
             }),
             "when calling the route `{}` with no content-type",
             route,
@@ -91,16 +92,16 @@ async fn strict_json_bad_content_type() {
             let response: Value = serde_json::from_slice(&body).unwrap_or_default();
             assert_eq!(status_code, 415);
             let expected_error_message = format!(
-                r#"The Content-Type "{}" is invalid. Accepted values for the Content-Type header are: "application/json""#,
+                r#"The Content-Type `{}` is invalid. Accepted values for the Content-Type header are: `application/json`"#,
                 bad_content_type
             );
             assert_eq!(
                 response,
                 json!({
                         "message": expected_error_message,
-                        "errorCode": "invalid_content_type",
-                        "errorType": "invalid_request_error",
-                        "errorLink": "https://docs.meilisearch.com/errors#invalid_content_type",
+                        "code": "invalid_content_type",
+                        "type": "invalid_request",
+                        "link": "https://docs.meilisearch.com/errors#invalid_content_type",
                 }),
                 "when calling the route `{}` with a content-type of `{}`",
                 route,

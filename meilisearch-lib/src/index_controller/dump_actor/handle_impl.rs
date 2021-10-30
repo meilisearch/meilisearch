@@ -33,6 +33,7 @@ impl DumpActorHandle for DumpActorHandleImpl {
 impl DumpActorHandleImpl {
     pub fn new(
         path: impl AsRef<Path>,
+        analytics_path: impl AsRef<Path>,
         index_resolver: Arc<HardStateIndexResolver>,
         update: crate::index_controller::updates::UpdateSender,
         index_db_size: usize,
@@ -44,6 +45,7 @@ impl DumpActorHandleImpl {
             index_resolver,
             update,
             path,
+            analytics_path,
             index_db_size,
             update_db_size,
         );

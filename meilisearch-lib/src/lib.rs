@@ -5,6 +5,8 @@ pub mod options;
 pub mod index;
 pub mod index_controller;
 
+mod analytics;
+
 pub use index_controller::updates::store::Update;
 pub use index_controller::MeiliSearch;
 
