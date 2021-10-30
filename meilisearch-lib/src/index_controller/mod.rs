@@ -39,6 +39,7 @@ use crate::update_file_store::UpdateFileStore;
 
 mod dump_actor;
 pub mod error;
+pub mod versioning;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
 pub type MeiliSearch = IndexController<HeedMetaStore, MapIndexStore>;
@@ -162,6 +163,11 @@ impl IndexControllerBuilder {
             .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
+        let db_exists = db_path.as_ref().exists();
+        if db_exists {
+            versioning::check_version_file(db_path.as_ref())?;
+        }
+
         if let Some(ref path) = self.import_snapshot {
             log::info!("Loading from snapshot {:?}", path);
             load_snapshot(
@@ -189,6 +195,8 @@ impl IndexControllerBuilder {
         let meta_env = options.open(&db_path)?;
 
         let update_file_store = UpdateFileStore::new(&db_path)?;
+        // Create or overwrite the version file for this DB
+        versioning::create_version_file(db_path.as_ref())?;
 
         let index_resolver = Arc::new(create_index_resolver(
             &db_path,
