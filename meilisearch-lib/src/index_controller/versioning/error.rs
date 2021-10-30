@@ -1,6 +1,6 @@
 #[derive(thiserror::Error, Debug)]
 pub enum VersionFileError {
-    #[error("Version file is missing or the previous MeiliSearch engine version was below 0.24.0")]
+    #[error("Version file is missing")]
     MissingVersionFile,
     #[error("Version file is empty")]
     EmptyVersionFile,
