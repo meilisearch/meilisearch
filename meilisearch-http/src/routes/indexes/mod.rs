@@ -54,20 +54,21 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    body: web::Json<IndexCreateRequest>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    _meilisearch: GuardedData<Private, MeiliSearch>,
+    _body: web::Json<IndexCreateRequest>,
+    _req: HttpRequest,
+    _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let body = body.into_inner();
+    todo!()
+    // let body = body.into_inner();
 
-    analytics.publish(
-        "Index Created".to_string(),
-        json!({ "primary_key": body.primary_key}),
-        Some(&req),
-    );
-    let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
-    Ok(HttpResponse::Created().json(meta))
+    // analytics.publish(
+    //     "Index Created".to_string(),
+    //     json!({ "primary_key": body.primary_key}),
+    //     Some(&req),
+    // );
+    // let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
+    // Ok(HttpResponse::Created().json(meta))
 }
 
 #[derive(Debug, Deserialize)]

@@ -16,6 +16,7 @@ use crate::error::{MeilisearchHttpError, ResponseError};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::routes::IndexParam;
+use crate::task::TaskResponse;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
@@ -76,11 +77,12 @@ pub async fn delete_document(
         index_uid,
     } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
-    let update_status = meilisearch
+    let task: TaskResponse = meilisearch
         .register_update(index_uid, update, false)
-        .await?;
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+        .await?
+        .into();
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 #[derive(Deserialize, Debug)]
@@ -147,15 +149,19 @@ pub async fn add_documents(
         &req,
     );
 
-    document_addition(
-        content_type,
+    let task = document_addition(
+        req.headers()
+            .get("Content-type")
+            .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
         path.index_uid.clone(),
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
     )
-    .await
+    .await?;
+
+    Ok(HttpResponse::Ok().json(task))
 }
 
 pub async fn update_documents(
@@ -178,19 +184,22 @@ pub async fn update_documents(
         &req,
     );
 
-    document_addition(
-        content_type,
+    let task = document_addition(
+        req.headers()
+            .get("Content-type")
+            .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
         path.into_inner().index_uid,
         params.into_inner().primary_key,
         body,
         IndexDocumentsMethod::UpdateDocuments,
     )
-    .await
+    .await?;
+
+    Ok(HttpResponse::Ok().json(task))
+
 }
 
-/// Route used when the payload type is "application/json"
-/// Used to add or replace documents
 async fn document_addition(
     content_type: Option<&str>,
     meilisearch: GuardedData<Private, MeiliSearch>,
@@ -231,10 +240,13 @@ async fn document_addition(
         format,
     };
 
-    let update_status = meilisearch.register_update(index_uid, update, true).await?;
+    let task = meilisearch
+        .register_update(index_uid, update, true)
+        .await?
+        .into();
 
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+    debug!("returns: {:?}", task);
+    Ok(task)
 }
 
 pub async fn delete_documents(
@@ -253,11 +265,13 @@ pub async fn delete_documents(
         .collect();
 
     let update = Update::DeleteDocuments(ids);
-    let update_status = meilisearch
+    let task: TaskResponse = meilisearch
         .register_update(path.into_inner().index_uid, update, false)
-        .await?;
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+        .await?
+        .into();
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn clear_all_documents(
@@ -265,9 +279,11 @@ pub async fn clear_all_documents(
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;
-    let update_status = meilisearch
+    let task: TaskResponse = meilisearch
         .register_update(path.into_inner().index_uid, update, false)
-        .await?;
-    debug!("returns: {:?}", update_status);
-    Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+        .await?
+        .into();
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }

@@ -2,12 +2,15 @@
 #[macro_use]
 pub mod error;
 #[macro_use]
-pub mod extractors;
+mod task;
 pub mod analytics;
+pub mod extractors;
 pub mod helpers;
 pub mod option;
 pub mod routes;
+
 use std::sync::Arc;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;

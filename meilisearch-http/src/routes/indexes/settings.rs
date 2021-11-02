@@ -33,9 +33,10 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
-                debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+                let task = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
+
+                debug!("returns: {:?}", task);
+                Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn update(
@@ -58,9 +59,10 @@ macro_rules! make_setting_route {
                 };
 
                 let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
-                debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status })))
+                let task = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
+
+                debug!("returns: {:?}", task);
+                Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn get(
@@ -71,6 +73,7 @@ macro_rules! make_setting_route {
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
+
                 Ok(HttpResponse::Ok().json(val))
             }
 
@@ -253,12 +256,12 @@ pub async fn update_all(
     );
 
     let update = Update::Settings(settings);
-    let update_result = meilisearch
+    let task = meilisearch
         .register_update(index_uid.into_inner(), update, true)
         .await?;
-    let json = serde_json::json!({ "updateId": update_result });
-    debug!("returns: {:?}", json);
-    Ok(HttpResponse::Accepted().json(json))
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_all(
@@ -277,10 +280,10 @@ pub async fn delete_all(
     let settings = Settings::cleared();
 
     let update = Update::Settings(settings.into_unchecked());
-    let update_result = data
+    let task = data
         .register_update(index_uid.into_inner(), update, false)
         .await?;
-    let json = serde_json::json!({ "updateId": update_result });
-    debug!("returns: {:?}", json);
-    Ok(HttpResponse::Accepted().json(json))
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }

@@ -316,7 +316,7 @@ where
         uid: String,
         update: Update,
         _create_index: bool,
-    ) -> Result<TaskId> {
+    ) -> Result<Task> {
         let content = match update {
             Update::DeleteDocuments(ids) => TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)),
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
@@ -363,7 +363,7 @@ where
 
         let task = self.task_store.register(uid, content).await.unwrap();
 
-        Ok(task.id)
+        Ok(task)
     }
 
     pub async fn get_task(&self, id: TaskId) -> Result<Task> {
