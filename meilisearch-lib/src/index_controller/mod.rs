@@ -366,6 +366,12 @@ where
         Ok(task.id)
     }
 
+    pub async fn get_task(&self, id: TaskId) -> Result<Task> {
+        let task = self.task_store.get_task(id).await.unwrap().unwrap();
+
+        Ok(task)
+    }
+
     pub async fn update_status(&self, _uid: String, _id: u64) -> Result<UpdateStatus> {
         todo!()
         //let uuid = self.index_resolver.get_uuid(uid).await?;
