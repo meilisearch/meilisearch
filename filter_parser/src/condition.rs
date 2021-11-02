@@ -9,10 +9,9 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::combinator::cut;
 use nom::sequence::tuple;
-use nom::IResult;
 use Condition::*;
 
-use crate::{parse_value, FPError, FilterCondition, Span, Token};
+use crate::{parse_value, FilterCondition, IResult, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition<'a> {
@@ -42,9 +41,7 @@ impl<'a> Condition<'a> {
 }
 
 /// condition      = value ("==" | ">" ...) value
-pub fn parse_condition<'a, E: FPError<'a>>(
-    input: Span<'a>,
-) -> IResult<Span<'a>, FilterCondition, E> {
+pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
     let (input, (key, op, value)) = tuple((|c| parse_value(c), operator, cut(parse_value)))(input)?;
 
@@ -74,7 +71,7 @@ pub fn parse_condition<'a, E: FPError<'a>>(
 }
 
 /// to             = value value TO value
-pub fn parse_to<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+pub fn parse_to(input: Span) -> IResult<FilterCondition> {
     let (input, (key, from, _, to)) =
         tuple((|c| parse_value(c), |c| parse_value(c), tag("TO"), cut(parse_value)))(input)?;
 

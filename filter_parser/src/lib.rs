@@ -37,16 +37,13 @@ use nom::error::{ContextError, ParseError};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
-use nom::{Finish, IResult};
+use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
-pub trait FilterParserError<'a>: ParseError<Span<'a>> + ContextError<Span<'a>> {}
-impl<'a, T> FilterParserError<'a> for T where T: ParseError<Span<'a>> + ContextError<Span<'a>> {}
-
-use FilterParserError as FPError;
+type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
@@ -96,24 +93,22 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn parse<E: FPError<'a>>(input: &'a str) -> Result<Self, E> {
+    pub fn parse(input: &'a str) -> Result<Self, Error> {
         if input.trim().is_empty() {
             return Ok(Self::Empty);
         }
         let span = Span::new_extra(input, input);
-        parse_filter::<'a, E>(span).finish().map(|(_rem, output)| output)
+        parse_filter(span).finish().map(|(_rem, output)| output)
     }
 }
 
 // remove OPTIONAL whitespaces before AND after the the provided parser
-fn ws<'a, O, E: FPError<'a>>(
-    inner: impl FnMut(Span<'a>) -> IResult<Span, O, E>,
-) -> impl FnMut(Span<'a>) -> IResult<Span, O, E> {
+fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) -> IResult<O> {
     delimited(multispace0, inner, multispace0)
 }
 
 /// and            = not (~ "AND" not)*
-fn parse_or<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_and(input)?;
     let (input, ors) = many0(preceded(ws(tag("OR")), cut(parse_and)))(input)?;
 
@@ -123,7 +118,7 @@ fn parse_or<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterConditio
     Ok((input, expr))
 }
 
-fn parse_and<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+fn parse_and(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_not(input)?;
     let (input, ors) = many0(preceded(ws(tag("AND")), cut(parse_not)))(input)?;
     let expr = ors
@@ -133,7 +128,7 @@ fn parse_and<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterConditi
 }
 
 /// not            = ("NOT" | "!") not | primary
-fn parse_not<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((
         map(preceded(alt((tag("!"), tag("NOT"))), cut(parse_not)), |e| e.negate()),
         cut(parse_primary),
@@ -141,7 +136,7 @@ fn parse_not<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterConditi
 }
 
 /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
-fn parse_geo_radius<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span<'a>, FilterCondition, E> {
+fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     let err_msg_args_incomplete = "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
 
     // we want to forbid space BEFORE the _geoRadius but not after
@@ -153,8 +148,8 @@ fn parse_geo_radius<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span<'a>, Fi
     let (input, args): (Span, Vec<Span>) = parsed?;
 
     if args.len() != 3 {
-        let e = E::from_char(input, '(');
-        return Err(nom::Err::Failure(E::add_context(input, err_msg_args_incomplete, e)));
+        let e = Error::from_char(input, '(');
+        return Err(nom::Err::Failure(Error::add_context(input, err_msg_args_incomplete, e)));
     }
 
     let res = FilterCondition::GeoLowerThan {
@@ -165,7 +160,7 @@ fn parse_geo_radius<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span<'a>, Fi
 }
 
 /// primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
-fn parse_primary<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+fn parse_primary(input: Span) -> IResult<FilterCondition> {
     alt((
         delimited(ws(char('(')), cut(parse_expression), cut(ws(char(')')))),
         |c| parse_geo_radius(c),
@@ -175,12 +170,12 @@ fn parse_primary<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCon
 }
 
 /// expression     = or
-pub fn parse_expression<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+pub fn parse_expression(input: Span) -> IResult<FilterCondition> {
     parse_or(input)
 }
 
 /// filter     = expression ~ EOF
-pub fn parse_filter<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(parse_expression, eof)(input)
 }
 
@@ -472,7 +467,7 @@ pub mod tests {
         ];
 
         for (input, expected) in test_case {
-            let result = Fc::parse::<Error<Span>>(input);
+            let result = Fc::parse(input);
 
             assert!(
                 result.is_ok(),
@@ -489,22 +484,22 @@ pub mod tests {
     fn error() {
         use FilterCondition as Fc;
 
-        let result = Fc::parse::<crate::Error<Span>>("test = truc OR truc");
+        let result = Fc::parse("test = truc OR truc");
         assert!(result.is_err());
 
         let test_case = [
             // simple test
+            ("channel = Ponce = 12", "An error occured"),
             ("OR", "An error occured"),
             ("AND", "An error occured"),
             ("channel = Ponce OR", "An error occured"),
-            ("channel = Ponce = 12", "An error occured"),
             ("_geoRadius = 12", "An error occured"),
             ("_geoPoint(12, 13, 14)", "An error occured"),
             ("_geo = _geoRadius(12, 13, 14)", "An error occured"),
         ];
 
         for (input, expected) in test_case {
-            let result = Fc::parse::<Error<Span>>(input);
+            let result = Fc::parse(input);
 
             assert!(
                 result.is_err(),
