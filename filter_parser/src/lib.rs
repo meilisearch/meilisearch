@@ -1,44 +1,50 @@
 //! BNF grammar:
 //!
 //! ```text
+//! filter         = expression ~ EOF
 //! expression     = or
 //! or             = and (~ "OR" ~ and)
 //! and            = not (~ "AND" not)*
 //! not            = ("NOT" | "!") not | primary
-//! primary        = (WS* ~ "("  expression ")" ~ WS*) | condition | to | geoRadius
+//! primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
 //! condition      = value ("==" | ">" ...) value
 //! to             = value value TO value
 //! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" (word | spaces)* "\""
 //! word           = (alphanumeric | _ | - | .)+
-//! geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
+//! geoRadius      = WS* ~ "_geoRadius(" ~ float ~ "," ~ float ~ "," float ~ ")"
+//! ```
+//!
+//! Other BNF grammar used to handle some specific errors:
+//! ```text
+//! geoPoint       = WS* ~ "_geoPoint(" ~ (float ~ ",")* ~ ")"
 //! ```
 
 mod condition;
+mod error;
 mod value;
+
 use std::fmt::Debug;
 
 pub use condition::{parse_condition, parse_to, Condition};
+pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0};
-use nom::combinator::map;
-use nom::error::{ContextError, Error, ErrorKind, VerboseError};
+use nom::combinator::{cut, eof, map};
+use nom::error::{ContextError, ParseError};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
-use nom::sequence::{delimited, preceded, tuple};
+use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::{Finish, IResult};
-use nom_greedyerror::GreedyError;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 
-pub type Span<'a> = LocatedSpan<&'a str>;
+pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
-pub trait FilterParserError<'a>: nom::error::ParseError<Span<'a>> + ContextError<Span<'a>> {}
-impl<'a> FilterParserError<'a> for GreedyError<Span<'a>, ErrorKind> {}
-impl<'a> FilterParserError<'a> for VerboseError<Span<'a>> {}
-impl<'a> FilterParserError<'a> for Error<Span<'a>> {}
+pub trait FilterParserError<'a>: ParseError<Span<'a>> + ContextError<Span<'a>> {}
+impl<'a, T> FilterParserError<'a> for T where T: ParseError<Span<'a>> + ContextError<Span<'a>> {}
 
 use FilterParserError as FPError;
 
@@ -94,8 +100,8 @@ impl<'a> FilterCondition<'a> {
         if input.trim().is_empty() {
             return Ok(Self::Empty);
         }
-        let span = Span::new(input);
-        parse_expression::<'a, E>(span).finish().map(|(_rem, output)| output)
+        let span = Span::new_extra(input, input);
+        parse_filter::<'a, E>(span).finish().map(|(_rem, output)| output)
     }
 }
 
@@ -109,7 +115,7 @@ fn ws<'a, O, E: FPError<'a>>(
 /// and            = not (~ "AND" not)*
 fn parse_or<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     let (input, lhs) = parse_and(input)?;
-    let (input, ors) = many0(preceded(ws(tag("OR")), |c| parse_and(c)))(input)?;
+    let (input, ors) = many0(preceded(ws(tag("OR")), cut(parse_and)))(input)?;
 
     let expr = ors
         .into_iter()
@@ -119,7 +125,7 @@ fn parse_or<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterConditio
 
 fn parse_and<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     let (input, lhs) = parse_not(input)?;
-    let (input, ors) = many0(preceded(ws(tag("AND")), |c| parse_not(c)))(input)?;
+    let (input, ors) = many0(preceded(ws(tag("AND")), cut(parse_not)))(input)?;
     let expr = ors
         .into_iter()
         .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
@@ -128,9 +134,10 @@ fn parse_and<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterConditi
 
 /// not            = ("NOT" | "!") not | primary
 fn parse_not<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
-    alt((map(preceded(alt((tag("!"), tag("NOT"))), |c| parse_not(c)), |e| e.negate()), |c| {
-        parse_primary(c)
-    }))(input)
+    alt((
+        map(preceded(alt((tag("!"), tag("NOT"))), cut(parse_not)), |e| e.negate()),
+        cut(parse_primary),
+    ))(input)
 }
 
 /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
@@ -140,7 +147,7 @@ fn parse_geo_radius<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span<'a>, Fi
     // we want to forbid space BEFORE the _geoRadius but not after
     let parsed = preceded::<_, _, _, _, _, _>(
         tuple((multispace0, tag("_geoRadius"))),
-        delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')')),
+        cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
     )(input);
 
     let (input, args): (Span, Vec<Span>) = parsed?;
@@ -157,19 +164,24 @@ fn parse_geo_radius<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span<'a>, Fi
     Ok((input, res))
 }
 
-/// primary        = (WS* ~ "("  expression ")" ~ WS*) | condition | to | geoRadius
+/// primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
 fn parse_primary<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     alt((
-        delimited(ws(char('(')), |c| parse_expression(c), ws(char(')'))),
+        delimited(ws(char('(')), cut(parse_expression), cut(ws(char(')')))),
+        |c| parse_geo_radius(c),
         |c| parse_condition(c),
         |c| parse_to(c),
-        |c| parse_geo_radius(c),
     ))(input)
 }
 
 /// expression     = or
 pub fn parse_expression<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     parse_or(input)
+}
+
+/// filter     = expression ~ EOF
+pub fn parse_filter<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
+    terminated(parse_expression, eof)(input)
 }
 
 #[cfg(test)]
@@ -181,7 +193,8 @@ pub mod tests {
         // if the string is empty we still need to return 1 for the line number
         let lines = before.is_empty().then(|| 1).unwrap_or_else(|| before.lines().count());
         let offset = before.chars().count();
-        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, ()) }.into()
+        // the extra field is not checked in the tests so we can set it to nothing
+        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()
     }
 
     #[test]
@@ -471,4 +484,48 @@ pub mod tests {
             assert_eq!(filter, expected, "Filter `{}` failed.", input);
         }
     }
+
+    #[test]
+    fn error() {
+        use FilterCondition as Fc;
+
+        let result = Fc::parse::<crate::Error<Span>>("test = truc OR truc");
+        assert!(result.is_err());
+
+        let test_case = [
+            // simple test
+            ("OR", "An error occured"),
+            ("AND", "An error occured"),
+            ("channel = Ponce OR", "An error occured"),
+            ("channel = Ponce = 12", "An error occured"),
+            ("_geoRadius = 12", "An error occured"),
+            ("_geoPoint(12, 13, 14)", "An error occured"),
+            ("_geo = _geoRadius(12, 13, 14)", "An error occured"),
+        ];
+
+        for (input, expected) in test_case {
+            let result = Fc::parse::<Error<Span>>(input);
+
+            assert!(
+                result.is_err(),
+                "Filter `{:?}` wasn't supposed to be parsed but it did with the following result: `{:?}`",
+                expected,
+                result.unwrap()
+            );
+            let filter = result.unwrap_err().to_string();
+            assert_eq!(filter, expected, "Filter `{:?}` was supposed to return the following error: `{}`, but instead returned `{}`.", input, filter, expected);
+        }
+    }
+
+    /*
+    #[test]
+    fn bidule() {
+        use FilterCondition as Fc;
+
+        let result = Fc::parse::<crate::Error<Span>>("test = truc OR truc");
+        dbg!(result);
+
+        assert!(false);
+    }
+    */
 }

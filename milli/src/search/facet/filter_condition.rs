@@ -93,7 +93,7 @@ impl<'a> Filter<'a> {
         let condition = match FilterCondition::parse::<GreedyError<Span, ErrorKind>>(expression) {
             Ok(fc) => Ok(fc),
             Err(e) => Err(Error::UserError(UserError::InvalidFilter {
-                input: convert_error(Span::new(expression), e).to_string(),
+                input: convert_error(Span::new_extra(expression, expression), e).to_string(),
             })),
         }?;
         Ok(Self { condition })

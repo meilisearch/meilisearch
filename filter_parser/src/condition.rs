@@ -3,20 +3,16 @@
 //! ```text
 //! condition      = value ("==" | ">" ...) value
 //! to             = value value TO value
-//! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
-//! singleQuoted   = "'" .* all but quotes "'"
-//! doubleQuoted   = "\"" (word | spaces)* "\""
-//! word           = (alphanumeric | _ | - | .)+
-//! geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
 //! ```
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::combinator::cut;
 use nom::sequence::tuple;
 use nom::IResult;
 use Condition::*;
 
-use crate::{parse_value, ws, FPError, FilterCondition, Span, Token};
+use crate::{parse_value, FPError, FilterCondition, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition<'a> {
@@ -50,8 +46,7 @@ pub fn parse_condition<'a, E: FPError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, FilterCondition, E> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
-    let (input, (key, op, value)) =
-        tuple((|c| parse_value(c), operator, |c| parse_value(c)))(input)?;
+    let (input, (key, op, value)) = tuple((|c| parse_value(c), operator, cut(parse_value)))(input)?;
 
     let fid = key;
 
@@ -81,9 +76,7 @@ pub fn parse_condition<'a, E: FPError<'a>>(
 /// to             = value value TO value
 pub fn parse_to<'a, E: FPError<'a>>(input: Span<'a>) -> IResult<Span, FilterCondition, E> {
     let (input, (key, from, _, to)) =
-        tuple((ws(|c| parse_value(c)), ws(|c| parse_value(c)), tag("TO"), ws(|c| parse_value(c))))(
-            input,
-        )?;
+        tuple((|c| parse_value(c), |c| parse_value(c), tag("TO"), cut(parse_value)))(input)?;
 
     Ok((
         input,

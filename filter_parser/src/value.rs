@@ -57,7 +57,7 @@ pub mod tests {
         ];
 
         for (input, expected) in test_case {
-            let input = Span::new(input);
+            let input = Span::new_extra(input, input);
             let result = parse_value::<Error<Span>>(input);
 
             assert!(
