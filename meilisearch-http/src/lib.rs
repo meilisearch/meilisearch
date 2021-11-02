@@ -53,7 +53,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
     meilisearch
         .set_max_index_size(opt.max_index_size.get_bytes() as usize)
-        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
+        .set_max_update_store_size(opt.max_task_db_size.get_bytes() as usize)
         .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
         .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
         .set_dump_dst(opt.dumps_dir.clone())

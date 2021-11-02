@@ -90,7 +90,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         no_analytics: true,
         max_index_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
-        max_udb_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
+        max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
         ssl_cert_path: None,
         ssl_key_path: None,

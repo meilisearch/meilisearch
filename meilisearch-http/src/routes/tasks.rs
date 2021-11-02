@@ -16,6 +16,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/{task_id}").route(web::get().to(get_task)));
 }
 
+// TODO: Remove
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum TaskType {
