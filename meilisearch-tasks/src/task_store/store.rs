@@ -81,7 +81,7 @@ impl Store {
             .tasks
             .lazily_decode_data()
             .last(txn)?
-            .map(|(id, _)| id.get())
+            .map(|(id, _)| id.get() + 1)
             .unwrap_or(0);
         Ok(id)
     }

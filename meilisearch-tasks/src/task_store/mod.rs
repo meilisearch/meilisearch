@@ -5,8 +5,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
-use tokio::sync::RwLock;
 use log::debug;
+use tokio::sync::RwLock;
 
 use crate::task::{Task, TaskContent, TaskEvent, TaskId};
 use crate::Result;
@@ -26,7 +26,10 @@ impl TaskStore {
     pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
         let store = Arc::new(Store::new(path, size)?);
         let pending_queue = Arc::default();
-        Ok(Self { store, pending_queue })
+        Ok(Self {
+            store,
+            pending_queue,
+        })
     }
 
     pub async fn register(&self, index_uid: String, content: TaskContent) -> Result<Task> {
@@ -48,8 +51,8 @@ impl TaskStore {
             txn.commit()?;
 
             Ok(task)
-        }).await??;
-
+        })
+        .await??;
 
         self.pending_queue.write().await.push_back(task.id);
 
@@ -67,7 +70,8 @@ impl TaskStore {
             let txn = store.rtxn()?;
             let task = store.get(&txn, id)?;
             Ok(task)
-        }).await??;
+        })
+        .await??;
 
         Ok(task)
     }
@@ -88,8 +92,8 @@ impl TaskStore {
             txn.commit()?;
 
             Ok(())
-
-        }).await??;
+        })
+        .await??;
 
         let mut pending_queue = pending_queue.write().await;
         pending_queue.retain(|id| !to_remove.contains(id));
@@ -99,21 +103,23 @@ impl TaskStore {
 
     pub async fn list_tasks(
         &self,
-        filter: Option<Box<dyn Fn(&Task) -> bool + Send + Sync +  'static>>,
+        filter: Option<Box<dyn Fn(&Task) -> bool + Send + Sync + 'static>>,
         limit: usize,
         offset: Option<TaskId>,
-        ) -> Result<Vec<Task>> {
+    ) -> Result<Vec<Task>> {
         let store = self.store.clone();
 
         tokio::task::spawn_blocking(move || {
             let txn = store.rtxn()?;
-            let tasks = store.list_updates(&txn, offset)?
+            let tasks = store
+                .list_updates(&txn, offset)?
                 .filter_map(|t| t.ok())
                 .filter(|t| filter.as_ref().map(|f| f(t)).unwrap_or(true))
                 .take(limit)
                 .collect::<Vec<_>>();
-                Ok(tasks)
-        }).await?
+            Ok(tasks)
+        })
+        .await?
     }
 }
 
@@ -122,6 +128,7 @@ pub mod test {
     use super::*;
 
     use nelson::Mocker;
+    use tempfile::tempdir;
 
     #[derive(Clone)]
     pub enum MockTaskStore {
@@ -158,5 +165,19 @@ pub mod test {
                 Self::Mock(m) => unsafe { m.get::<_, Option<TaskId>>("peek_pending").call(()) },
             }
         }
+    }
+
+    #[test]
+    fn test_increment_task_id() {
+        let temp_dir = tempdir().unwrap();
+        let store = Store::new(temp_dir.path(), 4096 * 100).unwrap();
+
+        let mut txn = store.wtxn().unwrap();
+        assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
+        assert_eq!(store.next_task_id(&mut txn).unwrap(), 1);
+        txn.commit().unwrap();
+
+        let mut txn = store.wtxn().unwrap();
+        assert_eq!(store.next_task_id(&mut txn).unwrap(), 2);
     }
 }
