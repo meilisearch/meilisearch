@@ -97,9 +97,9 @@ impl TaskStore {
         Ok(())
     }
 
-    pub async fn list_updates(
+    pub async fn list_tasks(
         &self,
-        filter: Option<impl Fn(&Task) -> bool + Send + Sync +  'static>,
+        filter: Option<Box<dyn Fn(&Task) -> bool + Send + Sync +  'static>>,
         limit: usize,
         offset: Option<TaskId>,
         ) -> Result<Vec<Task>> {

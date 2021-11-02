@@ -148,20 +148,17 @@ impl From<Task> for TaskResponse {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct TaskListResponse {
+    results: Vec<TaskResponse>,
+}
+
 async fn get_tasks(
-    _meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = TaskResponse {
-        uid: 123,
-        index_uid: "hello".to_string(),
-        status: TaskStatus::Enqueued,
-        task_type: TaskType::ClearAll,
-        details: None,
-        error: None,
-        duration: None,
-        enqueued_at: Utc::now(),
-        started_at: None,
-        finished_at: Some(Utc::now()),
+    let tasks = meilisearch.list_tasks().await?;
+    let  response = TaskListResponse {
+        results: tasks.into_iter().map(TaskResponse::from).collect(),
     };
     Ok(HttpResponse::Ok().json(response))
 }

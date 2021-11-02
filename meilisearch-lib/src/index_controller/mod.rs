@@ -372,6 +372,11 @@ where
         Ok(task)
     }
 
+    pub async fn list_tasks(&self) -> Result<Vec<Task>> {
+        let tasks = self.task_store.list_tasks(None, 20, None).await.unwrap();
+        Ok(tasks)
+    }
+
     pub async fn update_status(&self, _uid: String, _id: u64) -> Result<UpdateStatus> {
         todo!()
         //let uuid = self.index_resolver.get_uuid(uid).await?;
