@@ -118,16 +118,17 @@ pub async fn search_with_url_query(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch
-        .search(path.into_inner().index_uid, query)
-        .await?;
+    let search_result = meilisearch.search(path.into_inner().index_uid, query).await;
+    if let Ok(ref search_result) = search_result {
+        aggregate.succeed(search_result);
+    }
+    analytics.get_search(aggregate);
+
+    let search_result = search_result?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
-
-    aggregate.finish(&search_result);
-    analytics.get_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
@@ -145,16 +146,17 @@ pub async fn search_with_post(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch
-        .search(path.into_inner().index_uid, query)
-        .await?;
+    let search_result = meilisearch.search(path.into_inner().index_uid, query).await;
+    if let Ok(ref search_result) = search_result {
+        aggregate.succeed(search_result);
+    }
+    analytics.get_search(aggregate);
+
+    let search_result = search_result?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
     assert!(!search_result.exhaustive_nb_hits);
-
-    aggregate.finish(&search_result);
-    analytics.post_search(aggregate);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

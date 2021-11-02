@@ -18,7 +18,7 @@ impl SearchAggregator {
         Self::default()
     }
 
-    pub fn finish(&mut self, _: &dyn Any) {}
+    pub fn succeed(&mut self, _: &dyn Any) {}
 }
 
 impl MockAnalytics {
