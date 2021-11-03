@@ -364,7 +364,7 @@ impl SearchAggregator {
         ret
     }
 
-    pub fn finish(&mut self, result: &SearchResult) {
+    pub fn succeed(&mut self, result: &SearchResult) {
         self.total_succeeded += 1;
         self.time_spent.push(result.processing_time_ms as usize);
     }
