@@ -367,7 +367,7 @@ mod compat {
             "invalid_request" => Code::InvalidRankingRule,
             "max_fields_limit_exceeded" => Code::MaxFieldsLimitExceeded,
             "missing_document_id" => Code::MissingDocumentId,
-            "invalid_facet" => Code::Facet,
+            "invalid_facet" => Code::Filter,
             "invalid_filter" => Code::Filter,
             "invalid_sort" => Code::Sort,
             "bad_parameter" => Code::BadParameter,

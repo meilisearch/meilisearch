@@ -63,7 +63,6 @@ pub enum Code {
     MissingDocumentId,
     InvalidDocumentId,
 
-    Facet,
     Filter,
     Sort,
 
@@ -133,8 +132,6 @@ impl Code {
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
             InvalidDocumentId => ErrCode::invalid("invalid_document_id", StatusCode::BAD_REQUEST),
 
-            // error related to facets
-            Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
             // error related to filters
             Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
             // error related to sorts
