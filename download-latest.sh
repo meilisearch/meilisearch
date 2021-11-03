@@ -182,7 +182,7 @@ latest="$(get_latest)"
 if [ "$latest" = '' ]; then
     echo ''
     echo 'Impossible to get the latest stable version of MeiliSearch.'
-    echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch-swift/issues/new/choose'
+    echo 'Please let us know about this issue: https://github.com/meilisearch/MeiliSearch/issues/new/choose'
     exit 1
 fi
 
