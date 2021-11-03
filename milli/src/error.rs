@@ -232,11 +232,21 @@ impl fmt::Display for UserError {
                 )
             }
             Self::InvalidFilter(error) => error.fmt(f),
-            Self::InvalidGeoField { document_id, object } => write!(
-                f,
-                "The document with the id: `{}` contains an invalid _geo field: `{}`.",
-                document_id, object
-            ),
+            Self::InvalidGeoField { document_id, object } => {
+                let document_id = match document_id {
+                    Value::String(id) => id.clone(),
+                    _ => document_id.to_string(),
+                };
+                let object = match object {
+                    Value::String(id) => id.clone(),
+                    _ => object.to_string(),
+                };
+                write!(
+                    f,
+                    "The document with the id: `{}` contains an invalid _geo field: `{}`.",
+                    document_id, object
+                )
+            },
             Self::InvalidDocumentId { document_id } => {
                 let document_id = match document_id {
                     Value::String(id) => id.clone(),
@@ -268,10 +278,9 @@ ranking rules settings to use the sort parameter at search time.",
                 write!(f, "Document doesn't have a `{}` attribute: `{}`.", primary_key, json)
             }
             Self::MissingPrimaryKey => f.write_str("Missing primary key."),
-            Self::MaxDatabaseSizeReached => f.write_str("Maximum database size reached."),
-            // TODO where can we find it instead of writing the text ourselves?
-            Self::NoSpaceLeftOnDevice => f.write_str("No space left on device."),
-            Self::InvalidStoreFile => f.write_str("Store file is not a valid database file."),
+            Self::MaxDatabaseSizeReached => f.write_str("Maximum database size has been reached."),
+            Self::NoSpaceLeftOnDevice => f.write_str("There is no more space left on the device. Consider increasing the size of the disk/partition."),
+            Self::InvalidStoreFile => f.write_str("The database file is in an invalid state."),
             Self::PrimaryKeyCannotBeChanged(primary_key) => {
                 write!(f, "Index already has a primary key: `{}`.", primary_key)
             }
