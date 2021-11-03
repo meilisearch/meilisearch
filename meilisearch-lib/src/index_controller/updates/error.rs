@@ -16,7 +16,7 @@ pub type Result<T> = std::result::Result<T, UpdateLoopError>;
 pub enum UpdateLoopError {
     #[error("Task `{0}` not found.")]
     UnexistingUpdate(u64),
-    #[error("Internal error: {0}")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
     #[error(
         "update store was shut down due to a fatal error, please check your logs for more info."

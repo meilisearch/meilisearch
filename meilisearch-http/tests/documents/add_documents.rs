@@ -940,25 +940,29 @@ async fn error_document_field_limit_reached() {
 }
 
 #[actix_rt::test]
-#[ignore] // // TODO: Fix in an other PR: this does not provoke any error.
 async fn error_add_documents_invalid_geo_field() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("id")).await;
+    index
+        .update_settings(json!({"sortableAttributes": ["_geo"]}))
+        .await;
+
     let documents = json!([
         {
             "id": "11",
             "_geo": "foobar"
         }
     ]);
+
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_update_id(1).await;
+    let (response, code) = index.get_update(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
     assert_eq!(
         response["message"],
-        r#"The document with the id: `11` contains an invalid _geo field: :syntaxErrorHelper:REPLACE_ME."#
+        r#"The document with the id: `11` contains an invalid _geo field: `foobar`."#
     );
     assert_eq!(response["code"], "invalid_geo_field");
     assert_eq!(response["type"], "invalid_request");

@@ -36,11 +36,11 @@ impl ErrorCode for MilliError<'_> {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
-                    | UserError::MaxDatabaseSizeReached
-                    | UserError::InvalidStoreFile
-                    | UserError::NoSpaceLeftOnDevice
                     | UserError::DocumentLimitReached
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
+                    UserError::InvalidStoreFile => Code::InvalidStore,
+                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,

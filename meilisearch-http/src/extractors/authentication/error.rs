@@ -2,14 +2,14 @@ use meilisearch_error::{Code, ErrorCode};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
-    #[error("You must have an authorization token")]
+    #[error("The X-MEILI-API-KEY header is missing.")]
     MissingAuthorizationHeader,
-    #[error("Invalid API key")]
+    #[error("The provided API key is invalid.")]
     InvalidToken(String),
     // Triggered on configuration error.
-    #[error("Irretrievable state")]
+    #[error("An internal error has occurred. `Irretrievable state`.")]
     IrretrievableState,
-    #[error("Unknown authentication policy")]
+    #[error("An internal error has occurred. `Unknown authentication policy`.")]
     UnknownPolicy,
 }
 
