@@ -137,10 +137,6 @@ pub async fn add_documents(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let content_type = req
-        .headers()
-        .get("Content-type")
-        .map(|s| s.to_str().unwrap_or("unkown"));
     let params = params.into_inner();
 
     analytics.add_documents(
@@ -173,10 +169,6 @@ pub async fn update_documents(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let content_type = req
-        .headers()
-        .get("Content-type")
-        .map(|s| s.to_str().unwrap_or("unkown"));
 
     analytics.update_documents(
         &params,
@@ -207,7 +199,7 @@ async fn document_addition(
     primary_key: Option<String>,
     body: Payload,
     method: IndexDocumentsMethod,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<TaskResponse, ResponseError> {
     static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
         vec![
             "application/json".to_string(),

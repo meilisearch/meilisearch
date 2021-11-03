@@ -12,10 +12,7 @@ use futures::Stream;
 use futures::StreamExt;
 use log::info;
 use meilisearch_tasks::create_task_store;
-use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, Task};
-use meilisearch_tasks::task::DocumentDeletion;
-use meilisearch_tasks::task::TaskContent;
-use meilisearch_tasks::task::TaskId;
+use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
 use meilisearch_tasks::task_store::TaskStore;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
@@ -55,8 +52,7 @@ pub mod update_file_store;
 pub mod updates;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
-pub type MeiliSearch =
-    IndexController<HeedUuidStore, MapIndexStore, dump_actor::DumpActorHandleImpl>;
+pub type MeiliSearch = IndexController;
 
 pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
@@ -291,22 +287,7 @@ impl IndexControllerBuilder {
     }
 }
 
-// We are using derivative here to derive Clone, because U, I and D do not necessarily implement
-// Clone themselves.
-#[derive(derivative::Derivative)]
-#[derivative(Clone(bound = ""))]
-pub struct IndexController<U, I, D> {
-    index_resolver: Arc<IndexResolver<U, I>>,
-    update_sender: updates::UpdateSender,
-    dump_handle: Arc<D>,
-}
-
-impl<U, I, D> IndexController<U, I, D>
-where
-    U: UuidStore + Sync + Send + 'static,
-    I: IndexStore + Sync + Send + 'static,
-    D: DumpActorHandle + Send + Sync,
-{
+impl IndexController {
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
     }

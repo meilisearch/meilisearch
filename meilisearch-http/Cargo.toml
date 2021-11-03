@@ -25,6 +25,8 @@ zip = { version = "0.5.13", optional = true }
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
 actix-web = { version = "4.0.0-beta.9", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
+# TODO: specifying this dependency so semver doesn't bump to next beta
+actix-tls = "=3.0.0-beta.5"
 anyhow = { version = "1.0.43", features = ["backtrace"] }
 async-stream = "0.3.2"
 async-trait = "0.1.51"

@@ -58,7 +58,7 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// reads csv from input and write an obkv batch to writer.
-pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
     let builder =
         DocumentBatchBuilder::from_csv(input, writer).map_err(|e| (PayloadType::Csv, e))?;
@@ -67,13 +67,13 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<()> {
         return Err(DocumentFormatError::EmptyPayload(PayloadType::Csv));
     }
 
-    builder.finish().map_err(|e| (PayloadType::Csv, e))?;
+    let count = builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
     Ok(count)
 }
 
 /// reads jsonl from input and write an obkv batch to writer.
-pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut reader = BufReader::new(input);
     let writer = BufWriter::new(writer);
 
@@ -91,13 +91,13 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<()> {
         return Err(DocumentFormatError::EmptyPayload(PayloadType::Ndjson));
     }
 
-    builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
+    let count = builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
 
-    Ok(())
+    Ok(count)
 }
 
 /// reads json from input and write an obkv batch to writer.
-pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
+pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
     let mut builder = DocumentBatchBuilder::new(writer).map_err(|e| (PayloadType::Json, e))?;
     builder
@@ -108,7 +108,7 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<()> {
         return Err(DocumentFormatError::EmptyPayload(PayloadType::Json));
     }
 
-    builder.finish().map_err(|e| (PayloadType::Json, e))?;
+    let count = builder.finish().map_err(|e| (PayloadType::Json, e))?;
 
-    Ok(())
+    Ok(count)
 }

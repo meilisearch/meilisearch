@@ -2,6 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use env_logger::Env;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
