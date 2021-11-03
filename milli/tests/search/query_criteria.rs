@@ -341,9 +341,9 @@ fn criteria_mixup() {
         eprintln!("Testing with criteria order: {:?}", &criteria);
         //update criteria
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_criteria(criteria.iter().map(ToString::to_string).collect());
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();
@@ -376,16 +376,16 @@ fn criteria_ascdesc() {
 
     let mut wtxn = index.write_txn().unwrap();
 
-    let mut builder = Settings::new(&mut wtxn, &index, 0);
+    let mut builder = Settings::new(&mut wtxn, &index);
 
     builder.set_sortable_fields(hashset! {
         S("name"),
         S("age"),
     });
-    builder.execute(|_, _| ()).unwrap();
+    builder.execute(|_| ()).unwrap();
 
     // index documents
-    let mut builder = UpdateBuilder::new(0);
+    let mut builder = UpdateBuilder::new();
     builder.max_memory(10 * 1024 * 1024); // 10MiB
     let mut builder = builder.index_documents(&mut wtxn, &index);
     builder.enable_autogenerate_docids();
@@ -419,7 +419,7 @@ fn criteria_ascdesc() {
 
     let reader = DocumentBatchReader::from_reader(cursor).unwrap();
 
-    builder.execute(reader, |_, _| ()).unwrap();
+    builder.execute(reader, |_| ()).unwrap();
 
     wtxn.commit().unwrap();
 
@@ -430,9 +430,9 @@ fn criteria_ascdesc() {
         eprintln!("Testing with criterion: {:?}", &criterion);
 
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_criteria(vec![criterion.to_string()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();

@@ -512,10 +512,10 @@ mod tests {
 
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_searchable_fields(vec![S("title")]);
         builder.set_filterable_fields(hashset! { S("title") });
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -542,10 +542,10 @@ mod tests {
 
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
         builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

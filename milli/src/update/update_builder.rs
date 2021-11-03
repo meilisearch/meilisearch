@@ -13,11 +13,10 @@ pub struct UpdateBuilder<'a> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     pub(crate) max_positions_per_attributes: Option<u32>,
-    pub(crate) update_id: u64,
 }
 
 impl<'a> UpdateBuilder<'a> {
-    pub fn new(update_id: u64) -> UpdateBuilder<'a> {
+    pub fn new() -> UpdateBuilder<'a> {
         UpdateBuilder {
             log_every_n: None,
             max_nb_chunks: None,
@@ -27,7 +26,6 @@ impl<'a> UpdateBuilder<'a> {
             chunk_compression_level: None,
             thread_pool: None,
             max_positions_per_attributes: None,
-            update_id,
         }
     }
 
@@ -68,7 +66,7 @@ impl<'a> UpdateBuilder<'a> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> ClearDocuments<'t, 'u, 'i> {
-        ClearDocuments::new(wtxn, index, self.update_id)
+        ClearDocuments::new(wtxn, index)
     }
 
     pub fn delete_documents<'t, 'u, 'i>(
@@ -76,7 +74,7 @@ impl<'a> UpdateBuilder<'a> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> Result<DeleteDocuments<'t, 'u, 'i>> {
-        DeleteDocuments::new(wtxn, index, self.update_id)
+        DeleteDocuments::new(wtxn, index)
     }
 
     pub fn index_documents<'t, 'u, 'i>(
@@ -84,7 +82,7 @@ impl<'a> UpdateBuilder<'a> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> IndexDocuments<'t, 'u, 'i, 'a> {
-        let mut builder = IndexDocuments::new(wtxn, index, self.update_id);
+        let mut builder = IndexDocuments::new(wtxn, index);
 
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
@@ -103,7 +101,7 @@ impl<'a> UpdateBuilder<'a> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> Settings<'a, 't, 'u, 'i> {
-        let mut builder = Settings::new(wtxn, index, self.update_id);
+        let mut builder = Settings::new(wtxn, index);
 
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
@@ -122,7 +120,7 @@ impl<'a> UpdateBuilder<'a> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> Facets<'t, 'u, 'i> {
-        let mut builder = Facets::new(wtxn, index, self.update_id);
+        let mut builder = Facets::new(wtxn, index);
 
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;

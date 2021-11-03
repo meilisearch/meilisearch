@@ -85,7 +85,6 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     pub(crate) max_positions_per_attributes: Option<u32>,
-    update_id: u64,
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
@@ -99,11 +98,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
-    pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        index: &'i Index,
-        update_id: u64,
-    ) -> Settings<'a, 't, 'u, 'i> {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Settings<'a, 't, 'u, 'i> {
         Settings {
             wtxn,
             index,
@@ -123,7 +118,6 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
-            update_id,
             max_positions_per_attributes: None,
         }
     }
@@ -207,11 +201,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep, u64) + Sync,
+        F: Fn(UpdateIndexingStep) + Sync,
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-        let update_id = self.update_id;
-        let cb = |step| cb(step, update_id);
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
         if self.index.number_of_documents(&self.wtxn)? == 0 {
@@ -242,11 +234,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         )?;
 
         // We clear the full database (words-fst, documents ids and documents content).
-        ClearDocuments::new(self.wtxn, self.index, self.update_id).execute()?;
+        ClearDocuments::new(self.wtxn, self.index).execute()?;
 
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
-        let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index, self.update_id);
+        let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index);
         indexing_builder.log_every_n = self.log_every_n;
         indexing_builder.max_nb_chunks = self.max_nb_chunks;
         indexing_builder.max_memory = self.max_memory;
@@ -484,7 +476,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep, u64) + Sync,
+        F: Fn(UpdateIndexingStep) + Sync,
     {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
 
@@ -543,15 +535,15 @@ mod tests {
             { "id": 2, "name": "kevina", "age": 21},
             { "id": 3, "name": "benoit", "age": 34 }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.execute(content, |_, _| ()).unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 1);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field is correctly set to "name" only.
@@ -571,9 +563,9 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 2);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_searchable_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field have been reset and documents are found now.
@@ -600,18 +592,18 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // In the same transaction we change the displayed fields to be only the "age".
         // We also change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 1);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["age".into()]);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -622,9 +614,9 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 2);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_searchable_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields always contains only the "age" field.
@@ -647,9 +639,9 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -672,14 +664,14 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["age".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to only the "age" field.
@@ -690,9 +682,9 @@ mod tests {
 
         // We reset the fields ids to become `None`, the default value.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_displayed_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -710,9 +702,9 @@ mod tests {
 
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_filterable_fields(hashset! { S("age") });
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
 
         // Then index some documents.
         let content = documents!([
@@ -720,9 +712,9 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set.
@@ -757,9 +749,9 @@ mod tests {
             { "name": "benoit", "age": 35 }
         ]);
 
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 2);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -782,11 +774,11 @@ mod tests {
 
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name")]);
         builder.set_criteria(vec![S("age:asc")]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
 
         // Then index some documents.
         let content = documents!([
@@ -794,9 +786,9 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Run an empty query just to ensure that the search results are ordered.
@@ -824,11 +816,11 @@ mod tests {
 
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name"), S("age")]);
         builder.set_distinct_field(S("age"));
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
 
         // Then index some documents.
         let content = documents!([
@@ -840,9 +832,9 @@ mod tests {
             { "name": "bernie", "age": 34 },
             { "name": "ben", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Run an empty query just to ensure that the search results are ordered.
@@ -867,9 +859,9 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Ensure there is no stop_words by default
@@ -892,15 +884,15 @@ mod tests {
             { "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
             { "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
 
         // In the same transaction we provide some stop_words
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
         builder.set_stop_words(set.clone());
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Ensure stop_words are effectively stored
@@ -928,9 +920,9 @@ mod tests {
 
         // now we'll reset the stop_words and ensure it's None
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_stop_words();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -966,18 +958,18 @@ mod tests {
             { "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
             { "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.enable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
 
         // In the same transaction provide some synonyms
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_synonyms(hashmap! {
             "blini".to_string() => vec!["crepes".to_string()],
             "super like".to_string() => vec!["love".to_string()],
             "puppies".to_string() => vec!["dogs".to_string(), "doggos".to_string()]
         });
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Ensure synonyms are effectively stored
@@ -995,9 +987,9 @@ mod tests {
 
         // Reset the synonyms
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_synonyms();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Ensure synonyms are reset
@@ -1023,11 +1015,11 @@ mod tests {
 
         // Set all the settings except searchable
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         builder.set_filterable_fields(hashset! { S("age"), S("toto") });
         builder.set_criteria(vec!["toto:asc".to_string()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // check the output
@@ -1040,9 +1032,9 @@ mod tests {
 
         // We set toto and age as searchable to force reordering of the fields
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 1);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_searchable_fields(vec!["toto".to_string(), "age".to_string()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -1060,11 +1052,11 @@ mod tests {
 
         // Set all the settings except searchable
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
         builder.set_criteria(vec!["toto:asc".to_string()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -1081,10 +1073,10 @@ mod tests {
 
         // Set the primary key settings
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_primary_key(S("mykey"));
 
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
 
         // Then index some documents with the "mykey" primary key.
@@ -1097,29 +1089,29 @@ mod tests {
             { "mykey": 6, "name": "bernie", "age": 34 },
             { "mykey": 7, "name": "ben", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.disable_autogenerate_docids();
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // We now try to reset the primary key
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_primary_key();
 
-        let err = builder.execute(|_, _| ()).unwrap_err();
+        let err = builder.execute(|_| ()).unwrap_err();
         assert!(matches!(err, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
         wtxn.abort().unwrap();
 
         // But if we clear the database...
         let mut wtxn = index.write_txn().unwrap();
-        let builder = ClearDocuments::new(&mut wtxn, &index, 0);
+        let builder = ClearDocuments::new(&mut wtxn, &index);
         builder.execute().unwrap();
 
         // ...we can change the primary key
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_primary_key(S("myid"));
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
     }
 
@@ -1132,9 +1124,9 @@ mod tests {
 
         // Set the genres setting
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_filterable_fields(hashset! { S("genres") });
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
 
         let content = documents!([
           {
@@ -1155,8 +1147,8 @@ mod tests {
             "release_date": 819676800
           }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index, 1);
-        builder.execute(content, |_, _| ()).unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // We now try to reset the primary key
