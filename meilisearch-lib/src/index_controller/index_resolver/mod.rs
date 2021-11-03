@@ -45,12 +45,11 @@ where U: UuidStore,
                         DocumentAdditionMergeStrategy::ReplaceDocument => IndexDocumentsMethod::ReplaceDocuments,
                     };
 
-                    let task_id = task.id;
                     let primary_key = primary_key.clone();
                     let content_uuid = *content_uuid;
 
                     tokio::task::spawn_blocking(move || {
-                        let update_builder = index.update_builder(task_id as u64);
+                        let update_builder = index.update_builder();
                         let mut txn = index.write_txn()?;
                         let res = index.update_documents(
                             &mut txn,

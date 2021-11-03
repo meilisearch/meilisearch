@@ -29,9 +29,9 @@ impl UpdateHandler {
         })
     }
 
-    pub fn update_builder(&self, update_id: u64) -> UpdateBuilder {
+    pub fn update_builder(&self) -> UpdateBuilder {
         // We prepare the update by using the update builder.
-        let mut update_builder = UpdateBuilder::new(update_id);
+        let mut update_builder = UpdateBuilder::new();
         if let Some(max_nb_chunks) = self.max_nb_chunks {
             update_builder.max_nb_chunks(max_nb_chunks);
         }

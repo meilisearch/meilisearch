@@ -76,9 +76,9 @@ impl IndexStore for MapIndexStore {
                 let inner = index.inner();
                 let mut txn = inner.write_txn()?;
 
-                let mut builder = UpdateBuilder::new(0).settings(&mut txn, index.inner());
+                let mut builder = UpdateBuilder::new().settings(&mut txn, index.inner());
                 builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())?;
+                builder.execute(|_| ())?;
 
                 txn.commit()?;
             }

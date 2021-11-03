@@ -165,8 +165,7 @@ pub struct Facets {
 
 impl Index {
     pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
-        let update_id = update.id();
-        let update_builder = self.update_handler.update_builder(update_id);
+        let update_builder = self.update_handler.update_builder();
         let result = (|| {
             let mut txn = self.write_txn()?;
             let result = match update.meta() {
@@ -222,9 +221,9 @@ impl Index {
         match primary_key {
             Some(primary_key) => {
                 let mut txn = self.write_txn()?;
-                let mut builder = UpdateBuilder::new(0).settings(&mut txn, self);
+                let mut builder = UpdateBuilder::new().settings(&mut txn, self);
                 builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())?;
+                builder.execute(|_| ())?;
                 let meta = IndexMeta::new_txn(self, &txn)?;
                 txn.commit()?;
                 Ok(meta)
@@ -236,8 +235,8 @@ impl Index {
         }
     }
 
-    pub fn update_builder(&self, id: u64) -> UpdateBuilder {
-        self.update_handler.update_builder(id)
+    pub fn update_builder(&self) -> UpdateBuilder {
+        self.update_handler.update_builder()
     }
 
     pub fn update_documents<'a, 'b>(
@@ -252,13 +251,12 @@ impl Index {
 
         // Set the primary key if not set already, ignore if already set.
         if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = UpdateBuilder::new(0).settings(txn, self);
+            let mut builder = UpdateBuilder::new().settings(txn, self);
             builder.set_primary_key(primary_key.to_string());
-            builder.execute(|_, _| ())?;
+            builder.execute(|_| ())?;
         }
 
-        let indexing_callback =
-            |indexing_step, update_id| debug!("update {}: {:?}", update_id, indexing_step);
+        let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
 
         let content_file = self.update_file_store.get_update(content_uuid).unwrap();
         let reader = DocumentBatchReader::from_reader(content_file).unwrap();
@@ -283,9 +281,7 @@ impl Index {
 
         apply_settings_to_builder(settings, &mut builder);
 
-        builder.execute(|indexing_step, update_id| {
-            debug!("update {}: {:?}", update_id, indexing_step)
-        })?;
+        builder.execute(|indexing_step| debug!("update: {:?}", indexing_step))?;
 
         Ok(UpdateResult::Other)
     }

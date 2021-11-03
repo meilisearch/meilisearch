@@ -105,7 +105,7 @@ fn load_index(
 
     let handler = UpdateHandler::new(indexer_options)?;
 
-    let mut builder = handler.update_builder(0).settings(&mut txn, &index);
+    let mut builder = handler.update_builder().settings(&mut txn, &index);
 
     if let Some(primary_key) = primary_key {
         builder.set_primary_key(primary_key.to_string());
@@ -113,7 +113,7 @@ fn load_index(
 
     apply_settings_to_builder(&settings.check(), &mut builder);
 
-    builder.execute(|_, _| ())?;
+    builder.execute(|_| ())?;
 
     let reader = BufReader::new(File::open(&src.as_ref().join("documents.jsonl"))?);
 
@@ -129,9 +129,9 @@ fn load_index(
     //a primary key error to be thrown.
     if !documents_reader.is_empty() {
         let builder = update_handler
-            .update_builder(0)
+            .update_builder()
             .index_documents(&mut txn, &index);
-        builder.execute(documents_reader, |_, _| ())?;
+        builder.execute(documents_reader, |_| ())?;
     }
 
     txn.commit()?;
