@@ -49,13 +49,11 @@ where U: UuidStore,
                     let content_uuid = *content_uuid;
 
                     tokio::task::spawn_blocking(move || {
-                        let update_builder = index.update_builder();
                         let mut txn = index.write_txn()?;
                         let res = index.update_documents(
                             &mut txn,
                             method,
                             content_uuid,
-                            update_builder,
                             primary_key.as_deref());
                         txn.commit()?;
                         res

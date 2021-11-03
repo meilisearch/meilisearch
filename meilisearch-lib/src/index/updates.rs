@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
-use crate::Update;
 
 use super::error::Result;
 use super::index::{Index, IndexMeta};
@@ -165,56 +164,56 @@ pub struct Facets {
 
 impl Index {
     pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
-        let update_builder = self.update_handler.update_builder();
-        let result = (|| {
-            let mut txn = self.write_txn()?;
-            let result = match update.meta() {
-                Update::DocumentAddition {
-                    primary_key,
-                    content_uuid,
-                    method,
-                } => self.update_documents(
-                    &mut txn,
-                    *method,
-                    *content_uuid,
-                    update_builder,
-                    primary_key.as_deref(),
-                ),
-                Update::Settings(settings) => {
-                    let settings = settings.clone().check();
-                    self.update_settings(&mut txn, &settings, update_builder)
-                }
-                Update::ClearDocuments => {
-                    let builder = update_builder.clear_documents(&mut txn, self);
-                    let _count = builder.execute()?;
-                    Ok(UpdateResult::Other)
-                }
-                Update::DeleteDocuments(ids) => {
-                    let mut builder = update_builder.delete_documents(&mut txn, self)?;
+        todo!()
+      //  let update_builder = self.update_handler.update_builder();
+      //  let result = (|| {
+      //      let mut txn = self.write_txn()?;
+      //      let result = match update.meta() {
+      //          Update::DocumentAddition {
+      //              primary_key,
+      //              content_uuid,
+      //              method,
+      //          } => self.update_documents(
+      //              &mut txn,
+      //              *method,
+      //              *content_uuid,
+      //              primary_key.as_deref(),
+      //          ),
+      //          Update::Settings(settings) => {
+      //              let settings = settings.clone().check();
+      //              self.update_settings(&mut txn, &settings, update_builder)
+      //          }
+      //          Update::ClearDocuments => {
+      //              let builder = update_builder.clear_documents(&mut txn, self);
+      //              let _count = builder.execute()?;
+      //              Ok(UpdateResult::Other)
+      //          }
+      //          Update::DeleteDocuments(ids) => {
+      //              let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
-                    // We ignore unexisting document ids
-                    ids.iter().for_each(|id| {
-                        builder.delete_external_id(id);
-                    });
+      //              // We ignore unexisting document ids
+      //              ids.iter().for_each(|id| {
+      //                  builder.delete_external_id(id);
+      //              });
 
-                    let deleted = builder.execute()?;
-                    Ok(UpdateResult::DocumentDeletion { deleted })
-                }
-            };
-            if result.is_ok() {
-                txn.commit()?;
-            }
-            result
-        })();
+      //              let deleted = builder.execute()?;
+      //              Ok(UpdateResult::DocumentDeletion { deleted })
+      //          }
+      //      };
+      //      if result.is_ok() {
+      //          txn.commit()?;
+      //      }
+      //      result
+      //  })();
 
-        if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
-            let _ = self.update_file_store.delete(*content_uuid);
-        }
+      //  if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
+      //      let _ = self.update_file_store.delete(*content_uuid);
+      //  }
 
-        match result {
-            Ok(result) => Ok(update.process(result)),
-            Err(e) => Err(update.fail(e)),
-        }
+      //  match result {
+      //      Ok(result) => Ok(update.process(result)),
+      //      Err(e) => Err(update.fail(e)),
+      //  }
     }
 
     pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
@@ -235,8 +234,16 @@ impl Index {
         }
     }
 
-    pub fn update_builder(&self) -> UpdateBuilder {
-        self.update_handler.update_builder()
+    pub fn delete_documents<'a, 'b>(&'a self, txn: &mut heed::RwTxn<'a, 'b>, ids: &[String]) -> Result<UpdateResult> {
+        let mut builder = self.update_handler.update_builder().delete_documents(txn, self)?;
+
+        // We ignore unexisting document ids
+        ids.iter().for_each(|id| {
+            builder.delete_external_id(id);
+        });
+
+        let deleted = builder.execute()?;
+        Ok(UpdateResult::DocumentDeletion { deleted })
     }
 
     pub fn update_documents<'a, 'b>(
@@ -244,14 +251,13 @@ impl Index {
         txn: &mut heed::RwTxn<'a, 'b>,
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
-        update_builder: UpdateBuilder,
         primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
         trace!("performing document addition");
 
         // Set the primary key if not set already, ignore if already set.
         if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = UpdateBuilder::new().settings(txn, self);
+            let mut builder = self.update_handler.update_builder().settings(txn, self);
             builder.set_primary_key(primary_key.to_string());
             builder.execute(|_| ())?;
         }
@@ -261,7 +267,10 @@ impl Index {
         let content_file = self.update_file_store.get_update(content_uuid).unwrap();
         let reader = DocumentBatchReader::from_reader(content_file).unwrap();
 
-        let mut builder = update_builder.index_documents(txn, self);
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .index_documents(txn, self);
         builder.index_documents_method(method);
         let addition = builder.execute(reader, indexing_callback)?;
 
@@ -270,14 +279,13 @@ impl Index {
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    fn update_settings<'a, 'b>(
+    pub fn update_settings<'a, 'b>(
         &'a self,
         txn: &mut heed::RwTxn<'a, 'b>,
         settings: &Settings<Checked>,
-        update_builder: UpdateBuilder,
     ) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
-        let mut builder = update_builder.settings(txn, self);
+        let mut builder = self.update_handler.update_builder().settings(txn, self);
 
         apply_settings_to_builder(settings, &mut builder);
 
