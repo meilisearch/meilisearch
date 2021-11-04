@@ -1,5 +1,5 @@
 use chrono::{Duration, DateTime, Utc};
-use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskEvent};
+use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
 use serde::{Serialize, Serializer};
 
 use crate::error::ResponseError;
@@ -47,7 +47,7 @@ fn serialize_duration<S: Serializer>(duration: &Option<Duration>, serializer: S)
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskResponse {
-    uid: u32,
+    uid: TaskId,
     index_uid: String,
     status: TaskStatus,
     #[serde(rename = "type")]

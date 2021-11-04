@@ -20,7 +20,7 @@ struct TaskListResponse {
 async fn get_tasks(
     meilisearch: GuardedData<Private, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let tasks = meilisearch.list_tasks().await?;
+    let tasks = meilisearch.list_tasks(None).await?;
     let  response = TaskListResponse {
         results: tasks.into_iter().map(TaskResponse::from).collect(),
     };
@@ -31,7 +31,7 @@ async fn get_task(
     meilisearch: GuardedData<Private, MeiliSearch>,
     task_id: web::Path<TaskId>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task: TaskResponse = meilisearch.get_task(task_id.into_inner()).await?.into();
+    let task: TaskResponse = meilisearch.get_task(task_id.into_inner(), None).await?.into();
 
     Ok(HttpResponse::Ok().json(task))
 }

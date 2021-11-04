@@ -57,7 +57,7 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
         match self.store.peek_pending().await {
             Some(next_task_id) => {
-                let mut task = self.store.get_task(next_task_id).await?.unwrap();
+                let mut task = self.store.get_task(next_task_id, None).await?.unwrap();
                 task.events.push(TaskEvent::Batched {
                     timestamp: Utc::now(),
                     batch_id: 0,

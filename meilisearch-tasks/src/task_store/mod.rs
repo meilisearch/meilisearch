@@ -16,6 +16,26 @@ pub use store::test::MockStore as Store;
 #[cfg(not(test))]
 pub use store::Store;
 
+/// Defines constraints to be applied when querying for Tasks from the store.
+#[derive(Default, Debug)]
+pub struct TaskFilter {
+    indexes: Option<HashSet<String>>,
+}
+
+impl TaskFilter {
+    fn pass(&self, task: &Task) -> bool {
+        self.indexes
+            .as_ref()
+            .map(|indexes| indexes.contains(&task.index_uid))
+            .unwrap_or(true)
+    }
+
+    /// Adds an index to the filter, so the filter must match this index.
+    pub fn filter_index(&mut self, index: String) {
+        self.indexes.get_or_insert_with(Default::default).insert(index);
+    }
+}
+
 #[derive(Clone)]
 pub struct TaskStore {
     store: Arc<Store>,
@@ -64,7 +84,7 @@ impl TaskStore {
         self.pending_queue.read().await.front().copied()
     }
 
-    pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>> {
+    pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Option<Task>> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
@@ -73,7 +93,10 @@ impl TaskStore {
         })
         .await??;
 
-        Ok(task)
+        match (task, filter) {
+            (Some(task), Some(filter)) => filter.pass(&task).then(|| Ok(task)).transpose(),
+            (task, _) => Ok(task),
+        }
     }
 
     pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
@@ -103,23 +126,24 @@ impl TaskStore {
 
     pub async fn list_tasks(
         &self,
-        filter: Option<Box<dyn Fn(&Task) -> bool + Send + Sync + 'static>>,
-        limit: usize,
-        offset: Option<TaskId>,
+        _filter: Option<TaskFilter>,
+        _limit: usize,
+        _offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let store = self.store.clone();
+        todo!()
+        //  let store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || {
-            let txn = store.rtxn()?;
-            let tasks = store
-                .list_updates(&txn, offset)?
-                .filter_map(|t| t.ok())
-                .filter(|t| filter.as_ref().map(|f| f(t)).unwrap_or(true))
-                .take(limit)
-                .collect::<Vec<_>>();
-            Ok(tasks)
-        })
-        .await?
+        //  tokio::task::spawn_blocking(move || {
+        //      let txn = store.rtxn()?;
+        //      let tasks = store
+        //          .list_updates(&txn, offset)?
+        //          .filter_map(|t| t.ok())
+        //          .filter(|t| filter.as_ref().map(|f| f(t)).unwrap_or(true))
+        //          .take(limit)
+        //          .collect::<Vec<_>>();
+        //      Ok(tasks)
+        //  })
+        //  .await?
     }
 }
 
@@ -152,10 +176,17 @@ pub mod test {
             }
         }
 
-        pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>> {
+        pub async fn get_task(
+            &self,
+            id: TaskId,
+            filter: Option<TaskFilter>,
+        ) -> Result<Option<Task>> {
             match self {
-                Self::Real(s) => s.get_task(id).await,
-                Self::Mock(m) => unsafe { m.get::<_, Result<Option<Task>>>("get_task").call(id) },
+                Self::Real(s) => s.get_task(id, filter).await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Result<Option<Task>>>("get_task")
+                        .call((id, filter))
+                },
             }
         }
 

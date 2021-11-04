@@ -1,6 +1,6 @@
 
 #[allow(clippy::upper_case_acronyms)]
-type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
+type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
@@ -47,7 +47,7 @@ impl<'a> BytesDecode<'a> for IndexUidTaskIdCodec {
 pub struct Store {
     env: Env,
     uids_task_ids: Database<IndexUidTaskIdCodec, Unit>,
-    tasks: Database<OwnedType<BEU32>, SerdeBincode<Task>>,
+    tasks: Database<OwnedType<BEU64>, SerdeBincode<Task>>,
 }
 
 impl Store {
@@ -87,14 +87,14 @@ impl Store {
     }
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
-        self.tasks.put(txn, &BEU32::new(task.id), task)?;
+        self.tasks.put(txn, &BEU64::new(task.id), task)?;
         self.uids_task_ids.put(txn, &(&task.index_uid, task.id), &())?;
 
         Ok(())
     }
 
     pub fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
-        let task = self.tasks.get(txn, &BEU32::new(id))?;
+        let task = self.tasks.get(txn, &BEU64::new(id))?;
         Ok(task)
     }
 
@@ -104,7 +104,7 @@ impl Store {
 
     pub fn list_updates<'a>(&self, txn: &'a RoTxn, from: Option<TaskId>) -> Result<Box<dyn Iterator<Item = heed::Result<Task>> + 'a>> {
         match from {
-            Some(id) => Ok(Box::new(self.tasks.rev_range(txn, &(..BEU32::new(id)))?.map(|r| r.map(|(_, t)| t)))),
+            Some(id) => Ok(Box::new(self.tasks.rev_range(txn, &(..BEU64::new(id)))?.map(|r| r.map(|(_, t)| t)))),
             None => Ok(Box::new(self.tasks.rev_iter(txn)?.map(|r| r.map(|(_, t)| t)))),
         }
     }

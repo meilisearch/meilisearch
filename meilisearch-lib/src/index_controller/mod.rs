@@ -13,7 +13,7 @@ use futures::StreamExt;
 use log::info;
 use meilisearch_tasks::create_task_store;
 use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
-use meilisearch_tasks::task_store::TaskStore;
+use meilisearch_tasks::task_store::{TaskFilter, TaskStore};
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -41,7 +41,6 @@ use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
 use self::index_resolver::HardStateIndexResolver;
 use self::update_file_store::UpdateFileStore;
-use self::updates::status::UpdateStatus;
 //use self::updates::UpdateMsg;
 
 mod dump_actor;
@@ -348,29 +347,14 @@ impl IndexController {
         Ok(task)
     }
 
-    pub async fn get_task(&self, id: TaskId) -> Result<Task> {
-        let task = self.task_store.get_task(id).await.unwrap().unwrap();
-
+    pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+        let task = self.task_store.get_task(id, filter).await.unwrap().unwrap();
         Ok(task)
     }
 
-    pub async fn list_tasks(&self) -> Result<Vec<Task>> {
-        let tasks = self.task_store.list_tasks(None, 20, None).await.unwrap();
+    pub async fn list_tasks(&self, filter: Option<TaskFilter>) -> Result<Vec<Task>> {
+        let tasks = self.task_store.list_tasks(filter, 20, None).await.unwrap();
         Ok(tasks)
-    }
-
-    pub async fn update_status(&self, _uid: String, _id: u64) -> Result<UpdateStatus> {
-        todo!()
-        //let uuid = self.index_resolver.get_uuid(uid).await?;
-        //let result = UpdateMsg::get_update(&self.update_sender, uuid, id).await?;
-        //Ok(result)
-    }
-
-    pub async fn all_update_status(&self, _uid: String) -> Result<Vec<UpdateStatus>> {
-        todo!()
-        //let uuid = self.index_resolver.get_uuid(uid).await?;
-        //let result = UpdateMsg::list_updates(&self.update_sender, uuid).await?;
-        //Ok(result)
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {

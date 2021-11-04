@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::batch::BatchId;
 
-pub type TaskId = u32;
+pub type TaskId = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskResult;
