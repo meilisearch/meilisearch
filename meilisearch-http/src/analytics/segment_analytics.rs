@@ -187,7 +187,7 @@ impl Segment {
                     "kernel_version": kernel_version,
                     "cores": sys.processors().len(),
                     "ram_size": sys.total_memory(),
-                    "disk_size": sys.disks().iter().map(|disk| disk.available_space()).max(),
+                    "disk_size": sys.disks().iter().map(|disk| disk.total_space()).max(),
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
