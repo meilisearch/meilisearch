@@ -80,7 +80,16 @@ where U: UuidStore,
                         Ok(res)
                     }).await?
                 },
-                TaskContent::SettingsUpdate => todo!(),
+                TaskContent::SettingsUpdate(settings) => {
+                    let index = self.get_or_create_index(index_uid).await?;
+                    let settings =settings.clone();
+                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
+                        let mut txn = index.write_txn()?;
+                        let res = index.update_settings(&mut txn, &settings)?;
+                        txn.commit()?;
+                        Ok(res)
+                    }).await?
+                },
                 TaskContent::IndexDeletion => {
                     self.delete_index(index_uid).await?;
 
