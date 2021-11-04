@@ -68,7 +68,14 @@ where U: UuidStore,
                         res
                     }).await?
                 },
-                TaskContent::DocumentDeletion(DocumentDeletion::Clear) => todo!(),
+                TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
+                    tokio::task::spawn_blocking(move || {
+                        let mut txn = index.write_txn()?;
+                        let res = index.clear_documents(&mut txn);
+                        txn.commit()?;
+                        res
+                    }).await?
+                },
                 TaskContent::IndexDeletion => todo!(),
                 TaskContent::SettingsUpdate => todo!(),
             };

@@ -165,55 +165,55 @@ pub struct Facets {
 impl Index {
     pub fn handle_update(&self, _update: Processing) -> std::result::Result<Processed, Failed> {
         todo!()
-      //  let update_builder = self.update_handler.update_builder();
-      //  let result = (|| {
-      //      let mut txn = self.write_txn()?;
-      //      let result = match update.meta() {
-      //          Update::DocumentAddition {
-      //              primary_key,
-      //              content_uuid,
-      //              method,
-      //          } => self.update_documents(
-      //              &mut txn,
-      //              *method,
-      //              *content_uuid,
-      //              primary_key.as_deref(),
-      //          ),
-      //          Update::Settings(settings) => {
-      //              let settings = settings.clone().check();
-      //              self.update_settings(&mut txn, &settings, update_builder)
-      //          }
-      //          Update::ClearDocuments => {
-      //              let builder = update_builder.clear_documents(&mut txn, self);
-      //              let _count = builder.execute()?;
-      //              Ok(UpdateResult::Other)
-      //          }
-      //          Update::DeleteDocuments(ids) => {
-      //              let mut builder = update_builder.delete_documents(&mut txn, self)?;
+        //  let update_builder = self.update_handler.update_builder();
+        //  let result = (|| {
+        //      let mut txn = self.write_txn()?;
+        //      let result = match update.meta() {
+        //          Update::DocumentAddition {
+        //              primary_key,
+        //              content_uuid,
+        //              method,
+        //          } => self.update_documents(
+        //              &mut txn,
+        //              *method,
+        //              *content_uuid,
+        //              primary_key.as_deref(),
+        //          ),
+        //          Update::Settings(settings) => {
+        //              let settings = settings.clone().check();
+        //              self.update_settings(&mut txn, &settings, update_builder)
+        //          }
+        //          Update::ClearDocuments => {
+        //              let builder = update_builder.clear_documents(&mut txn, self);
+        //              let _count = builder.execute()?;
+        //              Ok(UpdateResult::Other)
+        //          }
+        //          Update::DeleteDocuments(ids) => {
+        //              let mut builder = update_builder.delete_documents(&mut txn, self)?;
 
-      //              // We ignore unexisting document ids
-      //              ids.iter().for_each(|id| {
-      //                  builder.delete_external_id(id);
-      //              });
+        //              // We ignore unexisting document ids
+        //              ids.iter().for_each(|id| {
+        //                  builder.delete_external_id(id);
+        //              });
 
-      //              let deleted = builder.execute()?;
-      //              Ok(UpdateResult::DocumentDeletion { deleted })
-      //          }
-      //      };
-      //      if result.is_ok() {
-      //          txn.commit()?;
-      //      }
-      //      result
-      //  })();
+        //              let deleted = builder.execute()?;
+        //              Ok(UpdateResult::DocumentDeletion { deleted })
+        //          }
+        //      };
+        //      if result.is_ok() {
+        //          txn.commit()?;
+        //      }
+        //      result
+        //  })();
 
-      //  if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
-      //      let _ = self.update_file_store.delete(*content_uuid);
-      //  }
+        //  if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
+        //      let _ = self.update_file_store.delete(*content_uuid);
+        //  }
 
-      //  match result {
-      //      Ok(result) => Ok(update.process(result)),
-      //      Err(e) => Err(update.fail(e)),
-      //  }
+        //  match result {
+        //      Ok(result) => Ok(update.process(result)),
+        //      Err(e) => Err(update.fail(e)),
+        //  }
     }
 
     pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
@@ -234,16 +234,35 @@ impl Index {
         }
     }
 
-    pub fn delete_documents<'a, 'b>(&'a self, txn: &mut heed::RwTxn<'a, 'b>, ids: &[String]) -> Result<UpdateResult> {
-        let mut builder = self.update_handler.update_builder().delete_documents(txn, self)?;
+    pub fn delete_documents<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
+        ids: &[String],
+    ) -> Result<UpdateResult> {
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .delete_documents(txn, self)?;
 
         // We ignore unexisting document ids
         ids.iter().for_each(|id| {
-            dbg!(builder.delete_external_id(id));
+            builder.delete_external_id(id);
         });
 
         let deleted = builder.execute()?;
         Ok(UpdateResult::DocumentDeletion { deleted })
+    }
+
+    pub fn clear_documents<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
+    ) -> Result<UpdateResult> {
+        self.update_handler
+            .update_builder()
+            .clear_documents(txn, self)
+            .execute()?;
+
+        Ok(UpdateResult::Other)
     }
 
     pub fn update_documents<'a, 'b>(
