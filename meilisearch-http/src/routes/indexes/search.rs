@@ -150,7 +150,7 @@ pub async fn search_with_post(
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
-    analytics.get_search(aggregate);
+    analytics.post_search(aggregate);
 
     let search_result = search_result?;
 
