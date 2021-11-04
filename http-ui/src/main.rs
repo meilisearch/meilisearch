@@ -738,31 +738,37 @@ async fn main() -> anyhow::Result<()> {
                 search.query(query);
             }
 
-            let filters = match query.filters {
+            let filters = match query.filters.as_ref() {
                 Some(condition) if !condition.trim().is_empty() => {
-                    Some(MilliFilter::from_str(&condition).unwrap())
+                    Some(MilliFilter::from_str(condition).unwrap())
                 }
                 _otherwise => None,
             };
 
-            let facet_filters = match query.facet_filters {
+            let facet_filters = match query.facet_filters.as_ref() {
                 Some(array) => {
-                    let eithers = array.into_iter().map(Into::into);
+                    let eithers = array.iter().map(|either| match either {
+                        UntaggedEither::Left(l) => {
+                            Either::Left(l.iter().map(|s| s.as_str()).collect::<Vec<&str>>())
+                        }
+                        UntaggedEither::Right(r) => Either::Right(r.as_str()),
+                    });
                     MilliFilter::from_array(eithers).unwrap()
                 }
                 _otherwise => None,
             };
 
             let condition = match (filters, facet_filters) {
-                (Some(filters), Some(facet_filters)) => {
-                    Some(FilterCondition::And(Box::new(filters), Box::new(facet_filters)))
-                }
-                (Some(condition), None) | (None, Some(condition)) => Some(condition),
+                (Some(filters), Some(facet_filters)) => Some(FilterCondition::And(
+                    Box::new(filters.into()),
+                    Box::new(facet_filters.into()),
+                )),
+                (Some(condition), None) | (None, Some(condition)) => Some(condition.into()),
                 _otherwise => None,
             };
 
             if let Some(condition) = condition {
-                search.filter(condition);
+                search.filter(condition.into());
             }
 
             if let Some(limit) = query.limit {

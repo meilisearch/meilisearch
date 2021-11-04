@@ -35,6 +35,12 @@ fn parse<T: FromStr>(tok: &Token) -> Result<T> {
     }
 }
 
+impl<'a> From<Filter<'a>> for FilterCondition<'a> {
+    fn from(f: Filter<'a>) -> Self {
+        f.condition
+    }
+}
+
 impl<'a> Filter<'a> {
     pub fn from_array<I, J>(array: I) -> Result<Option<Self>>
     where
