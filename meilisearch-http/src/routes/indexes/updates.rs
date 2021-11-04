@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::routes::{IndexParam, UpdateStatusResponse};
+use crate::routes::UpdateStatusResponse;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(get_all_updates_status)))
@@ -44,10 +44,10 @@ pub async fn get_update_status(
 
 pub async fn get_all_updates_status(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let metas = meilisearch
-        .all_update_status(path.into_inner().index_uid)
+        .all_update_status(path.into_inner())
         .await?;
     let metas = metas
         .into_iter()

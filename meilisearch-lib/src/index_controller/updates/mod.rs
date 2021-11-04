@@ -3,7 +3,6 @@ mod message;
 pub mod status;
 pub mod store;
 
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -19,7 +18,6 @@ use uuid::Uuid;
 use self::error::{Result, UpdateLoopError};
 pub use self::message::UpdateMsg;
 use self::store::{UpdateStore, UpdateStoreInfo};
-use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{Index, Settings, Unchecked};
 use crate::index_controller::update_file_store::UpdateFileStore;
 use status::UpdateStatus;
@@ -27,7 +25,7 @@ use status::UpdateStatus;
 use super::index_resolver::index_store::IndexStore;
 use super::index_resolver::uuid_store::UuidStore;
 use super::index_resolver::IndexResolver;
-use super::{DocumentAdditionFormat, Update};
+use super::Update;
 
 pub type UpdateSender = mpsc::Sender<UpdateMsg>;
 

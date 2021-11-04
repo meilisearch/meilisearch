@@ -209,11 +209,6 @@ impl From<UpdateStatus> for UpdateStatusResponse {
     }
 }
 
-#[derive(Deserialize)]
-pub struct IndexParam {
-    index_uid: String,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexUpdateResponse {

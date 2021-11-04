@@ -297,7 +297,6 @@ impl IndexController {
         &self,
         uid: String,
         update: Update,
-        _create_index: bool,
     ) -> Result<Task> {
         let content = match update {
             Update::DeleteDocuments(ids) => TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)),

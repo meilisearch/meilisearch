@@ -15,7 +15,6 @@ use crate::analytics::Analytics;
 use crate::error::{MeilisearchHttpError, ResponseError};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
-use crate::routes::IndexParam;
 use crate::task::TaskResponse;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
@@ -78,7 +77,7 @@ pub async fn delete_document(
     } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
     let task: TaskResponse = meilisearch
-        .register_update(index_uid, update, false)
+        .register_update(index_uid, update)
         .await?
         .into();
     debug!("returns: {:?}", task);
@@ -95,7 +94,7 @@ pub struct BrowseQuery {
 
 pub async fn get_all_documents(
     meilisearch: GuardedData<Public, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
@@ -112,7 +111,7 @@ pub async fn get_all_documents(
 
     let documents = meilisearch
         .documents(
-            path.index_uid.clone(),
+            path.into_inner(),
             params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
             params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
             attributes_to_retrieve,
@@ -130,7 +129,7 @@ pub struct UpdateDocumentsQuery {
 
 pub async fn add_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
@@ -138,10 +137,11 @@ pub async fn add_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
+    let index_uid =path.into_inner();
 
     analytics.add_documents(
         &params,
-        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
+        meilisearch.get_index(index_uid.clone()).await.is_err(),
         &req,
     );
 
@@ -150,7 +150,7 @@ pub async fn add_documents(
             .get("Content-type")
             .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
-        path.index_uid.clone(),
+        index_uid,
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
@@ -162,17 +162,18 @@ pub async fn add_documents(
 
 pub async fn update_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let index_uid = path.into_inner();
 
     analytics.update_documents(
         &params,
-        meilisearch.get_index(path.index_uid.clone()).await.is_err(),
+        meilisearch.get_index(index_uid.clone()).await.is_err(),
         &req,
     );
 
@@ -181,7 +182,7 @@ pub async fn update_documents(
             .get("Content-type")
             .map(|s| s.to_str().unwrap_or("unkown")),
         meilisearch,
-        path.into_inner().index_uid,
+        index_uid,
         params.into_inner().primary_key,
         body,
         IndexDocumentsMethod::UpdateDocuments,
@@ -233,7 +234,7 @@ async fn document_addition(
     };
 
     let task = meilisearch
-        .register_update(index_uid, update, true)
+        .register_update(index_uid, update)
         .await?
         .into();
 
@@ -243,7 +244,7 @@ async fn document_addition(
 
 pub async fn delete_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
@@ -258,7 +259,7 @@ pub async fn delete_documents(
 
     let update = Update::DeleteDocuments(ids);
     let task: TaskResponse = meilisearch
-        .register_update(path.into_inner().index_uid, update, false)
+        .register_update(path.into_inner(), update)
         .await?
         .into();
 
@@ -268,11 +269,11 @@ pub async fn delete_documents(
 
 pub async fn clear_all_documents(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;
     let task: TaskResponse = meilisearch
-        .register_update(path.into_inner().index_uid, update, false)
+        .register_update(path.into_inner(), update)
         .await?
         .into();
 

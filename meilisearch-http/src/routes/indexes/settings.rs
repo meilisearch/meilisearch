@@ -33,7 +33,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 let update = Update::Settings(settings);
-                let task = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
+                let task = meilisearch.register_update(index_uid.into_inner(), update).await?;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -59,7 +59,7 @@ macro_rules! make_setting_route {
                 };
 
                 let update = Update::Settings(settings);
-                let task = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
+                let task = meilisearch.register_update(index_uid.into_inner(), update).await?;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -257,7 +257,7 @@ pub async fn update_all(
 
     let update = Update::Settings(settings);
     let task = meilisearch
-        .register_update(index_uid.into_inner(), update, true)
+        .register_update(index_uid.into_inner(), update)
         .await?;
 
     debug!("returns: {:?}", task);
@@ -281,7 +281,7 @@ pub async fn delete_all(
 
     let update = Update::Settings(settings.into_unchecked());
     let task = data
-        .register_update(index_uid.into_inner(), update, false)
+        .register_update(index_uid.into_inner(), update)
         .await?;
 
     debug!("returns: {:?}", task);

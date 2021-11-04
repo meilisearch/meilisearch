@@ -9,7 +9,6 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::routes::IndexParam;
 use crate::task::TaskResponse;
 
 pub mod documents;
@@ -91,16 +90,16 @@ pub struct UpdateIndexResponse {
 
 pub async fn get_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let meta = meilisearch.get_index(path.index_uid.clone()).await?;
+    let meta = meilisearch.get_index(path.into_inner()).await?;
     debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
 }
 
 pub async fn update_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     body: web::Json<UpdateIndexRequest>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -117,7 +116,7 @@ pub async fn update_index(
         primary_key: body.primary_key,
     };
     let meta = meilisearch
-        .update_index(path.into_inner().index_uid, settings)
+        .update_index(path.into_inner(), settings)
         .await?;
     debug!("returns: {:?}", meta);
     Ok(HttpResponse::Ok().json(meta))
@@ -130,7 +129,7 @@ pub async fn delete_index(
     let uid = path.into_inner();
     let update = Update::DeleteIndex;
     let task: TaskResponse = meilisearch
-        .register_update(uid, update, false)
+        .register_update(uid, update)
         .await?
         .into();
 
@@ -139,9 +138,9 @@ pub async fn delete_index(
 
 pub async fn get_index_stats(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = meilisearch.get_index_stats(path.index_uid.clone()).await?;
+    let response = meilisearch.get_index_stats(path.into_inner()).await?;
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
