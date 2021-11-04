@@ -83,7 +83,7 @@ where U: UuidStore,
                     Ok(UpdateResult::Other)
                 },
                 TaskContent::CreateIndex { primary_key } => {
-                    let index = self.get_or_create_index(index_uid, None).await?;
+                    let index = self.create_index(index_uid, None).await?;
 
                     if let Some(primary_key) = primary_key {
                         let primary_key = primary_key.clone();
@@ -195,29 +195,17 @@ where
         Ok(indexes)
     }
 
-    /// Get or create an index with name `uid`.
-    pub async fn get_or_create_index(
-    &self,
-    uid: String,
-    primary_key: Option<String>
+    pub async fn create_index(
+        &self,
+        uid: String,
+        primary_key: Option<String>
     ) -> Result<Index> {
         if !is_index_uid_valid(&uid) {
             return Err(IndexResolverError::BadlyFormatted(uid));
         }
 
         match self.index_uuid_store.get_uuid(uid).await? {
-            (uid, Some(uuid)) => {
-                match self.index_store.get(uuid).await? {
-                    Some(index) => Ok(index),
-                    None => {
-                        // uh oh, there should have been an index here. Let's remove the uuid from
-                        // the uuid store and return an error. We also ignore the error when
-                        // deleting, not to confuse the user.
-                        let _ = self.index_uuid_store.delete(uid.clone()).await;
-                        Err(IndexResolverError::UnexistingIndex(uid))
-                    }
-                }
-            },
+            (uid, Some(_)) => Err(IndexResolverError::UnexistingIndex(uid)),
             (uid, None) => {
                 let uuid = Uuid::new_v4();
                 let index = self.index_store.create(uuid, primary_key).await?;
@@ -235,6 +223,19 @@ where
                     Ok(()) => Ok(index),
                 }
             }
+        }
+    }
+
+    /// Get or create an index with name `uid`.
+    pub async fn get_or_create_index(
+    &self,
+    uid: String,
+    primary_key: Option<String>
+    ) -> Result<Index> {
+        match self.create_index(uid, primary_key).await {
+            Ok(index) => Ok(index),
+            Err(IndexResolverError::IndexAlreadyExists(uid)) => self.get_index(uid).await,
+            Err(e) => Err(e),
         }
     }
 
