@@ -19,9 +19,9 @@ pub enum IndexResolverError {
     UnexistingIndex(String),
     #[error("A primary key is already present. It's impossible to update it")]
     ExistingPrimaryKey,
-    #[error("Internal Error: `{0}`")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("Internal Error: Index uuid `{0}` is already assigned.")]
+    #[error("The creation of the `{0}` index has failed due to `Index uuid is already assigned`.")]
     UuidAlreadyExists(Uuid),
     #[error("{0}")]
     Milli(#[from] milli::Error),
@@ -60,7 +60,7 @@ impl ErrorCode for IndexResolverError {
             IndexResolverError::UnexistingIndex(_) => Code::IndexNotFound,
             IndexResolverError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,
             IndexResolverError::Internal(_) => Code::Internal,
-            IndexResolverError::UuidAlreadyExists(_) => Code::Internal,
+            IndexResolverError::UuidAlreadyExists(_) => Code::CreateIndex,
             IndexResolverError::Milli(e) => MilliError(e).error_code(),
             IndexResolverError::BadlyFormatted(_) => Code::InvalidIndexUid,
         }

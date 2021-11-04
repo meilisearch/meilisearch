@@ -24,7 +24,7 @@ pub enum IndexControllerError {
     DumpActor(#[from] DumpActorError),
     #[error("{0}")]
     IndexError(#[from] IndexError),
-    #[error("Internal error: {0}")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
 }
 
