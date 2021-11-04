@@ -59,7 +59,7 @@ pub enum UserError {
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: HashSet<String> },
     InvalidGeoField { document_id: Value, object: Value },
-    InvalidFilter { input: String },
+    InvalidFilter(String),
     InvalidSortName { name: String },
     InvalidSortableAttribute { field: String, valid_fields: HashSet<String> },
     SortRankingRuleMissing,
@@ -207,7 +207,7 @@ impl StdError for InternalError {}
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::InvalidFilter { input } => write!(f, "parser error {}", input),
+            Self::InvalidFilter(input) => write!(f, "{}", input),
             Self::AttributeLimitReached => f.write_str("maximum number of attributes reached"),
             Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("maximum number of documents reached"),

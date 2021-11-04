@@ -71,6 +71,10 @@ impl<'a> Error<'a> {
         Self { context, kind }
     }
 
+    pub fn new_from_external(context: Span<'a>, error: impl std::error::Error) -> Self {
+        Self::new_from_kind(context, ErrorKind::External(error.to_string()))
+    }
+
     pub fn char(self) -> char {
         match self.kind {
             ErrorKind::Char(c) => c,

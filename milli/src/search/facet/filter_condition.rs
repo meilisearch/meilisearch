@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
 use std::str::FromStr;
 
@@ -20,18 +20,50 @@ pub struct Filter<'a> {
     condition: FilterCondition<'a>,
 }
 
-fn parse<T: FromStr>(tok: &Token) -> Result<T> {
+#[derive(Debug)]
+enum FilterError<'a> {
+    AttributeNotFilterable { attribute: &'a str, filterable: String },
+    BadGeo(&'a str),
+    Reserved(&'a str),
+}
+impl<'a> std::error::Error for FilterError<'a> {}
+
+impl<'a> Display for FilterError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AttributeNotFilterable { attribute, filterable } => write!(
+                f,
+                "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
+                attribute,
+                filterable,
+            ),
+            Self::Reserved(keyword) => write!(
+                f,
+                "`{}` is a reserved keyword and thus can't be used as a filter expression.",
+                keyword
+            ),
+            Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
+        }
+    }
+}
+
+impl<'a> From<FPError<'a>> for Error {
+    fn from(error: FPError<'a>) -> Self {
+        Self::UserError(UserError::InvalidFilter(error.to_string()))
+    }
+}
+
+fn parse<T>(tok: &Token) -> Result<T>
+where
+    T: FromStr,
+    T::Err: std::error::Error,
+{
     match tok.inner.parse::<T>() {
         Ok(t) => Ok(t),
-        Err(_e) => Err(UserError::InvalidFilter {
-            input: format!(
-                "Could not parse `{}` at line {} and offset {}",
-                tok.inner,
-                tok.position.location_line(),
-                tok.position.get_column()
-            ),
+        Err(e) => {
+            Err(UserError::InvalidFilter(FPError::new_from_external(tok.position, e).to_string())
+                .into())
         }
-        .into()),
     }
 }
 
@@ -90,7 +122,7 @@ impl<'a> Filter<'a> {
     pub fn from_str(expression: &'a str) -> Result<Self> {
         let condition = match FilterCondition::parse(expression) {
             Ok(fc) => Ok(fc),
-            Err(e) => Err(Error::UserError(UserError::InvalidFilter { input: e.to_string() })),
+            Err(e) => Err(Error::UserError(UserError::InvalidFilter(e.to_string()))),
         }?;
         Ok(Self { condition })
     }
@@ -299,25 +331,26 @@ impl<'a> Filter<'a> {
                     Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
                 } else {
                     match fid.inner {
-                        // TODO update the error messages according to the spec
-                        "_geo" => {
-                            return Err(UserError::InvalidFilter { input: format!("Tried to use _geo in a filter, you probably wanted to use _geoRadius(latitude, longitude, radius)") })?;
+                        attribute @ "_geo" => {
+                            return Err(fid.as_external_error(FilterError::BadGeo(attribute)))?;
                         }
-                        "_geoDistance" => {
-                            return Err(UserError::InvalidFilter {
-                                input: format!("Reserved field _geoDistance"),
-                            })?;
+                        attribute if attribute.starts_with("_geoPoint(") => {
+                            return Err(fid.as_external_error(FilterError::BadGeo("_geoPoint")))?;
                         }
-                        fid if fid.starts_with("_geoPoint(") => {
-                            return Err(UserError::InvalidFilter { input: format!("_geoPoint only available in sort. You wanted to use _geoRadius") })?;
+                        attribute @ "_geoDistance" => {
+                            return Err(fid.as_external_error(FilterError::Reserved(attribute)))?;
                         }
-                        fid => {
-                            return Err(UserError::InvalidFilter {
-                                input: format!(
-                                    "Bad filter {}, available filters are {:?}",
-                                    fid, filterable_fields
-                                ),
-                            })?;
+                        attribute => {
+                            return Err(fid.as_external_error(
+                                FilterError::AttributeNotFilterable {
+                                    attribute,
+                                    filterable: filterable_fields
+                                        .iter()
+                                        .map(|(_, s)| s)
+                                        .collect::<Vec<_>>()
+                                        .join(" "),
+                                },
+                            ))?;
                         }
                     }
                 }
@@ -356,9 +389,9 @@ impl<'a> Filter<'a> {
                     Ok(result)
                 } else {
                     // TODO TAMO: update the error message
-                    return Err(UserError::InvalidFilter {
-                        input: format!("You tried to use _geo in a filter, you probably wanted to use _geoRadius"),
-                    })?;
+                    return Err(UserError::InvalidFilter(format!(
+                        "You tried to use _geo in a filter, you probably wanted to use _geoRadius"
+                    )))?;
                 }
             }
             FilterCondition::GeoGreaterThan { point, radius } => {

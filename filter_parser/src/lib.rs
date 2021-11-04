@@ -69,6 +69,10 @@ impl<'a> Token<'a> {
     pub fn new(position: Span<'a>) -> Self {
         Self { position, inner: &position }
     }
+
+    pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
+        Error::new_from_external(self.position, error)
+    }
 }
 
 impl<'a> From<Span<'a>> for Token<'a> {
