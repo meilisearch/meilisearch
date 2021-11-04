@@ -219,7 +219,7 @@ impl StdError for InternalError {}
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::AttributeLimitReached => f.write_str("Maximum number of attributes reached."),
+            Self::AttributeLimitReached => f.write_str("A document cannot contain more than 65,535 fields."),
             Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("Maximum number of documents reached."),
             Self::InvalidFacetsDistribution { invalid_facets_name } => {
@@ -277,7 +277,7 @@ ranking rules settings to use the sort parameter at search time.",
                 let json = serde_json::to_string(document).unwrap();
                 write!(f, "Document doesn't have a `{}` attribute: `{}`.", primary_key, json)
             }
-            Self::MissingPrimaryKey => f.write_str("Missing primary key."),
+            Self::MissingPrimaryKey => f.write_str("The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index."),
             Self::MaxDatabaseSizeReached => f.write_str("Maximum database size has been reached."),
             Self::NoSpaceLeftOnDevice => f.write_str("There is no more space left on the device. Consider increasing the size of the disk/partition."),
             Self::InvalidStoreFile => f.write_str("The database file is in an invalid state."),

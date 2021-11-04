@@ -17,7 +17,7 @@ pub enum CriterionError {
 impl fmt::Display for CriterionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::InvalidName { name } => write!(f, "invalid ranking rule {}", name),
+            Self::InvalidName { name } => write!(f, "`{}` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules.", name),
             Self::ReservedName { name } => {
                 write!(
                     f,
