@@ -15,11 +15,11 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         return Err(err);
     }
     match parse_geo_radius(input) {
-        Ok(_) => return Err(nom::Err::Failure(Error::kind(input, ErrorKind::MisusedGeo))),
+        Ok(_) => return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeo))),
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing him how to fix his syntax we are going to tell him he should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::kind(input, ErrorKind::MisusedGeo)))
+            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeo)))
         }
         _ => (),
     }
@@ -45,9 +45,11 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     )(input)
     .map(|(s, t)| (s, t.into()))
     // if we found nothing in the alt it means the user did not input any value
-    .map_err(|e| e.map_err(|_| Error::kind(input, ErrorKind::ExpectedValue)))
+    .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::ExpectedValue)))
     // if we found encountered a failure it means the user really tried to input a value, but had an unmatched quote
-    .map_err(|e| e.map_fail(|c| Error::kind(input, ErrorKind::MissingClosingDelimiter(c.char()))))
+    .map_err(|e| {
+        e.map_fail(|c| Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char())))
+    })
 }
 
 fn is_key_component(c: char) -> bool {

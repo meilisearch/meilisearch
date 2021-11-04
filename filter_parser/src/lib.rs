@@ -162,12 +162,12 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoRadius` and can't parse the rest of the input we returns a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
     )(input)
-    .map_err(|e| e.map(|_| Error::kind(input, ErrorKind::Geo)));
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
 
     let (input, args) = parsed?;
 
     if args.len() != 3 {
-        return Err(nom::Err::Failure(Error::kind(input, ErrorKind::Geo)));
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::Geo)));
     }
 
     let res = FilterCondition::GeoLowerThan {
@@ -186,9 +186,9 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still returns a Failure because geoPoints are not allowed
-    Err(nom::Err::Failure(Error::kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
+    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
 }
 
 /// primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
@@ -199,7 +199,7 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
             ws(char('(')),
             cut(parse_expression),
             cut_with_err(ws(char(')')), |c| {
-                Error::kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
+                Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
             }),
         ),
         |c| parse_geo_radius(c),
@@ -209,7 +209,7 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
         |c| parse_geo_point(c),
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
-    .map_err(|e| e.map_err(|_| Error::kind(input, ErrorKind::InvalidPrimary)))
+    .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
 }
 
 /// expression     = or

@@ -63,9 +63,14 @@ pub enum ErrorKind<'a> {
 }
 
 impl<'a> Error<'a> {
-    pub fn kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
+    pub fn kind(&self) -> &ErrorKind<'a> {
+        &self.kind
+    }
+
+    pub fn new_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
         Self { context, kind }
     }
+
     pub fn char(self) -> char {
         match self.kind {
             ErrorKind::Char(c) => c,
