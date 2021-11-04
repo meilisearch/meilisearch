@@ -24,6 +24,8 @@ pub struct Filter<'a> {
 enum FilterError<'a> {
     AttributeNotFilterable { attribute: &'a str, filterable: String },
     BadGeo(&'a str),
+    BadGeoLat(f64),
+    BadGeoLng(f64),
     Reserved(&'a str),
 }
 impl<'a> std::error::Error for FilterError<'a> {}
@@ -43,6 +45,8 @@ impl<'a> Display for FilterError<'a> {
                 keyword
             ),
             Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
+            Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
+            Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Latitude must be contained between -180 and 180 degrees. ", lng),
         }
     }
 }
@@ -369,9 +373,17 @@ impl<'a> Filter<'a> {
             FilterCondition::GeoLowerThan { point, radius } => {
                 let filterable_fields = index.fields_ids_map(rtxn)?;
                 if filterable_fields.id("_geo").is_some() {
-                    let base_point = [parse(&point[0])?, parse(&point[1])?];
-                    // TODO TAMO: ensure lat is between -90 and 90
-                    // TODO TAMO: ensure lng is between -180 and 180
+                    let base_point: [f64; 2] = [parse(&point[0])?, parse(&point[1])?];
+                    if !(-90.0..=90.0).contains(&base_point[0]) {
+                        return Err(
+                            point[0].as_external_error(FilterError::BadGeoLat(base_point[0]))
+                        )?;
+                    }
+                    if !(-180.0..=180.0).contains(&base_point[1]) {
+                        return Err(
+                            point[1].as_external_error(FilterError::BadGeoLng(base_point[1]))
+                        )?;
+                    }
                     let radius = parse(&radius)?;
                     let rtree = match index.geo_rtree(rtxn)? {
                         Some(rtree) => rtree,
@@ -388,10 +400,14 @@ impl<'a> Filter<'a> {
 
                     Ok(result)
                 } else {
-                    // TODO TAMO: update the error message
-                    return Err(UserError::InvalidFilter(format!(
-                        "You tried to use _geo in a filter, you probably wanted to use _geoRadius"
-                    )))?;
+                    return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: "_geo",
+                        filterable: filterable_fields
+                            .iter()
+                            .map(|(_, s)| s)
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    }))?;
                 }
             }
             FilterCondition::GeoGreaterThan { point, radius } => {
