@@ -20,6 +20,20 @@
 //! ```text
 //! geoPoint       = WS* ~ "_geoPoint(" ~ (float ~ ",")* ~ ")"
 //! ```
+//!
+//! Specific errors:
+//! ================
+//! - If a user try to use a geoPoint, as a primary OR as a value we must throw an error.
+//! ```text
+//! field = _geoPoint(12, 13, 14)
+//! field < 12 AND _geoPoint(1, 2)
+//! ```
+//!
+//! - If a user try to use a geoRadius as a value we must throw an error.
+//! ```text
+//! field = _geoRadius(12, 13, 14)
+//! ```
+//!
 
 mod condition;
 mod error;
@@ -28,12 +42,12 @@ mod value;
 use std::fmt::Debug;
 
 pub use condition::{parse_condition, parse_to, Condition};
+use error::{cut_with_err, ExtendNomError};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0};
 use nom::combinator::{cut, eof, map};
-use nom::error::{ContextError, ParseError};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
@@ -102,14 +116,15 @@ impl<'a> FilterCondition<'a> {
     }
 }
 
-// remove OPTIONAL whitespaces before AND after the the provided parser
+/// remove OPTIONAL whitespaces before AND after the the provided parser.
 fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) -> IResult<O> {
     delimited(multispace0, inner, multispace0)
 }
 
-/// and            = not (~ "AND" not)*
+/// or             = and (~ "OR" ~ and)
 fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_and(input)?;
+    // if we found a `OR` then we MUST find something next
     let (input, ors) = many0(preceded(ws(tag("OR")), cut(parse_and)))(input)?;
 
     let expr = ors
@@ -118,8 +133,10 @@ fn parse_or(input: Span) -> IResult<FilterCondition> {
     Ok((input, expr))
 }
 
+/// and            = not (~ "AND" not)*
 fn parse_and(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_not(input)?;
+    // if we found a `AND` then we MUST find something next
     let (input, ors) = many0(preceded(ws(tag("AND")), cut(parse_not)))(input)?;
     let expr = ors
         .into_iter()
@@ -128,28 +145,29 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
 }
 
 /// not            = ("NOT" | "!") not | primary
+/// We can have multiple consecutive not, eg: `NOT NOT channel = mv`.
+/// If we parse a `NOT` or `!` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
-    alt((
-        map(preceded(alt((tag("!"), tag("NOT"))), cut(parse_not)), |e| e.negate()),
-        cut(parse_primary),
-    ))(input)
+    alt((map(preceded(alt((tag("!"), tag("NOT"))), cut(parse_not)), |e| e.negate()), parse_primary))(
+        input,
+    )
 }
 
 /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
+/// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
-    let err_msg_args_incomplete = "_geoRadius. The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`";
-
     // we want to forbid space BEFORE the _geoRadius but not after
-    let parsed = preceded::<_, _, _, _, _, _>(
+    let parsed = preceded(
         tuple((multispace0, tag("_geoRadius"))),
+        // if we were able to parse `_geoRadius` and can't parse the rest of the input we returns a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
-    )(input);
+    )(input)
+    .map_err(|e| e.map(|_| Error::kind(input, ErrorKind::Geo)));
 
-    let (input, args): (Span, Vec<Span>) = parsed?;
+    let (input, args) = parsed?;
 
     if args.len() != 3 {
-        let e = Error::from_char(input, '(');
-        return Err(nom::Err::Failure(Error::add_context(input, err_msg_args_incomplete, e)));
+        return Err(nom::Err::Failure(Error::kind(input, ErrorKind::Geo)));
     }
 
     let res = FilterCondition::GeoLowerThan {
@@ -159,14 +177,39 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
+/// geoPoint      = WS* ~ "_geoPoint(float ~ "," ~ float ~ "," float)
+fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
+    // we want to forbid space BEFORE the _geoPoint but not after
+    tuple((
+        multispace0,
+        tag("_geoPoint"),
+        // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
+        cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
+    ))(input)
+    .map_err(|e| e.map(|_| Error::kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
+    // if we succeeded we still returns a Failure because geoPoints are not allowed
+    Err(nom::Err::Failure(Error::kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
+}
+
 /// primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
 fn parse_primary(input: Span) -> IResult<FilterCondition> {
     alt((
-        delimited(ws(char('(')), cut(parse_expression), cut(ws(char(')')))),
+        // if we find a first parenthesis, then we must parse an expression and find the closing parenthesis
+        delimited(
+            ws(char('(')),
+            cut(parse_expression),
+            cut_with_err(ws(char(')')), |c| {
+                Error::kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
+            }),
+        ),
         |c| parse_geo_radius(c),
         |c| parse_condition(c),
         |c| parse_to(c),
+        // the next lines are only for error handling and are written at the end to have the less possible performance impact
+        |c| parse_geo_point(c),
     ))(input)
+    // if the inner parsers did not match enough information to return an accurate error
+    .map_err(|e| e.map_err(|_| Error::kind(input, ErrorKind::InvalidPrimary)))
 }
 
 /// expression     = or
@@ -484,18 +527,24 @@ pub mod tests {
     fn error() {
         use FilterCondition as Fc;
 
-        let result = Fc::parse("test = truc OR truc");
-        assert!(result.is_err());
-
         let test_case = [
             // simple test
-            ("channel = Ponce = 12", "An error occured"),
-            ("OR", "An error occured"),
-            ("AND", "An error occured"),
-            ("channel = Ponce OR", "An error occured"),
-            ("_geoRadius = 12", "An error occured"),
-            ("_geoPoint(12, 13, 14)", "An error occured"),
-            ("_geo = _geoRadius(12, 13, 14)", "An error occured"),
+            ("channel = Ponce = 12", "Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule."),
+            ("channel =    ", "Was expecting a value but instead got nothing."),
+            ("channel = 🐻", "Was expecting a value but instead got `🐻`."),
+            ("OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `OR`."),
+            ("AND", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `AND`."),
+            ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `channel Ponce`."),
+            ("channel = Ponce OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` but instead got nothing."),
+            ("_geoRadius", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
+            ("_geoRadius = 12", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
+            ("_geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
+            ("position <= _geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
+            ("position <= _geoRadius(12, 13, 14)", "The `_geoRadius` filter is an operation and can't be used as a value."),
+            ("channel = 'ponce", "Expression `'ponce` is missing the following closing delemiter: `'`."),
+            ("channel = \"ponce", "Expression `\"ponce` is missing the following closing delemiter: `\"`."),
+            ("channel = mv OR (followers >= 1000", "Expression `(followers >= 1000` is missing the following closing delemiter: `)`."),
+            ("channel = mv OR followers >= 1000)", "Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule."),
         ];
 
         for (input, expected) in test_case {
@@ -503,24 +552,12 @@ pub mod tests {
 
             assert!(
                 result.is_err(),
-                "Filter `{:?}` wasn't supposed to be parsed but it did with the following result: `{:?}`",
-                expected,
+                "Filter `{}` wasn't supposed to be parsed but it did with the following result: `{:?}`",
+                input,
                 result.unwrap()
             );
             let filter = result.unwrap_err().to_string();
-            assert_eq!(filter, expected, "Filter `{:?}` was supposed to return the following error: `{}`, but instead returned `{}`.", input, filter, expected);
+            assert!(filter.starts_with(expected), "Filter `{:?}` was supposed to return the following error:\n{}\n, but instead returned\n{}\n.", input, expected, filter);
         }
     }
-
-    /*
-    #[test]
-    fn bidule() {
-        use FilterCondition as Fc;
-
-        let result = Fc::parse::<crate::Error<Span>>("test = truc OR truc");
-        dbg!(result);
-
-        assert!(false);
-    }
-    */
 }
