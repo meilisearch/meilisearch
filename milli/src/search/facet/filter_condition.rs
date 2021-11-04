@@ -3,11 +3,9 @@ use std::ops::Bound::{self, Excluded, Included};
 use std::str::FromStr;
 
 use either::Either;
-pub use filter_parser::{Condition, FilterCondition, FilterParserError, Span, Token};
+pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
 use heed::types::DecodeIgnore;
 use log::debug;
-use nom::error::{ErrorKind, VerboseError};
-use nom_greedyerror::{convert_error, GreedyError};
 use roaring::RoaringBitmap;
 
 use super::FacetNumberRange;
@@ -20,12 +18,6 @@ use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, 
 #[derive(Debug, Clone)]
 pub struct Filter<'a> {
     condition: FilterCondition<'a>,
-}
-
-impl<'a> From<VerboseError<Span<'a>>> for Error {
-    fn from(nom_error: VerboseError<Span<'a>>) -> Self {
-        UserError::InvalidFilter { input: nom_error.to_string() }.into()
-    }
 }
 
 fn parse<T: FromStr>(tok: &Token) -> Result<T> {
@@ -90,11 +82,9 @@ impl<'a> Filter<'a> {
     }
 
     pub fn from_str(expression: &'a str) -> Result<Self> {
-        let condition = match FilterCondition::parse::<GreedyError<Span, ErrorKind>>(expression) {
+        let condition = match FilterCondition::parse(expression) {
             Ok(fc) => Ok(fc),
-            Err(e) => Err(Error::UserError(UserError::InvalidFilter {
-                input: convert_error(Span::new_extra(expression, expression), e).to_string(),
-            })),
+            Err(e) => Err(Error::UserError(UserError::InvalidFilter { input: e.to_string() })),
         }?;
         Ok(Self { condition })
     }

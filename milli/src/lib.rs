@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
+pub use filter_parser::{Condition, FilterCondition};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::{Map, Value};
@@ -34,9 +35,7 @@ pub use self::heed_codec::{
     RoaringBitmapLenCodec, StrBEU32Codec, StrStrU8Codec,
 };
 pub use self::index::Index;
-pub use self::search::{
-    Condition, FacetDistribution, Filter, FilterCondition, MatchingWords, Search, SearchResult,
-};
+pub use self::search::{FacetDistribution, Filter, MatchingWords, Search, SearchResult};
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 
