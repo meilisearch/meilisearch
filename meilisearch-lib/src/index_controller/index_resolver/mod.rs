@@ -14,7 +14,7 @@ use uuid_store::{HeedUuidStore, UuidStore};
 
 use meilisearch_tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
 
-use crate::{index::{update_handler::UpdateHandler, Index}, index_controller::updates::status::UpdateResult, options::IndexerOpts};
+use crate::{index::{Index, error::IndexError, update_handler::UpdateHandler}, index_controller::updates::status::UpdateResult, options::IndexerOpts};
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
@@ -45,35 +45,39 @@ where U: UuidStore,
                     let primary_key = primary_key.clone();
                     let content_uuid = *content_uuid;
 
-                    let index = self.get_or_create_index(index_uid, None).await?;
-                    tokio::task::spawn_blocking(move || {
+                    let index = self.get_or_create_index(index_uid).await?;
+                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
                         let mut txn = index.write_txn()?;
+
+                        if let Some(primary_key) = primary_key {
+                            index.update_primary_key(&mut txn, primary_key)?;
+                        }
+
                         let res = index.update_documents(
                             &mut txn,
                             method,
-                            content_uuid,
-                            primary_key.as_deref());
+                            content_uuid)?;
                         txn.commit()?;
-                        res
+                        Ok(res)
                     }).await?
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                     let ids = ids.clone();
-                    let index = self.get_or_create_index(index_uid, None).await?;
-                    tokio::task::spawn_blocking(move || {
+                    let index = self.get_or_create_index(index_uid).await?;
+                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
                         let mut txn = index.write_txn()?;
-                        let res = index.delete_documents(&mut txn, &ids);
+                        let res = index.delete_documents(&mut txn, &ids)?;
                         txn.commit()?;
-                        res
+                        Ok(res)
                     }).await?
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                    let index = self.get_or_create_index(index_uid, None).await?;
-                    tokio::task::spawn_blocking(move || {
+                    let index = self.get_or_create_index(index_uid).await?;
+                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
                         let mut txn = index.write_txn()?;
-                        let res = index.clear_documents(&mut txn);
+                        let res = index.clear_documents(&mut txn)?;
                         txn.commit()?;
-                        res
+                        Ok(res)
                     }).await?
                 },
                 TaskContent::SettingsUpdate => todo!(),
@@ -83,15 +87,15 @@ where U: UuidStore,
                     Ok(UpdateResult::Other)
                 },
                 TaskContent::CreateIndex { primary_key } => {
-                    let index = self.create_index(index_uid, None).await?;
+                    let index = self.create_index(index_uid).await?;
 
                     if let Some(primary_key) = primary_key {
                         let primary_key = primary_key.clone();
-                        tokio::task::spawn_blocking(move || {
+                        tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
                             let mut txn = index.write_txn()?;
-                            let res = index.update_primary_key(&mut txn, primary_key);
+                            let res = index.update_primary_key(&mut txn, primary_key)?;
                             txn.commit()?;
-                            res
+                            Ok(res)
                         }).await??;
                     }
 
@@ -198,7 +202,6 @@ where
     pub async fn create_index(
         &self,
         uid: String,
-        primary_key: Option<String>
     ) -> Result<Index> {
         if !is_index_uid_valid(&uid) {
             return Err(IndexResolverError::BadlyFormatted(uid));
@@ -208,7 +211,7 @@ where
             (uid, Some(_)) => Err(IndexResolverError::UnexistingIndex(uid)),
             (uid, None) => {
                 let uuid = Uuid::new_v4();
-                let index = self.index_store.create(uuid, primary_key).await?;
+                let index = self.index_store.create(uuid).await?;
                 match self.index_uuid_store.insert(uid, uuid).await {
                     Err(e) => {
                         match self.index_store.delete(uuid).await {
@@ -230,9 +233,8 @@ where
     pub async fn get_or_create_index(
     &self,
     uid: String,
-    primary_key: Option<String>
     ) -> Result<Index> {
-        match self.create_index(uid, primary_key).await {
+        match self.create_index(uid).await {
             Ok(index) => Ok(index),
             Err(IndexResolverError::IndexAlreadyExists(uid)) => self.get_index(uid).await,
             Err(e) => Err(e),

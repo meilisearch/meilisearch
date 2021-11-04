@@ -264,16 +264,8 @@ impl Index {
         txn: &mut heed::RwTxn<'a, 'b>,
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
-        primary_key: Option<&str>,
     ) -> Result<UpdateResult> {
         trace!("performing document addition");
-
-        // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = self.update_handler.update_builder().settings(txn, self);
-            builder.set_primary_key(primary_key.to_string());
-            builder.execute(|_| ())?;
-        }
 
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
 

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use milli::update::UpdateBuilder;
 use tokio::fs;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -19,7 +18,7 @@ type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 #[async_trait::async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait IndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
+    async fn create(&self, uuid: Uuid) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
     async fn delete(&self, uuid: Uuid) -> Result<Option<Index>>;
 }
@@ -54,7 +53,7 @@ impl MapIndexStore {
 
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
-    async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index> {
+    async fn create(&self, uuid: Uuid) -> Result<Index> {
         // We need to keep the lock until we are sure the db file has been opened correclty, to
         // ensure that another db is not created at the same time.
         let mut lock = self.index_store.write().await;
@@ -72,16 +71,6 @@ impl IndexStore for MapIndexStore {
         let update_handler = self.update_handler.clone();
         let index = spawn_blocking(move || -> Result<Index> {
             let index = Index::open(path, index_size, file_store, uuid, update_handler)?;
-            if let Some(primary_key) = primary_key {
-                let inner = index.inner();
-                let mut txn = inner.write_txn()?;
-
-                let mut builder = UpdateBuilder::new().settings(&mut txn, index.inner());
-                builder.set_primary_key(primary_key);
-                builder.execute(|_| ())?;
-
-                txn.commit()?;
-            }
             Ok(index)
         })
         .await??;

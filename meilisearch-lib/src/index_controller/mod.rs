@@ -30,7 +30,6 @@ use snapshot::load_snapshot;
 use crate::document_formats::read_csv;
 use crate::document_formats::read_json;
 use crate::document_formats::read_ndjson;
-use crate::index::error::Result as IndexResult;
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
@@ -501,30 +500,6 @@ impl IndexController {
 
     pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
         Ok(self.dump_handle.dump_info(uid).await?)
-    }
-
-    pub async fn create_index(
-        &self,
-        uid: String,
-        primary_key: Option<String>,
-    ) -> Result<IndexMetadata> {
-        let index = self
-            .index_resolver
-            .get_or_create_index(uid.clone(), primary_key)
-            .await?;
-        let meta = spawn_blocking(move || -> IndexResult<_> {
-            let meta = index.meta()?;
-            let meta = IndexMetadata {
-                uuid: index.uuid(),
-                uid: uid.clone(),
-                name: uid,
-                meta,
-            };
-            Ok(meta)
-        })
-        .await??;
-
-        Ok(meta)
     }
 }
 
