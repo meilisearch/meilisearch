@@ -38,7 +38,7 @@ fn write_user_id(db_path: &Path, user_id: &str) {
     }
 }
 
-const SEGMENT_API_KEY: &str = "vHi89WrNDckHSQssyUJqLvIyp2QFITSC";
+const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 
 pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
     request
