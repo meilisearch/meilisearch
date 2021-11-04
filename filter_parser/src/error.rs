@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use nom::{Parser, error::{self, ParseError}};
+use nom::error::{self, ParseError};
+use nom::Parser;
 
 use crate::{IResult, Span};
 
@@ -31,11 +32,14 @@ impl<E> ExtendNomError<E> for nom::Err<E> {
 }
 
 /// cut a parser and map the error
-pub fn cut_with_err<'a, O>(mut parser: impl FnMut(Span<'a>) -> IResult<O>, mut with: impl FnMut(Error<'a>) -> Error<'a>) -> impl FnMut(Span<'a>) -> IResult<O> {
-  move |input| match parser.parse(input) {
-    Err(nom::Err::Error(e)) => Err(nom::Err::Failure(with(e))),
-    rest => rest,
-  }
+pub fn cut_with_err<'a, O>(
+    mut parser: impl FnMut(Span<'a>) -> IResult<O>,
+    mut with: impl FnMut(Error<'a>) -> Error<'a>,
+) -> impl FnMut(Span<'a>) -> IResult<O> {
+    move |input| match parser.parse(input) {
+        Err(nom::Err::Error(e)) => Err(nom::Err::Failure(with(e))),
+        rest => rest,
+    }
 }
 
 #[derive(Debug)]
@@ -50,14 +54,12 @@ pub enum ErrorKind<'a> {
     Geo,
     MisusedGeo,
     InvalidPrimary,
-    ReservedKeyword,
     ExpectedEof,
     ExpectedValue,
     MissingClosingDelimiter(char),
-    UnexpectedInput(Vec<&'a str>),
-    Context(&'a str),
     Char(char),
-    Unreachable,
+    InternalError(error::ErrorKind),
+    External(String),
 }
 
 impl<'a> Error<'a> {
@@ -68,66 +70,15 @@ impl<'a> Error<'a> {
         match self.kind {
             ErrorKind::Char(c) => c,
             _ => panic!("Internal filter parser error"),
-            }
         }
+    }
 }
 
 impl<'a> ParseError<Span<'a>> for Error<'a> {
     fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
         let kind = match kind {
             error::ErrorKind::Eof => ErrorKind::ExpectedEof,
-            error::ErrorKind::Tag => ErrorKind::UnexpectedInput(Vec::new()),
-            error::ErrorKind::MapRes => todo!(),
-            error::ErrorKind::MapOpt => todo!(),
-            error::ErrorKind::Alt => todo!(),
-            error::ErrorKind::IsNot => todo!(),
-            error::ErrorKind::IsA => todo!(),
-            error::ErrorKind::SeparatedList => todo!(),
-            error::ErrorKind::SeparatedNonEmptyList => todo!(),
-            error::ErrorKind::Many0 => todo!(),
-            error::ErrorKind::Many1 => todo!(),
-            error::ErrorKind::ManyTill => todo!(),
-            error::ErrorKind::Count => todo!(),
-            error::ErrorKind::TakeUntil => todo!(),
-            error::ErrorKind::LengthValue => todo!(),
-            error::ErrorKind::TagClosure => todo!(),
-            error::ErrorKind::Alpha => todo!(),
-            error::ErrorKind::Digit => todo!(),
-            error::ErrorKind::HexDigit => todo!(),
-            error::ErrorKind::OctDigit => todo!(),
-            error::ErrorKind::AlphaNumeric => todo!(),
-            error::ErrorKind::Space => todo!(),
-            error::ErrorKind::MultiSpace => todo!(),
-            error::ErrorKind::LengthValueFn => todo!(),
-            error::ErrorKind::Switch => todo!(),
-            error::ErrorKind::TagBits => todo!(),
-            error::ErrorKind::OneOf => todo!(),
-            error::ErrorKind::NoneOf => todo!(),
-            error::ErrorKind::Char => todo!(),
-            error::ErrorKind::CrLf => todo!(),
-            error::ErrorKind::RegexpMatch => todo!(),
-            error::ErrorKind::RegexpMatches => todo!(),
-            error::ErrorKind::RegexpFind => todo!(),
-            error::ErrorKind::RegexpCapture => todo!(),
-            error::ErrorKind::RegexpCaptures => todo!(),
-            error::ErrorKind::TakeWhile1 => ErrorKind::Unreachable,
-            error::ErrorKind::Complete => todo!(),
-            error::ErrorKind::Fix => todo!(),
-            error::ErrorKind::Escaped => todo!(),
-            error::ErrorKind::EscapedTransform => todo!(),
-            error::ErrorKind::NonEmpty => todo!(),
-            error::ErrorKind::ManyMN => todo!(),
-            error::ErrorKind::Not => todo!(),
-            error::ErrorKind::Permutation => todo!(),
-            error::ErrorKind::Verify => todo!(),
-            error::ErrorKind::TakeTill1 => todo!(),
-            error::ErrorKind::TakeWhileMN => todo!(),
-            error::ErrorKind::TooLarge => todo!(),
-            error::ErrorKind::Many0Count => todo!(),
-            error::ErrorKind::Many1Count => todo!(),
-            error::ErrorKind::Float => todo!(),
-            error::ErrorKind::Satisfy => todo!(),
-            error::ErrorKind::Fail => todo!(),
+            kind => ErrorKind::InternalError(kind),
         };
         Self { context: input, kind }
     }
@@ -149,7 +100,7 @@ impl<'a> Display for Error<'a> {
             ErrorKind::ExpectedValue if input.trim().is_empty() => {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
             }
-            ErrorKind::MissingClosingDelimiter(c) => { 
+            ErrorKind::MissingClosingDelimiter(c) => {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", input, c)?
             }
             ErrorKind::ExpectedValue => {
@@ -176,13 +127,11 @@ impl<'a> Display for Error<'a> {
             ErrorKind::Char(c) => {
                 panic!("Tried to display a char error with `{}`", c)
             }
-            ErrorKind::ReservedKeyword => writeln!(f, "reserved keyword")?,
-            ErrorKind::UnexpectedInput(ref v) => writeln!(f, "Unexpected input found `{}`, vec: `{:?}`", input, v)?,
-            ErrorKind::Context(_) => todo!(),
-            ErrorKind::Unreachable => writeln!(
+            ErrorKind::InternalError(kind) => writeln!(
                 f,
-                "Encountered an internal error while parsing your filter. Please fill an issue"
+                "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
             )?,
+            ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
         }
         write!(
             f,
