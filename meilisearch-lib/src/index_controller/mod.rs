@@ -124,6 +124,9 @@ pub enum Update {
         format: DocumentAdditionFormat,
     },
     DeleteIndex,
+    CreateIndex {
+        primary_key: Option<String>,
+    },
 }
 
 #[derive(Default, Debug)]
@@ -349,6 +352,7 @@ impl IndexController {
                 }
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,
+            Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
         };
 
         let task = self.task_store.register(uid, content).await.unwrap();
@@ -424,26 +428,6 @@ impl IndexController {
             spawn_blocking(move || index.retrieve_document(doc_id, attributes_to_retrieve))
                 .await??;
         Ok(document)
-    }
-
-    pub async fn update_index(
-        &self,
-        uid: String,
-        mut index_settings: IndexSettings,
-    ) -> Result<IndexMetadata> {
-        index_settings.uid.take();
-
-        let index = self.index_resolver.get_index(uid.clone()).await?;
-        let uuid = index.uuid();
-        let meta =
-            spawn_blocking(move || index.update_primary_key(index_settings.primary_key)).await??;
-        let meta = IndexMetadata {
-            uuid,
-            name: uid.clone(),
-            uid,
-            meta,
-        };
-        Ok(meta)
     }
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> Result<SearchResult> {

@@ -299,7 +299,7 @@ pub mod test {
             }
         }
 
-        pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
+        pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
             match self {
                 MockIndex::Vrai(index) => index.update_primary_key(primary_key),
                 MockIndex::Faux(_) => todo!(),

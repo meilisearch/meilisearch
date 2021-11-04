@@ -1,7 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
-use meilisearch_lib::index_controller::{IndexSettings, Update};
+use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -54,21 +54,23 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    _meilisearch: GuardedData<Private, MeiliSearch>,
-    _body: web::Json<IndexCreateRequest>,
-    _req: HttpRequest,
-    _analytics: web::Data<dyn Analytics>,
+    meilisearch: GuardedData<Private, MeiliSearch>,
+    body: web::Json<IndexCreateRequest>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    // let body = body.into_inner();
+    let IndexCreateRequest { primary_key, uid, ..} = body.into_inner();
 
-    // analytics.publish(
-    //     "Index Created".to_string(),
-    //     json!({ "primary_key": body.primary_key}),
-    //     Some(&req),
-    // );
-    // let meta = meilisearch.create_index(body.uid, body.primary_key).await?;
-    // Ok(HttpResponse::Created().json(meta))
+    analytics.publish(
+        "Index Created".to_string(),
+        json!({ "primary_key": primary_key }),
+        Some(&req),
+    );
+
+    let update = Update::CreateIndex { primary_key };
+    let task: TaskResponse = meilisearch.register_update(uid, update).await?.into();
+
+    Ok(HttpResponse::Created().json(task))
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,28 +100,29 @@ pub async fn get_index(
 }
 
 pub async fn update_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<String>,
-    body: web::Json<UpdateIndexRequest>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    _meilisearch: GuardedData<Private, MeiliSearch>,
+    _path: web::Path<String>,
+    _body: web::Json<UpdateIndexRequest>,
+    _req: HttpRequest,
+    _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!("called with params: {:?}", body);
-    let body = body.into_inner();
-    analytics.publish(
-        "Index Updated".to_string(),
-        json!({ "primary_key": body.primary_key}),
-        Some(&req),
-    );
-    let settings = IndexSettings {
-        uid: body.uid,
-        primary_key: body.primary_key,
-    };
-    let meta = meilisearch
-        .update_index(path.into_inner(), settings)
-        .await?;
-    debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
+    todo!()
+    // debug!("called with params: {:?}", body);
+    // let body = body.into_inner();
+    // analytics.publish(
+    //     "Index Updated".to_string(),
+    //     json!({ "primary_key": body.primary_key}),
+    //     Some(&req),
+    // );
+    // let settings = IndexSettings {
+    //     uid: body.uid,
+    //     primary_key: body.primary_key,
+    // };
+    // let meta = meilisearch
+    //     .update_index(path.into_inner(), settings)
+    //     .await?;
+    // debug!("returns: {:?}", meta);
+    // Ok(HttpResponse::Ok().json(meta))
 }
 
 pub async fn delete_index(

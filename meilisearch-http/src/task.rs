@@ -109,6 +109,7 @@ impl From<Task> for TaskResponse {
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
             TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
             TaskContent::SettingsUpdate => (TaskType::SettingsUpdate, None),
+            TaskContent::CreateIndex { .. } => (TaskType::IndexCreation, None),
         };
 
         let enqueued_at = match events.first().unwrap() {

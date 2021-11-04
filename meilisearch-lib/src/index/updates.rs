@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
-use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
+use milli::update::{IndexDocumentsMethod, Setting};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -216,22 +216,16 @@ impl Index {
         //  }
     }
 
-    pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
-        match primary_key {
-            Some(primary_key) => {
-                let mut txn = self.write_txn()?;
-                let mut builder = UpdateBuilder::new().settings(&mut txn, self);
-                builder.set_primary_key(primary_key);
-                builder.execute(|_| ())?;
-                let meta = IndexMeta::new_txn(self, &txn)?;
-                txn.commit()?;
-                Ok(meta)
-            }
-            None => {
-                let meta = IndexMeta::new(self)?;
-                Ok(meta)
-            }
-        }
+    pub fn update_primary_key<'a, 'b>(
+        &'a self,
+        txn: &mut heed::RwTxn<'a, 'b>,
+        primary_key: String
+    ) -> Result<IndexMeta> {
+        let mut builder = self.update_handler.update_builder().settings(txn, self);
+        builder.set_primary_key(primary_key);
+        builder.execute(|_| ())?;
+        let meta = IndexMeta::new_txn(self, &txn)?;
+        Ok(meta)
     }
 
     pub fn delete_documents<'a, 'b>(

@@ -82,6 +82,21 @@ where U: UuidStore,
 
                     Ok(UpdateResult::Other)
                 },
+                TaskContent::CreateIndex { primary_key } => {
+                    let index = self.get_or_create_index(index_uid, None).await?;
+
+                    if let Some(primary_key) = primary_key {
+                        let primary_key = primary_key.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let mut txn = index.write_txn()?;
+                            let res = index.update_primary_key(&mut txn, primary_key);
+                            txn.commit()?;
+                            res
+                        }).await??;
+                    }
+
+                    Ok(UpdateResult::Other)
+                }
             };
 
             match result {

@@ -61,6 +61,9 @@ pub enum TaskContent {
     DocumentDeletion(DocumentDeletion),
     IndexDeletion,
     SettingsUpdate,
+    CreateIndex {
+        primary_key: Option<String>,
+    }
 }
 
 #[cfg(test)]
