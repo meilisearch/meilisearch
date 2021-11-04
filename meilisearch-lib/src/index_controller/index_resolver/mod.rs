@@ -8,7 +8,7 @@ use std::path::Path;
 use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
-use meilisearch_tasks::task::TaskResult;
+use meilisearch_tasks::task::{DocumentDeletion, TaskResult};
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
@@ -33,7 +33,7 @@ where U: UuidStore,
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
-        let index = self.create_index(batch.index_uid.clone(), None).await?;
+        let index = self.get_or_create_index(batch.index_uid.clone(), None).await?;
 
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
@@ -59,7 +59,16 @@ where U: UuidStore,
                         res
                     }).await?
                 },
-                TaskContent::DocumentDeletion(_) => todo!(),
+                TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
+                    let ids = ids.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let mut txn = index.write_txn()?;
+                        let res = index.delete_documents(&mut txn, &ids);
+                        txn.commit()?;
+                        res
+                    }).await?
+                },
+                TaskContent::DocumentDeletion(DocumentDeletion::Clear) => todo!(),
                 TaskContent::IndexDeletion => todo!(),
                 TaskContent::SettingsUpdate => todo!(),
             };
@@ -161,26 +170,46 @@ where
     }
 
     /// Get or create an index with name `uid`.
-    pub async fn create_index(&self, _uid: String, _primary_key: Option<String>) -> Result<Index> {
-        todo!()
-        // if !is_index_uid_valid(&uid) {
-        //     return Err(IndexResolverError::BadlyFormatted(uid));
-        // }
-        // let uuid = Uuid::new_v4();
-        // let index = self.index_store.create(uuid, primary_key).await?;
-        // match self.index_uuid_store.insert(uid, uuid).await {
-        //     Err(e) => {
-        //         match self.index_store.delete(uuid).await {
-        //             Ok(Some(index)) => {
-        //                 index.inner().clone().prepare_for_closing();
-        //             }
-        //             Ok(None) => (),
-        //             Err(e) => error!("Error while deleting index: {:?}", e),
-        //         }
-        //         Err(e)
-        //     }
-        //     Ok(()) => Ok(index),
-        // }
+    pub async fn get_or_create_index(
+    &self,
+    uid: String,
+    primary_key: Option<String>
+    ) -> Result<Index> {
+        if !is_index_uid_valid(&uid) {
+            return Err(IndexResolverError::BadlyFormatted(uid));
+        }
+
+        match self.index_uuid_store.get_uuid(uid).await? {
+            (uid, Some(uuid)) => {
+                match self.index_store.get(uuid).await? {
+                    Some(index) => Ok(index),
+                    None => {
+                        // uh oh, there should have been an index here. Let's remove the uuid from
+                        // the uuid store and return an error. We also ignore the error when
+                        // deleting, not to confuse the user.
+                        let _ = self.index_uuid_store.delete(uid.clone()).await;
+                        Err(IndexResolverError::UnexistingIndex(uid))
+                    }
+                }
+            },
+            (uid, None) => {
+                let uuid = Uuid::new_v4();
+                let index = self.index_store.create(uuid, primary_key).await?;
+                match self.index_uuid_store.insert(uid, uuid).await {
+                    Err(e) => {
+                        match self.index_store.delete(uuid).await {
+                            Ok(Some(index)) => {
+                                index.inner().clone().prepare_for_closing();
+                            }
+                            Ok(None) => (),
+                            Err(e) => log::error!("Error while deleting index: {:?}", e),
+                        }
+                        Err(e)
+                    }
+                    Ok(()) => Ok(index),
+                }
+            }
+        }
     }
 
     pub async fn list(&self) -> Result<Vec<(String, Index)>> {
@@ -199,21 +228,20 @@ where
         Ok(indexes)
     }
 
-    pub async fn delete_index(&self, _uid: String) -> Result<Uuid> {
-        todo!()
-        // match self.index_uuid_store.delete(uid.clone()).await? {
-        //     Some(uuid) => {
-        //         match self.index_store.delete(uuid).await {
-        //             Ok(Some(index)) => {
-        //                 index.inner().clone().prepare_for_closing();
-        //             }
-        //             Ok(None) => (),
-        //             Err(e) => error!("Error while deleting index: {:?}", e),
-        //         }
-        //         Ok(uuid)
-        //     }
-        //     None => Err(IndexResolverError::UnexistingIndex(uid)),
-        // }
+    pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
+        match self.index_uuid_store.delete(uid.clone()).await? {
+            Some(uuid) => {
+                match self.index_store.delete(uuid).await {
+                    Ok(Some(index)) => {
+                        index.inner().clone().prepare_for_closing();
+                    }
+                    Ok(None) => (),
+                    Err(e) => log::error!("Error while deleting index: {:?}", e),
+                }
+                Ok(uuid)
+            }
+            None => Err(IndexResolverError::UnexistingIndex(uid)),
+        }
     }
 
     pub async fn get_index_by_uuid(&self, uuid: Uuid) -> Result<Index> {
@@ -249,7 +277,7 @@ where
     }
 }
 
-// fn is_index_uid_valid(uid: &str) -> bool {
-//     uid.chars()
-//         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-// }
+fn is_index_uid_valid(uid: &str) -> bool {
+    uid.chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+}

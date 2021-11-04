@@ -523,7 +523,7 @@ impl IndexController {
     ) -> Result<IndexMetadata> {
         let index = self
             .index_resolver
-            .create_index(uid.clone(), primary_key)
+            .get_or_create_index(uid.clone(), primary_key)
             .await?;
         let meta = spawn_blocking(move || -> IndexResult<_> {
             let meta = index.meta()?;

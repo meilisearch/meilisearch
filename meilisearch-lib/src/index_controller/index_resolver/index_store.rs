@@ -21,7 +21,7 @@ type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 pub trait IndexStore {
     async fn create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
-    async fn delete(&self, uuid: Uuid) -> Result<()>;
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>>;
 }
 
 pub struct MapIndexStore {
@@ -116,28 +116,10 @@ impl IndexStore for MapIndexStore {
         }
     }
 
-    async fn delete(&self, uuid: Uuid) -> Result<()> {
+    async fn delete(&self, uuid: Uuid) -> Result<Option<Index>> {
         let db_path = self.path.join(format!("{}", uuid));
         fs::remove_dir_all(db_path).await?;
-
-        // if the index was already loaded, we need to close it.
-        if let Some(index) = self.index_store.write().await.remove(&uuid) {
-            let Index { inner, .. } = index;
-            tokio::task::spawn_blocking(move || {
-                let mut arc_index = inner;
-                let naked_index = loop {
-                    match Arc::try_unwrap(arc_index) {
-                        Ok(index) => break index,
-                        Err(index) => {
-                            arc_index = index;
-                        },
-                    }
-                };
-
-                naked_index.prepare_for_closing().wait();
-            });
-        }
-
-        Ok(())
+        let index = self.index_store.write().await.remove(&uuid);
+        Ok(index)
     }
 }

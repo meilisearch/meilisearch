@@ -163,7 +163,7 @@ pub struct Facets {
 }
 
 impl Index {
-    pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
+    pub fn handle_update(&self, _update: Processing) -> std::result::Result<Processed, Failed> {
         todo!()
       //  let update_builder = self.update_handler.update_builder();
       //  let result = (|| {
@@ -239,7 +239,7 @@ impl Index {
 
         // We ignore unexisting document ids
         ids.iter().for_each(|id| {
-            builder.delete_external_id(id);
+            dbg!(builder.delete_external_id(id));
         });
 
         let deleted = builder.execute()?;
