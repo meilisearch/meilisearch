@@ -12,7 +12,9 @@ use futures::Stream;
 use futures::StreamExt;
 use log::info;
 use meilisearch_tasks::create_task_store;
-use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
+use meilisearch_tasks::task::{
+    DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId,
+};
 use meilisearch_tasks::task_store::{TaskFilter, TaskStore};
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
@@ -177,20 +179,18 @@ impl IndexControllerBuilder {
             &indexer_options,
         )?);
 
-        let task_store = create_task_store(
-            &db_path,
-            update_store_size,
-            index_resolver.clone()).map_err(|e| anyhow::anyhow!(e))?;
+        let task_store = create_task_store(&db_path, update_store_size, index_resolver.clone())
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         //let dump_path = self
-            //.dump_dst
-            //.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        //.dump_dst
+        //.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
         //let dump_handle = dump_actor::DumpActorHandleImpl::new(
-            //dump_path,
-            //index_resolver.clone(),
-            //task_store,
-            //index_size,
-            //update_store_size,
+        //dump_path,
+        //index_resolver.clone(),
+        //task_store,
+        //index_size,
+        //update_store_size,
         //)?;
 
         let (sender, _) = mpsc::channel(1);
@@ -199,21 +199,21 @@ impl IndexControllerBuilder {
         let update_file_store = UpdateFileStore::new(&db_path)?;
 
         //if self.schedule_snapshot {
-            //let snapshot_service = SnapshotService::new(
-                //index_resolver.clone(),
-                //task_store,
-                //self.snapshot_interval
-                    //.ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
-                //self.snapshot_dir
-                    //.ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
-                //db_path
-                    //.as_ref()
-                    //.file_name()
-                    //.map(|n| n.to_owned().into_string().expect("invalid path"))
-                    //.unwrap_or_else(|| String::from("data.ms")),
-            //);
+        //let snapshot_service = SnapshotService::new(
+        //index_resolver.clone(),
+        //task_store,
+        //self.snapshot_interval
+        //.ok_or_else(|| anyhow::anyhow!("Snapshot interval not provided."))?,
+        //self.snapshot_dir
+        //.ok_or_else(|| anyhow::anyhow!("Snapshot path not provided."))?,
+        //db_path
+        //.as_ref()
+        //.file_name()
+        //.map(|n| n.to_owned().into_string().expect("invalid path"))
+        //.unwrap_or_else(|| String::from("data.ms")),
+        //);
 
-            //tokio::task::spawn(snapshot_service.run());
+        //tokio::task::spawn(snapshot_service.run());
         //}
 
         Ok(IndexController {
@@ -292,22 +292,25 @@ impl IndexController {
         IndexControllerBuilder::default()
     }
 
-    pub async fn register_update(
-        &self,
-        uid: String,
-        update: Update,
-    ) -> Result<Task> {
+    pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {
         let content = match update {
-            Update::DeleteDocuments(ids) => TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)),
+            Update::DeleteDocuments(ids) => {
+                TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
+            }
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
             Update::Settings(_) => TaskContent::SettingsUpdate,
-            Update::DocumentAddition { mut payload, primary_key, format, .. } => {
+            Update::DocumentAddition {
+                mut payload,
+                primary_key,
+                format,
+                ..
+            } => {
                 let mut buffer = Vec::new();
                 while let Some(bytes) = payload.next().await {
                     match bytes {
                         Ok(bytes) => {
                             buffer.extend_from_slice(&bytes);
-                        },
+                        }
                         Err(_e) => todo!("handle payload errors"),
                     }
                 }
@@ -321,16 +324,22 @@ impl IndexController {
 
                     let reader = Cursor::new(buffer);
                     let count = match format {
-                        DocumentAdditionFormat::Json => read_json(reader, &mut *update_file).unwrap(),
+                        DocumentAdditionFormat::Json => {
+                            read_json(reader, &mut *update_file).unwrap()
+                        }
                         DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file).unwrap(),
-                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file).unwrap(),
+                        DocumentAdditionFormat::Ndjson => {
+                            read_ndjson(reader, &mut *update_file).unwrap()
+                        }
                     };
 
                     update_file.persist().unwrap();
 
                     Ok(count)
                 })
-                .await.unwrap().unwrap();
+                .await
+                .unwrap()
+                .unwrap();
 
                 TaskContent::DocumentAddition {
                     content_uuid,
@@ -338,7 +347,7 @@ impl IndexController {
                     primary_key,
                     documents_count,
                 }
-            },
+            }
             Update::DeleteIndex => TaskContent::IndexDeletion,
         };
 
@@ -352,8 +361,17 @@ impl IndexController {
         Ok(task)
     }
 
-    pub async fn list_tasks(&self, filter: Option<TaskFilter>) -> Result<Vec<Task>> {
-        let tasks = self.task_store.list_tasks(filter, 20, None).await.unwrap();
+    pub async fn list_tasks(
+        &self,
+        filter: Option<TaskFilter>,
+        limit: Option<usize>,
+        offset: Option<TaskId>,
+    ) -> Result<Vec<Task>> {
+        let tasks = self
+            .task_store
+            .list_tasks(filter, limit, offset)
+            .await
+            .unwrap();
         Ok(tasks)
     }
 
@@ -362,14 +380,14 @@ impl IndexController {
         //let indexes = self.index_resolver.list().await?;
         //let mut ret = Vec::new();
         //for (uid, index) in indexes {
-            //let meta = index.meta()?;
-            //let meta = IndexMetadata {
-                //uuid: index.uuid,
-                //name: uid.clone(),
-                //uid,
-                //meta,
-            //};
-            //ret.push(meta);
+        //let meta = index.meta()?;
+        //let meta = IndexMetadata {
+        //uuid: index.uuid,
+        //name: uid.clone(),
+        //uid,
+        //meta,
+        //};
+        //ret.push(meta);
         //}
 
         //Ok(ret)
@@ -466,30 +484,30 @@ impl IndexController {
         //let mut indexes = BTreeMap::new();
 
         //for (index_uid, index) in self.index_resolver.list().await? {
-            //let uuid = index.uuid;
-            //let (mut stats, meta) = spawn_blocking::<_, IndexResult<_>>(move || {
-                //let stats = index.stats()?;
-                //let meta = index.meta()?;
-                //Ok((stats, meta))
-            //})
-            //.await??;
+        //let uuid = index.uuid;
+        //let (mut stats, meta) = spawn_blocking::<_, IndexResult<_>>(move || {
+        //let stats = index.stats()?;
+        //let meta = index.meta()?;
+        //Ok((stats, meta))
+        //})
+        //.await??;
 
-            //database_size += stats.size;
+        //database_size += stats.size;
 
-            //last_update = last_update.map_or(Some(meta.updated_at), |last| {
-                //Some(last.max(meta.updated_at))
-            //});
+        //last_update = last_update.map_or(Some(meta.updated_at), |last| {
+        //Some(last.max(meta.updated_at))
+        //});
 
-            //// Check if the currently indexing update is from our index.
-            //stats.is_indexing = Some(Some(uuid) == update_infos.processing);
+        //// Check if the currently indexing update is from our index.
+        //stats.is_indexing = Some(Some(uuid) == update_infos.processing);
 
-            //indexes.insert(index_uid, stats);
+        //indexes.insert(index_uid, stats);
         //}
 
         //Ok(Stats {
-            //database_size,
-            //last_update,
-            //indexes,
+        //database_size,
+        //last_update,
+        //indexes,
         //})
     }
 

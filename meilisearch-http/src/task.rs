@@ -138,3 +138,13 @@ impl From<Task> for TaskResponse {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct TaskListResponse {
+    results: Vec<TaskResponse>,
+}
+
+impl From<Vec<TaskResponse>> for TaskListResponse {
+    fn from(results: Vec<TaskResponse>) -> Self {
+        Self { results }
+    }
+}

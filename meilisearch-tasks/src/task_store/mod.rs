@@ -126,24 +126,18 @@ impl TaskStore {
 
     pub async fn list_tasks(
         &self,
-        _filter: Option<TaskFilter>,
-        _limit: usize,
-        _offset: Option<TaskId>,
+        filter: Option<TaskFilter>,
+        limit: Option<usize>,
+        offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        todo!()
-        //  let store = self.store.clone();
+       let store = self.store.clone();
 
-        //  tokio::task::spawn_blocking(move || {
-        //      let txn = store.rtxn()?;
-        //      let tasks = store
-        //          .list_updates(&txn, offset)?
-        //          .filter_map(|t| t.ok())
-        //          .filter(|t| filter.as_ref().map(|f| f(t)).unwrap_or(true))
-        //          .take(limit)
-        //          .collect::<Vec<_>>();
-        //      Ok(tasks)
-        //  })
-        //  .await?
+       tokio::task::spawn_blocking(move || {
+           let txn = store.rtxn()?;
+           let tasks = store.list_tasks(&txn, offset, filter, limit)?;
+           Ok(tasks)
+       })
+       .await?
     }
 }
 

@@ -1,17 +1,24 @@
-
 #[allow(clippy::upper_case_acronyms)]
 type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 
 const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
-use std::{borrow::Cow, convert::TryInto, path::Path};
+use std::borrow::Cow;
+use std::collections::BTreeSet;
+use std::convert::TryInto;
+use std::path::Path;
+use std::result::Result as StdResult;
 
-use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn, types::{OwnedType, SerdeBincode, Unit}};
+use heed::{
+    types::{ByteSlice, OwnedType, SerdeBincode, Unit},
+    BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn,
+};
 
 use crate::task::{Task, TaskId};
 use crate::Result;
 
+use super::TaskFilter;
 
 enum IndexUidTaskIdCodec {}
 
@@ -21,7 +28,7 @@ impl<'a> BytesEncode<'a> for IndexUidTaskIdCodec {
     fn bytes_encode((s, id): &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
         let size = s.len() + std::mem::size_of::<TaskId>() + 1;
         if size > 512 {
-            return None
+            return None;
         }
         let mut b = Vec::with_capacity(size);
         b.extend_from_slice(s.as_bytes());
@@ -65,7 +72,6 @@ impl Store {
             uids_task_ids,
             tasks,
         })
-
     }
 
     pub fn wtxn(&self) -> Result<RwTxn> {
@@ -88,7 +94,8 @@ impl Store {
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
         self.tasks.put(txn, &BEU64::new(task.id), task)?;
-        self.uids_task_ids.put(txn, &(&task.index_uid, task.id), &())?;
+        self.uids_task_ids
+            .put(txn, &(&task.index_uid, task.id), &())?;
 
         Ok(())
     }
@@ -102,11 +109,75 @@ impl Store {
         Ok(self.tasks.len(txn)?)
     }
 
-    pub fn list_updates<'a>(&self, txn: &'a RoTxn, from: Option<TaskId>) -> Result<Box<dyn Iterator<Item = heed::Result<Task>> + 'a>> {
-        match from {
-            Some(id) => Ok(Box::new(self.tasks.rev_range(txn, &(..BEU64::new(id)))?.map(|r| r.map(|(_, t)| t)))),
-            None => Ok(Box::new(self.tasks.rev_iter(txn)?.map(|r| r.map(|(_, t)| t)))),
+    pub fn list_tasks<'a>(
+        &self,
+        txn: &'a RoTxn,
+        from: Option<TaskId>,
+        filter: Option<TaskFilter>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Task>> {
+        let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
+            Some(filter) => {
+                let iter = self
+                    .compute_candidates(txn, dbg!(filter))?
+                    .into_iter()
+                    .skip_while(|&id| from.map(|from| from == id).unwrap_or_default())
+                    .filter_map(|id| self.tasks.get(txn, &BEU64::new(id)).transpose());
+
+                Box::new(iter)
+            }
+            None => match from {
+                Some(id) => Box::new(
+                    self.tasks
+                        .rev_range(txn, &(..BEU64::new(id)))?
+                        .map(|r| r.map(|(_, t)| t)),
+                ),
+                None => Box::new(self.tasks.rev_iter(txn)?.map(|r| r.map(|(_, t)| t))),
+            },
+        };
+
+        // Collect 'limit' task if it exists or all of them.
+        let tasks = iter
+            .take(limit.unwrap_or(usize::MAX))
+            .try_fold::<_, _, StdResult<_, heed::Error>>(Vec::new(), |mut v, task| {
+                v.push(task?);
+                Ok(v)
+            })?;
+
+        Ok(tasks)
+    }
+
+    fn compute_candidates(
+        &self,
+        txn: &heed::RoTxn,
+        filter: TaskFilter,
+    ) -> Result<BTreeSet<TaskId>> {
+        let mut candidates = BTreeSet::new();
+        if let Some(indexes) = filter.indexes {
+            for index in indexes {
+                // We need to prefix search the null terminated string to make sure that we only
+                // get exact matches for the index, and not other uids that would share the same
+                // prefix, i.e test and test1.
+                let mut index_uid = index.as_bytes().to_vec();
+                index_uid.push(0);
+                self.uids_task_ids
+                    .remap_key_type::<ByteSlice>()
+                    .prefix_iter(txn, &index_uid)?
+                    .try_fold(
+                        &mut candidates,
+                        |candidates, entry| -> StdResult<_, heed::Error> {
+                            let (key, _) = entry?;
+                            let (_, id) = IndexUidTaskIdCodec::bytes_decode(key)
+                                .ok_or(heed::Error::Decoding)?;
+                            candidates.insert(id);
+
+                            Ok(candidates)
+                        },
+                    )?;
+            }
         }
+
+        Ok(candidates)
     }
 }
 
@@ -114,9 +185,9 @@ impl Store {
 pub mod test {
     use std::collections::{HashMap, HashSet};
 
-    use quickcheck::TestResult;
-    use quickcheck_macros::quickcheck;
     use nelson::Mocker;
+    use quickcheck::{Arbitrary, Gen, TestResult};
+    use quickcheck_macros::quickcheck;
 
     use super::*;
 
@@ -172,9 +243,15 @@ pub mod test {
             }
         }
 
-        pub fn list_updates<'a>(&self, txn: &'a RoTxn, from: Option<TaskId>) -> Result<Box<dyn Iterator<Item = heed::Result<Task>> + 'a>> {
+        pub fn list_tasks<'a>(
+            &self,
+            txn: &'a RoTxn,
+            from: Option<TaskId>,
+            filter: Option<TaskFilter>,
+            limit: Option<usize>,
+        ) -> Result<Vec<Task>> {
             match self {
-                MockStore::Real(index) => index.list_updates(txn, from),
+                MockStore::Real(index) => index.list_tasks(txn, from, filter, limit),
                 MockStore::Fake(_) => todo!(),
             }
         }
@@ -183,8 +260,10 @@ pub mod test {
     #[quickcheck]
     fn put_retrieve_task(tasks: Vec<Task>) -> TestResult {
         // if two task have the same id, we discard the test.
-        if tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
-            return TestResult::discard()
+        if tasks.is_empty()
+            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
+        {
+            return TestResult::discard();
         }
         let tmp = tempfile::tempdir().unwrap();
 
@@ -213,14 +292,12 @@ pub mod test {
     #[quickcheck]
     fn list_updates(tasks: Vec<Task>) -> TestResult {
         // if two task have the same id, we discard the test.
-        if tasks.is_empty() || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
-            return TestResult::discard()
+        if tasks.is_empty()
+            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
+        {
+            return TestResult::discard();
         }
 
-        // if two task have the same id, we discard the test.
-        if tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len() {
-            return TestResult::discard()
-        }
         let tmp = tempfile::tempdir().unwrap();
 
         let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
@@ -234,13 +311,17 @@ pub mod test {
         txn.commit().unwrap();
 
         let txn = store.rtxn().unwrap();
-        let validator = tasks.into_iter().map(|t| (t.id, t)).collect::<HashMap<_, _>>();
+        let validator = tasks
+            .into_iter()
+            .map(|t| (t.id, t))
+            .collect::<HashMap<_, _>>();
 
         assert_eq!(store.task_count(&txn).unwrap(), validator.len());
 
-        let iter = store.list_updates(&txn, None)
+        let iter = store
+            .list_tasks(&txn, None, None, None)
             .unwrap()
-            .map(|t| t.unwrap())
+            .into_iter()
             .map(|t| (t.id, t))
             .collect::<HashMap<_, _>>();
 
@@ -248,11 +329,84 @@ pub mod test {
 
         let randid = validator.values().next().unwrap().id;
 
-        store.list_updates(&txn, Some(randid))
+        store
+            .list_tasks(&txn, Some(randid), None, None)
             .unwrap()
-            .map(|t| t.unwrap())
+            .into_iter()
             .for_each(|t| assert!(t.id < randid, "id: {}, randid: {}", t.id, randid));
 
         TestResult::passed()
+    }
+
+    #[quickcheck]
+    fn list_updates_filter(tasks: Vec<Task>) -> TestResult {
+        // if two task have the same id, we discard the test.
+        if tasks.is_empty()
+            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
+        {
+            return TestResult::discard();
+        }
+
+        let index_to_filter = tasks.first().unwrap().index_uid.clone();
+
+        let tmp = tempfile::tempdir().unwrap();
+
+        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+
+        let mut txn = store.wtxn().unwrap();
+
+        for task in tasks.iter() {
+            store.put(&mut txn, task).unwrap();
+        }
+
+        txn.commit().unwrap();
+
+        let txn = store.rtxn().unwrap();
+        let validator = tasks
+            .into_iter()
+            .map(|t| (t.id, t))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(store.task_count(&txn).unwrap(), validator.len());
+
+        let mut filter = TaskFilter::default();
+        filter.filter_index(index_to_filter.clone());
+
+        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+        assert!(!tasks.is_empty());
+        tasks.into_iter().for_each(|task| {
+            assert_eq!(task.index_uid, index_to_filter);
+        });
+        TestResult::passed()
+    }
+
+    #[test]
+    fn test_filter_same_index_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+
+        let mut gen = Gen::new(30);
+
+        // task1 and 2 share the same index_uid prefix
+        let mut task_1 = Task::arbitrary(&mut gen);
+        task_1.index_uid = "test".into();
+
+        let mut task_2 = Task::arbitrary(&mut gen);
+        task_2.index_uid = "test1".into();
+
+
+        let mut txn = store.wtxn().unwrap();
+        store.put(&mut txn, &task_1).unwrap();
+        store.put(&mut txn, &task_2).unwrap();
+
+        let mut filter = TaskFilter::default();
+        filter.filter_index("test".into());
+
+        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks.first().unwrap().index_uid, "test");
     }
 }
