@@ -112,13 +112,15 @@ impl Code {
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set
-            MissingPrimaryKey => ErrCode::invalid("missing_primary_key", StatusCode::BAD_REQUEST),
+            MissingPrimaryKey => {
+                ErrCode::invalid("primary_key_inference_failed", StatusCode::BAD_REQUEST)
+            }
             // error thrown when trying to set an already existing primary key
             PrimaryKeyAlreadyPresent => {
                 ErrCode::invalid("index_primary_key_already_exists", StatusCode::BAD_REQUEST)
             }
             // invalid ranking rule
-            InvalidRankingRule => ErrCode::invalid("invalid_request", StatusCode::BAD_REQUEST),
+            InvalidRankingRule => ErrCode::invalid("invalid_ranking_rule", StatusCode::BAD_REQUEST),
 
             // invalid database
             InvalidStore => {
