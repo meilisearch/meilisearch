@@ -29,8 +29,9 @@ enum TaskStatus {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(untagged)]
 enum TaskDetails {
+    #[serde(rename_all = "camelCase")]
     DocumentsUpdate { number_of_documents: usize },
 }
 
