@@ -279,16 +279,15 @@ async fn error_set_invalid_ranking_rules() {
 
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
-    assert_eq!(
-        response["message"],
-        r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules."#
-    );
-    assert_eq!(response["code"], "invalid_ranking_rule");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#invalid_ranking_rule"
-    );
+
+    let expected_error = json!({
+        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules."#,
+        "code": "invalid_ranking_rule",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_ranking_rule"
+    });
+
+    assert_eq!(response["error"], expected_error);
 }
 
 #[actix_rt::test]
