@@ -11,11 +11,6 @@ use chrono::{DateTime, Utc};
 use futures::Stream;
 use futures::StreamExt;
 use log::info;
-use meilisearch_tasks::create_task_store;
-use meilisearch_tasks::task::{
-    DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId,
-};
-use meilisearch_tasks::task_store::{TaskFilter, TaskStore};
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -27,15 +22,16 @@ use dump_actor::DumpActorHandle;
 pub use dump_actor::{DumpInfo, DumpStatus};
 use snapshot::load_snapshot;
 
-use crate::document_formats::read_csv;
-use crate::document_formats::read_json;
-use crate::document_formats::read_ndjson;
+use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
 use crate::index_controller::index_resolver::create_index_resolver;
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
+use crate::tasks::create_task_store;
+use crate::tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
+use crate::tasks::task_store::{TaskFilter, TaskStore};
 use error::Result;
 
 use self::dump_actor::load_dump;

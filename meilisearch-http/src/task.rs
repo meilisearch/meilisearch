@@ -1,5 +1,5 @@
 use chrono::{Duration, DateTime, Utc};
-use meilisearch_tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use meilisearch_lib::tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
 use serde::{Serialize, Serializer};
 
 use crate::error::ResponseError;

@@ -918,16 +918,6 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
@@ -1663,7 +1653,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "either",
- "env_logger 0.9.0",
+ "env_logger",
  "flate2",
  "fst",
  "futures",
@@ -1676,7 +1666,6 @@ dependencies = [
  "log",
  "meilisearch-error",
  "meilisearch-lib",
- "meilisearch-tasks",
  "meilisearch-tokenizer",
  "mime",
  "num_cpus",
@@ -1743,7 +1732,6 @@ dependencies = [
  "lazy_static",
  "log",
  "meilisearch-error",
- "meilisearch-tasks",
  "meilisearch-tokenizer",
  "milli",
  "mime",
@@ -1772,24 +1760,6 @@ dependencies = [
  "uuid",
  "walkdir",
  "whoami",
-]
-
-[[package]]
-name = "meilisearch-tasks"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "heed",
- "log",
- "mockall",
- "nelson",
- "quickcheck",
- "quickcheck_macros",
- "serde",
- "tempfile",
- "tokio",
- "uuid",
 ]
 
 [[package]]
@@ -1951,10 +1921,6 @@ dependencies = [
  "quote 1.0.10",
  "syn 1.0.81",
 ]
-
-[[package]]
-name = "nelson"
-version = "0.1.0"
 
 [[package]]
 name = "normalize-line-endings"
@@ -2324,28 +2290,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba508cc11742c0dc5c1659771673afbab7a0efab23aa17e854cbab0837ed0b43"
 dependencies = [
  "unicode-xid 0.2.2",
-]
-
-[[package]]
-name = "quickcheck"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
-dependencies = [
- "env_logger 0.8.4",
- "log",
- "rand",
-]
-
-[[package]]
-name = "quickcheck_macros"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b22a693222d716a9587786f37ac3f6b4faedb5b80c23914e7303ff5a1d8016e9"
-dependencies = [
- "proc-macro2 1.0.32",
- "quote 1.0.10",
- "syn 1.0.81",
 ]
 
 [[package]]

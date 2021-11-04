@@ -8,11 +8,11 @@ use std::path::Path;
 use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
-use meilisearch_tasks::task::{DocumentDeletion, TaskResult};
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
-use meilisearch_tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
+use crate::tasks::task::{DocumentDeletion, TaskResult};
+use crate::tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
 
 use crate::{index::{Index, error::IndexError, update_handler::UpdateHandler}, index_controller::updates::status::UpdateResult, options::IndexerOpts};
 

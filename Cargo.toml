@@ -3,7 +3,6 @@ members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
-    "meilisearch-tasks",
 ]
 
 resolver = "2"
