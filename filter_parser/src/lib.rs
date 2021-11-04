@@ -541,9 +541,9 @@ pub mod tests {
             ("_geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
             ("position <= _geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
             ("position <= _geoRadius(12, 13, 14)", "The `_geoRadius` filter is an operation and can't be used as a value."),
-            ("channel = 'ponce", "Expression `'ponce` is missing the following closing delemiter: `'`."),
-            ("channel = \"ponce", "Expression `\"ponce` is missing the following closing delemiter: `\"`."),
-            ("channel = mv OR (followers >= 1000", "Expression `(followers >= 1000` is missing the following closing delemiter: `)`."),
+            ("channel = 'ponce", "Expression `'ponce` is missing the following closing delimiter: `'`."),
+            ("channel = \"ponce", "Expression `\"ponce` is missing the following closing delimiter: `\"`."),
+            ("channel = mv OR (followers >= 1000", "Expression `(followers >= 1000` is missing the following closing delimiter: `)`."),
             ("channel = mv OR followers >= 1000)", "Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule."),
         ];
 

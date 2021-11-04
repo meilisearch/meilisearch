@@ -150,7 +150,7 @@ impl<'a> Display for Error<'a> {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
             }
             ErrorKind::MissingClosingDelimiter(c) => { 
-                writeln!(f, "Expression `{}` is missing the following closing delemiter: `{}`.", input, c)?
+                writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", input, c)?
             }
             ErrorKind::ExpectedValue => {
                 writeln!(f, "Was expecting a value but instead got `{}`.", input)?
