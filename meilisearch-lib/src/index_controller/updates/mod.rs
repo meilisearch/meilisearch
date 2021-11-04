@@ -149,60 +149,61 @@ impl UpdateLoop {
             .await;
     }
 
-    async fn handle_update(&self, index_uuid: Uuid, update: Update) -> Result<UpdateStatus> {
-        let registration = match update {
-            Update::DocumentAddition {
-                mut payload,
-                primary_key,
-                method,
-                format,
-            } => {
-                let mut buffer = Vec::new();
-                while let Some(bytes) = payload.next().await {
-                    match bytes {
-                        Ok(bytes) => {
-                            buffer.extend_from_slice(&bytes);
-                        }
-                        Err(e) => return Err(e.into()),
-                    }
-                }
-                let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
-                tokio::task::spawn_blocking(move || -> Result<_> {
-                    // check if the payload is empty, and return an error
-                    if buffer.is_empty() {
-                        return Err(UpdateLoopError::MissingPayload(format));
-                    }
+    async fn handle_update(&self, _index_uuid: Uuid, _update: Update) -> Result<UpdateStatus> {
+        todo!()
+        // let registration = match update {
+        //     Update::DocumentAddition {
+        //         mut payload,
+        //         primary_key,
+        //         method,
+        //         format,
+        //     } => {
+        //         let mut buffer = Vec::new();
+        //         while let Some(bytes) = payload.next().await {
+        //             match bytes {
+        //                 Ok(bytes) => {
+        //                     buffer.extend_from_slice(&bytes);
+        //                 }
+        //                 Err(e) => return Err(e.into()),
+        //             }
+        //         }
+        //         let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
+        //         tokio::task::spawn_blocking(move || -> Result<_> {
+        //             // check if the payload is empty, and return an error
+        //             if buffer.is_empty() {
+        //                 return Err(UpdateLoopError::MissingPayload(format));
+        //             }
 
-                    let reader = Cursor::new(buffer);
-                    match format {
-                        DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
-                    };
+        //             let reader = Cursor::new(buffer);
+        //             match format {
+        //                 DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
+        //                 DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
+        //                 DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
+        //             };
 
-                    update_file.persist()?;
+        //             update_file.persist()?;
 
-                    Ok(())
-                })
-                .await??;
+        //             Ok(())
+        //         })
+        //         .await??;
 
-                store::Update::DocumentAddition {
-                    primary_key,
-                    method,
-                    content_uuid,
-                }
-            }
-            Update::Settings(settings) => store::Update::Settings(settings),
-            Update::ClearDocuments => store::Update::ClearDocuments,
-            Update::DeleteDocuments(ids) => store::Update::DeleteDocuments(ids),
-        };
+        //         store::Update::DocumentAddition {
+        //             primary_key,
+        //             method,
+        //             content_uuid,
+        //         }
+        //     }
+        //     Update::Settings(settings) => store::Update::Settings(settings),
+        //     Update::ClearDocuments => store::Update::ClearDocuments,
+        //     Update::DeleteDocuments(ids) => store::Update::DeleteDocuments(ids),
+        // };
 
-        let store = self.store.clone();
-        let status =
-            tokio::task::spawn_blocking(move || store.register_update(index_uuid, registration))
-                .await??;
+        // let store = self.store.clone();
+        // let status =
+        //     tokio::task::spawn_blocking(move || store.register_update(index_uuid, registration))
+        //         .await??;
 
-        Ok(status.into())
+        // Ok(status.into())
     }
 
     async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {

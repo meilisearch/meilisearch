@@ -122,6 +122,7 @@ pub enum Update {
         method: IndexDocumentsMethod,
         format: DocumentAdditionFormat,
     },
+    DeleteIndex,
 }
 
 #[derive(Default, Debug)]
@@ -340,6 +341,7 @@ impl IndexController {
                     documents_count,
                 }
             },
+            Update::DeleteIndex => TaskContent::IndexDeletion,
         };
 
         let task = self.task_store.register(uid, content).await.unwrap();
@@ -538,18 +540,6 @@ impl IndexController {
         .await??;
 
         Ok(meta)
-    }
-
-    pub async fn delete_index(&self, _uid: String) -> Result<()> {
-        todo!()
-        //let uuid = self.index_resolver.delete_index(uid).await?;
-
-        //let update_sender = self.update_sender.clone();
-        //tokio::spawn(async move {
-            //let _ = UpdateMsg::delete(&update_sender, uuid).await;
-        //});
-
-        //Ok(())
     }
 }
 

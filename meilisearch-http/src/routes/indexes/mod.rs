@@ -1,7 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
-use meilisearch_lib::index_controller::IndexSettings;
+use meilisearch_lib::index_controller::{IndexSettings, Update};
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -10,6 +10,7 @@ use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::routes::IndexParam;
+use crate::task::TaskResponse;
 
 pub mod documents;
 pub mod search;
@@ -124,10 +125,16 @@ pub async fn update_index(
 
 pub async fn delete_index(
     meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    meilisearch.delete_index(path.index_uid.clone()).await?;
-    Ok(HttpResponse::NoContent().finish())
+    let uid = path.into_inner();
+    let update = Update::DeleteIndex;
+    let task: TaskResponse = meilisearch
+        .register_update(uid, update, false)
+        .await?
+        .into();
+
+    Ok(HttpResponse::Ok().json(task))
 }
 
 pub async fn get_index_stats(

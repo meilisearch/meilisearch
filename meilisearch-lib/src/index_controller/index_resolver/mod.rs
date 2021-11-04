@@ -14,10 +14,7 @@ use uuid_store::{HeedUuidStore, UuidStore};
 
 use meilisearch_tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
 
-use crate::{
-    index::{update_handler::UpdateHandler, Index},
-    options::IndexerOpts,
-};
+use crate::{index::{update_handler::UpdateHandler, Index}, index_controller::updates::status::UpdateResult, options::IndexerOpts};
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
@@ -33,11 +30,11 @@ where U: UuidStore,
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
-        let index = self.get_or_create_index(batch.index_uid.clone(), None).await?;
 
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
 
+            let index_uid = batch.index_uid.clone();
             let result = match &task.content {
                 TaskContent::DocumentAddition { content_uuid, merge_strategy, primary_key, .. } =>  {
                     let method = match merge_strategy {
@@ -48,6 +45,7 @@ where U: UuidStore,
                     let primary_key = primary_key.clone();
                     let content_uuid = *content_uuid;
 
+                    let index = self.get_or_create_index(index_uid, None).await?;
                     tokio::task::spawn_blocking(move || {
                         let mut txn = index.write_txn()?;
                         let res = index.update_documents(
@@ -61,6 +59,7 @@ where U: UuidStore,
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                     let ids = ids.clone();
+                    let index = self.get_or_create_index(index_uid, None).await?;
                     tokio::task::spawn_blocking(move || {
                         let mut txn = index.write_txn()?;
                         let res = index.delete_documents(&mut txn, &ids);
@@ -69,6 +68,7 @@ where U: UuidStore,
                     }).await?
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
+                    let index = self.get_or_create_index(index_uid, None).await?;
                     tokio::task::spawn_blocking(move || {
                         let mut txn = index.write_txn()?;
                         let res = index.clear_documents(&mut txn);
@@ -76,8 +76,12 @@ where U: UuidStore,
                         res
                     }).await?
                 },
-                TaskContent::IndexDeletion => todo!(),
                 TaskContent::SettingsUpdate => todo!(),
+                TaskContent::IndexDeletion => {
+                    self.delete_index(index_uid).await?;
+
+                    Ok(UpdateResult::Other)
+                },
             };
 
             match result {
