@@ -40,6 +40,7 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use error::{cut_with_err, ExtendNomError};
@@ -72,6 +73,14 @@ impl<'a> Token<'a> {
 
     pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
         Error::new_from_external(self.position, error)
+    }
+
+    pub fn parse<T>(&self) -> Result<T, Error>
+    where
+        T: FromStr,
+        T::Err: std::error::Error,
+    {
+        self.inner.parse().map_err(|e| self.as_external_error(e))
     }
 }
 

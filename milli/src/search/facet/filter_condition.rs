@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
-use std::str::FromStr;
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
@@ -54,20 +53,6 @@ impl<'a> Display for FilterError<'a> {
 impl<'a> From<FPError<'a>> for Error {
     fn from(error: FPError<'a>) -> Self {
         Self::UserError(UserError::InvalidFilter(error.to_string()))
-    }
-}
-
-fn parse<T>(tok: &Token) -> Result<T>
-where
-    T: FromStr,
-    T::Err: std::error::Error,
-{
-    match tok.inner.parse::<T>() {
-        Ok(t) => Ok(t),
-        Err(e) => {
-            Err(UserError::InvalidFilter(FPError::new_from_external(tok.position, e).to_string())
-                .into())
-        }
     }
 }
 
@@ -254,11 +239,11 @@ impl<'a> Filter<'a> {
         // field id and the level.
 
         let (left, right) = match operator {
-            Condition::GreaterThan(val) => (Excluded(parse(val)?), Included(f64::MAX)),
-            Condition::GreaterThanOrEqual(val) => (Included(parse(val)?), Included(f64::MAX)),
-            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(parse(val)?)),
-            Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(parse(val)?)),
-            Condition::Between { from, to } => (Included(parse(from)?), Included(parse(to)?)),
+            Condition::GreaterThan(val) => (Excluded(val.parse()?), Included(f64::MAX)),
+            Condition::GreaterThanOrEqual(val) => (Included(val.parse()?), Included(f64::MAX)),
+            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.parse()?)),
+            Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(val.parse()?)),
+            Condition::Between { from, to } => (Included(from.parse()?), Included(to.parse()?)),
             Condition::Equal(val) => {
                 let (_original_value, string_docids) = strings_db
                     .get(rtxn, &(field_id, &val.inner.to_lowercase()))?
@@ -373,7 +358,7 @@ impl<'a> Filter<'a> {
             FilterCondition::GeoLowerThan { point, radius } => {
                 let filterable_fields = index.fields_ids_map(rtxn)?;
                 if filterable_fields.id("_geo").is_some() {
-                    let base_point: [f64; 2] = [parse(&point[0])?, parse(&point[1])?];
+                    let base_point: [f64; 2] = [point[0].parse()?, point[1].parse()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
                         return Err(
                             point[0].as_external_error(FilterError::BadGeoLat(base_point[0]))
@@ -384,7 +369,7 @@ impl<'a> Filter<'a> {
                             point[1].as_external_error(FilterError::BadGeoLng(base_point[1]))
                         )?;
                     }
-                    let radius = parse(&radius)?;
+                    let radius = radius.parse()?;
                     let rtree = match index.geo_rtree(rtxn)? {
                         Some(rtree) => rtree,
                         None => return Ok(RoaringBitmap::new()),
