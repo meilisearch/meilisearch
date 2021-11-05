@@ -25,8 +25,9 @@ cargo install cargo-fuzz
 ```
 
 ### Run
+When the filter parser is executed by the fuzzer it's triggering a stackoverflow really fast. We can avoid this problem by limiting the `max_len` of [libfuzzer](https://llvm.org/docs/LibFuzzer.html) at 500 characters.
 ```
-cargo fuzz run parse
+cargo fuzz run parse -- -max_len=500
 ```
 
 ## What to do if you find a bug in the parser
