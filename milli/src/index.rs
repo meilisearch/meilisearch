@@ -953,6 +953,7 @@ pub(crate) mod tests {
             { "id": 1, "name": "kevin", "has_dog": true },
             { "id": 2, "name": "bob" }
         ]);
+
         let mut wtxn = index.write_txn().unwrap();
         let builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.execute(content, |_, _| ()).unwrap();

@@ -61,9 +61,12 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut cursor = Cursor::new(Vec::new());
     let mut documents_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
     let reader = Cursor::new(CONTENT.as_bytes());
+
     for doc in serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>() {
-        documents_builder.add_documents(doc.unwrap()).unwrap();
+        let doc = Cursor::new(serde_json::to_vec(&doc.unwrap()).unwrap());
+        documents_builder.extend_from_json(doc).unwrap();
     }
+
     documents_builder.finish().unwrap();
 
     cursor.set_position(0);

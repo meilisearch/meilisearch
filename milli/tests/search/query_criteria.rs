@@ -409,7 +409,8 @@ fn criteria_ascdesc() {
             "age": age,
         });
 
-        batch_builder.add_documents(json).unwrap();
+        let json = Cursor::new(serde_json::to_vec(&json).unwrap());
+        batch_builder.extend_from_json(json).unwrap();
     });
 
     batch_builder.finish().unwrap();

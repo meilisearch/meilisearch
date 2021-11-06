@@ -1,10 +1,9 @@
-mod documents_from_csv;
 mod update_store;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{create_dir_all, File};
-use std::io::Cursor;
+use std::io::{BufRead, BufReader, Cursor};
 use std::net::SocketAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
@@ -40,7 +39,6 @@ use warp::http::Response;
 use warp::Filter;
 
 use self::update_store::UpdateStore;
-use crate::documents_from_csv::CSVDocumentDeserializer;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -1048,11 +1046,11 @@ fn documents_from_jsonl(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
-    let values = serde_json::Deserializer::from_reader(reader)
-        .into_iter::<serde_json::Map<String, serde_json::Value>>();
-    for document in values {
-        let document = document?;
-        documents.add_documents(document)?;
+    let mut buf = String::new();
+    let mut reader = BufReader::new(reader);
+
+    while reader.read_line(&mut buf)? > 0 {
+        documents.extend_from_json(&mut buf.as_bytes())?;
     }
     documents.finish()?;
 
@@ -1063,8 +1061,7 @@ fn documents_from_json(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
-    let json: serde_json::Value = serde_json::from_reader(reader)?;
-    documents.add_documents(json)?;
+    documents.extend_from_json(reader)?;
     documents.finish()?;
 
     Ok(writer.into_inner())
@@ -1072,16 +1069,7 @@ fn documents_from_json(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
 
 fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
-
-    let iter = CSVDocumentDeserializer::from_reader(reader)?;
-
-    for doc in iter {
-        let doc = doc?;
-        documents.add_documents(doc)?;
-    }
-
-    documents.finish()?;
+    milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
 
     Ok(writer.into_inner())
 }

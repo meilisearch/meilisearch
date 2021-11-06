@@ -1,6 +1,6 @@
 [package]
 name = "milli"
-version = "0.18.0"
+version = "0.20.2"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
@@ -46,6 +46,7 @@ itertools = "0.10.0"
 # logging
 log = "0.4.14"
 logging_timer = "1.0.0"
+csv = "1.1.6"
 
 [dev-dependencies]
 big_s = "1.0.2"

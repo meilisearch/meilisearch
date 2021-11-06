@@ -151,13 +151,13 @@ impl<'a> Search<'a> {
                     Member::Field(ref field) if !sortable_fields.contains(field) => {
                         return Err(UserError::InvalidSortableAttribute {
                             field: field.to_string(),
-                            valid_fields: sortable_fields,
+                            valid_fields: sortable_fields.into_iter().collect(),
                         })?
                     }
                     Member::Geo(_) if !sortable_fields.contains("_geo") => {
                         return Err(UserError::InvalidSortableAttribute {
                             field: "_geo".to_string(),
-                            valid_fields: sortable_fields,
+                            valid_fields: sortable_fields.into_iter().collect(),
                         })?
                     }
                     _ => (),
