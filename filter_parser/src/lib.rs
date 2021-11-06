@@ -60,10 +60,16 @@ pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct Token<'a> {
     pub position: Span<'a>,
     pub inner: &'a str,
+}
+
+impl<'a> PartialEq for Token<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
 }
 
 impl<'a> Token<'a> {
