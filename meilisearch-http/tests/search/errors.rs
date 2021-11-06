@@ -50,7 +50,7 @@ async fn filter_invalid_syntax_object() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
+        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `title & Glass`.\n1:1 in `title & Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -77,7 +77,7 @@ async fn filter_invalid_syntax_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
+        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `title & Glass`.\n1:1 in `title & Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -104,7 +104,7 @@ async fn filter_invalid_syntax_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Invalid syntax for the filter parameter: ` --> 1:15\n  |\n1 | title = Glass XOR title = Glass\n  |               ^---\n  |\n  = expected EOI, and, or or`.",
+        "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n1:15 in `title = Glass XOR title = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -134,7 +134,7 @@ async fn filter_invalid_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
+        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:1 in `many = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -161,7 +161,7 @@ async fn filter_invalid_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
+        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:1 in `many = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -188,7 +188,7 @@ async fn filter_reserved_geo_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.\n1:1 in `_geo = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -215,7 +215,7 @@ async fn filter_reserved_geo_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.\n1:1 in `_geo = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -242,7 +242,7 @@ async fn filter_reserved_attribute_array() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:1 in `_geoDistance = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -272,7 +272,7 @@ async fn filter_reserved_attribute_string() {
     index.wait_update_id(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:1 in `_geoDistance = Glass`.",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
