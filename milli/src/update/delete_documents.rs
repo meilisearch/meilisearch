@@ -567,7 +567,7 @@ mod tests {
 
     use super::*;
     use crate::update::{IndexDocuments, Settings};
-    use crate::FilterCondition;
+    use crate::Filter;
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {
@@ -667,7 +667,7 @@ mod tests {
         builder.delete_external_id("1_4");
         builder.execute().unwrap();
 
-        let filter = FilterCondition::from_str(&wtxn, &index, "label = sign").unwrap();
+        let filter = Filter::from_str("label = sign").unwrap();
         let results = index.search(&wtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
 

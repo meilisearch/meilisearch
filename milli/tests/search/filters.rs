@@ -1,5 +1,5 @@
 use either::{Either, Left, Right};
-use milli::{Criterion, FilterCondition, Search, SearchResult};
+use milli::{Criterion, Filter, Search, SearchResult};
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -13,11 +13,7 @@ macro_rules! test_filter {
             let rtxn = index.read_txn().unwrap();
 
             let filter_conditions =
-                FilterCondition::from_array::<Vec<Either<Vec<&str>, &str>>, _, _, _>(
-                    &rtxn, &index, $filter,
-                )
-                .unwrap()
-                .unwrap();
+                Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
             let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);

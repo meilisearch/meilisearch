@@ -14,7 +14,7 @@ use crate::heed_codec::facet::{
 };
 use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {
     condition: FilterCondition<'a>,
 }
@@ -45,7 +45,7 @@ impl<'a> Display for FilterError<'a> {
             ),
             Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
             Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
-            Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Latitude must be contained between -180 and 180 degrees. ", lng),
+            Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ", lng),
         }
     }
 }
@@ -427,274 +427,63 @@ mod tests {
     use crate::Index;
 
     #[test]
-    fn number() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut map = index.fields_ids_map(&wtxn).unwrap();
-        map.insert("timestamp");
-        index.put_fields_ids_map(&mut wtxn, &map).unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_filterable_fields(hashset! { "timestamp".into() });
-        builder.execute(|_, _| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        // Test that the facet condition is correctly generated.
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
-        let expected = FilterCondition::Operator(0, Between(22.0, 44.0));
-        assert_eq!(condition, expected);
-
-        let condition = FilterCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
-        let expected = FilterCondition::Or(
-            Box::new(FilterCondition::Operator(0, LowerThan(22.0))),
-            Box::new(FilterCondition::Operator(0, GreaterThan(44.0))),
-        );
-        assert_eq!(condition, expected);
-    }
-
-    #[test]
-    fn compare() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("channel"), S("timestamp"), S("id")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") ,S("id")});
-        builder.execute(|_, _| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_str(&rtxn, &index, "channel < 20").unwrap();
-        let expected = FilterCondition::Operator(0, LowerThan(20.0));
-        assert_eq!(condition, expected);
-
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_str(&rtxn, &index, "id < 200").unwrap();
-        let expected = FilterCondition::Operator(2, LowerThan(200.0));
-        assert_eq!(condition, expected);
-    }
-
-    #[test]
-    fn parentheses() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
-        builder.execute(|_, _| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        // Test that the facet condition is correctly generated.
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_str(
-            &rtxn,
-            &index,
-            "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
-        )
-        .unwrap();
-        let expected = FilterCondition::Or(
-            Box::new(FilterCondition::Operator(0, Operator::Equal(None, S("gotaga")))),
-            Box::new(FilterCondition::And(
-                Box::new(FilterCondition::Operator(1, Between(22.0, 44.0))),
-                Box::new(FilterCondition::Operator(0, Operator::NotEqual(None, S("ponce")))),
-            )),
-        );
-        assert_eq!(condition, expected);
-
-        let condition = FilterCondition::from_str(
-            &rtxn,
-            &index,
-            "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
-        )
-        .unwrap();
-        let expected = FilterCondition::Or(
-            Box::new(FilterCondition::Operator(0, Operator::Equal(None, S("gotaga")))),
-            Box::new(FilterCondition::Or(
-                Box::new(FilterCondition::Or(
-                    Box::new(FilterCondition::Operator(1, LowerThan(22.0))),
-                    Box::new(FilterCondition::Operator(1, GreaterThan(44.0))),
-                )),
-                Box::new(FilterCondition::Operator(0, Operator::Equal(None, S("ponce")))),
-            )),
-        );
-        assert_eq!(condition, expected);
-    }
-
-    #[test]
     fn from_array() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("channel"), S("timestamp")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("channel"), S("timestamp") });
-        builder.execute(|_, _| ()).unwrap();
-        wtxn.commit().unwrap();
-
         // Simple array with Left
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, _, _, &str>(
-            &rtxn,
-            &index,
-            vec![Either::Left(["channel = mv"])],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = mv").unwrap();
+        let condition = Filter::from_array(vec![Either::Left(["channel = mv"])]).unwrap().unwrap();
+        let expected = Filter::from_str("channel = mv").unwrap();
         assert_eq!(condition, expected);
 
         // Simple array with Right
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, Option<&str>, _, _>(
-            &rtxn,
-            &index,
-            vec![Either::Right("channel = mv")],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = mv").unwrap();
+        let condition = Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = mv")])
+            .unwrap()
+            .unwrap();
+        let expected = Filter::from_str("channel = mv").unwrap();
         assert_eq!(condition, expected);
 
         // Array with Left and escaped quote
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, _, _, &str>(
-            &rtxn,
-            &index,
-            vec![Either::Left(["channel = \"Mister Mv\""])],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = \"Mister Mv\"").unwrap();
+        let condition =
+            Filter::from_array(vec![Either::Left(["channel = \"Mister Mv\""])]).unwrap().unwrap();
+        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap();
         assert_eq!(condition, expected);
 
         // Array with Right and escaped quote
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, Option<&str>, _, _>(
-            &rtxn,
-            &index,
-            vec![Either::Right("channel = \"Mister Mv\"")],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = \"Mister Mv\"").unwrap();
+        let condition =
+            Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = \"Mister Mv\"")])
+                .unwrap()
+                .unwrap();
+        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap();
         assert_eq!(condition, expected);
 
         // Array with Left and escaped simple quote
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, _, _, &str>(
-            &rtxn,
-            &index,
-            vec![Either::Left(["channel = 'Mister Mv'"])],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = 'Mister Mv'").unwrap();
+        let condition =
+            Filter::from_array(vec![Either::Left(["channel = 'Mister Mv'"])]).unwrap().unwrap();
+        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap();
         assert_eq!(condition, expected);
 
         // Array with Right and escaped simple quote
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, Option<&str>, _, _>(
-            &rtxn,
-            &index,
-            vec![Either::Right("channel = 'Mister Mv'")],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "channel = 'Mister Mv'").unwrap();
+        let condition =
+            Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = 'Mister Mv'")])
+                .unwrap()
+                .unwrap();
+        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap();
         assert_eq!(condition, expected);
 
         // Simple with parenthesis
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array::<_, _, _, &str>(
-            &rtxn,
-            &index,
-            vec![Either::Left(["(channel = mv)"])],
-        )
-        .unwrap()
-        .unwrap();
-        let expected = FilterCondition::from_str(&rtxn, &index, "(channel = mv)").unwrap();
+        let condition =
+            Filter::from_array(vec![Either::Left(["(channel = mv)"])]).unwrap().unwrap();
+        let expected = Filter::from_str("(channel = mv)").unwrap();
         assert_eq!(condition, expected);
 
         // Test that the facet condition is correctly generated.
-        let rtxn = index.read_txn().unwrap();
-        let condition = FilterCondition::from_array(
-            &rtxn,
-            &index,
-            vec![
-                Either::Right("channel = gotaga"),
-                Either::Left(vec!["timestamp = 44", "channel != ponce"]),
-            ],
-        )
+        let condition = Filter::from_array(vec![
+            Either::Right("channel = gotaga"),
+            Either::Left(vec!["timestamp = 44", "channel != ponce"]),
+        ])
         .unwrap()
         .unwrap();
-        let expected = FilterCondition::from_str(
-            &rtxn,
-            &index,
-            "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
-        )
-        .unwrap();
-        assert_eq!(condition, expected);
-    }
-
-    #[test]
-    fn geo_radius() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, 0);
-        builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
-        builder.execute(|_, _| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        // basic test
-        let condition =
-            FilterCondition::from_str(&rtxn, &index, "_geoRadius(12, 13.0005, 2000)").unwrap();
-        let expected = FilterCondition::Operator(0, GeoLowerThan([12., 13.0005], 2000.));
-        assert_eq!(condition, expected);
-
-        // test the negation of the GeoLowerThan
-        let condition =
-            FilterCondition::from_str(&rtxn, &index, "NOT _geoRadius(50, 18, 2000.500)").unwrap();
-        let expected = FilterCondition::Operator(0, GeoGreaterThan([50., 18.], 2000.500));
-        assert_eq!(condition, expected);
-
-        // composition of multiple operations
-        let condition = FilterCondition::from_str(
-            &rtxn,
-            &index,
-            "(NOT _geoRadius(1, 2, 300) AND _geoRadius(1.001, 2.002, 1000.300)) OR price <= 10",
-        )
-        .unwrap();
-        let expected = FilterCondition::Or(
-            Box::new(FilterCondition::And(
-                Box::new(FilterCondition::Operator(0, GeoGreaterThan([1., 2.], 300.))),
-                Box::new(FilterCondition::Operator(0, GeoLowerThan([1.001, 2.002], 1000.300))),
-            )),
-            Box::new(FilterCondition::Operator(1, LowerThanOrEqual(10.))),
-        );
+        let expected =
+            Filter::from_str("channel = gotaga AND (timestamp = 44 OR channel != ponce)").unwrap();
+        println!("\nExpecting: {:#?}\nGot: {:#?}\n", expected, condition);
         assert_eq!(condition, expected);
     }
 
@@ -715,62 +504,40 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        // georadius don't have any parameters
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
-
-        // georadius don't have any parameters
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius()");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
-
-        // georadius don't have enough parameters
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
-
-        // georadius have too many parameters
-        let result =
-            FilterCondition::from_str(&rtxn, &index, "_geoRadius(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("The `_geoRadius` filter expect three arguments: `_geoRadius(latitude, longitude, radius)`"));
-
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-100, 150, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
+        // georadius have a bad latitude
+        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(
-            error.to_string().contains("Latitude must be contained between -90 and 90 degrees."),
+            error.to_string().starts_with(
+                "Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees."
+            ),
             "{}",
             error.to_string()
         );
 
         // georadius have a bad latitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-90.0000001, 150, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Latitude must be contained between -90 and 90 degrees."));
+        let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
+        ));
 
         // georadius have a bad longitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 250, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Longitude must be contained between -180 and 180 degrees."));
+        let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(
+            error.to_string().contains(
+                "Bad longitude `250`. Longitude must be contained between -180 and 180 degrees."
+            ),
+            "{}",
+            error.to_string(),
+        );
 
         // georadius have a bad longitude
-        let result = FilterCondition::from_str(&rtxn, &index, "_geoRadius(-10, 180.000001, 10)");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Longitude must be contained between -180 and 180 degrees."));
+        let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
+        ));
     }
 }

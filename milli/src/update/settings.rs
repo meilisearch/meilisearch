@@ -524,7 +524,7 @@ mod tests {
     use super::*;
     use crate::error::Error;
     use crate::update::IndexDocuments;
-    use crate::{Criterion, FilterCondition, SearchResult};
+    use crate::{Criterion, Filter, SearchResult};
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -1066,7 +1066,8 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        FilterCondition::from_str(&rtxn, &index, "toto = 32").unwrap_err();
+        let filter = Filter::from_str("toto = 32").unwrap();
+        let _ = filter.evaluate(&rtxn, &index).unwrap_err();
     }
 
     #[test]
