@@ -26,6 +26,7 @@ enum FilterError<'a> {
     BadGeoLat(f64),
     BadGeoLng(f64),
     Reserved(&'a str),
+    InternalError,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
 
@@ -46,6 +47,7 @@ impl<'a> Display for FilterError<'a> {
             Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
             Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
             Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ", lng),
+            Self::InternalError => write!(f, "Internal error while executing this filter."),
         }
     }
 }
@@ -315,9 +317,14 @@ impl<'a> Filter<'a> {
 
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
-                let filterable_fields = index.fields_ids_map(rtxn)?;
-                if let Some(fid) = filterable_fields.id(&fid.inner.to_lowercase()) {
-                    Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
+                let filterable_fields = index.filterable_fields(rtxn)?;
+                if filterable_fields.contains(&fid.inner.to_lowercase()) {
+                    let field_ids_map = index.fields_ids_map(rtxn)?;
+                    if let Some(fid) = field_ids_map.id(fid.inner) {
+                        Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
+                    } else {
+                        return Err(fid.as_external_error(FilterError::InternalError))?;
+                    }
                 } else {
                     match fid.inner {
                         attribute @ "_geo" => {
@@ -334,8 +341,7 @@ impl<'a> Filter<'a> {
                                 FilterError::AttributeNotFilterable {
                                     attribute,
                                     filterable: filterable_fields
-                                        .iter()
-                                        .map(|(_, s)| s)
+                                        .into_iter()
                                         .collect::<Vec<_>>()
                                         .join(" "),
                                 },
@@ -356,8 +362,8 @@ impl<'a> Filter<'a> {
             }
             FilterCondition::Empty => Ok(RoaringBitmap::new()),
             FilterCondition::GeoLowerThan { point, radius } => {
-                let filterable_fields = index.fields_ids_map(rtxn)?;
-                if filterable_fields.id("_geo").is_some() {
+                let filterable_fields = index.filterable_fields(rtxn)?;
+                if filterable_fields.contains("_geo") {
                     let base_point: [f64; 2] = [point[0].parse()?, point[1].parse()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
                         return Err(
@@ -387,11 +393,7 @@ impl<'a> Filter<'a> {
                 } else {
                     return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: "_geo",
-                        filterable: filterable_fields
-                            .iter()
-                            .map(|(_, s)| s)
-                            .collect::<Vec<_>>()
-                            .join(" "),
+                        filterable: filterable_fields.into_iter().collect::<Vec<_>>().join(" "),
                     }))?;
                 }
             }
@@ -485,6 +487,50 @@ mod tests {
             Filter::from_str("channel = gotaga AND (timestamp = 44 OR channel != ponce)").unwrap();
         println!("\nExpecting: {:#?}\nGot: {:#?}\n", expected, condition);
         assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn not_filterable() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `_geo` is not filterable. Available filterable attributes are: ``."
+        ));
+
+        let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `dog` is not filterable. Available filterable attributes are: ``."
+        ));
+        drop(rtxn);
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
+        builder.set_searchable_fields(vec![S("title")]);
+        builder.set_filterable_fields(hashset! { S("title") });
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
+        ));
+
+        let filter = Filter::from_str("name = 12").unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `name` is not filterable. Available filterable attributes are: `title`."
+        ));
     }
 
     #[test]
