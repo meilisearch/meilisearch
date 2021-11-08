@@ -296,7 +296,7 @@ impl IndexController {
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
             }
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
-            Update::Settings(settings) => TaskContent::SettingsUpdate(settings.check()),
+            Update::Settings(settings) => TaskContent::SettingsUpdate(settings),
             Update::DocumentAddition {
                 mut payload,
                 primary_key,

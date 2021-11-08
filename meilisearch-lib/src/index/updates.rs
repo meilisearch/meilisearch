@@ -29,7 +29,7 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq)]
 pub struct Checked;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]

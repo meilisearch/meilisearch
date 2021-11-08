@@ -9,20 +9,22 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::task::TaskResponse;
 
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
+            use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
-            use actix_web::{web, HttpResponse, HttpRequest, Resource};
 
             use meilisearch_lib::milli::update::Setting;
-            use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
+            use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
             use crate::analytics::Analytics;
             use crate::error::ResponseError;
-            use crate::extractors::authentication::{GuardedData, policies::*};
+            use crate::extractors::authentication::{policies::*, GuardedData};
+            use crate::task::TaskResponse;
 
             pub async fn delete(
                 meilisearch: GuardedData<Private, MeiliSearch>,
@@ -33,7 +35,10 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
                 let update = Update::Settings(settings);
-                let task = meilisearch.register_update(index_uid.into_inner(), update).await?;
+                let task: TaskResponse = meilisearch
+                    .register_update(index_uid.into_inner(), update)
+                    .await?
+                    .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -44,7 +49,7 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
-                $analytics_var: web::Data< dyn Analytics>,
+                $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let body = body.into_inner();
 
@@ -53,13 +58,16 @@ macro_rules! make_setting_route {
                 let settings = Settings {
                     $attr: match body {
                         Some(inner_body) => Setting::Set(inner_body),
-                        None => Setting::Reset
+                        None => Setting::Reset,
                     },
                     ..Default::default()
                 };
 
                 let update = Update::Settings(settings);
-                let task = meilisearch.register_update(index_uid.into_inner(), update).await?;
+                let task: TaskResponse = meilisearch
+                    .register_update(index_uid.into_inner(), update)
+                    .await?
+                    .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -256,9 +264,10 @@ pub async fn update_all(
     );
 
     let update = Update::Settings(settings);
-    let task = meilisearch
+    let task: TaskResponse = meilisearch
         .register_update(index_uid.into_inner(), update)
-        .await?;
+        .await?
+        .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -280,9 +289,10 @@ pub async fn delete_all(
     let settings = Settings::cleared();
 
     let update = Update::Settings(settings.into_unchecked());
-    let task = data
+    let task: TaskResponse = data
         .register_update(index_uid.into_inner(), update)
-        .await?;
+        .await?
+        .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

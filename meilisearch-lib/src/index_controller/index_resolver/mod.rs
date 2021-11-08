@@ -82,10 +82,10 @@ where U: UuidStore,
                 },
                 TaskContent::SettingsUpdate(settings) => {
                     let index = self.get_or_create_index(index_uid).await?;
-                    let settings =settings.clone();
+                    let settings = settings.clone();
                     tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
                         let mut txn = index.write_txn()?;
-                        let res = index.update_settings(&mut txn, &settings)?;
+                        let res = index.update_settings(&mut txn, &settings.check())?;
                         txn.commit()?;
                         Ok(res)
                     }).await?
@@ -217,7 +217,7 @@ where
         }
 
         match self.index_uuid_store.get_uuid(uid).await? {
-            (uid, Some(_)) => Err(IndexResolverError::UnexistingIndex(uid)),
+            (uid, Some(_)) => Err(IndexResolverError::IndexAlreadyExists(uid)),
             (uid, None) => {
                 let uuid = Uuid::new_v4();
                 let index = self.index_store.create(uuid).await?;
