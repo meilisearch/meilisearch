@@ -551,6 +551,7 @@ pub mod tests {
             ("channel = Ponce = 12", "Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule."),
             ("channel =    ", "Was expecting a value but instead got nothing."),
             ("channel = 🐻", "Was expecting a value but instead got `🐻`."),
+            ("channel = 🐻 AND followers < 100", "Was expecting a value but instead got `🐻`."),
             ("OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `OR`."),
             ("AND", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `AND`."),
             ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `channel Ponce`."),

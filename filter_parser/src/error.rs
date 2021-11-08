@@ -67,6 +67,10 @@ impl<'a> Error<'a> {
         &self.kind
     }
 
+    pub fn context(&self) -> &Span<'a> {
+        &self.context
+    }
+
     pub fn new_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
         Self { context, kind }
     }

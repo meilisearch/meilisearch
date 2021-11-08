@@ -9,7 +9,10 @@ use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, 
 
 /// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
 pub fn parse_value(input: Span) -> IResult<Token> {
-    // before anything we want to check if the user is misusing a geo expression
+    // to get better diagnostic message we are going to strip the left whitespaces from the input right now
+    let (input, _) = take_while(char::is_whitespace)(input)?;
+
+    // then, we want to check if the user is misusing a geo expression
     let err = parse_geo_point(input).unwrap_err();
     if err.is_failure() {
         return Err(err);
@@ -29,23 +32,30 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     // doubleQuoted   = "\"" (word | spaces)* "\""
     let double_quoted = |input| take_till(|c: char| c == '"')(input);
     // word           = (alphanumeric | _ | - | .)+
-    let word = |input| take_while1(is_key_component)(input);
+    let word = take_while1(is_key_component);
 
+    // this parser is only used when an error is encountered and it parse the
+    // largest string possible that do not contain any “language” syntax.
+    // If we try to parse `name = 🦀 AND language = rust` we want to return an
+    // error saying we could not parse `🦀`. Not that no value were found or that
+    // we could note parse `🦀 AND language = rust`.
     // we want to remove the space before entering the alt because if we don't,
     // when we create the errors from the output of the alt we have spaces everywhere
-    let (input, _) = take_while(char::is_whitespace)(input)?;
+    let error_word = take_till::<_, _, Error>(is_syntax_component);
 
     terminated(
         alt((
-            delimited(char('\''), simple_quoted, cut(char('\''))),
-            delimited(char('"'), double_quoted, cut(char('"'))),
+            delimited(char('\''), cut(simple_quoted), cut(char('\''))),
+            delimited(char('"'), cut(double_quoted), cut(char('"'))),
             word,
         )),
         multispace0,
     )(input)
     .map(|(s, t)| (s, t.into()))
-    // if we found nothing in the alt it means the user did not input any value
-    .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::ExpectedValue)))
+    // if we found nothing in the alt it means the user specified something that was not recognized as a value
+    .map_err(|e: nom::Err<Error>| {
+        e.map_err(|_| Error::new_from_kind(error_word(input).unwrap().1, ErrorKind::ExpectedValue))
+    })
     // if we found encountered a failure it means the user really tried to input a value, but had an unmatched quote
     .map_err(|e| {
         e.map_fail(|c| Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char())))
@@ -56,8 +66,14 @@ fn is_key_component(c: char) -> bool {
     c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
 }
 
+fn is_syntax_component(c: char) -> bool {
+    c.is_whitespace() || ['(', ')', '=', '<', '>', '!'].contains(&c)
+}
+
 #[cfg(test)]
-pub mod tests {
+pub mod test {
+    use nom::Finish;
+
     use super::*;
     use crate::tests::rtok;
 
@@ -82,6 +98,7 @@ pub mod tests {
             ("\" some spaces \"", rtok("\"", " some spaces ")),
             ("\"cha'nnel\"", rtok("'", "cha'nnel")),
             ("\"cha'nnel\"", rtok("'", "cha'nnel")),
+            ("I'm tamo", rtok("'m tamo", "I")),
         ];
 
         for (input, expected) in test_case {
@@ -96,6 +113,32 @@ pub mod tests {
             );
             let value = result.unwrap().1;
             assert_eq!(value, expected, "Filter `{}` failed.", input);
+        }
+    }
+
+    #[test]
+    fn diagnostic() {
+        let test_case = [
+            ("🦀", "🦀"),
+            ("     🦀", "🦀"),
+            ("🦀 AND crab = truc", "🦀"),
+            ("🦀_in_name", "🦀_in_name"),
+            (" (name = ...", ""),
+        ];
+
+        for (input, expected) in test_case {
+            let input = Span::new_extra(input, input);
+            let result = parse_value(input);
+
+            assert!(
+                result.is_err(),
+                "Filter `{}` wasn’t supposed to be parsed but it did with the following result: `{:?}`",
+                expected,
+                result.unwrap()
+            );
+            // get the inner string referenced in the error
+            let value = *result.finish().unwrap_err().context().fragment();
+            assert_eq!(value, expected, "Filter `{}` was supposed to fail with the following value: `{}`, but it failed with: `{}`.", input, expected, value);
         }
     }
 }
