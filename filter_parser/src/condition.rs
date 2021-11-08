@@ -45,28 +45,17 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
     let (input, (fid, op, value)) = tuple((parse_value, operator, cut(parse_value)))(input)?;
 
-
-    match *op.fragment() {
-        "=" => {
-            let k = FilterCondition::Condition { fid, op: Equal(value) };
-            Ok((input, k))
-        }
-        "!=" => {
-            let k = FilterCondition::Condition { fid, op: NotEqual(value) };
-            Ok((input, k))
-        }
-        ">" | "<" | "<=" | ">=" => {
-            let k = match *op.fragment() {
-                ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
-                "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
-                "<=" => FilterCondition::Condition { fid, op: LowerThanOrEqual(value) },
-                ">=" => FilterCondition::Condition { fid, op: GreaterThanOrEqual(value) },
-                _ => unreachable!(),
-            };
-            Ok((input, k))
-        }
+    let condition = match *op.fragment() {
+        "=" => FilterCondition::Condition { fid, op: Equal(value) },
+        "!=" => FilterCondition::Condition { fid, op: NotEqual(value) },
+        ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
+        "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
+        "<=" => FilterCondition::Condition { fid, op: LowerThanOrEqual(value) },
+        ">=" => FilterCondition::Condition { fid, op: GreaterThanOrEqual(value) },
         _ => unreachable!(),
-    }
+    };
+
+    Ok((input, condition))
 }
 
 /// to             = value value TO value
