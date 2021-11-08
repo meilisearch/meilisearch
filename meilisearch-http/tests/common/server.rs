@@ -2,6 +2,7 @@ use std::path::Path;
 
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
+use meilisearch_auth::AuthController;
 use meilisearch_http::setup_meilisearch;
 use meilisearch_lib::options::{IndexerOpts, MaxMemory};
 use once_cell::sync::Lazy;
@@ -19,7 +20,7 @@ pub struct Server {
     _dir: Option<TempDir>,
 }
 
-static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
+pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server {
     pub async fn new() -> Self {
@@ -34,9 +35,12 @@ impl Server {
         let options = default_settings(dir.path());
 
         let meilisearch = setup_meilisearch(&options).unwrap();
+        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
         let service = Service {
             meilisearch,
+            auth,
             options,
+            api_key: None,
         };
 
         Server {
@@ -47,9 +51,12 @@ impl Server {
 
     pub async fn new_with_options(options: Opt) -> Self {
         let meilisearch = setup_meilisearch(&options).unwrap();
+        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
         let service = Service {
             meilisearch,
+            auth,
             options,
+            api_key: None,
         };
 
         Server {

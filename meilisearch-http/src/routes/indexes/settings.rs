@@ -27,7 +27,7 @@ macro_rules! make_setting_route {
             use meilisearch_error::ResponseError;
 
             pub async fn delete(
-                meilisearch: GuardedData<Private, MeiliSearch>,
+                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
                 let settings = Settings {
@@ -48,7 +48,7 @@ macro_rules! make_setting_route {
             }
 
             pub async fn update(
-                meilisearch: GuardedData<Private, MeiliSearch>,
+                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
@@ -80,7 +80,7 @@ macro_rules! make_setting_route {
             }
 
             pub async fn get(
-                meilisearch: GuardedData<Private, MeiliSearch>,
+                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let settings = meilisearch.settings(index_uid.into_inner()).await?;
@@ -243,7 +243,7 @@ generate_configure!(
 );
 
 pub async fn update_all(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
     req: HttpRequest,
@@ -286,7 +286,7 @@ pub async fn update_all(
 }
 
 pub async fn get_all(
-    data: GuardedData<Private, MeiliSearch>,
+    data: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = data.settings(index_uid.into_inner()).await?;
@@ -295,7 +295,7 @@ pub async fn get_all(
 }
 
 pub async fn delete_all(
-    data: GuardedData<Private, MeiliSearch>,
+    data: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared().into_unchecked();

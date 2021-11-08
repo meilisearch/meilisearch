@@ -86,7 +86,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn get_document(
-    meilisearch: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
@@ -99,7 +99,7 @@ pub async fn get_document(
 }
 
 pub async fn delete_document(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam {
@@ -121,7 +121,7 @@ pub struct BrowseQuery {
 }
 
 pub async fn get_all_documents(
-    meilisearch: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
     path: web::Path<String>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -156,7 +156,7 @@ pub struct UpdateDocumentsQuery {
 }
 
 pub async fn add_documents(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
     path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -187,7 +187,7 @@ pub async fn add_documents(
 }
 
 pub async fn update_documents(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
     path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -218,7 +218,7 @@ pub async fn update_documents(
 
 async fn document_addition(
     mime_type: Option<Mime>,
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
     index_uid: String,
     primary_key: Option<String>,
     body: Payload,
@@ -259,7 +259,7 @@ async fn document_addition(
 }
 
 pub async fn delete_documents(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
     path: web::Path<String>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -284,7 +284,7 @@ pub async fn delete_documents(
 }
 
 pub async fn clear_all_documents(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;

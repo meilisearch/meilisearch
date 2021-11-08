@@ -1,4 +1,4 @@
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_error::{internal_error, Code, ErrorCode};
 
 use crate::{index_resolver::error::IndexResolverError, tasks::error::TaskError};
 
@@ -16,20 +16,8 @@ pub enum DumpActorError {
     IndexResolver(#[from] IndexResolverError),
 }
 
-macro_rules! internal_error {
-    ($($other:path), *) => {
-        $(
-            impl From<$other> for DumpActorError {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
-    }
-}
-
 internal_error!(
-    heed::Error,
+    DumpActorError: heed::Error,
     std::io::Error,
     tokio::task::JoinError,
     tokio::sync::oneshot::error::RecvError,

@@ -39,6 +39,7 @@ async fn error_json_bad_content_type() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -118,6 +119,7 @@ async fn extract_actual_content_type() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0

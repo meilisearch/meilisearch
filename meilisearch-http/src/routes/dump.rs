@@ -14,7 +14,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn create_dump(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, MeiliSearch>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -38,7 +38,7 @@ struct DumpParam {
 }
 
 async fn get_dump_status(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::DUMPS_GET }>, MeiliSearch>,
     path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let res = meilisearch.dump_info(path.dump_uid.clone()).await?;

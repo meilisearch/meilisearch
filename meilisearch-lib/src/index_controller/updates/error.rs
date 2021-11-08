@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_error::{internal_error, Code, ErrorCode};
 
 use crate::{
     document_formats::DocumentFormatError,

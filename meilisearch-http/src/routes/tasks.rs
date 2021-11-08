@@ -14,7 +14,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 async fn get_tasks(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -36,7 +36,7 @@ async fn get_tasks(
 }
 
 async fn get_task(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
     task_id: web::Path<TaskId>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,

@@ -32,7 +32,7 @@ pub struct UpdateParam {
 }
 
 pub async fn get_task_status(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
     index_uid: web::Path<UpdateParam>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -52,7 +52,7 @@ pub async fn get_task_status(
 }
 
 pub async fn get_all_tasks_status(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
     index_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,

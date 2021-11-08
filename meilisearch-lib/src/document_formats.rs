@@ -1,7 +1,7 @@
 use std::fmt;
 use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_error::{internal_error, Code, ErrorCode};
 use milli::documents::DocumentBatchBuilder;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;

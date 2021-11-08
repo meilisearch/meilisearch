@@ -106,7 +106,7 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 }
 
 pub async fn search_with_url_query(
-    meilisearch: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
     path: web::Path<String>,
     params: web::Query<SearchQueryGet>,
     req: HttpRequest,
@@ -134,7 +134,7 @@ pub async fn search_with_url_query(
 }
 
 pub async fn search_with_post(
-    meilisearch: GuardedData<Public, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
     path: web::Path<String>,
     params: web::Json<SearchQuery>,
     req: HttpRequest,

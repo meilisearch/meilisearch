@@ -525,13 +525,20 @@ where
         Ok(stats)
     }
 
-    pub async fn get_all_stats(&self) -> Result<Stats> {
+    pub async fn get_all_stats(&self, index_filter: &Option<Vec<String>>) -> Result<Stats> {
         let mut last_task: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
         let processing_task = self.task_store.get_processing_task().await?;
 
         for (index_uid, index) in self.index_resolver.list().await? {
+            if index_filter
+                .as_ref()
+                .map_or(false, |filter| !filter.contains(&index_uid))
+            {
+                continue;
+            }
+
             let (mut stats, meta) =
                 spawn_blocking::<_, Result<(IndexStats, IndexMeta)>>(move || {
                     Ok((index.stats()?, index.meta()?))

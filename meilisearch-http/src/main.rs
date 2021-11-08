@@ -2,6 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
@@ -46,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
 
     let meilisearch = setup_meilisearch(&opt)?;
 
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
+
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let (analytics, user) = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
@@ -57,22 +60,30 @@ async fn main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, &user);
 
-    run_http(meilisearch, opt, analytics).await?;
+    run_http(meilisearch, auth_controller, opt, analytics).await?;
 
     Ok(())
 }
 
 async fn run_http(
     data: MeiliSearch,
+    auth_controller: AuthController,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let _enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
-    let http_server =
-        HttpServer::new(move || create_app!(data, _enable_dashboard, opt_clone, analytics.clone()))
-            // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-            .disable_signals();
+    let http_server = HttpServer::new(move || {
+        create_app!(
+            data,
+            auth_controller,
+            _enable_dashboard,
+            opt_clone,
+            analytics.clone()
+        )
+    })
+    // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+    .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server

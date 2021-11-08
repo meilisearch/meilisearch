@@ -159,6 +159,13 @@ pub enum Code {
     MissingContentType,
     MalformedPayload,
     MissingPayload,
+
+    ApiKeyNotFound,
+    MissingParameter,
+    InvalidApiKeyActions,
+    InvalidApiKeyIndexes,
+    InvalidApiKeyExpiresAt,
+    InvalidApiKeyDescription,
 }
 
 impl Code {
@@ -249,6 +256,22 @@ impl Code {
                 ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
             MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
+
+            // error related to keys
+            ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
+            MissingParameter => ErrCode::invalid("missing_parameter", StatusCode::BAD_REQUEST),
+            InvalidApiKeyActions => {
+                ErrCode::invalid("invalid_api_key_actions", StatusCode::BAD_REQUEST)
+            }
+            InvalidApiKeyIndexes => {
+                ErrCode::invalid("invalid_api_key_indexes", StatusCode::BAD_REQUEST)
+            }
+            InvalidApiKeyExpiresAt => {
+                ErrCode::invalid("invalid_api_key_expires_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidApiKeyDescription => {
+                ErrCode::invalid("invalid_api_key_description", StatusCode::BAD_REQUEST)
+            }
         }
     }
 
@@ -314,5 +337,18 @@ mod strategy {
 
     pub(super) fn status_code_strategy() -> impl Strategy<Value = StatusCode> {
         (100..999u16).prop_map(|i| StatusCode::from_u16(i).unwrap())
+    }
+}
+
+#[macro_export]
+macro_rules! internal_error {
+    ($target:ty : $($other:path), *) => {
+        $(
+            impl From<$other> for $target {
+                fn from(other: $other) -> Self {
+                    Self::Internal(Box::new(other))
+                }
+            }
+        )*
     }
 }
