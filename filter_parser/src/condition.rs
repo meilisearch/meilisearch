@@ -43,9 +43,8 @@ impl<'a> Condition<'a> {
 /// condition      = value ("==" | ">" ...) value
 pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
-    let (input, (key, op, value)) = tuple((|c| parse_value(c), operator, cut(parse_value)))(input)?;
+    let (input, (fid, op, value)) = tuple((parse_value, operator, cut(parse_value)))(input)?;
 
-    let fid = key;
 
     match *op.fragment() {
         "=" => {
@@ -73,7 +72,7 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
 /// to             = value value TO value
 pub fn parse_to(input: Span) -> IResult<FilterCondition> {
     let (input, (key, from, _, to)) =
-        tuple((|c| parse_value(c), |c| parse_value(c), tag("TO"), cut(parse_value)))(input)?;
+        tuple((parse_value, parse_value, tag("TO"), cut(parse_value)))(input)?;
 
     Ok((
         input,

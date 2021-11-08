@@ -28,9 +28,9 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     }
 
     // singleQuoted   = "'" .* all but quotes "'"
-    let simple_quoted = |input| take_till(|c: char| c == '\'')(input);
+    let simple_quoted = take_till(|c: char| c == '\'');
     // doubleQuoted   = "\"" (word | spaces)* "\""
-    let double_quoted = |input| take_till(|c: char| c == '"')(input);
+    let double_quoted = take_till(|c: char| c == '"');
     // word           = (alphanumeric | _ | - | .)+
     let word = take_while1(is_key_component);
 
