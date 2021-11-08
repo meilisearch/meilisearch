@@ -35,7 +35,7 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     // doubleQuoted   = "\"" (word | spaces)* "\""
     let double_quoted = take_till(|c: char| c == '"');
     // word           = (alphanumeric | _ | - | .)+
-    let word = take_while1(is_key_component);
+    let word = take_while1(is_value_component);
 
     // this parser is only used when an error is encountered and it parse the
     // largest string possible that do not contain any “language” syntax.
@@ -65,7 +65,7 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     })
 }
 
-fn is_key_component(c: char) -> bool {
+fn is_value_component(c: char) -> bool {
     c.is_alphanumeric() || ['_', '-', '.'].contains(&c)
 }
 
