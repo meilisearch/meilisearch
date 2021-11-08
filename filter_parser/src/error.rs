@@ -5,13 +5,13 @@ use nom::Parser;
 
 use crate::{IResult, Span};
 
-pub trait ExtendNomError<E> {
+pub trait NomErrorExt<E> {
     fn is_failure(&self) -> bool;
     fn map_err<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E>;
     fn map_fail<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E>;
 }
 
-impl<E> ExtendNomError<E> for nom::Err<E> {
+impl<E> NomErrorExt<E> for nom::Err<E> {
     fn is_failure(&self) -> bool {
         matches!(self, Self::Failure(_))
     }

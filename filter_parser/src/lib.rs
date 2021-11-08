@@ -43,7 +43,7 @@ use std::fmt::Debug;
 use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
-use error::{cut_with_err, ExtendNomError};
+use error::{cut_with_err, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;

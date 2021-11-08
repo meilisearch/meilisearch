@@ -4,7 +4,7 @@ use nom::character::complete::{char, multispace0};
 use nom::combinator::cut;
 use nom::sequence::{delimited, terminated};
 
-use crate::error::ExtendNomError;
+use crate::error::NomErrorExt;
 use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
 
 /// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
