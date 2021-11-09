@@ -6,9 +6,8 @@ use tokio::task::JoinError;
 
 use crate::index::error::IndexError;
 
-use super::dump_actor::error::DumpActorError;
+// use super::dump_actor::error::DumpActorError;
 use super::index_resolver::error::IndexResolverError;
-use super::updates::error::UpdateLoopError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
@@ -18,10 +17,10 @@ pub enum IndexControllerError {
     MissingUid,
     #[error("{0}")]
     IndexResolver(#[from] IndexResolverError),
-    #[error("{0}")]
-    UpdateLoop(#[from] UpdateLoopError),
-    #[error("{0}")]
-    DumpActor(#[from] DumpActorError),
+    // #[error("{0}")]
+    // UpdateLoop(#[from] UpdateLoopError),
+    // #[error("{0}")]
+    // DumpActor(#[from] DumpActorError),
     #[error("{0}")]
     IndexError(#[from] IndexError),
     #[error("Internal error: {0}")]
@@ -35,8 +34,8 @@ impl ErrorCode for IndexControllerError {
         match self {
             IndexControllerError::MissingUid => Code::BadRequest,
             IndexControllerError::IndexResolver(e) => e.error_code(),
-            IndexControllerError::UpdateLoop(e) => e.error_code(),
-            IndexControllerError::DumpActor(e) => e.error_code(),
+            // IndexControllerError::UpdateLoop(e) => e.error_code(),
+            // IndexControllerError::DumpActor(e) => e.error_code(),
             IndexControllerError::IndexError(e) => e.error_code(),
             IndexControllerError::Internal(_) => Code::Internal,
         }

@@ -1,8 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use log::debug;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::error::ResponseError;
@@ -14,16 +12,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn create_dump(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    req: HttpRequest,
-    analytics: web::Data<dyn Analytics>,
+    _meilisearch: GuardedData<Private, MeiliSearch>,
+    _req: HttpRequest,
+    _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
+    // analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
 
-    let res = meilisearch.create_dump().await?;
+    // let res = meilisearch.create_dump().await?;
 
-    debug!("returns: {:?}", res);
-    Ok(HttpResponse::Accepted().json(res))
+    // debug!("returns: {:?}", res);
+    // Ok(HttpResponse::Accepted().json(res))
+    todo!()
 }
 
 #[derive(Debug, Serialize)]
@@ -34,15 +33,16 @@ struct DumpStatusResponse {
 
 #[derive(Deserialize)]
 struct DumpParam {
-    dump_uid: String,
+    _dump_uid: String,
 }
 
 async fn get_dump_status(
-    meilisearch: GuardedData<Private, MeiliSearch>,
-    path: web::Path<DumpParam>,
+    _meilisearch: GuardedData<Private, MeiliSearch>,
+    _path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let res = meilisearch.dump_info(path.dump_uid.clone()).await?;
+    todo!()
+    // let res = meilisearch.dump_info(path.dump_uid.clone()).await?;
 
-    debug!("returns: {:?}", res);
-    Ok(HttpResponse::Ok().json(res))
+    // debug!("returns: {:?}", res);
+    // Ok(HttpResponse::Ok().json(res))
 }

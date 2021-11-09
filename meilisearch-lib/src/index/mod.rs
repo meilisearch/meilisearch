@@ -5,7 +5,7 @@ mod dump;
 pub mod error;
 mod search;
 pub mod update_handler;
-mod updates;
+pub mod updates;
 
 #[allow(clippy::module_inception)]
 mod index;
@@ -30,15 +30,16 @@ pub mod test {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use milli::update::IndexDocumentsMethod;
     use serde_json::{Map, Value};
     use uuid::Uuid;
 
     use crate::index_controller::update_file_store::UpdateFileStore;
-    use crate::index_controller::updates::status::{Failed, Processed, Processing};
 
     use super::error::Result;
     use super::index::Index;
     use super::update_handler::UpdateHandler;
+    use super::updates::UpdateResult;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
 
     pub struct Stub<A, R> {
@@ -219,13 +220,6 @@ pub mod test {
             Ok(())
         }
 
-        pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
-            match self {
-                MockIndex::Vrai(index) => index.handle_update(update),
-                MockIndex::Faux(faux) => faux.get("handle_update").call(update),
-            }
-        }
-
         pub fn uuid(&self) -> Uuid {
             match self {
                 MockIndex::Vrai(index) => index.uuid(),
@@ -299,12 +293,6 @@ pub mod test {
             }
         }
 
-        pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
-            match self {
-                MockIndex::Vrai(index) => index.update_primary_key(primary_key),
-                MockIndex::Faux(_) => todo!(),
-            }
-        }
         pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
             match self {
                 MockIndex::Vrai(index) => index.perform_search(query),
@@ -316,6 +304,46 @@ pub mod test {
             match self {
                 MockIndex::Vrai(index) => index.dump(path),
                 MockIndex::Faux(faux) => faux.get("dump").call(path.as_ref()),
+            }
+        }
+
+        pub fn update_documents(
+            &self,
+            method: IndexDocumentsMethod,
+            content_uuid: Uuid,
+            primary_key: Option<String>,
+        ) -> Result<UpdateResult> {
+            match self {
+                MockIndex::Vrai(index) => index.update_documents(method, content_uuid, primary_key),
+                MockIndex::Faux(_faux) => todo!(),
+            }
+        }
+
+        pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<UpdateResult> {
+            match self {
+                MockIndex::Vrai(index) => index.update_settings(settings),
+                MockIndex::Faux(_faux) => todo!(),
+            }
+        }
+
+        pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
+            match self {
+                MockIndex::Vrai(index) => index.update_primary_key(primary_key),
+                MockIndex::Faux(_faux) => todo!(),
+            }
+        }
+
+        pub fn delete_documents(&self, ids: &[String]) -> Result<UpdateResult> {
+            match self {
+                MockIndex::Vrai(index) => index.delete_documents(ids),
+                MockIndex::Faux(_faux) => todo!(),
+            }
+        }
+
+        pub fn clear_documents(&self) -> Result<UpdateResult> {
+            match self {
+                MockIndex::Vrai(index) => index.clear_documents(),
+                MockIndex::Faux(_faux) => todo!(),
             }
         }
     }

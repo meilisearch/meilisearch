@@ -5,6 +5,7 @@ use std::path::Path;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use tar::{Archive, Builder};
 
+    #[allow(dead_code)]
 pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
     let mut f = File::create(dest)?;
     let gz_encoder = GzEncoder::new(&mut f, Compression::default());

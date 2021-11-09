@@ -27,6 +27,7 @@ pub struct MetadataV1 {
 }
 
 impl MetadataV1 {
+    #[allow(dead_code)]
     pub fn load_dump(
         self,
         src: impl AsRef<Path>,

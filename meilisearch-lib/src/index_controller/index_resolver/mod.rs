@@ -11,17 +11,19 @@ use index_store::{IndexStore, MapIndexStore};
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
+use crate::index::updates::UpdateResult;
 use crate::tasks::task::{DocumentDeletion, TaskResult};
 use crate::tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
 
-use crate::{index::{Index, error::IndexError, update_handler::UpdateHandler}, index_controller::updates::status::UpdateResult, options::IndexerOpts};
+use crate::options::IndexerOpts;
+use crate::index::Index;
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl<U, I> TaskPerformer for IndexResolver<U, I>
-where U: UuidStore,
-      I: IndexStore,
+where U: UuidStore + Send + Sync + 'static,
+      I: IndexStore + Send + Sync + 'static,
 {
     type Error = IndexResolverError;
 
@@ -46,49 +48,26 @@ where U: UuidStore,
                     let content_uuid = *content_uuid;
 
                     let index = self.get_or_create_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
-                        let mut txn = index.write_txn()?;
-
-                        if let Some(primary_key) = primary_key {
-                            index.update_primary_key(&mut txn, primary_key)?;
-                        }
-
-                        let res = index.update_documents(
-                            &mut txn,
+                    tokio::task::spawn_blocking(move ||
+                        index.update_documents(
                             method,
-                            content_uuid)?;
-                        txn.commit()?;
-                        Ok(res)
-                    }).await?
+                            content_uuid,
+                            primary_key,
+                        )).await?
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                     let ids = ids.clone();
                     let index = self.get_or_create_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
-                        let mut txn = index.write_txn()?;
-                        let res = index.delete_documents(&mut txn, &ids)?;
-                        txn.commit()?;
-                        Ok(res)
-                    }).await?
+                    tokio::task::spawn_blocking(move || index.delete_documents(&ids)).await?
                 },
                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                     let index = self.get_or_create_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
-                        let mut txn = index.write_txn()?;
-                        let res = index.clear_documents(&mut txn)?;
-                        txn.commit()?;
-                        Ok(res)
-                    }).await?
+                    tokio::task::spawn_blocking(move || index.clear_documents()).await?
                 },
                 TaskContent::SettingsUpdate(settings) => {
                     let index = self.get_or_create_index(index_uid).await?;
                     let settings = settings.clone();
-                    tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
-                        let mut txn = index.write_txn()?;
-                        let res = index.update_settings(&mut txn, &settings.check())?;
-                        txn.commit()?;
-                        Ok(res)
-                    }).await?
+                    tokio::task::spawn_blocking(move || index.update_settings(&settings.check())).await?
                 },
                 TaskContent::IndexDeletion => {
                     self.delete_index(index_uid).await?;
@@ -100,12 +79,7 @@ where U: UuidStore,
 
                     if let Some(primary_key) = primary_key {
                         let primary_key = primary_key.clone();
-                        tokio::task::spawn_blocking(move || -> StdResult<_, IndexError> {
-                            let mut txn = index.write_txn()?;
-                            let res = index.update_primary_key(&mut txn, primary_key)?;
-                            txn.commit()?;
-                            Ok(res)
-                        }).await??;
+                        tokio::task::spawn_blocking(move || index.update_primary_key(primary_key)).await??;
                     }
 
                     Ok(UpdateResult::Other)
@@ -148,25 +122,25 @@ pub struct IndexResolver<U, I> {
 }
 
 impl IndexResolver<HeedUuidStore, MapIndexStore> {
-    pub fn load_dump(
-        src: impl AsRef<Path>,
-        dst: impl AsRef<Path>,
-        index_db_size: usize,
-        indexer_opts: &IndexerOpts,
-    ) -> anyhow::Result<()> {
-        HeedUuidStore::load_dump(&src, &dst)?;
+    // pub fn load_dump(
+    //     src: impl AsRef<Path>,
+    //     dst: impl AsRef<Path>,
+    //     index_db_size: usize,
+    //     indexer_opts: &IndexerOpts,
+    // ) -> anyhow::Result<()> {
+    //     HeedUuidStore::load_dump(&src, &dst)?;
 
-        let indexes_path = src.as_ref().join("indexes");
-        let indexes = indexes_path.read_dir()?;
+    //     let indexes_path = src.as_ref().join("indexes");
+    //     let indexes = indexes_path.read_dir()?;
 
-        let update_handler = UpdateHandler::new(indexer_opts)?;
-        for index in indexes {
-            let index = index?;
-            Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
-        }
+    //     let update_handler = UpdateHandler::new(indexer_opts)?;
+    //     for index in indexes {
+    //         let index = index?;
+    //         Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
 impl<U, I> IndexResolver<U, I>
@@ -181,32 +155,32 @@ where
         }
     }
 
-    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-        let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
-        let mut indexes = Vec::new();
-        for uuid in uuids {
-            indexes.push(self.get_index_by_uuid(uuid).await?);
-        }
+    // pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+    //     let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
+    //     let mut indexes = Vec::new();
+    //     for uuid in uuids {
+    //         indexes.push(self.get_index_by_uuid(uuid).await?);
+    //     }
 
-        Ok(indexes)
-    }
+    //     Ok(indexes)
+    // }
 
-    pub async fn get_uuids_size(&self) -> Result<u64> {
-        Ok(self.index_uuid_store.get_size().await?)
-    }
+   //  pub async fn get_uuids_size(&self) -> Result<u64> {
+   //      Ok(self.index_uuid_store.get_size().await?)
+   //  }
 
-    pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-        let uuids = self
-            .index_uuid_store
-            .snapshot(path.as_ref().to_owned())
-            .await?;
-        let mut indexes = Vec::new();
-        for uuid in uuids {
-            indexes.push(self.get_index_by_uuid(uuid).await?);
-        }
+   //  pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+   //      let uuids = self
+   //          .index_uuid_store
+   //          .snapshot(path.as_ref().to_owned())
+   //          .await?;
+   //      let mut indexes = Vec::new();
+   //      for uuid in uuids {
+   //          indexes.push(self.get_index_by_uuid(uuid).await?);
+   //      }
 
-        Ok(indexes)
-    }
+   //      Ok(indexes)
+   //  }
 
     pub async fn create_index(
         &self,
@@ -250,21 +224,21 @@ where
         }
     }
 
-    pub async fn list(&self) -> Result<Vec<(String, Index)>> {
-        let uuids = self.index_uuid_store.list().await?;
-        let mut indexes = Vec::new();
-        for (name, uuid) in uuids {
-            match self.index_store.get(uuid).await? {
-                Some(index) => indexes.push((name, index)),
-                None => {
-                    // we found an unexisting index, we remove it from the uuid store
-                    let _ = self.index_uuid_store.delete(name).await;
-                }
-            }
-        }
+    // pub async fn list(&self) -> Result<Vec<(String, Index)>> {
+    //     let uuids = self.index_uuid_store.list().await?;
+    //     let mut indexes = Vec::new();
+    //     for (name, uuid) in uuids {
+    //         match self.index_store.get(uuid).await? {
+    //             Some(index) => indexes.push((name, index)),
+    //             None => {
+    //                 // we found an unexisting index, we remove it from the uuid store
+    //                 let _ = self.index_uuid_store.delete(name).await;
+    //             }
+    //         }
+    //     }
 
-        Ok(indexes)
-    }
+    //     Ok(indexes)
+    // }
 
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
@@ -282,13 +256,13 @@ where
         }
     }
 
-    pub async fn get_index_by_uuid(&self, uuid: Uuid) -> Result<Index> {
-        // TODO: Handle this error better.
-        self.index_store
-            .get(uuid)
-            .await?
-            .ok_or_else(|| IndexResolverError::UnexistingIndex(String::new()))
-    }
+    // pub async fn get_index_by_uuid(&self, uuid: Uuid) -> Result<Index> {
+    //     // TODO: Handle this error better.
+    //     self.index_store
+    //         .get(uuid)
+    //         .await?
+    //         .ok_or_else(|| IndexResolverError::UnexistingIndex(String::new()))
+    // }
 
     pub async fn get_index(&self, uid: String) -> Result<Index> {
         match self.index_uuid_store.get_uuid(uid).await? {
@@ -307,12 +281,12 @@ where
         }
     }
 
-    pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
-        match self.index_uuid_store.get_uuid(uid).await? {
-            (_, Some(uuid)) => Ok(uuid),
-            (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
-        }
-    }
+    // pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
+    //     match self.index_uuid_store.get_uuid(uid).await? {
+    //         (_, Some(uuid)) => Ok(uuid),
+    //         (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
+    //     }
+    // }
 }
 
 fn is_index_uid_valid(uid: &str) -> bool {

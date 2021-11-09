@@ -7,11 +7,6 @@ use tempfile::NamedTempFile;
 
 use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
 use crate::index_controller::dump_actor::Metadata;
-use crate::index_controller::updates::status::{
-    Aborted, Enqueued, Failed, Processed, Processing, UpdateResult, UpdateStatus,
-};
-use crate::index_controller::updates::store::dump::UpdateEntry;
-use crate::index_controller::updates::store::Update;
 use crate::options::IndexerOpts;
 
 use super::v3;

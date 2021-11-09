@@ -11,13 +11,6 @@ use crate::{
     Update,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: u64 },
-    Other,
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]

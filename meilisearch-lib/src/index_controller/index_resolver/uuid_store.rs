@@ -1,6 +1,5 @@
 use std::collections::HashSet;
-use std::fs::{create_dir_all, File};
-use std::io::{BufRead, BufReader, Write};
+use std::fs::{create_dir_all};
 use std::path::{Path, PathBuf};
 
 use heed::types::{ByteSlice, Str};
@@ -134,59 +133,59 @@ impl HeedUuidStore {
         Ok(self.env.size())
     }
 
-    pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
-        let dump_path = path.join(UUIDS_DB_PATH);
-        create_dir_all(&dump_path)?;
-        let dump_file_path = dump_path.join("data.jsonl");
-        let mut dump_file = File::create(&dump_file_path)?;
-        let mut uuids = HashSet::new();
+    // pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
+    //     let dump_path = path.join(UUIDS_DB_PATH);
+    //     create_dir_all(&dump_path)?;
+    //     let dump_file_path = dump_path.join("data.jsonl");
+    //     let mut dump_file = File::create(&dump_file_path)?;
+    //     let mut uuids = HashSet::new();
 
-        let txn = self.env.read_txn()?;
-        for entry in self.db.iter(&txn)? {
-            let (uid, uuid) = entry?;
-            let uid = uid.to_string();
-            let uuid = Uuid::from_slice(uuid)?;
+    //     let txn = self.env.read_txn()?;
+    //     for entry in self.db.iter(&txn)? {
+    //         let (uid, uuid) = entry?;
+    //         let uid = uid.to_string();
+    //         let uuid = Uuid::from_slice(uuid)?;
 
-            let entry = DumpEntry { uuid, uid };
-            serde_json::to_writer(&mut dump_file, &entry)?;
-            dump_file.write_all(b"\n").unwrap();
+    //         let entry = DumpEntry { uuid, uid };
+    //         serde_json::to_writer(&mut dump_file, &entry)?;
+    //         dump_file.write_all(b"\n").unwrap();
 
-            uuids.insert(uuid);
-        }
+    //         uuids.insert(uuid);
+    //     }
 
-        Ok(uuids)
-    }
+    //     Ok(uuids)
+    // }
 
-    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
-        std::fs::create_dir_all(&uuid_resolver_path)?;
+    // pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+    //     let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
+    //     std::fs::create_dir_all(&uuid_resolver_path)?;
 
-        let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
-        let indexes = File::open(&src_indexes)?;
-        let mut indexes = BufReader::new(indexes);
-        let mut line = String::new();
+    //     let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
+    //     let indexes = File::open(&src_indexes)?;
+    //     let mut indexes = BufReader::new(indexes);
+    //     let mut line = String::new();
 
-        let db = Self::new(dst)?;
-        let mut txn = db.env.write_txn()?;
+    //     let db = Self::new(dst)?;
+    //     let mut txn = db.env.write_txn()?;
 
-        loop {
-            match indexes.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
-                    db.db.put(&mut txn, &uid, uuid.as_bytes())?;
-                }
-                Err(e) => return Err(e.into()),
-            }
+    //     loop {
+    //         match indexes.read_line(&mut line) {
+    //             Ok(0) => break,
+    //             Ok(_) => {
+    //                 let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
+    //                 db.db.put(&mut txn, &uid, uuid.as_bytes())?;
+    //             }
+    //             Err(e) => return Err(e.into()),
+    //         }
 
-            line.clear();
-        }
-        txn.commit()?;
+    //         line.clear();
+    //     }
+    //     txn.commit()?;
 
-        db.env.prepare_for_closing().wait();
+    //     db.env.prepare_for_closing().wait();
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
 #[async_trait::async_trait]
@@ -220,8 +219,9 @@ impl UuidStore for HeedUuidStore {
         self.get_size()
     }
 
-    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
-        let this = self.clone();
-        tokio::task::spawn_blocking(move || this.dump(path)).await?
+    async fn dump(&self, _path: PathBuf) -> Result<HashSet<Uuid>> {
+        todo!()
+        // let this = self.clone();
+        // tokio::task::spawn_blocking(move || this.dump(path)).await?
     }
 }

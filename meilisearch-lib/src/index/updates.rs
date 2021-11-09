@@ -4,11 +4,9 @@ use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
-use milli::update::{IndexDocumentsMethod, Setting};
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, Setting};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
-
-use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
 
 use super::error::Result;
 use super::index::{Index, IndexMeta};
@@ -162,61 +160,15 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateResult {
+    DocumentsAddition(DocumentAdditionResult),
+    DocumentDeletion { deleted: u64 },
+    Other,
+}
+
 impl Index {
-    pub fn handle_update(&self, _update: Processing) -> std::result::Result<Processed, Failed> {
-        todo!()
-        //  let update_builder = self.update_handler.update_builder();
-        //  let result = (|| {
-        //      let mut txn = self.write_txn()?;
-        //      let result = match update.meta() {
-        //          Update::DocumentAddition {
-        //              primary_key,
-        //              content_uuid,
-        //              method,
-        //          } => self.update_documents(
-        //              &mut txn,
-        //              *method,
-        //              *content_uuid,
-        //              primary_key.as_deref(),
-        //          ),
-        //          Update::Settings(settings) => {
-        //              let settings = settings.clone().check();
-        //              self.update_settings(&mut txn, &settings, update_builder)
-        //          }
-        //          Update::ClearDocuments => {
-        //              let builder = update_builder.clear_documents(&mut txn, self);
-        //              let _count = builder.execute()?;
-        //              Ok(UpdateResult::Other)
-        //          }
-        //          Update::DeleteDocuments(ids) => {
-        //              let mut builder = update_builder.delete_documents(&mut txn, self)?;
-
-        //              // We ignore unexisting document ids
-        //              ids.iter().for_each(|id| {
-        //                  builder.delete_external_id(id);
-        //              });
-
-        //              let deleted = builder.execute()?;
-        //              Ok(UpdateResult::DocumentDeletion { deleted })
-        //          }
-        //      };
-        //      if result.is_ok() {
-        //          txn.commit()?;
-        //      }
-        //      result
-        //  })();
-
-        //  if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
-        //      let _ = self.update_file_store.delete(*content_uuid);
-        //  }
-
-        //  match result {
-        //      Ok(result) => Ok(update.process(result)),
-        //      Err(e) => Err(update.fail(e)),
-        //  }
-    }
-
-    pub fn update_primary_key<'a, 'b>(
+    fn update_primary_key_txn<'a, 'b>(
         &'a self,
         txn: &mut heed::RwTxn<'a, 'b>,
         primary_key: String
@@ -225,18 +177,24 @@ impl Index {
         builder.set_primary_key(primary_key);
         builder.execute(|_| ())?;
         let meta = IndexMeta::new_txn(self, &txn)?;
+
         Ok(meta)
     }
 
-    pub fn delete_documents<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
-        ids: &[String],
-    ) -> Result<UpdateResult> {
+    pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
+        let mut txn = self.write_txn()?;
+        let res = self.update_primary_key_txn(&mut txn, primary_key)?;
+        txn.commit()?;
+
+        Ok(res)
+    }
+
+    pub fn delete_documents(&self, ids: &[String]) -> Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
         let mut builder = self
             .update_handler
             .update_builder()
-            .delete_documents(txn, self)?;
+            .delete_documents(&mut txn, self)?;
 
         // We ignore unexisting document ids
         ids.iter().for_each(|id| {
@@ -244,28 +202,36 @@ impl Index {
         });
 
         let deleted = builder.execute()?;
+
+        txn.commit()?;
+
         Ok(UpdateResult::DocumentDeletion { deleted })
     }
 
-    pub fn clear_documents<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
-    ) -> Result<UpdateResult> {
+    pub fn clear_documents(&self) -> Result<UpdateResult> {
+        let mut txn = self.write_txn()?;
         self.update_handler
             .update_builder()
-            .clear_documents(txn, self)
+            .clear_documents(&mut txn, self)
             .execute()?;
+
+            txn.commit()?;
 
         Ok(UpdateResult::Other)
     }
 
-    pub fn update_documents<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
+    pub fn update_documents(
+        &self,
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
+        primary_key: Option<String>,
     ) -> Result<UpdateResult> {
         trace!("performing document addition");
+        let mut txn = self.write_txn()?;
+
+        if let Some(primary_key) = primary_key {
+            self.update_primary_key_txn(&mut txn, primary_key)?;
+        }
 
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
 
@@ -275,26 +241,30 @@ impl Index {
         let mut builder = self
             .update_handler
             .update_builder()
-            .index_documents(txn, self);
+            .index_documents(&mut txn, self);
         builder.index_documents_method(method);
         let addition = builder.execute(reader, indexing_callback)?;
+
+        txn.commit()?;
 
         info!("document addition done: {:?}", addition);
 
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn update_settings<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
+    pub fn update_settings(
+        &self,
         settings: &Settings<Checked>,
     ) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
-        let mut builder = self.update_handler.update_builder().settings(txn, self);
+        let mut txn = self.write_txn()?;
+        let mut builder = self.update_handler.update_builder().settings(&mut txn, self);
 
         apply_settings_to_builder(settings, &mut builder);
 
         builder.execute(|indexing_step| debug!("update: {:?}", indexing_step))?;
+
+        txn.commit()?;
 
         Ok(UpdateResult::Other)
     }
@@ -357,7 +327,46 @@ pub fn apply_settings_to_builder(
 
 #[cfg(test)]
 mod test {
+    use quickcheck::Arbitrary;
+
     use super::*;
+
+    #[derive(Clone)]
+    struct ArbitrarySetting<T>(Setting<T>);
+
+    impl<T: Arbitrary> ArbitrarySetting<T> {
+        fn into_inner(self) -> Setting<T> {
+            self.0
+        }
+    }
+
+    impl<T: Arbitrary> Arbitrary for ArbitrarySetting<T> {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            let rand = g.choose(&[1, 2, 3]).unwrap();
+            match rand {
+                1 => Self(Setting::Set(T::arbitrary(g))),
+                2 => Self(Setting::Reset),
+                3 => Self(Setting::NotSet),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    impl<T: Clone + 'static> Arbitrary for Settings<T> {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            Settings {
+                displayed_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
+                searchable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
+                filterable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
+                sortable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
+                ranking_rules: ArbitrarySetting::arbitrary(g).into_inner(),
+                stop_words: ArbitrarySetting::arbitrary(g).into_inner(),
+                synonyms: ArbitrarySetting::arbitrary(g).into_inner(),
+                distinct_attribute: ArbitrarySetting::arbitrary(g).into_inner(),
+                _kind: PhantomData,
+            }
+        }
+    }
 
     #[test]
     fn test_setting_check() {

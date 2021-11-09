@@ -38,7 +38,7 @@ impl DumpActorHandleImpl {
         path: impl AsRef<Path>,
         analytics_path: impl AsRef<Path>,
         index_resolver: Arc<HardStateIndexResolver>,
-        update: crate::index_controller::updates::UpdateSender,
+        // update: crate::index_controller::updates::UpdateSender,
         index_db_size: usize,
         update_db_size: usize,
     ) -> anyhow::Result<Self> {
@@ -46,7 +46,7 @@ impl DumpActorHandleImpl {
         let actor = DumpActor::new(
             receiver,
             index_resolver,
-            update,
+            // update,
             path,
             analytics_path,
             index_db_size,

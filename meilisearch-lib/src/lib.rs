@@ -8,7 +8,6 @@ pub mod tasks;
 
 mod analytics;
 
-pub use index_controller::updates::store::Update;
 pub use index_controller::MeiliSearch;
 
 pub use milli;

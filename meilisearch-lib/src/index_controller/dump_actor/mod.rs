@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use log::{info, trace, warn};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tokio::fs::create_dir_all;
+// use tokio::fs::create_dir_all;
 
 use loaders::v1::MetadataV1;
 
@@ -16,12 +16,10 @@ pub use message::DumpMsg;
 use super::index_resolver::index_store::IndexStore;
 use super::index_resolver::uuid_store::UuidStore;
 use super::index_resolver::IndexResolver;
-use super::updates::UpdateSender;
-use crate::analytics;
-use crate::compression::{from_tar_gz, to_tar_gz};
-use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::{v2, v3};
-use crate::index_controller::updates::UpdateMsg;
+// use crate::analytics;
+use crate::compression::from_tar_gz;
+// use crate::index_controller::dump_actor::error::DumpActorError;
+use crate::index_controller::dump_actor::loaders::v3;
 use crate::options::IndexerOpts;
 use error::Result;
 
@@ -31,6 +29,7 @@ mod handle_impl;
 mod loaders;
 mod message;
 
+#[allow(dead_code)]
 const META_FILE_NAME: &str = "metadata.json";
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,6 +42,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    #[allow(dead_code)]
     pub fn new(index_db_size: usize, update_db_size: usize) -> Self {
         Self {
             db_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -74,11 +74,13 @@ pub enum MetadataVersion {
 }
 
 impl MetadataVersion {
+    #[allow(dead_code)]
     pub fn new_v3(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = Metadata::new(index_db_size, update_db_size);
         Self::V3(meta)
     }
 
+    #[allow(dead_code)]
     pub fn db_version(&self) -> &str {
         match self {
             Self::V1(meta) => &meta.db_version,
@@ -86,6 +88,7 @@ impl MetadataVersion {
         }
     }
 
+    #[allow(dead_code)]
     pub fn version(&self) -> &str {
         match self {
             MetadataVersion::V1(_) => "V1",
@@ -94,6 +97,7 @@ impl MetadataVersion {
         }
     }
 
+    #[allow(dead_code)]
     pub fn dump_date(&self) -> Option<&DateTime<Utc>> {
         match self {
             MetadataVersion::V1(_) => None,
@@ -144,11 +148,13 @@ impl DumpInfo {
         self.status = DumpStatus::Done;
     }
 
+    #[allow(dead_code)]
     pub fn dump_already_in_progress(&self) -> bool {
         self.status == DumpStatus::InProgress
     }
 }
 
+    #[allow(dead_code)]
 pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
@@ -193,14 +199,15 @@ pub fn load_dump(
         MetadataVersion::V1(meta) => {
             meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
-        MetadataVersion::V2(meta) => v2::load_dump(
-            meta,
-            &tmp_src_path,
-            tmp_dst.path(),
-            index_db_size,
-            update_db_size,
-            indexer_opts,
-        )?,
+        MetadataVersion::V2(_meta) => todo!(),
+        //     v2::load_dump(
+        //     meta,
+        //     &tmp_src_path,
+        //     tmp_dst.path(),
+        //     index_db_size,
+        //     update_db_size,
+        //     indexer_opts,
+        // )?,
         MetadataVersion::V3(meta) => v3::load_dump(
             meta,
             &tmp_src_path,
@@ -222,11 +229,12 @@ pub fn load_dump(
     Ok(())
 }
 
+    #[allow(dead_code)]
 struct DumpTask<U, I> {
     dump_path: PathBuf,
     db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
-    update_sender: UpdateSender,
+    // update_sender: UpdateSender,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
@@ -238,39 +246,40 @@ where
     I: IndexStore + Sync + Send + 'static,
 {
     async fn run(self) -> Result<()> {
-        trace!("Performing dump.");
+        todo!()
+        // trace!("Performing dump.");
 
-        create_dir_all(&self.dump_path).await?;
+        // create_dir_all(&self.dump_path).await?;
 
-        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
-        let temp_dump_path = temp_dump_dir.path().to_owned();
+        // let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
+        // let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
-        let meta_path = temp_dump_path.join(META_FILE_NAME);
-        let mut meta_file = File::create(&meta_path)?;
-        serde_json::to_writer(&mut meta_file, &meta)?;
-        analytics::copy_user_id(&self.db_path, &temp_dump_path);
+        // let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
+        // let meta_path = temp_dump_path.join(META_FILE_NAME);
+        // let mut meta_file = File::create(&meta_path)?;
+        // serde_json::to_writer(&mut meta_file, &meta)?;
+        // analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
-        create_dir_all(&temp_dump_path.join("indexes")).await?;
-        let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
+        // create_dir_all(&temp_dump_path.join("indexes")).await?;
+        // let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
+        // UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
 
-        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
-            to_tar_gz(temp_dump_path, temp_dump_file.path())
-                .map_err(|e| DumpActorError::Internal(e.into()))?;
+        // let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+        //     let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
+        //     to_tar_gz(temp_dump_path, temp_dump_file.path())
+        //         .map_err(|e| DumpActorError::Internal(e.into()))?;
 
-            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
-            temp_dump_file.persist(&dump_path)?;
+        //     let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+        //     temp_dump_file.persist(&dump_path)?;
 
-            Ok(dump_path)
-        })
-        .await??;
+        //     Ok(dump_path)
+        // })
+        // .await??;
 
-        info!("Created dump in {:?}.", dump_path);
+        // info!("Created dump in {:?}.", dump_path);
 
-        Ok(())
+        // Ok(())
     }
 }
 
@@ -289,7 +298,6 @@ mod test {
     use crate::index_controller::index_resolver::error::IndexResolverError;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
     use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
-    use crate::index_controller::updates::create_update_handler;
 
     fn setup() {
         static SETUP: Lazy<()> = Lazy::new(|| {
@@ -337,15 +345,15 @@ mod test {
 
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-        let update_sender =
-            create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
+        //let update_sender =
+        //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
         let task = DumpTask {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
             index_resolver,
-            update_sender,
+        //    update_sender,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
             index_db_size: 4096 * 10,
@@ -367,15 +375,15 @@ mod test {
         let index_store = MockIndexStore::new();
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
 
-        let update_sender =
-            create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
+        // let update_sender =
+        //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
         let task = DumpTask {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
             index_resolver,
-            update_sender,
+            // update_sender,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
             index_db_size: 4096 * 10,

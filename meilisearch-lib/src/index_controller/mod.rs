@@ -10,17 +10,15 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use futures::StreamExt;
-use log::info;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use dump_actor::DumpActorHandle;
-pub use dump_actor::{DumpInfo, DumpStatus};
-use snapshot::load_snapshot;
+//use dump_actor::DumpActorHandle;
+//pub use dump_actor::{DumpInfo, DumpStatus};
+//use snapshot::load_snapshot;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{
@@ -29,26 +27,28 @@ use crate::index::{
 use crate::index_controller::index_resolver::create_index_resolver;
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
-use crate::tasks::create_task_store;
+use crate::tasks::{create_task_store, TaskStore};
 use crate::tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::task_store::{TaskFilter, TaskStore};
+use crate::tasks::task_store::TaskFilter;
 use error::Result;
 
-use self::dump_actor::load_dump;
+// use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
-use self::index_resolver::HardStateIndexResolver;
+use self::index_resolver::IndexResolver;
+use self::index_resolver::index_store::{MapIndexStore, IndexStore};
+use self::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
 use self::update_file_store::UpdateFileStore;
 //use self::updates::UpdateMsg;
 
 mod dump_actor;
 pub mod error;
 mod index_resolver;
-mod snapshot;
+// mod snapshot;
 pub mod update_file_store;
-pub mod updates;
+// pub mod updates;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
-pub type MeiliSearch = IndexController;
+pub type MeiliSearch = IndexController<HeedUuidStore, MapIndexStore>;
 
 pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
@@ -71,12 +71,22 @@ pub struct IndexSettings {
     pub primary_key: Option<String>,
 }
 
-#[derive(Clone)]
-pub struct IndexController {
-    index_resolver: Arc<HardStateIndexResolver>,
+pub struct IndexController<U, I> {
+    index_resolver: Arc<IndexResolver<U, I>>,
     task_store: TaskStore,
-    dump_handle: dump_actor::DumpActorHandleImpl,
+    // dump_handle: dump_actor::DumpActorHandleImpl,
     update_file_store: UpdateFileStore,
+}
+
+/// Need a custom implementation for clone because deriving require that U and I are clone.
+impl<U, I> Clone for IndexController<U, I> {
+    fn clone(&self) -> Self {
+        Self {
+            index_resolver: self.index_resolver.clone(),
+            task_store: self.task_store.clone(),
+            update_file_store: self.update_file_store.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -151,23 +161,23 @@ impl IndexControllerBuilder {
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
-        if let Some(ref path) = self.import_snapshot {
-            info!("Loading from snapshot {:?}", path);
-            load_snapshot(
-                db_path.as_ref(),
-                path,
-                self.ignore_snapshot_if_db_exists,
-                self.ignore_missing_snapshot,
-            )?;
-        } else if let Some(ref src_path) = self.dump_src {
-            load_dump(
-                db_path.as_ref(),
-                src_path,
-                index_size,
-                update_store_size,
-                &indexer_options,
-            )?;
-        }
+       //  if let Some(ref path) = self.import_snapshot {
+       //      info!("Loading from snapshot {:?}", path);
+       //      load_snapshot(
+       //          db_path.as_ref(),
+       //          path,
+       //          self.ignore_snapshot_if_db_exists,
+       //          self.ignore_missing_snapshot,
+       //      )?;
+       //  } else if let Some(ref src_path) = self.dump_src {
+       //      load_dump(
+       //          db_path.as_ref(),
+       //          src_path,
+       //          index_size,
+       //          update_store_size,
+       //          &indexer_options,
+       //      )?;
+       //  }
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
@@ -191,8 +201,7 @@ impl IndexControllerBuilder {
         //update_store_size,
         //)?;
 
-        let (sender, _) = mpsc::channel(1);
-        let dump_handle = dump_actor::DumpActorHandleImpl { sender };
+        // let dump_handle = dump_actor::DumpActorHandleImpl { sender };
 
         let update_file_store = UpdateFileStore::new(&db_path)?;
 
@@ -217,7 +226,7 @@ impl IndexControllerBuilder {
         Ok(IndexController {
             index_resolver,
             task_store,
-            dump_handle,
+          //  dump_handle,
             update_file_store,
         })
     }
@@ -285,7 +294,10 @@ impl IndexControllerBuilder {
     }
 }
 
-impl IndexController {
+impl<U, I> IndexController<U, I>
+    where U: UuidStore,
+            I: IndexStore,
+    {
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
     }
@@ -490,13 +502,13 @@ impl IndexController {
         //})
     }
 
-    pub async fn create_dump(&self) -> Result<DumpInfo> {
-        Ok(self.dump_handle.create_dump().await?)
-    }
+    // pub async fn create_dump(&self) -> Result<DumpInfo> {
+    //     Ok(self.dump_handle.create_dump().await?)
+    // }
 
-    pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
-        Ok(self.dump_handle.dump_info(uid).await?)
-    }
+    // pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
+    //     Ok(self.dump_handle.dump_info(uid).await?)
+    // }
 }
 
 pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
@@ -516,28 +528,29 @@ pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
 mod test {
     use futures::future::ok;
     use mockall::predicate::eq;
-    use tokio::sync::mpsc;
 
     use crate::index::error::Result as IndexResult;
     use crate::index::test::Mocker;
     use crate::index::Index;
-    use crate::index_controller::dump_actor::MockDumpActorHandle;
+    // use crate::index_controller::dump_actor::MockDumpActorHandle;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
     use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
 
-    use super::updates::UpdateSender;
+    use super::index_resolver::IndexResolver;
     use super::*;
 
-    impl<D: DumpActorHandle> IndexController<MockUuidStore, MockIndexStore, D> {
+    impl IndexController<MockUuidStore, MockIndexStore> {
         pub fn mock(
             index_resolver: IndexResolver<MockUuidStore, MockIndexStore>,
-            update_sender: UpdateSender,
-            dump_handle: D,
+            task_store: TaskStore,
+            update_file_store: UpdateFileStore,
+        //     dump_handle: D,
         ) -> Self {
             IndexController {
                 index_resolver: Arc::new(index_resolver),
-                update_sender,
-                dump_handle: Arc::new(dump_handle),
+                task_store,
+                // dump_handle: Arc::new(dump_handle),
+                update_file_store,
             }
         }
     }
@@ -599,15 +612,18 @@ mod test {
                 Box::pin(ok(Some(index)))
             });
 
-        let index_resolver = IndexResolver::new(uuid_store, index_store);
-        let (update_sender, _) = mpsc::channel(1);
-        let dump_actor = MockDumpActorHandle::new();
-        let index_controller = IndexController::mock(index_resolver, update_sender, dump_actor);
+        let task_store_mocker = nelson::Mocker::default();
+        let _index_resolver = IndexResolver::new(uuid_store, index_store);
+        let _task_store = TaskStore::mock(task_store_mocker);
+        // let dump_actor = MockDumpActorHandle::new();
+        todo!("implement mock update file store");
+        // let update_file_store = UpdateFileStore::new(".").unwrap();
+        // let index_controller = IndexController::mock(index_resolver, task_store, update_file_store);
 
-        let r = index_controller
-            .search(index_uid.to_owned(), query.clone())
-            .await
-            .unwrap();
-        assert_eq!(r, result);
+        // let r = index_controller
+        //     .search(index_uid.to_owned(), query.clone())
+        //     .await
+        //     .unwrap();
+        // assert_eq!(r, result);
     }
 }

@@ -62,3 +62,6 @@ derivative = "2.2.0"
 actix-rt = "2.2.0"
 mockall = "0.10.2"
 paste = "1.0.5"
+nelson = { path = "../../nelson" }
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"

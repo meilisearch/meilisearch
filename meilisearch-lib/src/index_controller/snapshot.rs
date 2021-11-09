@@ -13,12 +13,10 @@ use tokio::time::sleep;
 
 use crate::analytics;
 use crate::compression::from_tar_gz;
-use crate::index_controller::updates::UpdateMsg;
 
 use super::index_resolver::index_store::IndexStore;
 use super::index_resolver::uuid_store::UuidStore;
 use super::index_resolver::IndexResolver;
-use super::updates::UpdateSender;
 
 pub struct SnapshotService<U, I> {
     index_resolver: Arc<IndexResolver<U, I>>,
