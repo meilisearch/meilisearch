@@ -61,24 +61,21 @@ pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
 #[derive(Debug, Clone, Eq)]
-pub struct Token<'a> {
-    pub position: Span<'a>,
-    pub inner: &'a str,
-}
+pub struct Token<'a>(Span<'a>);
 
 impl<'a> PartialEq for Token<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+        self.0.fragment() == other.0.fragment()
     }
 }
 
 impl<'a> Token<'a> {
     pub fn new(position: Span<'a>) -> Self {
-        Self { position, inner: &position }
+        Self(position)
     }
 
     pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
-        Error::new_from_external(self.position, error)
+        Error::new_from_external(self.0, error)
     }
 
     pub fn parse<T>(&self) -> Result<T, Error>
@@ -86,13 +83,13 @@ impl<'a> Token<'a> {
         T: FromStr,
         T::Err: std::error::Error,
     {
-        self.inner.parse().map_err(|e| self.as_external_error(e))
+        self.0.parse().map_err(|e| self.as_external_error(e))
     }
 }
 
 impl<'a> From<Span<'a>> for Token<'a> {
     fn from(span: Span<'a>) -> Self {
-        Self { inner: &span, position: span }
+        Self(span)
     }
 }
 
