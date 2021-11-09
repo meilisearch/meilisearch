@@ -250,7 +250,7 @@ impl Search {
         }
 
         if let Some(ref filter) = self.filter {
-            let condition = milli::FilterCondition::from_str(&txn, &index, filter)?;
+            let condition = milli::Filter::from_str(filter)?;
             search.filter(condition);
         }
 

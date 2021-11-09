@@ -7,7 +7,6 @@ use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
 
-use crate::search::ParserRule;
 use crate::{CriterionError, DocumentId, FieldId, SortError};
 
 pub type Object = Map<String, Value>;
@@ -59,8 +58,8 @@ pub enum UserError {
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
-    InvalidFilter(FilterError),
     InvalidGeoField { document_id: Value, object: Value },
+    InvalidFilter(String),
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     SortRankingRuleMissing,
     InvalidStoreFile,
@@ -72,13 +71,6 @@ pub enum UserError {
     SerdeJson(serde_json::Error),
     SortError(SortError),
     UnknownInternalDocumentId { document_id: DocumentId },
-}
-
-#[derive(Debug)]
-pub enum FilterError {
-    InvalidAttribute { field: String, valid_fields: BTreeSet<String> },
-    ReservedKeyword { field: String, context: Option<String> },
-    Syntax(pest::error::Error<ParserRule>),
 }
 
 impl From<io::Error> for Error {
@@ -165,12 +157,6 @@ impl From<UserError> for Error {
     }
 }
 
-impl From<FilterError> for Error {
-    fn from(error: FilterError) -> Error {
-        Error::UserError(UserError::InvalidFilter(error))
-    }
-}
-
 impl From<SerializationError> for Error {
     fn from(error: SerializationError) -> Error {
         Error::InternalError(InternalError::Serialization(error))
@@ -219,6 +205,7 @@ impl StdError for InternalError {}
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::InvalidFilter(error) => f.write_str(error),
             Self::AttributeLimitReached => f.write_str("A document cannot contain more than 65,535 fields."),
             Self::CriterionError(error) => write!(f, "{}", error),
             Self::DocumentLimitReached => f.write_str("Maximum number of documents reached."),
@@ -231,7 +218,6 @@ impl fmt::Display for UserError {
                     name_list
                 )
             }
-            Self::InvalidFilter(error) => error.fmt(f),
             Self::InvalidGeoField { document_id, object } => {
                 let document_id = match document_id {
                     Value::String(id) => id.clone(),
@@ -288,40 +274,6 @@ ranking rules settings to use the sort parameter at search time.",
             Self::SortError(error) => write!(f, "{}", error),
             Self::UnknownInternalDocumentId { document_id } => {
                 write!(f, "An unknown internal document id have been used: `{}`.", document_id)
-            }
-        }
-    }
-}
-
-impl fmt::Display for FilterError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidAttribute { field, valid_fields } => write!(
-                f,
-                "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
-                field,
-                valid_fields
-                    .clone()
-                    .into_iter()
-                    .reduce(|left, right| left + "`, `" + &right)
-                    .unwrap_or_default()
-            ),
-            Self::ReservedKeyword { field, context: Some(context) } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a filter expression. {}",
-                    field, context
-                )
-            }
-            Self::ReservedKeyword { field, context: None } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a filter expression.",
-                    field
-                )
-            }
-            Self::Syntax(syntax_helper) => {
-                write!(f, "Invalid syntax for the filter parameter: `{}`.", syntax_helper)
             }
         }
     }

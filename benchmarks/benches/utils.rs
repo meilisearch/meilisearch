@@ -9,7 +9,7 @@ use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
 use milli::documents::DocumentBatchReader;
 use milli::update::{IndexDocumentsMethod, Settings, UpdateBuilder};
-use milli::{FilterCondition, Index};
+use milli::{Filter, Index};
 use serde_json::{Map, Value};
 
 pub struct Conf<'a> {
@@ -117,7 +117,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
                     if let Some(filter) = conf.filter {
-                        let filter = FilterCondition::from_str(&rtxn, &index, filter).unwrap();
+                        let filter = Filter::from_str(filter).unwrap();
                         search.filter(filter);
                     }
                     if let Some(sort) = &conf.sort {

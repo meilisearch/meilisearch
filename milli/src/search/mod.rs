@@ -14,8 +14,7 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub(crate) use self::facet::ParserRule;
-pub use self::facet::{FacetDistribution, FacetNumberIter, FilterCondition, Operator};
+pub use self::facet::{FacetDistribution, FacetNumberIter, Filter};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
@@ -35,7 +34,8 @@ mod query_tree;
 
 pub struct Search<'a> {
     query: Option<String>,
-    filter: Option<FilterCondition>,
+    // this should be linked to the String in the query
+    filter: Option<Filter<'a>>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -97,7 +97,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: FilterCondition) -> &mut Search<'a> {
+    pub fn filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
         self.filter = Some(condition);
         self
     }

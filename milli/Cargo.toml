@@ -38,9 +38,7 @@ smallvec = "1.6.1"
 tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 
-# facet filter parser
-pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
-pest_derive = "2.1.0"
+filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
 itertools = "0.10.0"
