@@ -326,7 +326,7 @@ where
                         Err(_e) => todo!("handle payload errors"),
                     }
                 }
-                let (content_uuid, mut update_file) = self.update_file_store.new_update().unwrap();
+                let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
                 let documents_count = tokio::task::spawn_blocking(move || -> Result<_> {
                     // check if the payload is empty, and return an error
                     if buffer.is_empty() {
@@ -336,22 +336,16 @@ where
 
                     let reader = Cursor::new(buffer);
                     let count = match format {
-                        DocumentAdditionFormat::Json => {
-                            read_json(reader, &mut *update_file).unwrap()
-                        }
-                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file).unwrap(),
-                        DocumentAdditionFormat::Ndjson => {
-                            read_ndjson(reader, &mut *update_file).unwrap()
-                        }
+                        DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
                     };
 
-                    update_file.persist().unwrap();
+                    update_file.persist()?;
 
                     Ok(count)
                 })
-                .await
-                .unwrap()
-                .unwrap();
+                .await??;
 
                 TaskContent::DocumentAddition {
                     content_uuid,
@@ -364,13 +358,13 @@ where
             Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
         };
 
-        let task = self.task_store.register(uid, content).await.unwrap();
+        let task = self.task_store.register(uid, content).await?;
 
         Ok(task)
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
-        let task = self.task_store.get_task(id, filter).await.unwrap().unwrap();
+        let task = self.task_store.get_task(id, filter).await?;
         Ok(task)
     }
 
@@ -383,8 +377,8 @@ where
         let tasks = self
             .task_store
             .list_tasks(filter, limit, offset)
-            .await
-            .unwrap();
+            .await?;
+
         Ok(tasks)
     }
 

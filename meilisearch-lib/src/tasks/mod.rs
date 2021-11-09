@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,20 +12,20 @@ pub use task_store::TaskStore;
 
 use batch::Batch;
 use scheduler::Scheduler;
+use error::Result;
 
 pub mod batch;
 pub mod scheduler;
 pub mod task;
 pub mod task_store;
-
-type Result<T> = StdResult<T, Box<dyn std::error::Error + Sync + Send>>;
+pub mod error;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]
 pub trait TaskPerformer: Sync + Send + 'static {
     type Error: Serialize + for<'de> Deserialize<'de> + std::error::Error + Sync + Send + 'static;
     /// Processes the `Task` batch returning the batch with the `Task` updated.
-    async fn process(&self, batch: Batch) -> StdResult<Batch, Self::Error>;
+    async fn process(&self, batch: Batch) -> Batch;
 }
 
 pub fn create_task_store<P>(

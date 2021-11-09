@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::tasks::task::TaskEvent;
 
+use super::error::TaskError;
 use super::task::{Task, TaskContent, TaskId};
 use super::Result;
 
@@ -100,18 +101,19 @@ impl TaskStore {
         &self,
         id: TaskId,
         filter: Option<TaskFilter>,
-    ) -> Result<Option<Task>> {
+    ) -> Result<Task> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
             let task = store.get(&txn, id)?;
             Ok(task)
         })
-        .await??;
+        .await??
+        .ok_or(TaskError::UnexistingTask(id))?;
 
-        match (task, filter) {
-            (Some(task), Some(filter)) => filter.pass(&task).then(|| Ok(task)).transpose(),
-            (task, _) => Ok(task),
+        match filter {
+            Some(filter) => filter.pass(&task).then(|| task).ok_or(TaskError::UnexistingTask(id)),
+            None => Ok(task),
         }
     }
 
@@ -198,11 +200,11 @@ pub mod test {
             &self,
             id: TaskId,
             filter: Option<TaskFilter>,
-        ) -> Result<Option<Task>> {
+        ) -> Result<Task> {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
                 Self::Mock(m) => unsafe {
-                    m.get::<_, Result<Option<Task>>>("get_task")
+                    m.get::<_, Result<Task>>("get_task")
                         .call((id, filter))
                 },
             }

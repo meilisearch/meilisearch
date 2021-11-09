@@ -3,7 +3,6 @@ pub mod index_store;
 pub mod uuid_store;
 
 use std::path::Path;
-use std::result::Result as StdResult;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
@@ -30,7 +29,7 @@ where
 {
     type Error = ResponseError;
 
-    async fn process(&self, mut batch: Batch) -> StdResult<Batch, Self::Error> {
+    async fn process(&self, mut batch: Batch) -> Batch {
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
@@ -51,7 +50,7 @@ where
             }
         }
 
-        Ok(batch)
+        batch
     }
 }
 

@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::tasks::task::TaskEvent;
 
-use super::Result;
+use super::error::Result;
 use super::TaskPerformer;
 
 use super::batch::Batch;
@@ -33,11 +33,7 @@ where
     P: TaskPerformer + Send + Sync + 'static,
     P::Error: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
 {
-    pub fn new(
-        store: TaskStore,
-        performer: Arc<P>,
-        task_store_check_interval: Duration,
-    ) -> Self {
+    pub fn new(store: TaskStore, performer: Arc<P>, task_store_check_interval: Duration) -> Self {
         Self {
             store,
             performer,
@@ -47,18 +43,26 @@ where
 
     pub async fn run(self) {
         loop {
-            match self.prepare_batch().await.unwrap() {
-                Some(batch) => {
-                    let performer = self.performer.clone();
-                    let batch_result = performer.process(batch).await.unwrap();
-                    self.handle_batch_result(batch_result).await.unwrap();
-                }
-                None => {
-                    // No updates found to create a batch we wait a bit before we retry.
-                    tokio::time::sleep(self.task_store_check_interval).await;
-                }
+            if let Err(e) = self.process_next_batch().await {
+                log::error!("an error occured while processing an update batch: {}", e);
             }
         }
+    }
+
+    async fn process_next_batch(&self) -> Result<()> {
+        match self.prepare_batch().await? {
+            Some(batch) => {
+                let performer = self.performer.clone();
+                let batch_result = performer.process(batch).await;
+                self.handle_batch_result(batch_result).await?;
+            }
+            None => {
+                // No updates found to create a batch we wait a bit before we retry.
+                tokio::time::sleep(self.task_store_check_interval).await;
+            }
+        }
+
+        Ok(())
     }
 
     /// Checks for pending tasks and groups them in a batch. If there are no pending update,
@@ -68,7 +72,11 @@ where
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
         match self.store.peek_pending().await {
             Some(next_task_id) => {
-                let mut task = self.store.get_task(next_task_id, None).await?.unwrap();
+                let mut task = self
+                    .store
+                    .get_task(next_task_id, None)
+                    .await?;
+
                 task.events.push(TaskEvent::Batched {
                     timestamp: Utc::now(),
                     batch_id: 0,
@@ -203,7 +211,8 @@ mod test {
                     timestamp: Utc::now(),
                 })
             });
-            Ok(batch)
+
+            batch
         });
 
         let performer = Arc::new(performer);
