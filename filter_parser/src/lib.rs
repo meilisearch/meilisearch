@@ -179,7 +179,7 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     let parsed = preceded(
         tuple((multispace0, tag("_geoRadius"))),
         // if we were able to parse `_geoRadius` and can't parse the rest of the input we returns a failure
-        cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
+        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     )(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
 
@@ -221,11 +221,11 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
                 Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
             }),
         ),
-        |c| parse_geo_radius(c),
-        |c| parse_condition(c),
-        |c| parse_to(c),
+        parse_geo_radius,
+        parse_condition,
+        parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
-        |c| parse_geo_point(c),
+        parse_geo_point,
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
     .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
