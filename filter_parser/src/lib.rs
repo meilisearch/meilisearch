@@ -13,7 +13,7 @@
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
-//! geoRadius      = WS* ~ "_geoRadius(" ~ float ~ "," ~ float ~ "," float ~ ")"
+//! geoRadius      = WS* ~ "_geoRadius(" ~ WS* ~ float ~ WS* ~ "," ~ WS* ~ float ~ WS* ~ "," float ~ WS* ~ ")"
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
