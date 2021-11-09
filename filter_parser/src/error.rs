@@ -109,30 +109,34 @@ impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let input = self.context.fragment();
 
+        // When printing our error message we want to escape all `\n` to be sure we keep our format with the
+        // first line being the diagnostic and the second line being the incriminated filter.
+        let escaped_input = input.escape_debug();
+
         match self.kind {
             ErrorKind::ExpectedValue if input.trim().is_empty() => {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
             }
             ErrorKind::MissingClosingDelimiter(c) => {
-                writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", input, c)?
+                writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
             }
             ErrorKind::ExpectedValue => {
-                writeln!(f, "Was expecting a value but instead got `{}`.", input)?
+                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
             }
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
                 writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` but instead got nothing.")?
             }
             ErrorKind::InvalidPrimary => {
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `{}`.", input)?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `{}`.", escaped_input)?
             }
             ErrorKind::ExpectedEof => {
-                writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", input)?
+                writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
             }
             ErrorKind::Geo => {
                 writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
             }
             ErrorKind::ReservedGeo(name) => {
-                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.", name)?
+                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.", name.escape_debug())?
             }
             ErrorKind::MisusedGeo => {
                 writeln!(f, "The `_geoRadius` filter is an operation and can't be used as a value.")?
@@ -148,6 +152,7 @@ impl<'a> Display for Error<'a> {
         }
         let base_column = self.context.get_utf8_column();
         let size = self.context.fragment().chars().count();
-        write!(f, "{}:{} in `{}`.", base_column, base_column + size, self.context.extra,)
+
+        write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra)
     }
 }
