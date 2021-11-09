@@ -46,12 +46,12 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let (input, (fid, op, value)) = tuple((parse_value, operator, cut(parse_value)))(input)?;
 
     let condition = match *op.fragment() {
-        "=" => FilterCondition::Condition { fid, op: Equal(value) },
-        "!=" => FilterCondition::Condition { fid, op: NotEqual(value) },
-        ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
-        "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
         "<=" => FilterCondition::Condition { fid, op: LowerThanOrEqual(value) },
         ">=" => FilterCondition::Condition { fid, op: GreaterThanOrEqual(value) },
+        "!=" => FilterCondition::Condition { fid, op: NotEqual(value) },
+        "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
+        ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
+        "=" => FilterCondition::Condition { fid, op: Equal(value) },
         _ => unreachable!(),
     };
 
