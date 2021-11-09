@@ -33,5 +33,4 @@ cargo fuzz run parse -- -max_len=500
 ## What to do if you find a bug in the parser
 
 - Write a test at the end of the [`lib.rs`](./src/lib.rs) to ensure it never happens again.
-- Add a file in [the corpus directory](./fuzz/corpus/parse/) with your filter to help the fuzzer finding new bug. Since this directory is going to be heavily polluted by the execution of the fuzzer it's in the gitignore and you'll need to force push your new test.
-  Since this directory is going to be heavily polluted by the execution of the fuzzer it's in the gitignore and you'll need to force add your new test.
+- Add a file in [the corpus directory](./fuzz/corpus/parse/) with your filter to help the fuzzer find new bugs. Since this directory is going to be heavily polluted by the execution of the fuzzer it's in the gitignore and you'll need to force push your new test.

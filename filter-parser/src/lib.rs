@@ -141,7 +141,7 @@ impl<'a> FilterCondition<'a> {
     }
 }
 
-/// remove OPTIONAL whitespaces before AND after the the provided parser.
+/// remove OPTIONAL whitespaces before AND after the provided parser.
 fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) -> IResult<O> {
     delimited(multispace0, inner, multispace0)
 }
@@ -184,7 +184,7 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoRadius but not after
     let parsed = preceded(
         tuple((multispace0, tag("_geoRadius"))),
-        // if we were able to parse `_geoRadius` and can't parse the rest of the input we returns a failure
+        // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     )(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
@@ -212,7 +212,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
-    // if we succeeded we still returns a Failure because geoPoints are not allowed
+    // if we succeeded we still return a `Failure` because geoPoints are not allowed
     Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
 }
 
