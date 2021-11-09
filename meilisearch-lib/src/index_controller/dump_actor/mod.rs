@@ -154,7 +154,7 @@ impl DumpInfo {
     }
 }
 
-    #[allow(dead_code)]
+#[allow(dead_code)]
 pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
@@ -229,7 +229,7 @@ pub fn load_dump(
     Ok(())
 }
 
-    #[allow(dead_code)]
+#[allow(dead_code)]
 struct DumpTask<U, I> {
     dump_path: PathBuf,
     db_path: PathBuf,
@@ -353,7 +353,7 @@ mod test {
             // this should do nothing
             db_path: tmp.path().into(),
             index_resolver,
-        //    update_sender,
+            //    update_sender,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
             index_db_size: 4096 * 10,

@@ -55,7 +55,7 @@ where
         Self {
             inbox: Some(inbox),
             index_resolver,
-      //       update,
+            //       update,
             dump_path: dump_path.as_ref().into(),
             analytics_path: analytics_path.as_ref().into(),
             dump_infos,

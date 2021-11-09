@@ -117,9 +117,7 @@ pub async fn search_with_url_query(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch
-        .search(path.into_inner(), query)
-        .await?;
+    let search_result = meilisearch.search(path.into_inner(), query).await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]
@@ -144,9 +142,7 @@ pub async fn search_with_post(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch
-        .search(path.into_inner(), query)
-        .await?;
+    let search_result = meilisearch.search(path.into_inner(), query).await?;
 
     // Tests that the nb_hits is always set to false
     #[cfg(test)]

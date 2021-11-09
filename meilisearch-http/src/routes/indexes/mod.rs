@@ -59,7 +59,9 @@ pub async fn create_index(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let IndexCreateRequest { primary_key, uid, ..} = body.into_inner();
+    let IndexCreateRequest {
+        primary_key, uid, ..
+    } = body.into_inner();
 
     analytics.publish(
         "Index Created".to_string(),
@@ -131,10 +133,7 @@ pub async fn delete_index(
 ) -> Result<HttpResponse, ResponseError> {
     let uid = path.into_inner();
     let update = Update::DeleteIndex;
-    let task: TaskResponse = meilisearch
-        .register_update(uid, update)
-        .await?
-        .into();
+    let task: TaskResponse = meilisearch.register_update(uid, update).await?.into();
 
     Ok(HttpResponse::Ok().json(task))
 }

@@ -1,8 +1,8 @@
 #![allow(rustdoc::private_intra_doc_links)]
 #[macro_use]
 pub mod error;
-mod task;
 pub mod analytics;
+mod task;
 #[macro_use]
 pub mod extractors;
 pub mod helpers;

@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_lib::tasks::task_store::TaskFilter;
+use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;

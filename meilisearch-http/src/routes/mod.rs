@@ -15,8 +15,7 @@ pub mod indexes;
 mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(web::scope("/tasks").configure(tasks::configure))
+    cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/keys").route(web::get().to(list_keys)))

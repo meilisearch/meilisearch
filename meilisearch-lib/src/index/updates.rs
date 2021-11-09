@@ -171,7 +171,7 @@ impl Index {
     fn update_primary_key_txn<'a, 'b>(
         &'a self,
         txn: &mut heed::RwTxn<'a, 'b>,
-        primary_key: String
+        primary_key: String,
     ) -> Result<IndexMeta> {
         let mut builder = self.update_handler.update_builder().settings(txn, self);
         builder.set_primary_key(primary_key);
@@ -215,7 +215,7 @@ impl Index {
             .clear_documents(&mut txn, self)
             .execute()?;
 
-            txn.commit()?;
+        txn.commit()?;
 
         Ok(UpdateResult::Other)
     }
@@ -252,13 +252,13 @@ impl Index {
         Ok(UpdateResult::DocumentsAddition(addition))
     }
 
-    pub fn update_settings(
-        &self,
-        settings: &Settings<Checked>,
-    ) -> Result<UpdateResult> {
+    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut txn = self.write_txn()?;
-        let mut builder = self.update_handler.update_builder().settings(&mut txn, self);
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .settings(&mut txn, self);
 
         apply_settings_to_builder(settings, &mut builder);
 

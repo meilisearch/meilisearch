@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use milli::update::IndexDocumentsMethod;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::index::{Settings, Unchecked};
@@ -40,12 +41,6 @@ pub struct Task {
     pub events: Vec<TaskEvent>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
-pub enum DocumentAdditionMergeStrategy {
-    UpdateDocument,
-    ReplaceDocument,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum DocumentDeletion {
     Clear,
@@ -56,7 +51,7 @@ pub enum DocumentDeletion {
 pub enum TaskContent {
     DocumentAddition {
         content_uuid: Uuid,
-        merge_strategy: DocumentAdditionMergeStrategy,
+        merge_strategy: IndexDocumentsMethod,
         primary_key: Option<String>,
         documents_count: usize,
     },
@@ -65,7 +60,7 @@ pub enum TaskContent {
     IndexDeletion,
     CreateIndex {
         primary_key: Option<String>,
-    }
+    },
 }
 
 #[cfg(test)]
@@ -86,25 +81,25 @@ mod test {
 
     impl Arbitrary for TaskContent {
         fn arbitrary(g: &mut Gen) -> Self {
-           let rand = g.choose(&[1, 2, 3, 4]).unwrap();
-           match rand {
-               1 => Self::DocumentAddition {
-                content_uuid: Uuid::new_v4(),
-                merge_strategy: DocumentAdditionMergeStrategy::arbitrary(g),
-                primary_key: Option::arbitrary(g),
-                documents_count: usize::arbitrary(g),
-            },
-               2 => Self::DocumentDeletion(DocumentDeletion::arbitrary(g)),
-               3 => Self::IndexDeletion,
-               4 => Self::SettingsUpdate(Settings::arbitrary(g)),
-               _ => unreachable!()
-           }
-        }
-    }
-
-    impl Arbitrary for DocumentAdditionMergeStrategy {
-        fn arbitrary(g: &mut Gen) -> Self {
-            *g.choose(&[Self::ReplaceDocument, Self::UpdateDocument]).unwrap()
+            let rand = g.choose(&[1, 2, 3, 4]).unwrap();
+            let merge_strategy = *g
+                .choose(&[
+                    IndexDocumentsMethod::ReplaceDocuments,
+                    IndexDocumentsMethod::UpdateDocuments,
+                ])
+                .unwrap();
+            match rand {
+                1 => Self::DocumentAddition {
+                    content_uuid: Uuid::new_v4(),
+                    merge_strategy,
+                    primary_key: Option::arbitrary(g),
+                    documents_count: usize::arbitrary(g),
+                },
+                2 => Self::DocumentDeletion(DocumentDeletion::arbitrary(g)),
+                3 => Self::IndexDeletion,
+                4 => Self::SettingsUpdate(Settings::arbitrary(g)),
+                _ => unreachable!(),
+            }
         }
     }
 

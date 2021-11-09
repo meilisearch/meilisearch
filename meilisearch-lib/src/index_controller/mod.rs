@@ -27,16 +27,16 @@ use crate::index::{
 use crate::index_controller::index_resolver::create_index_resolver;
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
-use crate::tasks::{create_task_store, TaskStore};
-use crate::tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
+use crate::tasks::{create_task_store, TaskStore};
 use error::Result;
 
 // use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
-use self::index_resolver::IndexResolver;
-use self::index_resolver::index_store::{MapIndexStore, IndexStore};
+use self::index_resolver::index_store::{IndexStore, MapIndexStore};
 use self::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
+use self::index_resolver::IndexResolver;
 use self::update_file_store::UpdateFileStore;
 //use self::updates::UpdateMsg;
 
@@ -161,23 +161,23 @@ impl IndexControllerBuilder {
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
-       //  if let Some(ref path) = self.import_snapshot {
-       //      info!("Loading from snapshot {:?}", path);
-       //      load_snapshot(
-       //          db_path.as_ref(),
-       //          path,
-       //          self.ignore_snapshot_if_db_exists,
-       //          self.ignore_missing_snapshot,
-       //      )?;
-       //  } else if let Some(ref src_path) = self.dump_src {
-       //      load_dump(
-       //          db_path.as_ref(),
-       //          src_path,
-       //          index_size,
-       //          update_store_size,
-       //          &indexer_options,
-       //      )?;
-       //  }
+        //  if let Some(ref path) = self.import_snapshot {
+        //      info!("Loading from snapshot {:?}", path);
+        //      load_snapshot(
+        //          db_path.as_ref(),
+        //          path,
+        //          self.ignore_snapshot_if_db_exists,
+        //          self.ignore_missing_snapshot,
+        //      )?;
+        //  } else if let Some(ref src_path) = self.dump_src {
+        //      load_dump(
+        //          db_path.as_ref(),
+        //          src_path,
+        //          index_size,
+        //          update_store_size,
+        //          &indexer_options,
+        //      )?;
+        //  }
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
@@ -226,7 +226,7 @@ impl IndexControllerBuilder {
         Ok(IndexController {
             index_resolver,
             task_store,
-          //  dump_handle,
+            //  dump_handle,
             update_file_store,
         })
     }
@@ -295,9 +295,10 @@ impl IndexControllerBuilder {
 }
 
 impl<U, I> IndexController<U, I>
-    where U: UuidStore,
-            I: IndexStore,
-    {
+where
+    U: UuidStore,
+    I: IndexStore,
+{
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
     }
@@ -353,7 +354,7 @@ impl<U, I> IndexController<U, I>
 
                 TaskContent::DocumentAddition {
                     content_uuid,
-                    merge_strategy: DocumentAdditionMergeStrategy::ReplaceDocument,
+                    merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
                     primary_key,
                     documents_count,
                 }
@@ -544,7 +545,7 @@ mod test {
             index_resolver: IndexResolver<MockUuidStore, MockIndexStore>,
             task_store: TaskStore,
             update_file_store: UpdateFileStore,
-        //     dump_handle: D,
+            //     dump_handle: D,
         ) -> Self {
             IndexController {
                 index_resolver: Arc::new(index_resolver),

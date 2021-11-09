@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fs::{create_dir_all};
+use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 
 use heed::types::{ByteSlice, Str};

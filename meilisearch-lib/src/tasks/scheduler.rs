@@ -27,12 +27,12 @@ pub struct Scheduler<P> {
 }
 
 impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
-    pub fn new(
-        store: TaskStore,
-        performer: Arc<P>,
-        task_store_check_interval: Duration,
-        ) -> Self {
-        Self { store, performer, task_store_check_interval }
+    pub fn new(store: TaskStore, performer: Arc<P>, task_store_check_interval: Duration) -> Self {
+        Self {
+            store,
+            performer,
+            task_store_check_interval,
+        }
     }
 
     pub async fn run(self) {
@@ -90,15 +90,16 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
 mod test {
     use nelson::Mocker;
 
-    use super::*;
     use super::super::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
     use super::super::MockTaskPerformer;
+    use super::*;
 
     #[tokio::test]
     async fn test_prepare_batch_full() {
         let mocker = Mocker::default();
 
-        mocker.when::<TaskId, Result<Option<Task>>>("get_task")
+        mocker
+            .when::<TaskId, Result<Option<Task>>>("get_task")
             .once()
             .then(|id| {
                 let task = Task {
@@ -110,7 +111,9 @@ mod test {
                 Ok(Some(task))
             });
 
-        mocker.when::<(), Option<TaskId>>("peek_pending").then(|()| { Some(1) });
+        mocker
+            .when::<(), Option<TaskId>>("peek_pending")
+            .then(|()| Some(1));
 
         let store = TaskStore::mock(mocker);
         let performer = Arc::new(MockTaskPerformer::new());
@@ -130,7 +133,9 @@ mod test {
     #[tokio::test]
     async fn test_prepare_batch_empty() {
         let mocker = Mocker::default();
-        mocker.when::<(), Option<TaskId>>("peek_pending").then(|()| None);
+        mocker
+            .when::<(), Option<TaskId>>("peek_pending")
+            .then(|()| None);
 
         let store = TaskStore::mock(mocker);
         let performer = Arc::new(MockTaskPerformer::new());
@@ -148,8 +153,11 @@ mod test {
     async fn test_loop_run_normal() {
         let mocker = Mocker::default();
         let mut id = Some(1);
-        mocker.when::<(), Option<TaskId>>("peek_pending").then(move |()| { id.take() });
-        mocker.when::<TaskId, Result<Option<Task>>>("get_task")
+        mocker
+            .when::<(), Option<TaskId>>("peek_pending")
+            .then(move |()| id.take());
+        mocker
+            .when::<TaskId, Result<Option<Task>>>("get_task")
             .once()
             .then(|id| {
                 let task = Task {
@@ -160,26 +168,31 @@ mod test {
                 };
                 Ok(Some(task))
             });
-        mocker.when::<Vec<Task>, Result<()>>("update_tasks")
+        mocker
+            .when::<Vec<Task>, Result<()>>("update_tasks")
             .once()
             .then(|tasks| {
                 assert_eq!(tasks.len(), 1);
-                assert!(tasks[0].events.iter().find(|e| matches!(e, &TaskEvent::Succeded { .. })).is_some());
+                assert!(tasks[0]
+                    .events
+                    .iter()
+                    .find(|e| matches!(e, &TaskEvent::Succeded { .. }))
+                    .is_some());
                 Ok(())
             });
 
         let store = TaskStore::mock(mocker);
 
         let mut performer = MockTaskPerformer::new();
-        performer.expect_process()
-            .once()
-            .returning(|mut batch| {
-                batch.tasks.iter_mut().for_each(|t| t.events.push(TaskEvent::Succeded {
+        performer.expect_process().once().returning(|mut batch| {
+            batch.tasks.iter_mut().for_each(|t| {
+                t.events.push(TaskEvent::Succeded {
                     result: TaskResult,
                     timestamp: Utc::now(),
-                }));
-                Ok(batch)
+                })
             });
+            Ok(batch)
+        });
 
         let performer = Arc::new(performer);
 
@@ -193,7 +206,7 @@ mod test {
 
         match tokio::time::timeout(Duration::from_millis(100), handle).await {
             Ok(r) => r.unwrap(),
-            _ => ()
+            _ => (),
         }
     }
 }

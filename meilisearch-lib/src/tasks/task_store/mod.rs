@@ -10,8 +10,8 @@ use tokio::sync::RwLock;
 
 use crate::tasks::task::TaskEvent;
 
-use super::Result;
 use super::task::{Task, TaskContent, TaskId};
+use super::Result;
 
 #[cfg(test)]
 pub use store::test::MockStore as Store;
@@ -34,7 +34,9 @@ impl TaskFilter {
 
     /// Adds an index to the filter, so the filter must match this index.
     pub fn filter_index(&mut self, index: String) {
-        self.indexes.get_or_insert_with(Default::default).insert(index);
+        self.indexes
+            .get_or_insert_with(Default::default)
+            .insert(index);
     }
 }
 
@@ -132,14 +134,14 @@ impl TaskStore {
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-       let store = self.store.clone();
+        let store = self.store.clone();
 
-       tokio::task::spawn_blocking(move || {
-           let txn = store.rtxn()?;
-           let tasks = store.list_tasks(&txn, offset, filter, limit)?;
-           Ok(tasks)
-       })
-       .await?
+        tokio::task::spawn_blocking(move || {
+            let txn = store.rtxn()?;
+            let tasks = store.list_tasks(&txn, offset, filter, limit)?;
+            Ok(tasks)
+        })
+        .await?
     }
 }
 

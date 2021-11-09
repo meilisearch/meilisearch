@@ -76,10 +76,7 @@ pub async fn delete_document(
         index_uid,
     } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
-    let task: TaskResponse = meilisearch
-        .register_update(index_uid, update)
-        .await?
-        .into();
+    let task: TaskResponse = meilisearch.register_update(index_uid, update).await?.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -137,7 +134,7 @@ pub async fn add_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
-    let index_uid =path.into_inner();
+    let index_uid = path.into_inner();
 
     analytics.add_documents(
         &params,
@@ -190,7 +187,6 @@ pub async fn update_documents(
     .await?;
 
     Ok(HttpResponse::Ok().json(task))
-
 }
 
 async fn document_addition(
@@ -233,10 +229,7 @@ async fn document_addition(
         format,
     };
 
-    let task = meilisearch
-        .register_update(index_uid, update)
-        .await?
-        .into();
+    let task = meilisearch.register_update(index_uid, update).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(task)

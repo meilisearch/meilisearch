@@ -1,5 +1,8 @@
-use chrono::{Duration, DateTime, Utc};
-use meilisearch_lib::tasks::task::{DocumentAdditionMergeStrategy, DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use chrono::{DateTime, Duration, Utc};
+use meilisearch_lib::{
+    milli::update::IndexDocumentsMethod,
+    tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId},
+};
 use serde::{Serialize, Serializer};
 
 use crate::error::ResponseError;
@@ -35,12 +38,15 @@ enum TaskDetails {
     DocumentsUpdate { number_of_documents: usize },
 }
 
-fn serialize_duration<S: Serializer>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_duration<S: Serializer>(
+    duration: &Option<Duration>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     match duration {
         Some(duration) => {
             let duration_str = duration.to_string();
             serializer.serialize_str(&duration_str)
-        },
+        }
         None => serializer.serialize_none(),
     }
 }
@@ -95,8 +101,9 @@ impl From<Task> for TaskResponse {
                 };
 
                 let task_type = match merge_strategy {
-                    DocumentAdditionMergeStrategy::UpdateDocument => TaskType::DocumentsPartial,
-                    DocumentAdditionMergeStrategy::ReplaceDocument => TaskType::DocumentsAddition,
+                    IndexDocumentsMethod::UpdateDocuments => TaskType::DocumentsPartial,
+                    IndexDocumentsMethod::ReplaceDocuments => TaskType::DocumentsAddition,
+                    _ => unreachable!("Unexpected document merge strategy."),
                 };
 
                 (task_type, Some(details))

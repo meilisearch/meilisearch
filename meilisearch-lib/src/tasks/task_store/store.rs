@@ -10,8 +10,8 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::result::Result as StdResult;
 
-use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
+use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 
 use crate::tasks::task::{Task, TaskId};
 
@@ -394,7 +394,6 @@ pub mod test {
 
         let mut task_2 = Task::arbitrary(&mut gen);
         task_2.index_uid = "test1".into();
-
 
         let mut txn = store.wtxn().unwrap();
         store.put(&mut txn, &task_1).unwrap();

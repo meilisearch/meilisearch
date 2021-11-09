@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse};
-use meilisearch_lib::MeiliSearch;
 use meilisearch_lib::tasks::task::TaskId;
+use meilisearch_lib::MeiliSearch;
 
 use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};

@@ -2,8 +2,8 @@ pub mod error;
 pub mod index_store;
 pub mod uuid_store;
 
-use std::result::Result as StdResult;
 use std::path::Path;
+use std::result::Result as StdResult;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
@@ -12,74 +12,74 @@ use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
 use crate::index::updates::UpdateResult;
-use crate::tasks::task::{DocumentDeletion, TaskResult};
-use crate::tasks::{TaskPerformer, batch::Batch, task::{DocumentAdditionMergeStrategy, TaskContent, TaskError, TaskEvent}};
-
-use crate::options::IndexerOpts;
 use crate::index::Index;
+use crate::options::IndexerOpts;
+use crate::tasks::batch::Batch;
+use crate::tasks::task::{DocumentDeletion, TaskContent, TaskError, TaskEvent, TaskResult};
+use crate::tasks::TaskPerformer;
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
 
 #[async_trait::async_trait]
 impl<U, I> TaskPerformer for IndexResolver<U, I>
-where U: UuidStore + Send + Sync + 'static,
-      I: IndexStore + Send + Sync + 'static,
+where
+    U: UuidStore + Send + Sync + 'static,
+    I: IndexStore + Send + Sync + 'static,
 {
     type Error = IndexResolverError;
 
     async fn process(&self, mut batch: Batch) -> StdResult<Batch, Self::Error> {
-        use milli::update::IndexDocumentsMethod;
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
-
 
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
 
             let index_uid = batch.index_uid.clone();
             let result = match &task.content {
-                TaskContent::DocumentAddition { content_uuid, merge_strategy, primary_key, .. } =>  {
-                    let method = match merge_strategy {
-                        DocumentAdditionMergeStrategy::UpdateDocument => IndexDocumentsMethod::UpdateDocuments,
-                        DocumentAdditionMergeStrategy::ReplaceDocument => IndexDocumentsMethod::ReplaceDocuments,
-                    };
-
+                TaskContent::DocumentAddition {
+                    content_uuid,
+                    merge_strategy,
+                    primary_key,
+                    ..
+                } => {
                     let primary_key = primary_key.clone();
                     let content_uuid = *content_uuid;
+                    let method = *merge_strategy;
 
                     let index = self.get_or_create_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move ||
-                        index.update_documents(
-                            method,
-                            content_uuid,
-                            primary_key,
-                        )).await?
-                },
+                    tokio::task::spawn_blocking(move || {
+                        index.update_documents(method, content_uuid, primary_key)
+                    })
+                    .await?
+                }
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                     let ids = ids.clone();
                     let index = self.get_or_create_index(index_uid).await?;
                     tokio::task::spawn_blocking(move || index.delete_documents(&ids)).await?
-                },
+                }
                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                     let index = self.get_or_create_index(index_uid).await?;
                     tokio::task::spawn_blocking(move || index.clear_documents()).await?
-                },
+                }
                 TaskContent::SettingsUpdate(settings) => {
                     let index = self.get_or_create_index(index_uid).await?;
                     let settings = settings.clone();
-                    tokio::task::spawn_blocking(move || index.update_settings(&settings.check())).await?
-                },
+                    tokio::task::spawn_blocking(move || index.update_settings(&settings.check()))
+                        .await?
+                }
                 TaskContent::IndexDeletion => {
                     self.delete_index(index_uid).await?;
 
                     Ok(UpdateResult::Other)
-                },
+                }
                 TaskContent::CreateIndex { primary_key } => {
                     let index = self.create_index(index_uid).await?;
 
                     if let Some(primary_key) = primary_key {
                         let primary_key = primary_key.clone();
-                        tokio::task::spawn_blocking(move || index.update_primary_key(primary_key)).await??;
+                        tokio::task::spawn_blocking(move || index.update_primary_key(primary_key))
+                            .await??;
                     }
 
                     Ok(UpdateResult::Other)
@@ -92,13 +92,11 @@ where U: UuidStore + Send + Sync + 'static,
                         result: TaskResult,
                         timestamp: Utc::now(),
                     });
-                },
-                Err(_err) => {
-                    task.events.push(TaskEvent::Failed {
-                        error: TaskError,
-                        timestamp: Utc::now(),
-                    })
-                },
+                }
+                Err(_err) => task.events.push(TaskEvent::Failed {
+                    error: TaskError,
+                    timestamp: Utc::now(),
+                }),
             }
         }
 
@@ -165,27 +163,24 @@ where
     //     Ok(indexes)
     // }
 
-   //  pub async fn get_uuids_size(&self) -> Result<u64> {
-   //      Ok(self.index_uuid_store.get_size().await?)
-   //  }
+    //  pub async fn get_uuids_size(&self) -> Result<u64> {
+    //      Ok(self.index_uuid_store.get_size().await?)
+    //  }
 
-   //  pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-   //      let uuids = self
-   //          .index_uuid_store
-   //          .snapshot(path.as_ref().to_owned())
-   //          .await?;
-   //      let mut indexes = Vec::new();
-   //      for uuid in uuids {
-   //          indexes.push(self.get_index_by_uuid(uuid).await?);
-   //      }
+    //  pub async fn snapshot(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+    //      let uuids = self
+    //          .index_uuid_store
+    //          .snapshot(path.as_ref().to_owned())
+    //          .await?;
+    //      let mut indexes = Vec::new();
+    //      for uuid in uuids {
+    //          indexes.push(self.get_index_by_uuid(uuid).await?);
+    //      }
 
-   //      Ok(indexes)
-   //  }
+    //      Ok(indexes)
+    //  }
 
-    pub async fn create_index(
-        &self,
-        uid: String,
-    ) -> Result<Index> {
+    pub async fn create_index(&self, uid: String) -> Result<Index> {
         if !is_index_uid_valid(&uid) {
             return Err(IndexResolverError::BadlyFormatted(uid));
         }
@@ -213,10 +208,7 @@ where
     }
 
     /// Get or create an index with name `uid`.
-    pub async fn get_or_create_index(
-    &self,
-    uid: String,
-    ) -> Result<Index> {
+    pub async fn get_or_create_index(&self, uid: String) -> Result<Index> {
         match self.create_index(uid).await {
             Ok(index) => Ok(index),
             Err(IndexResolverError::IndexAlreadyExists(uid)) => self.get_index(uid).await,
