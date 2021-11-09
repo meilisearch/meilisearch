@@ -158,6 +158,17 @@ where
 
                 Ok(UpdateResult::Other)
             }
+            TaskContent::UpdateIndex { primary_key } => {
+                let index = self.get_index(index_uid).await?;
+
+                if let Some(primary_key) = primary_key {
+                    let primary_key = primary_key.clone();
+                    spawn_blocking(move || index.update_primary_key(primary_key))
+                    .await??;
+                }
+
+                Ok(UpdateResult::Other)
+            },
         }
     }
 

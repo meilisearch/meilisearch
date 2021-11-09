@@ -1,8 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
 use meilisearch_error::ResponseError;
+use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
-use meilisearch_lib::index::{Settings, Unchecked};
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, Serialize)]
@@ -33,7 +33,7 @@ enum TaskDetails {
     #[serde(rename_all = "camelCase")]
     DocumentsUpdate { number_of_documents: usize },
     #[serde(rename_all = "camelCase")]
-    Settings{
+    Settings {
         #[serde(flatten)]
         settings: Settings<Unchecked>,
     },
@@ -88,7 +88,9 @@ impl From<Task> for TaskResponse {
             TaskEvent::Succeded { timestamp, .. } => {
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
-            TaskEvent::Failed { timestamp, error } => (TaskStatus::Failed, Some(error.clone()), Some(*timestamp)),
+            TaskEvent::Failed { timestamp, error } => {
+                (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
+            }
         };
 
         let (task_type, details) = match content {
@@ -117,10 +119,12 @@ impl From<Task> for TaskResponse {
             ),
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
             TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
-            TaskContent::SettingsUpdate(settings) => {
-                (TaskType::SettingsUpdate, Some(TaskDetails::Settings { settings }))
-            },
+            TaskContent::SettingsUpdate(settings) => (
+                TaskType::SettingsUpdate,
+                Some(TaskDetails::Settings { settings }),
+            ),
             TaskContent::CreateIndex { .. } => (TaskType::IndexCreation, None),
+            TaskContent::UpdateIndex { .. } => (TaskType::IndexUpdate, None),
         };
 
         let enqueued_at = match events.first().unwrap() {

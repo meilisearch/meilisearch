@@ -62,6 +62,9 @@ pub enum TaskContent {
     CreateIndex {
         primary_key: Option<String>,
     },
+    UpdateIndex {
+        primary_key: Option<String>,
+    },
 }
 
 #[cfg(test)]
