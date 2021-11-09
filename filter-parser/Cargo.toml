@@ -1,5 +1,5 @@
 [package]
-name = "filter_parser"
+name = "filter-parser"
 version = "0.1.0"
 edition = "2021"
 

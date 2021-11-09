@@ -38,7 +38,7 @@ smallvec = "1.6.1"
 tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 
-filter_parser = { path = "../filter_parser" }
+filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
 itertools = "0.10.0"

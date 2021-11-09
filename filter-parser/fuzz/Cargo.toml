@@ -1,5 +1,5 @@
 [package]
-name = "filter_parser-fuzz"
+name = "filter-parser-fuzz"
 version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
@@ -11,7 +11,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.filter_parser]
+[dependencies.filter-parser]
 path = ".."
 
 # Prevent this from interfering with workspaces
