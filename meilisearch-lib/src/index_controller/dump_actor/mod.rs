@@ -290,10 +290,10 @@ mod test {
     use futures::future::{err, ok};
     use once_cell::sync::Lazy;
     use uuid::Uuid;
+    use nelson::Mocker;
 
     use super::*;
     use crate::index::error::Result as IndexResult;
-    use crate::index::test::Mocker;
     use crate::index::Index;
     use crate::index_controller::index_resolver::error::IndexResolverError;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;

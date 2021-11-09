@@ -528,9 +528,9 @@ pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
 mod test {
     use futures::future::ok;
     use mockall::predicate::eq;
+    use nelson::Mocker;
 
     use crate::index::error::Result as IndexResult;
-    use crate::index::test::Mocker;
     use crate::index::Index;
     // use crate::index_controller::dump_actor::MockDumpActorHandle;
     use crate::index_controller::index_resolver::index_store::MockIndexStore;
