@@ -40,6 +40,7 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
@@ -62,6 +63,14 @@ type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Token<'a>(Span<'a>);
+
+impl<'a> Deref for Token<'a> {
+    type Target = &'a str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl<'a> PartialEq for Token<'a> {
     fn eq(&self, other: &Self) -> bool {

@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
+use std::ops::Deref;
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
@@ -247,10 +248,9 @@ impl<'a> Filter<'a> {
             Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(val.parse()?)),
             Condition::Between { from, to } => (Included(from.parse()?), Included(to.parse()?)),
             Condition::Equal(val) => {
-                let (_original_value, string_docids) = strings_db
-                    .get(rtxn, &(field_id, &val.inner.to_lowercase()))?
-                    .unwrap_or_default();
-                let number = val.inner.parse::<f64>().ok();
+                let (_original_value, string_docids) =
+                    strings_db.get(rtxn, &(field_id, &val.to_lowercase()))?.unwrap_or_default();
+                let number = val.parse::<f64>().ok();
                 let number_docids = match number {
                     Some(n) => {
                         let n = Included(n);
@@ -271,7 +271,7 @@ impl<'a> Filter<'a> {
                 return Ok(string_docids | number_docids);
             }
             Condition::NotEqual(val) => {
-                let number = val.inner.parse::<f64>().ok();
+                let number = val.parse::<f64>().ok();
                 let all_numbers_ids = if number.is_some() {
                     index.number_faceted_documents_ids(rtxn, field_id)?
                 } else {
@@ -318,15 +318,15 @@ impl<'a> Filter<'a> {
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
                 let filterable_fields = index.filterable_fields(rtxn)?;
-                if filterable_fields.contains(&fid.inner.to_lowercase()) {
+                if filterable_fields.contains(&fid.to_lowercase()) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
-                    if let Some(fid) = field_ids_map.id(fid.inner) {
+                    if let Some(fid) = field_ids_map.id(&fid) {
                         Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
                     } else {
                         return Err(fid.as_external_error(FilterError::InternalError))?;
                     }
                 } else {
-                    match fid.inner {
+                    match *fid.deref() {
                         attribute @ "_geo" => {
                             return Err(fid.as_external_error(FilterError::BadGeo(attribute)))?;
                         }
