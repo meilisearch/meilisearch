@@ -5,7 +5,7 @@
 //! expression     = or
 //! or             = and (~ "OR" ~ and)
 //! and            = not (~ "AND" not)*
-//! not            = ("NOT" | "!") not | primary
+//! not            = ("NOT" ~ not) | primary
 //! primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
 //! condition      = value ("==" | ">" ...) value
 //! to             = value value TO value
@@ -169,13 +169,11 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
     Ok((input, expr))
 }
 
-/// not            = ("NOT" | "!") not | primary
+/// not            = ("NOT" ~ not) | primary
 /// We can have multiple consecutive not, eg: `NOT NOT channel = mv`.
-/// If we parse a `NOT` or `!` we MUST parse something behind.
+/// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
-    alt((map(preceded(alt((tag("!"), tag("NOT"))), cut(parse_not)), |e| e.negate()), parse_primary))(
-        input,
-    )
+    alt((map(preceded(tag("NOT"), cut(parse_not)), |e| e.negate()), parse_primary))(input)
 }
 
 /// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
