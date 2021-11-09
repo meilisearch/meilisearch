@@ -138,7 +138,7 @@ pub enum Update {
 #[derive(Default, Debug)]
 pub struct IndexControllerBuilder {
     max_index_size: Option<usize>,
-    max_update_store_size: Option<usize>,
+    max_task_store_size: Option<usize>,
     snapshot_dir: Option<PathBuf>,
     import_snapshot: Option<PathBuf>,
     snapshot_interval: Option<Duration>,
@@ -159,7 +159,7 @@ impl IndexControllerBuilder {
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
         let update_store_size = self
-            .max_index_size
+            .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
         //  if let Some(ref path) = self.import_snapshot {
@@ -233,8 +233,8 @@ impl IndexControllerBuilder {
     }
 
     /// Set the index controller builder's max update store size.
-    pub fn set_max_update_store_size(&mut self, max_update_store_size: usize) -> &mut Self {
-        self.max_update_store_size.replace(max_update_store_size);
+    pub fn set_max_task_store_size(&mut self, max_update_store_size: usize) -> &mut Self {
+        self.max_task_store_size.replace(max_update_store_size);
         self
     }
 
