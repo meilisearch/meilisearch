@@ -1,6 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
 use meilisearch_error::ResponseError;
-use meilisearch_lib::{milli::update::IndexDocumentsMethod, tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId}};
+use meilisearch_lib::milli::update::IndexDocumentsMethod;
+use meilisearch_lib::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use meilisearch_lib::index::{Settings, Unchecked};
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, Serialize)]
@@ -30,6 +32,11 @@ enum TaskStatus {
 enum TaskDetails {
     #[serde(rename_all = "camelCase")]
     DocumentsUpdate { number_of_documents: usize },
+    #[serde(rename_all = "camelCase")]
+    Settings{
+        #[serde(flatten)]
+        settings: Settings<Unchecked>,
+    },
 }
 
 fn serialize_duration<S: Serializer>(
@@ -110,7 +117,9 @@ impl From<Task> for TaskResponse {
             ),
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
             TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
-            TaskContent::SettingsUpdate(_) => (TaskType::SettingsUpdate, None),
+            TaskContent::SettingsUpdate(settings) => {
+                (TaskType::SettingsUpdate, Some(TaskDetails::Settings { settings }))
+            },
             TaskContent::CreateIndex { .. } => (TaskType::IndexCreation, None),
         };
 
