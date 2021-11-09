@@ -11,7 +11,7 @@
 //! to             = value value TO value
 //! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
 //! singleQuoted   = "'" .* all but quotes "'"
-//! doubleQuoted   = "\"" (word | spaces)* "\""
+//! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = WS* ~ "_geoRadius(" ~ float ~ "," ~ float ~ "," float ~ ")"
 //! ```
