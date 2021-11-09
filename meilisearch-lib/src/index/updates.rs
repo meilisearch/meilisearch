@@ -160,13 +160,6 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: u64 },
-    Other,
-}
-
 impl Index {
     fn update_primary_key_txn<'a, 'b>(
         &'a self,
@@ -189,7 +182,8 @@ impl Index {
         Ok(res)
     }
 
-    pub fn delete_documents(&self, ids: &[String]) -> Result<UpdateResult> {
+    /// Deletes `ids` from the index, and returns how many documents were deleted.
+    pub fn delete_documents(&self, ids: &[String]) -> Result<u64> {
         let mut txn = self.write_txn()?;
         let mut builder = self
             .update_handler
@@ -205,10 +199,10 @@ impl Index {
 
         txn.commit()?;
 
-        Ok(UpdateResult::DocumentDeletion { deleted })
+        Ok(deleted)
     }
 
-    pub fn clear_documents(&self) -> Result<UpdateResult> {
+    pub fn clear_documents(&self) -> Result<()> {
         let mut txn = self.write_txn()?;
         self.update_handler
             .update_builder()
@@ -217,7 +211,7 @@ impl Index {
 
         txn.commit()?;
 
-        Ok(UpdateResult::Other)
+        Ok(())
     }
 
     pub fn update_documents(
@@ -225,7 +219,7 @@ impl Index {
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
         primary_key: Option<String>,
-    ) -> Result<UpdateResult> {
+    ) -> Result<DocumentAdditionResult> {
         trace!("performing document addition");
         let mut txn = self.write_txn()?;
 
@@ -249,10 +243,10 @@ impl Index {
 
         info!("document addition done: {:?}", addition);
 
-        Ok(UpdateResult::DocumentsAddition(addition))
+        Ok(addition)
     }
 
-    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<UpdateResult> {
+    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut txn = self.write_txn()?;
         let mut builder = self
@@ -266,7 +260,7 @@ impl Index {
 
         txn.commit()?;
 
-        Ok(UpdateResult::Other)
+        Ok(())
     }
 }
 

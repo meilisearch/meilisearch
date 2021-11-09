@@ -2,7 +2,9 @@ use chrono::{DateTime, Duration, Utc};
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
-use meilisearch_lib::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use meilisearch_lib::tasks::task::{
+    DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
+};
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, Serialize)]
@@ -31,7 +33,10 @@ enum TaskStatus {
 #[serde(untagged)]
 enum TaskDetails {
     #[serde(rename_all = "camelCase")]
-    DocumentsUpdate { number_of_documents: usize },
+    DocumentsAddition {
+        received_documents: usize,
+        indexed_documents: Option<usize>,
+    },
     #[serde(rename_all = "camelCase")]
     Settings {
         #[serde(flatten)]
@@ -39,6 +44,11 @@ enum TaskDetails {
     },
     #[serde(rename_all = "camelCase")]
     IndexInfo { primary_key: Option<String> },
+    #[serde(rename_all = "camelCase")]
+    DocumentDeletion {
+        received_document_ids: usize,
+        deleted_documents: Option<u64>,
+    },
 }
 
 fn serialize_duration<S: Serializer>(
@@ -82,27 +92,15 @@ impl From<Task> for TaskResponse {
             events,
         } = task;
 
-        // An event always has at least one event: "Created"
-        let (status, error, finished_at) = match events.last().unwrap() {
-            TaskEvent::Created(_) => (TaskStatus::Enqueued, None, None),
-            TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
-            TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
-            TaskEvent::Succeded { timestamp, .. } => {
-                (TaskStatus::Succeeded, None, Some(*timestamp))
-            }
-            TaskEvent::Failed { timestamp, error } => {
-                (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
-            }
-        };
-
-        let (task_type, details) = match content {
+        let (task_type, mut details) = match content {
             TaskContent::DocumentAddition {
                 merge_strategy,
                 documents_count,
                 ..
             } => {
-                let details = TaskDetails::DocumentsUpdate {
-                    number_of_documents: documents_count,
+                let details = TaskDetails::DocumentsAddition {
+                    received_documents: documents_count,
+                    indexed_documents: None,
                 };
 
                 let task_type = match merge_strategy {
@@ -115,8 +113,9 @@ impl From<Task> for TaskResponse {
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => (
                 TaskType::DocumentsDeletion,
-                Some(TaskDetails::DocumentsUpdate {
-                    number_of_documents: ids.len(),
+                Some(TaskDetails::DocumentDeletion {
+                    received_document_ids: ids.len(),
+                    deleted_documents: None,
                 }),
             ),
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
@@ -135,8 +134,50 @@ impl From<Task> for TaskResponse {
             ),
         };
 
-        let enqueued_at = match events.first().unwrap() {
-            TaskEvent::Created(ts) => *ts,
+        // An event always has at least one event: "Created"
+        let (status, error, finished_at) = match events.last().unwrap() {
+            TaskEvent::Created(_) => (TaskStatus::Enqueued, None, None),
+            TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
+            TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
+            TaskEvent::Succeded { timestamp, result } => {
+                match (result, &mut details) {
+                    (
+                        TaskResult::DocumentAddition {
+                            number_of_documents,
+                        },
+                        Some(TaskDetails::DocumentsAddition {
+                            ref mut indexed_documents,
+                            ..
+                        }),
+                    ) => {
+                        indexed_documents.replace(dbg!(*number_of_documents));
+                    }
+                    (
+                        TaskResult::DocumentDeletion {
+                            number_of_documents,
+                        },
+                        Some(TaskDetails::DocumentDeletion {
+                            ref mut deleted_documents,
+                            ..
+                        }),
+                    ) => {
+                        deleted_documents.replace(*number_of_documents);
+                    }
+                    (TaskResult::Other, None)
+                    | (TaskResult::Other, Some(TaskDetails::IndexInfo { .. })) => (),
+                    _ => unreachable!(
+                        "Update type from the task content should match that of its result."
+                    ),
+                }
+                (TaskStatus::Succeeded, None, Some(*timestamp))
+            }
+            TaskEvent::Failed { timestamp, error } => {
+                (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
+            }
+        };
+
+        let enqueued_at = match events.first() {
+            Some(TaskEvent::Created(ts)) => *ts,
             _ => unreachable!("A task first element should always be a cretion event."),
         };
 

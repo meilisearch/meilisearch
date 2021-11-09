@@ -12,7 +12,6 @@ use tokio::task::spawn_blocking;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
-use crate::index::updates::UpdateResult;
 use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
@@ -37,9 +36,9 @@ where
             task.events.push(TaskEvent::Processing(Utc::now()));
 
             match self.process_task(batch.index_uid.clone(), task).await {
-                Ok(_success) => {
+                Ok(success) => {
                     task.events.push(TaskEvent::Succeded {
-                        result: TaskResult,
+                        result: success,
                         timestamp: Utc::now(),
                     });
                 }
@@ -103,7 +102,7 @@ where
         }
     }
 
-    async fn process_task(&self, index_uid: String, task: &Task) -> Result<UpdateResult> {
+    async fn process_task(&self, index_uid: String, task: &Task) -> Result<TaskResult> {
         match &task.content {
             TaskContent::DocumentAddition {
                 content_uuid,
@@ -121,30 +120,32 @@ where
                     })
                     .await??;
 
-                    Ok(result)
+                    Ok(result.into())
                 }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid).await?;
-                Ok(spawn_blocking(move || index.delete_documents(&ids)).await??)
+                let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
+                Ok(TaskResult::DocumentDeletion { number_of_documents:  deleted })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                 let index = self.get_index(index_uid).await?;
-                Ok(spawn_blocking(move || index.clear_documents()).await??)
+                spawn_blocking(move || index.clear_documents()).await??;
+
+                Ok(TaskResult::Other)
             }
             TaskContent::SettingsUpdate(settings) => {
                 let index = self.get_or_create_index(index_uid).await?;
                 let settings = settings.clone();
-                let result = spawn_blocking(move || index.update_settings(&settings.check()))
-                .await??;
+                spawn_blocking(move || index.update_settings(&settings.check())).await??;
 
-                Ok(result)
+                Ok(TaskResult::Other)
             }
             TaskContent::IndexDeletion => {
                 self.delete_index(index_uid).await?;
                 // TODO: handle task deletion
 
-                Ok(UpdateResult::Other)
+                Ok(TaskResult::Other)
             }
             TaskContent::CreateIndex { primary_key } => {
                 let index = self.create_index(index_uid).await?;
@@ -155,7 +156,7 @@ where
                     .await??;
                 }
 
-                Ok(UpdateResult::Other)
+                Ok(TaskResult::Other)
             }
             TaskContent::UpdateIndex { primary_key } => {
                 let index = self.get_index(index_uid).await?;
@@ -166,7 +167,7 @@ where
                     .await??;
                 }
 
-                Ok(UpdateResult::Other)
+                Ok(TaskResult::Other)
             },
         }
     }

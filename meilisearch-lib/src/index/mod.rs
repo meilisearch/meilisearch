@@ -26,6 +26,7 @@ pub mod test {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use milli::update::DocumentAdditionResult;
     use milli::update::IndexDocumentsMethod;
     use serde_json::{Map, Value};
     use uuid::Uuid;
@@ -36,7 +37,6 @@ pub mod test {
     use super::error::Result;
     use super::index::Index;
     use super::update_handler::UpdateHandler;
-    use super::updates::UpdateResult;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
 
     #[derive(Clone)]
@@ -163,14 +163,14 @@ pub mod test {
             method: IndexDocumentsMethod,
             content_uuid: Uuid,
             primary_key: Option<String>,
-        ) -> Result<UpdateResult> {
+        ) -> Result<DocumentAdditionResult> {
             match self {
                 MockIndex::Real(index) => index.update_documents(method, content_uuid, primary_key),
                 MockIndex::Mock(_) => todo!(),
             }
         }
 
-        pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<UpdateResult> {
+        pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.update_settings(settings),
                 MockIndex::Mock(_) => todo!(),
@@ -184,14 +184,14 @@ pub mod test {
             }
         }
 
-        pub fn delete_documents(&self, ids: &[String]) -> Result<UpdateResult> {
+        pub fn delete_documents(&self, ids: &[String]) -> Result<u64> {
             match self {
                 MockIndex::Real(index) => index.delete_documents(ids),
                 MockIndex::Mock(_) => todo!(),
             }
         }
 
-        pub fn clear_documents(&self) -> Result<UpdateResult> {
+        pub fn clear_documents(&self) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.clear_documents(),
                 MockIndex::Mock(_) => todo!(),

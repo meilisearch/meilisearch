@@ -207,7 +207,7 @@ mod test {
         performer.expect_process().once().returning(|mut batch| {
             batch.tasks.iter_mut().for_each(|t| {
                 t.events.push(TaskEvent::Succeded {
-                    result: TaskResult,
+                    result: TaskResult::Other,
                     timestamp: Utc::now(),
                 })
             });

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use meilisearch_error::ResponseError;
-use milli::update::IndexDocumentsMethod;
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,10 +11,23 @@ use super::batch::BatchId;
 pub type TaskId = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TaskResult;
+pub enum TaskResult {
+    DocumentAddition {
+        number_of_documents: usize,
+    },
+    DocumentDeletion {
+        number_of_documents: u64,
+    },
+    Other,
+}
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TaskError;
+impl From<DocumentAdditionResult> for TaskResult {
+    fn from(other : DocumentAdditionResult) -> Self {
+        Self::DocumentAddition {
+            number_of_documents: other.nb_documents,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskEvent {
@@ -135,15 +148,15 @@ mod test {
         }
     }
 
-    impl Arbitrary for TaskError {
-        fn arbitrary(_: &mut Gen) -> Self {
-            Self
-        }
-    }
-
     impl Arbitrary for TaskResult {
-        fn arbitrary(_: &mut Gen) -> Self {
-            Self
+        fn arbitrary(g: &mut Gen) -> Self {
+            let n = g.choose(&[1, 2, 3]).unwrap();
+            match n {
+                1 => Self::Other,
+                2 => Self::DocumentAddition { number_of_documents: usize::arbitrary(g) },
+                3 => Self::DocumentDeletion { number_of_documents: u64::arbitrary(g) },
+                _ => unreachable!()
+            }
         }
     }
 }
