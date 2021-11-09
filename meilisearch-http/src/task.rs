@@ -37,6 +37,8 @@ enum TaskDetails {
         #[serde(flatten)]
         settings: Settings<Unchecked>,
     },
+    #[serde(rename_all = "camelCase")]
+    IndexInfo { primary_key: Option<String> },
 }
 
 fn serialize_duration<S: Serializer>(
@@ -123,8 +125,14 @@ impl From<Task> for TaskResponse {
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
-            TaskContent::CreateIndex { .. } => (TaskType::IndexCreation, None),
-            TaskContent::UpdateIndex { .. } => (TaskType::IndexUpdate, None),
+            TaskContent::CreateIndex { primary_key } => (
+                TaskType::IndexCreation,
+                Some(TaskDetails::IndexInfo { primary_key }),
+            ),
+            TaskContent::UpdateIndex { primary_key } => (
+                TaskType::IndexUpdate,
+                Some(TaskDetails::IndexInfo { primary_key }),
+            ),
         };
 
         let enqueued_at = match events.first().unwrap() {
