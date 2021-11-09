@@ -388,21 +388,20 @@ where
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {
-        todo!()
-        //let indexes = self.index_resolver.list().await?;
-        //let mut ret = Vec::new();
-        //for (uid, index) in indexes {
-        //let meta = index.meta()?;
-        //let meta = IndexMetadata {
-        //uuid: index.uuid,
-        //name: uid.clone(),
-        //uid,
-        //meta,
-        //};
-        //ret.push(meta);
-        //}
+        let indexes = self.index_resolver.list().await?;
+        let mut ret = Vec::new();
+        for (uid, index) in indexes {
+            let meta = index.meta()?;
+            let meta = IndexMetadata {
+                uuid: index.uuid(),
+                name: uid.clone(),
+                uid,
+                meta,
+            };
+            ret.push(meta);
+        }
 
-        //Ok(ret)
+        Ok(ret)
     }
 
     pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {

@@ -216,21 +216,21 @@ where
         }
     }
 
-    // pub async fn list(&self) -> Result<Vec<(String, Index)>> {
-    //     let uuids = self.index_uuid_store.list().await?;
-    //     let mut indexes = Vec::new();
-    //     for (name, uuid) in uuids {
-    //         match self.index_store.get(uuid).await? {
-    //             Some(index) => indexes.push((name, index)),
-    //             None => {
-    //                 // we found an unexisting index, we remove it from the uuid store
-    //                 let _ = self.index_uuid_store.delete(name).await;
-    //             }
-    //         }
-    //     }
+    pub async fn list(&self) -> Result<Vec<(String, Index)>> {
+        let uuids = self.index_uuid_store.list().await?;
+        let mut indexes = Vec::new();
+        for (name, uuid) in uuids {
+            match self.index_store.get(uuid).await? {
+                Some(index) => indexes.push((name, index)),
+                None => {
+                    // we found an unexisting index, we remove it from the uuid store
+                    let _ = self.index_uuid_store.delete(name).await;
+                }
+            }
+        }
 
-    //     Ok(indexes)
-    // }
+        Ok(indexes)
+    }
 
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
