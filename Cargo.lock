@@ -1642,7 +1642,11 @@ name = "meilisearch-error"
 version = "0.24.0"
 dependencies = [
  "actix-http",
+ "actix-web",
+ "quickcheck",
+ "quickcheck_macros",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

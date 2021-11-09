@@ -8,6 +8,8 @@ use std::result::Result as StdResult;
 use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
+use meilisearch_error::ResponseError;
+use tokio::task::spawn_blocking;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
 
@@ -15,7 +17,7 @@ use crate::index::updates::UpdateResult;
 use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, TaskContent, TaskError, TaskEvent, TaskResult};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
 use crate::tasks::TaskPerformer;
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
@@ -26,7 +28,7 @@ where
     U: UuidStore + Send + Sync + 'static,
     I: IndexStore + Send + Sync + 'static,
 {
-    type Error = IndexResolverError;
+    type Error = ResponseError;
 
     async fn process(&self, mut batch: Batch) -> StdResult<Batch, Self::Error> {
         // Until batching is implemented, all batch should contain only one update.
@@ -35,67 +37,15 @@ where
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
 
-            let index_uid = batch.index_uid.clone();
-            let result = match &task.content {
-                TaskContent::DocumentAddition {
-                    content_uuid,
-                    merge_strategy,
-                    primary_key,
-                    ..
-                } => {
-                    let primary_key = primary_key.clone();
-                    let content_uuid = *content_uuid;
-                    let method = *merge_strategy;
-
-                    let index = self.get_or_create_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || {
-                        index.update_documents(method, content_uuid, primary_key)
-                    })
-                    .await?
-                }
-                TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
-                    let ids = ids.clone();
-                    let index = self.get_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || index.delete_documents(&ids)).await?
-                }
-                TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                    let index = self.get_index(index_uid).await?;
-                    tokio::task::spawn_blocking(move || index.clear_documents()).await?
-                }
-                TaskContent::SettingsUpdate(settings) => {
-                    let index = self.get_or_create_index(index_uid).await?;
-                    let settings = settings.clone();
-                    tokio::task::spawn_blocking(move || index.update_settings(&settings.check()))
-                        .await?
-                }
-                TaskContent::IndexDeletion => {
-                    self.delete_index(index_uid).await?;
-                    // TODO: handle task deletion
-
-                    Ok(UpdateResult::Other)
-                }
-                TaskContent::CreateIndex { primary_key } => {
-                    let index = self.create_index(index_uid).await?;
-
-                    if let Some(primary_key) = primary_key {
-                        let primary_key = primary_key.clone();
-                        tokio::task::spawn_blocking(move || index.update_primary_key(primary_key))
-                            .await??;
-                    }
-
-                    Ok(UpdateResult::Other)
-                }
-            };
-
-            match result {
+            match self.process_task(batch.index_uid.clone(), task).await {
                 Ok(_success) => {
                     task.events.push(TaskEvent::Succeded {
                         result: TaskResult,
                         timestamp: Utc::now(),
                     });
                 }
-                Err(_err) => task.events.push(TaskEvent::Failed {
-                    error: TaskError,
+                Err(err) => task.events.push(TaskEvent::Failed {
+                    error: err.into(),
                     timestamp: Utc::now(),
                 }),
             }
@@ -151,6 +101,63 @@ where
         Self {
             index_uuid_store,
             index_store,
+        }
+    }
+
+    async fn process_task(&self, index_uid: String, task: &Task) -> Result<UpdateResult> {
+        match &task.content {
+            TaskContent::DocumentAddition {
+                content_uuid,
+                merge_strategy,
+                primary_key,
+                ..
+            } => {
+                    let primary_key = primary_key.clone();
+                    let content_uuid = *content_uuid;
+                    let method = *merge_strategy;
+
+                    let index = self.get_or_create_index(index_uid).await?;
+                    let result = spawn_blocking(move || {
+                        index.update_documents(method, content_uuid, primary_key)
+                    })
+                    .await??;
+
+                    Ok(result)
+                }
+            TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
+                let ids = ids.clone();
+                let index = self.get_index(index_uid).await?;
+                Ok(spawn_blocking(move || index.delete_documents(&ids)).await??)
+            }
+            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
+                let index = self.get_index(index_uid).await?;
+                Ok(spawn_blocking(move || index.clear_documents()).await??)
+            }
+            TaskContent::SettingsUpdate(settings) => {
+                let index = self.get_or_create_index(index_uid).await?;
+                let settings = settings.clone();
+                let result = spawn_blocking(move || index.update_settings(&settings.check()))
+                .await??;
+
+                Ok(result)
+            }
+            TaskContent::IndexDeletion => {
+                self.delete_index(index_uid).await?;
+                // TODO: handle task deletion
+
+                Ok(UpdateResult::Other)
+            }
+            TaskContent::CreateIndex { primary_key } => {
+                let index = self.create_index(index_uid).await?;
+
+                if let Some(primary_key) = primary_key {
+                    let primary_key = primary_key.clone();
+                    spawn_blocking(move || index.update_primary_key(primary_key))
+                    .await??;
+                }
+
+                Ok(UpdateResult::Other)
+            }
         }
     }
 

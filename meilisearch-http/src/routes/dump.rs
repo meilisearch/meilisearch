@@ -1,9 +1,9 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
+use meilisearch_error::ResponseError;
 
 use crate::analytics::Analytics;
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

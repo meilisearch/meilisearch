@@ -40,10 +40,18 @@ impl TaskFilter {
     }
 }
 
-#[derive(Clone)]
 pub struct TaskStore {
     store: Arc<Store>,
     pending_queue: Arc<RwLock<VecDeque<TaskId>>>,
+}
+
+impl Clone for TaskStore {
+    fn clone(&self) -> Self {
+        Self {
+            store: self.store.clone(),
+            pending_queue: self.pending_queue.clone(),
+        }
+    }
 }
 
 impl TaskStore {
@@ -88,7 +96,11 @@ impl TaskStore {
         self.pending_queue.read().await.front().copied()
     }
 
-    pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Option<Task>> {
+    pub async fn get_task(
+        &self,
+        id: TaskId,
+        filter: Option<TaskFilter>,
+    ) -> Result<Option<Task>> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
@@ -152,10 +164,18 @@ pub mod test {
     use nelson::Mocker;
     use tempfile::tempdir;
 
-    #[derive(Clone)]
     pub enum MockTaskStore {
         Real(TaskStore),
         Mock(Arc<Mocker>),
+    }
+
+    impl Clone for MockTaskStore {
+        fn clone(&self) -> Self {
+            match self {
+                Self::Real(x) => Self::Real(x.clone()),
+                Self::Mock(x) => Self::Mock(x.clone()),
+            }
+        }
     }
 
     impl MockTaskStore {

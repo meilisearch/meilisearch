@@ -182,8 +182,9 @@ macro_rules! create_app {
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
-        use meilisearch_http::error::{MeilisearchHttpError, ResponseError};
+        use meilisearch_http::error::{MeilisearchHttpError};
         use meilisearch_http::routes;
+        use meilisearch_error::ResponseError;
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()

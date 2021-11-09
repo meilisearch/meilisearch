@@ -2,12 +2,8 @@ use std::error::Error;
 use std::fmt;
 
 use actix_web as aweb;
-use actix_web::body::Body;
-use actix_web::http::StatusCode;
-use actix_web::HttpResponseBuilder;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
-use meilisearch_error::{Code, ErrorCode};
-use serde::{Deserialize, Serialize};
+use meilisearch_error::{Code, ErrorCode, ResponseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
@@ -33,54 +29,6 @@ impl ErrorCode for MeilisearchHttpError {
 impl From<MeilisearchHttpError> for aweb::Error {
     fn from(other: MeilisearchHttpError) -> Self {
         aweb::Error::from(ResponseError::from(other))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ResponseError {
-    #[serde(skip)]
-    code: StatusCode,
-    message: String,
-    #[serde(rename = "code")]
-    error_code: String,
-    #[serde(rename = "type")]
-    error_type: String,
-    #[serde(rename = "link")]
-    error_link: String,
-}
-
-impl fmt::Display for ResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.message.fmt(f)
-    }
-}
-
-impl<T> From<T> for ResponseError
-where
-    T: ErrorCode,
-{
-    fn from(other: T) -> Self {
-        Self {
-            code: other.http_status(),
-            message: other.to_string(),
-            error_code: other.error_name(),
-            error_type: other.error_type(),
-            error_link: other.error_url(),
-        }
-    }
-}
-
-impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::HttpResponse<Body> {
-        let json = serde_json::to_vec(self).unwrap();
-        HttpResponseBuilder::new(self.status_code())
-            .content_type("application/json")
-            .body(json)
-    }
-
-    fn status_code(&self) -> StatusCode {
-        self.code
     }
 }
 

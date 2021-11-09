@@ -29,7 +29,8 @@ use crate::index_controller::index_resolver::create_index_resolver;
 use crate::options::IndexerOpts;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
-use crate::tasks::{create_task_store, TaskStore};
+use crate::tasks::TaskStore;
+use crate::tasks::create_task_store;
 use error::Result;
 
 // use self::dump_actor::load_dump;

@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::tasks::task::TaskEvent;
 
@@ -18,7 +20,7 @@ use super::task_store::TaskStore;
 /// for new tasks, put them in a batch, and process the batch as soon as possible.
 ///
 /// When a batch is currently processing, the scheduler is just waiting.
-pub struct Scheduler<P> {
+pub struct Scheduler<P: TaskPerformer> {
     store: TaskStore,
     performer: Arc<P>,
 
@@ -26,8 +28,16 @@ pub struct Scheduler<P> {
     task_store_check_interval: Duration,
 }
 
-impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
-    pub fn new(store: TaskStore, performer: Arc<P>, task_store_check_interval: Duration) -> Self {
+impl<P> Scheduler<P>
+where
+    P: TaskPerformer + Send + Sync + 'static,
+    P::Error: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
+{
+    pub fn new(
+        store: TaskStore,
+        performer: Arc<P>,
+        task_store_check_interval: Duration,
+    ) -> Self {
         Self {
             store,
             performer,
@@ -90,7 +100,9 @@ impl<P: TaskPerformer + Send + Sync + 'static> Scheduler<P> {
 mod test {
     use nelson::Mocker;
 
-    use super::super::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
+    use crate::tasks::task::Task;
+
+    use super::super::task::{TaskContent, TaskEvent, TaskId, TaskResult};
     use super::super::MockTaskPerformer;
     use super::*;
 

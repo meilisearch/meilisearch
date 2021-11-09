@@ -1,11 +1,11 @@
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::tasks::task_store::TaskFilter;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::task::{TaskListResponse, TaskResponse};
 

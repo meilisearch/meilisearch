@@ -1,14 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
-use meilisearch_lib::{
-    milli::update::IndexDocumentsMethod,
-    tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId},
-};
+use meilisearch_error::ResponseError;
+use meilisearch_lib::{milli::update::IndexDocumentsMethod, tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId}};
 use serde::{Serialize, Serializer};
 
-use crate::error::ResponseError;
-
-// TODO: Remove
-#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum TaskType {
@@ -87,7 +81,7 @@ impl From<Task> for TaskResponse {
             TaskEvent::Succeded { timestamp, .. } => {
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
-            TaskEvent::Failed { timestamp, .. } => (TaskStatus::Failed, None, Some(*timestamp)),
+            TaskEvent::Failed { timestamp, error } => (TaskStatus::Failed, Some(error.clone()), Some(*timestamp)),
         };
 
         let (task_type, details) = match content {

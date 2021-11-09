@@ -4,9 +4,9 @@ use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LI
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
+use meilisearch_error::ResponseError;
 
 use crate::analytics::{Analytics, SearchAggregator};
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

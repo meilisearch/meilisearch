@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use meilisearch_error::ResponseError;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -28,7 +29,7 @@ pub enum TaskEvent {
         timestamp: DateTime<Utc>,
     },
     Failed {
-        error: TaskError,
+        error: ResponseError,
         timestamp: DateTime<Utc>,
     },
 }
@@ -120,7 +121,7 @@ mod test {
                 },
                 Self::Failed {
                     timestamp: Utc::now(),
-                    error: TaskError::arbitrary(g),
+                    error: ResponseError::arbitrary(g),
                 },
                 Self::Succeded {
                     timestamp: Utc::now(),

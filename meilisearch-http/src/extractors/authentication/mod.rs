@@ -8,8 +8,8 @@ use std::ops::Deref;
 use actix_web::FromRequest;
 use futures::future::err;
 use futures::future::{ok, Ready};
+use meilisearch_error::ResponseError;
 
-use crate::error::ResponseError;
 use error::AuthenticationError;
 
 macro_rules! create_policies {

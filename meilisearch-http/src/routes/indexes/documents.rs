@@ -10,9 +10,10 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
+use meilisearch_error::ResponseError;
 
 use crate::analytics::Analytics;
-use crate::error::{MeilisearchHttpError, ResponseError};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::task::TaskResponse;

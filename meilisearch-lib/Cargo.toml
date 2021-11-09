@@ -2,6 +2,7 @@
 name = "meilisearch-lib"
 version = "0.24.0"
 edition = "2018"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -65,3 +66,4 @@ paste = "1.0.5"
 nelson = { path = "../../nelson" }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
+meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
