@@ -613,17 +613,17 @@ mod test {
             });
 
         let task_store_mocker = nelson::Mocker::default();
-        let _index_resolver = IndexResolver::new(uuid_store, index_store);
-        let _task_store = TaskStore::mock(task_store_mocker);
+        let index_resolver = IndexResolver::new(uuid_store, index_store);
+        let task_store = TaskStore::mock(task_store_mocker);
         // let dump_actor = MockDumpActorHandle::new();
-        todo!("implement mock update file store");
-        // let update_file_store = UpdateFileStore::new(".").unwrap();
-        // let index_controller = IndexController::mock(index_resolver, task_store, update_file_store);
+        let mocker = Mocker::default();
+        let update_file_store = UpdateFileStore::mock(mocker);
+        let index_controller = IndexController::mock(index_resolver, task_store, update_file_store);
 
-        // let r = index_controller
-        //     .search(index_uid.to_owned(), query.clone())
-        //     .await
-        //     .unwrap();
-        // assert_eq!(r, result);
+        let r = index_controller
+            .search(index_uid.to_owned(), query.clone())
+            .await
+            .unwrap();
+        assert_eq!(r, result);
     }
 }
