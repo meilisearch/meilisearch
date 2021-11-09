@@ -146,12 +146,8 @@ impl<'a> Display for Error<'a> {
             )?,
             ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
         }
-        write!(
-            f,
-            "{}:{} in `{}`.",
-            self.context.location_line(),
-            self.context.get_utf8_column(),
-            self.context.extra,
-        )
+        let base_column = self.context.get_utf8_column();
+        let size = self.context.fragment().chars().count();
+        write!(f, "{}:{} in `{}`.", base_column, base_column + size, self.context.extra,)
     }
 }
