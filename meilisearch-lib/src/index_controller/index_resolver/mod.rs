@@ -55,11 +55,11 @@ where
                 }
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                     let ids = ids.clone();
-                    let index = self.get_or_create_index(index_uid).await?;
+                    let index = self.get_index(index_uid).await?;
                     tokio::task::spawn_blocking(move || index.delete_documents(&ids)).await?
                 }
                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                    let index = self.get_or_create_index(index_uid).await?;
+                    let index = self.get_index(index_uid).await?;
                     tokio::task::spawn_blocking(move || index.clear_documents()).await?
                 }
                 TaskContent::SettingsUpdate(settings) => {
@@ -70,6 +70,7 @@ where
                 }
                 TaskContent::IndexDeletion => {
                     self.delete_index(index_uid).await?;
+                    // TODO: handle task deletion
 
                     Ok(UpdateResult::Other)
                 }
