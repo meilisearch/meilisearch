@@ -70,7 +70,7 @@ fn is_value_component(c: char) -> bool {
 }
 
 fn is_syntax_component(c: char) -> bool {
-    c.is_whitespace() || ['(', ')', '=', '<', '>'].contains(&c)
+    c.is_whitespace() || ['(', ')', '=', '<', '>', '!'].contains(&c)
 }
 
 #[cfg(test)]
