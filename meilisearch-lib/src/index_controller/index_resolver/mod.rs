@@ -15,7 +15,7 @@ use uuid_store::{HeedUuidStore, UuidStore};
 use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
 use crate::tasks::TaskPerformer;
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
@@ -275,11 +275,11 @@ where
     //         .ok_or_else(|| IndexResolverError::UnexistingIndex(String::new()))
     // }
 
-    pub async fn get_index(&self, uid: String) -> Result<Index> {
+    pub async fn get_index(&self, uid: String) -> Result<(String, Index)> {
         match self.index_uuid_store.get_uuid(uid).await? {
             (name, Some(uuid)) => {
                 match self.index_store.get(uuid).await? {
-                    Some(index) => Ok(index),
+                    Some(index) => Ok((name, index)),
                     None => {
                         // For some reason we got a uuid to an unexisting index, we return an error,
                         // and remove the uuid from the uuid store.
@@ -290,6 +290,10 @@ where
             }
             (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
         }
+    }
+
+    pub async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
+        self.index_uuid_store.get_index_creation_task_id(index_uid).await
     }
 
     // pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
