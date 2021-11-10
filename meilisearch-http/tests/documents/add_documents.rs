@@ -762,9 +762,10 @@ async fn add_larger_dataset() {
     let update_id = index.load_test_set().await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["type"]["name"], "DocumentsAddition");
-    assert_eq!(response["type"]["number"], 77);
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["details"]["indexedDocuments"], 77);
+    assert_eq!(response["details"]["receivedDocuments"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
             limit: Some(1000),
