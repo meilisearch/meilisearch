@@ -1,6 +1,7 @@
 mod store;
 
-use std::collections::{HashSet, VecDeque};
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -43,7 +44,7 @@ impl TaskFilter {
 
 pub struct TaskStore {
     store: Arc<Store>,
-    pending_queue: Arc<RwLock<VecDeque<TaskId>>>,
+    pending_queue: Arc<RwLock<BinaryHeap<Reverse<TaskId>>>>,
 }
 
 impl Clone for TaskStore {
@@ -87,21 +88,17 @@ impl TaskStore {
         })
         .await??;
 
-        self.pending_queue.write().await.push_back(task.id);
+        self.pending_queue.write().await.push(Reverse(task.id));
 
         Ok(task)
     }
 
     // Returns the next task to process.
     pub async fn peek_pending(&self) -> Option<TaskId> {
-        self.pending_queue.read().await.front().copied()
+        self.pending_queue.read().await.peek().map(|rid| rid.0)
     }
 
-    pub async fn get_task(
-        &self,
-        id: TaskId,
-        filter: Option<TaskFilter>,
-    ) -> Result<Task> {
+    pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
@@ -112,7 +109,10 @@ impl TaskStore {
         .ok_or(TaskError::UnexistingTask(id))?;
 
         match filter {
-            Some(filter) => filter.pass(&task).then(|| task).ok_or(TaskError::UnexistingTask(id)),
+            Some(filter) => filter
+                .pass(&task)
+                .then(|| task)
+                .ok_or(TaskError::UnexistingTask(id)),
             None => Ok(task),
         }
     }
@@ -137,7 +137,14 @@ impl TaskStore {
         .await??;
 
         let mut pending_queue = pending_queue.write().await;
-        pending_queue.retain(|id| !to_remove.contains(id));
+
+        // currently retain is not stable: https://doc.rust-lang.org/stable/std/collections/struct.BinaryHeap.html#method.retain
+        // pending_queue.retain(|id| !to_remove.contains(&id.0));
+
+        *pending_queue = pending_queue
+            .drain()
+            .filter(|id| !to_remove.contains(&id.0))
+            .collect();
 
         Ok(())
     }
@@ -197,17 +204,10 @@ pub mod test {
             }
         }
 
-        pub async fn get_task(
-            &self,
-            id: TaskId,
-            filter: Option<TaskFilter>,
-        ) -> Result<Task> {
+        pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
-                Self::Mock(m) => unsafe {
-                    m.get::<_, Result<Task>>("get_task")
-                        .call((id, filter))
-                },
+                Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
             }
         }
 
