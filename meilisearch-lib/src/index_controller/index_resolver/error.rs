@@ -5,7 +5,7 @@ use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
 use uuid::Uuid;
 
-use crate::{error::MilliError, index::error::IndexError};
+use crate::{error::MilliError, index::error::IndexError, tasks::error::TaskError};
 
 pub type Result<T> = std::result::Result<T, IndexResolverError>;
 
@@ -13,6 +13,8 @@ pub type Result<T> = std::result::Result<T, IndexResolverError>;
 pub enum IndexResolverError {
     #[error("{0}")]
     IndexError(#[from] IndexError),
+    #[error("{0}")]
+    TaskError(#[from] TaskError),
     #[error("Index `{0}` already exists.")]
     IndexAlreadyExists(String),
     #[error("Index `{0}` not found.")]
@@ -56,6 +58,7 @@ impl ErrorCode for IndexResolverError {
     fn error_code(&self) -> Code {
         match self {
             IndexResolverError::IndexError(e) => e.error_code(),
+            IndexResolverError::TaskError(e) => e.error_code(),
             IndexResolverError::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             IndexResolverError::UnexistingIndex(_) => Code::IndexNotFound,
             IndexResolverError::ExistingPrimaryKey => Code::PrimaryKeyAlreadyPresent,

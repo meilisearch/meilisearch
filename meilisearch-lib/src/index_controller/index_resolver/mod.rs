@@ -15,7 +15,8 @@ use uuid_store::{HeedUuidStore, UuidStore};
 use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task_store::TaskStore;
 use crate::tasks::TaskPerformer;
 
 pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
@@ -28,14 +29,17 @@ where
 {
     type Error = ResponseError;
 
-    async fn process(&self, mut batch: Batch) -> Batch {
+    async fn process(&self, mut batch: Batch, store: TaskStore) -> Batch {
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
 
-            match self.process_task(batch.index_uid.clone(), task).await {
+            match self
+                .process_task(batch.index_uid.clone(), task, store)
+                .await
+            {
                 Ok(success) => {
                     task.events.push(TaskEvent::Succeded {
                         result: success,
@@ -102,7 +106,12 @@ where
         }
     }
 
-    async fn process_task(&self, index_uid: String, task: &Task) -> Result<TaskResult> {
+    async fn process_task(
+        &self,
+        index_uid: String,
+        task: &Task,
+        store: TaskStore,
+    ) -> Result<TaskResult> {
         match &task.content {
             TaskContent::DocumentAddition {
                 content_uuid,
@@ -110,23 +119,25 @@ where
                 primary_key,
                 ..
             } => {
-                    let primary_key = primary_key.clone();
-                    let content_uuid = *content_uuid;
-                    let method = *merge_strategy;
+                let primary_key = primary_key.clone();
+                let content_uuid = *content_uuid;
+                let method = *merge_strategy;
 
-                    let index = self.get_or_create_index(index_uid).await?;
-                    let result = spawn_blocking(move || {
-                        index.update_documents(method, content_uuid, primary_key)
-                    })
-                    .await??;
+                let index = self.get_or_create_index(index_uid).await?;
+                let result = spawn_blocking(move || {
+                    index.update_documents(method, content_uuid, primary_key)
+                })
+                .await??;
 
-                    Ok(result.into())
-                }
+                Ok(result.into())
+            }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid).await?;
                 let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
-                Ok(TaskResult::DocumentDeletion { number_of_documents:  deleted })
+                Ok(TaskResult::DocumentDeletion {
+                    number_of_documents: deleted,
+                })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                 let index = self.get_index(index_uid).await?;
@@ -142,7 +153,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::IndexDeletion => {
-                self.delete_index(index_uid).await?;
+                self.delete_index(index_uid, task.id, store).await?;
                 // TODO: handle task deletion
 
                 Ok(TaskResult::Other)
@@ -152,8 +163,7 @@ where
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
-                    spawn_blocking(move || index.update_primary_key(primary_key))
-                    .await??;
+                    spawn_blocking(move || index.update_primary_key(primary_key)).await??;
                 }
 
                 Ok(TaskResult::Other)
@@ -163,12 +173,11 @@ where
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
-                    spawn_blocking(move || index.update_primary_key(primary_key))
-                    .await??;
+                    spawn_blocking(move || index.update_primary_key(primary_key)).await??;
                 }
 
                 Ok(TaskResult::Other)
-            },
+            }
         }
     }
 
@@ -251,8 +260,13 @@ where
         Ok(indexes)
     }
 
-    pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
-        match self.index_uuid_store.delete(uid.clone()).await? {
+    pub async fn delete_index(
+        &self,
+        uid: String,
+        task_id: TaskId,
+        store: TaskStore,
+    ) -> Result<Uuid> {
+        let uuid = match self.index_uuid_store.delete(uid.clone()).await? {
             Some(uuid) => {
                 match self.index_store.delete(uuid).await {
                     Ok(Some(index)) => {
@@ -261,10 +275,14 @@ where
                     Ok(None) => (),
                     Err(e) => log::error!("Error while deleting index: {:?}", e),
                 }
-                Ok(uuid)
+                uuid
             }
-            None => Err(IndexResolverError::UnexistingIndex(uid)),
-        }
+            None => return Err(IndexResolverError::UnexistingIndex(uid))?,
+        };
+
+        store.delete_uid_until(uid, task_id).await?;
+
+        Ok(uuid)
     }
 
     // pub async fn get_index_by_uuid(&self, uuid: Uuid) -> Result<Index> {

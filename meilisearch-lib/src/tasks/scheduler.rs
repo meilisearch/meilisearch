@@ -53,7 +53,7 @@ where
         match self.prepare_batch().await? {
             Some(batch) => {
                 let performer = self.performer.clone();
-                let batch_result = performer.process(batch).await;
+                let batch_result = performer.process(batch, self.store.clone()).await;
                 self.handle_batch_result(batch_result).await?;
             }
             None => {
@@ -72,10 +72,7 @@ where
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
         match self.store.peek_pending().await {
             Some(next_task_id) => {
-                let mut task = self
-                    .store
-                    .get_task(next_task_id, None)
-                    .await?;
+                let mut task = self.store.get_task(next_task_id, None).await?;
 
                 task.events.push(TaskEvent::Batched {
                     timestamp: Utc::now(),

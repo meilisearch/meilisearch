@@ -97,11 +97,7 @@ impl TaskStore {
         self.pending_queue.read().await.front().copied()
     }
 
-    pub async fn get_task(
-        &self,
-        id: TaskId,
-        filter: Option<TaskFilter>,
-    ) -> Result<Task> {
+    pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
@@ -112,9 +108,25 @@ impl TaskStore {
         .ok_or(TaskError::UnexistingTask(id))?;
 
         match filter {
-            Some(filter) => filter.pass(&task).then(|| task).ok_or(TaskError::UnexistingTask(id)),
+            Some(filter) => filter
+                .pass(&task)
+                .then(|| task)
+                .ok_or(TaskError::UnexistingTask(id)),
             None => Ok(task),
         }
+    }
+
+    pub async fn delete_uid_until(&self, uid: String, task_id: TaskId) -> Result<()> {
+        let store = self.store.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<HashSet<TaskId>> {
+            let mut txn = store.wtxn()?;
+            let to_delete = store.delete_uid_until(&mut txn, uid, task_id)?;
+            txn.commit()?;
+            Ok(to_delete)
+        })
+        .await??;
+        Ok(())
     }
 
     pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
@@ -196,17 +208,10 @@ pub mod test {
             }
         }
 
-        pub async fn get_task(
-            &self,
-            id: TaskId,
-            filter: Option<TaskFilter>,
-        ) -> Result<Task> {
+        pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
-                Self::Mock(m) => unsafe {
-                    m.get::<_, Result<Task>>("get_task")
-                        .call((id, filter))
-                },
+                Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
             }
         }
 

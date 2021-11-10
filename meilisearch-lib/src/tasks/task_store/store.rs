@@ -5,7 +5,7 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::TryInto;
 use std::path::Path;
 use std::result::Result as StdResult;
@@ -115,7 +115,7 @@ impl Store {
         filter: Option<TaskFilter>,
         limit: Option<usize>,
     ) -> Result<Vec<Task>> {
-        let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
+        let iter: Box<dyn Iterator<Item = StdResult<Task, heed::Error>>> = match filter {
             Some(filter) => {
                 let iter = self
                     .compute_candidates(txn, filter)?
@@ -144,6 +144,40 @@ impl Store {
             })?;
 
         Ok(tasks)
+    }
+
+    pub fn delete_uid_until(
+        &self,
+        wtxn: &mut RwTxn,
+        uid: String,
+        task_id: TaskId,
+    ) -> Result<HashSet<TaskId>> {
+        // We need to prefix search the null terminated string to make sure that we only
+        // get exact matches for the index, and not other uids that would share the same
+        // prefix, i.e test and test1.
+        let mut index_uid = uid.as_bytes().to_vec();
+        index_uid.push(0);
+
+        let to_delete: HashSet<TaskId> = self
+            .uids_task_ids
+            .remap_key_type::<ByteSlice>()
+            .prefix_iter(wtxn, &index_uid)?
+            .try_fold(HashSet::new(), |mut set, res| -> Result<_> {
+                let key = res?.0;
+                let (_, id) =
+                    IndexUidTaskIdCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                if id <= task_id {
+                    set.insert(id);
+                }
+                Ok(set)
+            })?;
+
+        for tid in &to_delete {
+            self.uids_task_ids.delete(wtxn, &(&uid, *tid))?;
+            self.tasks.delete(wtxn, &BEU64::new(*tid))?;
+        }
+
+        Ok(to_delete)
     }
 
     fn compute_candidates(
@@ -231,6 +265,18 @@ pub mod test {
         pub fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
             match self {
                 MockStore::Real(index) => index.get(txn, id),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn delete_uid_until(
+            &self,
+            wtxn: &mut RwTxn,
+            uid: String,
+            task_id: TaskId,
+        ) -> Result<HashSet<TaskId>> {
+            match self {
+                MockStore::Real(index) => index.delete_uid_until(wtxn, uid, task_id),
                 MockStore::Fake(_) => todo!(),
             }
         }
