@@ -27,10 +27,10 @@ use crate::index::{
 use crate::index_controller::index_resolver::create_index_resolver;
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
+use crate::tasks::create_task_store;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
-use crate::tasks::create_task_store;
 use error::Result;
 
 // use self::dump_actor::load_dump;
@@ -368,18 +368,43 @@ where
         Ok(task)
     }
 
+    pub async fn get_index_task(&self, index_uid: String, task_id: TaskId) -> Result<Task> {
+    //    let mut filter = TaskFilter::default();
+    //    filter.filter_index(params.index_uid);
+    //    let task: TaskResponse = meilisearch
+    //        .get_task(params.task_id, Some(filter))
+    //        .await?
+    //        .into();
+        todo!()
+    }
+
     pub async fn list_tasks(
         &self,
         filter: Option<TaskFilter>,
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let tasks = self
-            .task_store
-            .list_tasks(filter, limit, offset)
-            .await?;
+        let tasks = self.task_store.list_tasks(filter, limit, offset).await?;
 
         Ok(tasks)
+    }
+
+    pub async fn list_index_task(
+        &self,
+        index_uid: String,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<Task>> {
+    //let mut filter = TaskFilter::default();
+    //filter.filter_index(index_uid.into_inner());
+    //let tasks: TaskListResponse = meilisearch
+    //    .list_tasks(Some(filter), None, None)
+    //    .await?
+    //    .into_iter()
+    //    .map(TaskResponse::from)
+    //    .collect::<Vec<_>>()
+    //    .into();
+        todo!()
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {

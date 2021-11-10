@@ -2,7 +2,6 @@ use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
 use meilisearch_error::ResponseError;
-use meilisearch_lib::tasks::task_store::TaskFilter;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
@@ -34,13 +33,9 @@ pub async fn get_task_status(
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let params = index_uid.into_inner();
-    let mut filter = TaskFilter::default();
-    filter.filter_index(params.index_uid);
-    let task: TaskResponse = meilisearch
-        .get_task(params.task_id, Some(filter))
-        .await?
-        .into();
+    let UpdateParam { index_uid, task_id } = index_uid.into_inner();
+
+    let task: TaskResponse = meilisearch.get_index_task(index_uid, task_id).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Ok().json(task))
@@ -50,10 +45,8 @@ pub async fn get_all_tasks_status(
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let mut filter = TaskFilter::default();
-    filter.filter_index(index_uid.into_inner());
     let tasks: TaskListResponse = meilisearch
-        .list_tasks(Some(filter), None, None)
+        .list_index_task(index_uid.into_inner(), None, None)
         .await?
         .into_iter()
         .map(TaskResponse::from)
