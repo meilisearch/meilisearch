@@ -47,7 +47,7 @@ async fn filter_invalid_syntax_object() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
@@ -74,7 +74,7 @@ async fn filter_invalid_syntax_array() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Invalid syntax for the filter parameter: ` --> 1:7\n  |\n1 | title & Glass\n  |       ^---\n  |\n  = expected word`.",
@@ -101,7 +101,7 @@ async fn filter_invalid_syntax_string() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Invalid syntax for the filter parameter: ` --> 1:15\n  |\n1 | title = Glass XOR title = Glass\n  |               ^---\n  |\n  = expected EOI, and, or or`.",
@@ -131,7 +131,7 @@ async fn filter_invalid_attribute_array() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
@@ -158,7 +158,7 @@ async fn filter_invalid_attribute_string() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.",
@@ -185,7 +185,7 @@ async fn filter_reserved_geo_attribute_array() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
@@ -212,7 +212,7 @@ async fn filter_reserved_geo_attribute_string() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.",
@@ -239,7 +239,7 @@ async fn filter_reserved_attribute_array() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
@@ -269,7 +269,7 @@ async fn filter_reserved_attribute_string() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.",
@@ -299,7 +299,7 @@ async fn sort_geo_reserved_attribute() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
@@ -331,7 +331,7 @@ async fn sort_reserved_attribute() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
@@ -363,7 +363,7 @@ async fn sort_unsortable_attribute() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Attribute `title` is not sortable. Available sortable attributes are: `id`.",
@@ -395,7 +395,7 @@ async fn sort_invalid_syntax() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `title`.",
@@ -429,7 +429,7 @@ async fn sort_unset_ranking_rule() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let expected_response = json!({
         "message": "The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.",

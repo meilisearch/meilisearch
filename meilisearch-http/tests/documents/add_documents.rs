@@ -548,9 +548,9 @@ async fn add_documents_no_index_creation() {
      * assert!(response.get("enqueuedAt").is_some());
      */
 
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
-    let (response, code) = index.get_update(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
@@ -617,9 +617,9 @@ async fn document_addition_with_primary_key() {
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
-    let (response, code) = index.get_update(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
@@ -645,9 +645,9 @@ async fn document_update_with_primary_key() {
     let (_response, code) = index.update_documents(documents, Some("primary")).await;
     assert_eq!(code, 202);
 
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
-    let (response, code) = index.get_update(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
@@ -674,7 +674,7 @@ async fn replace_document() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let documents = json!([
         {
@@ -686,9 +686,9 @@ async fn replace_document() {
     let (_response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
-    let (response, code) = index.get_update(1).await;
+    let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
 
@@ -729,7 +729,7 @@ async fn update_document() {
     let (_response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let documents = json!([
         {
@@ -741,9 +741,9 @@ async fn update_document() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
-    let (response, code) = index.get_update(1).await;
+    let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
 
@@ -760,7 +760,7 @@ async fn add_larger_dataset() {
     let server = Server::new().await;
     let index = server.index("test");
     let update_id = index.load_test_set().await;
-    let (response, code) = index.get_update(update_id).await;
+    let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["type"]["name"], "DocumentsAddition");
@@ -781,8 +781,8 @@ async fn update_larger_dataset() {
     let index = server.index("test");
     let documents = serde_json::from_str(include_str!("../assets/test_set.json")).unwrap();
     index.update_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["type"]["name"], "DocumentsPartial");
     assert_eq!(response["type"]["number"], 77);
@@ -808,8 +808,8 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], json!("failed"));
     assert_eq!(response["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
@@ -833,8 +833,8 @@ async fn error_update_documents_bad_document_id() {
         }
     ]);
     index.update_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], json!("failed"));
     assert_eq!(response["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
@@ -858,8 +858,8 @@ async fn error_add_documents_missing_document_id() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
     assert_eq!(
@@ -886,8 +886,8 @@ async fn error_update_documents_missing_document_id() {
         }
     ]);
     index.update_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
     assert_eq!(
@@ -922,8 +922,8 @@ async fn error_document_field_limit_reached() {
     let (_response, code) = index.update_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
 
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     // Documents without a primary key are not accepted.
     assert_eq!(response["status"], "failed");
@@ -952,8 +952,8 @@ async fn error_add_documents_invalid_geo_field() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(0).await;
+    let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
     assert_eq!(

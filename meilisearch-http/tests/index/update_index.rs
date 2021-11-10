@@ -55,7 +55,7 @@ async fn error_update_existing_primary_key() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let (response, code) = index.update(Some("primary")).await;
 

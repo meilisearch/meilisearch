@@ -77,7 +77,7 @@ async fn test_partial_update() {
     let (_response, _code) = index
         .update_settings(json!({"displayedAttributes": ["foo"]}))
         .await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
@@ -86,7 +86,7 @@ async fn test_partial_update() {
     let (_response, _) = index
         .update_settings(json!({"searchableAttributes": ["bar"]}))
         .await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -118,12 +118,12 @@ async fn reset_all_settings() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
     assert_eq!(response["updateId"], 0);
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -136,7 +136,7 @@ async fn reset_all_settings() {
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     index.delete_settings().await;
-    index.wait_update_id(2).await;
+    index.wait_task(2).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
