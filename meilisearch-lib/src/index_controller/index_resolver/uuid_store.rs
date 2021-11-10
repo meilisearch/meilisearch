@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 
-use heed::types::{ByteSlice, SerdeBincode, Str};
+use heed::types::{SerdeBincode, Str};
 use heed::{CompactionOption, Database, Env, EnvOpenOptions};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -96,7 +96,7 @@ impl HeedUuidStore {
         Ok(entries)
     }
 
-    fn insert(&self, name: String, uuid: Uuid, task_id: TaskId) -> Result<()> {
+    pub(crate) fn insert(&self, name: String, uuid: Uuid, task_id: TaskId) -> Result<()> {
         let env = self.env.clone();
         let db = self.db;
         let mut txn = env.write_txn()?;

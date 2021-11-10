@@ -38,7 +38,8 @@ impl MetadataV1 {
         let uuid_store = HeedUuidStore::new(&dst)?;
         for index in self.indexes {
             let uuid = Uuid::new_v4();
-            uuid_store.insert(index.uid.clone(), uuid)?;
+            // Since we don't know when the index was created, we assume it's from 0
+            uuid_store.insert(index.uid.clone(), uuid, 0)?;
             let src = src.as_ref().join(index.uid);
             load_index(
                 &src,
