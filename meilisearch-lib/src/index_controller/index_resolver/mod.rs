@@ -114,7 +114,7 @@ where
                     let content_uuid = *content_uuid;
                     let method = *merge_strategy;
 
-                    let index = self.get_or_create_index(index_uid).await?;
+                    let index = self.get_or_create_index(index_uid, task.id).await?;
                     let result = spawn_blocking(move || {
                         index.update_documents(method, content_uuid, primary_key)
                     })
@@ -135,7 +135,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::SettingsUpdate(settings) => {
-                let index = self.get_or_create_index(index_uid).await?;
+                let index = self.get_or_create_index(index_uid, task.id).await?;
                 let settings = settings.clone();
                 spawn_blocking(move || index.update_settings(&settings.check())).await??;
 
@@ -148,7 +148,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::CreateIndex { primary_key } => {
-                let index = self.create_index(index_uid).await?;
+                let index = self.create_index(index_uid, task.id).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -199,7 +199,7 @@ where
     //      Ok(indexes)
     //  }
 
-    pub async fn create_index(&self, uid: String) -> Result<Index> {
+    async fn create_index(&self, uid: String, task_id: TaskId) -> Result<Index> {
         if !is_index_uid_valid(&uid) {
             return Err(IndexResolverError::BadlyFormatted(uid));
         }
@@ -209,7 +209,7 @@ where
             (uid, None) => {
                 let uuid = Uuid::new_v4();
                 let index = self.index_store.create(uuid).await?;
-                match self.index_uuid_store.insert(uid, uuid).await {
+                match self.index_uuid_store.insert(uid, uuid, task_id).await {
                     Err(e) => {
                         match self.index_store.delete(uuid).await {
                             Ok(Some(index)) => {
@@ -227,8 +227,8 @@ where
     }
 
     /// Get or create an index with name `uid`.
-    pub async fn get_or_create_index(&self, uid: String) -> Result<Index> {
-        match self.create_index(uid).await {
+    pub async fn get_or_create_index(&self, uid: String, task_id: TaskId) -> Result<Index> {
+        match self.create_index(uid, task_id).await {
             Ok(index) => Ok(index),
             Err(IndexResolverError::IndexAlreadyExists(uid)) => self.get_index(uid).await,
             Err(e) => Err(e),
@@ -275,11 +275,11 @@ where
     //         .ok_or_else(|| IndexResolverError::UnexistingIndex(String::new()))
     // }
 
-    pub async fn get_index(&self, uid: String) -> Result<(String, Index)> {
+    pub async fn get_index(&self, uid: String) -> Result<Index> {
         match self.index_uuid_store.get_uuid(uid).await? {
             (name, Some(uuid)) => {
                 match self.index_store.get(uuid).await? {
-                    Some(index) => Ok((name, index)),
+                    Some(index) => Ok(index),
                     None => {
                         // For some reason we got a uuid to an unexisting index, we return an error,
                         // and remove the uuid from the uuid store.
