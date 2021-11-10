@@ -98,7 +98,7 @@ impl Index<'_> {
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try 10 times to get status, or panic to not wait forever
-        let url = format!("/indexes/{}/tasks/{}", self.uid, update_id);
+        let url = format!("/tasks/{}", update_id);
         for _ in 0..10 {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(status_code, 200, "response: {}", response);
