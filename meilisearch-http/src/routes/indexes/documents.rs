@@ -155,7 +155,7 @@ pub async fn add_documents(
     )
     .await?;
 
-    Ok(HttpResponse::Ok().json(task))
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn update_documents(
@@ -187,7 +187,7 @@ pub async fn update_documents(
     )
     .await?;
 
-    Ok(HttpResponse::Ok().json(task))
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 async fn document_addition(
