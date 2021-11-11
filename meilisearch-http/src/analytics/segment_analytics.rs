@@ -254,9 +254,9 @@ impl Segment {
                 .await;
         }
         let get_search = std::mem::take(&mut self.get_search_aggregator)
-            .into_event(&self.user, "Document Searched GET");
+            .into_event(&self.user, "Documents Searched GET");
         let post_search = std::mem::take(&mut self.post_search_aggregator)
-            .into_event(&self.user, "Document Searched POST");
+            .into_event(&self.user, "Documents Searched POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
