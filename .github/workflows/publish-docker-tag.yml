@@ -11,6 +11,9 @@ jobs:
   docker-tag:
     runs-on: ubuntu-20.04
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
 
@@ -35,7 +38,6 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v2
         with:
-          context: .
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
