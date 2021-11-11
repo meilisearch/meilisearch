@@ -144,6 +144,6 @@ Anonymous telemetry:\t\"Enabled\""
     eprintln!();
     eprintln!("Documentation:\t\thttps://docs.meilisearch.com");
     eprintln!("Source code:\t\thttps://github.com/meilisearch/meilisearch");
-    eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html or bonjour@meilisearch.com");
+    eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html");
     eprintln!();
 }
