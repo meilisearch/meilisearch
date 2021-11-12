@@ -67,62 +67,6 @@ semverLT() {
     return 1
 }
 
-# Get a token from https://github.com/settings/tokens to increasae rate limit (from 60 to 5000), make sure the token scope is set to 'public_repo'
-# Create GITHUB_PAT enviroment variable once you aquired the token to start using it
-# Returns the tag of the latest stable release (in terms of semver and not of release date)
-get_latest() {
-    temp_file='temp_file' # temp_file needed because the grep would start before the download is over
-
-        if [ -z "$GITHUB_PAT" ]; then
-        curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
-    else
-        curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file" || return 1
-    fi
-
-    releases=$(cat "$temp_file" | \
-        grep -E "tag_name|draft|prerelease" \
-        | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')
-        # Returns a list of [tag_name draft_boolean prerelease_boolean ...]
-        # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
-
-    i=0
-    latest=''
-    current_tag=''
-    for release_info in $releases; do
-        if [ $i -eq 0 ]; then # Cheking tag_name
-            if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
-                current_tag=$release_info
-            else
-                current_tag=''
-            fi
-            i=1
-        elif [ $i -eq 1 ]; then # Checking draft boolean
-            if [ "$release_info" = 'true' ]; then
-                current_tag=''
-            fi
-            i=2
-        elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" = 'true' ]; then
-                current_tag=''
-            fi
-            i=0
-            if [ "$current_tag" != '' ]; then # If the current_tag is valid
-                if [ "$latest" = '' ]; then # If there is no latest yet
-                    latest="$current_tag"
-                else
-                    semverLT $current_tag $latest # Comparing latest and the current tag
-                    if [ $? -eq 1 ]; then
-                        latest="$current_tag"
-                    fi
-                fi
-            fi
-        fi
-    done
-
-    rm -f "$temp_file"
-    echo $latest
-}
-
 # Gets the OS by setting the $os variable
 # Returns 0 in case of success, 1 otherwise.
 get_os() {
@@ -177,15 +121,6 @@ failure_usage() {
 }
 
 # MAIN
-latest="$(get_latest)"
-
-if [ "$latest" = '' ]; then
-    echo ''
-    echo 'Impossible to get the latest stable version of MeiliSearch.'
-    echo 'Please let us know about this issue: https://github.com/meilisearch/MeiliSearch/issues/new/choose'
-    exit 1
-fi
-
 if ! get_os; then
     failure_usage
     exit 1
@@ -196,7 +131,7 @@ if ! get_archi; then
     exit 1
 fi
 
-echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
+echo "Downloading latest MeiliSearch binary for $os, architecture $archi..."
 case "$os" in
     'windows')
         release_file="meilisearch-$os-$archi.exe"
@@ -208,7 +143,7 @@ case "$os" in
 		binary_name='meilisearch'
 
 esac
-link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
+link="https://github.com/meilisearch/MeiliSearch/releases/download/latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$binary_name"
 chmod 744 "$binary_name"
