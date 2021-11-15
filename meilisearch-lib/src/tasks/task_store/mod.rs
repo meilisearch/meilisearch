@@ -9,6 +9,7 @@ use chrono::Utc;
 use log::debug;
 use tokio::sync::RwLock;
 
+use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
 
 use super::error::TaskError;
@@ -30,7 +31,7 @@ impl TaskFilter {
     fn pass(&self, task: &Task) -> bool {
         self.indexes
             .as_ref()
-            .map(|indexes| indexes.contains(&task.index_uid))
+            .map(|indexes| indexes.contains(&*task.index_uid))
             .unwrap_or(true)
     }
 
@@ -66,7 +67,7 @@ impl TaskStore {
         })
     }
 
-    pub async fn register(&self, index_uid: String, content: TaskContent) -> Result<Task> {
+    pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
         debug!("registering update: {:?}", content);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
@@ -232,7 +233,7 @@ pub mod test {
             }
         }
 
-        pub async fn register(&self, index_uid: String, content: TaskContent) -> Result<Task> {
+        pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
                 Self::Mock(_m) => todo!(),

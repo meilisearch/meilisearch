@@ -1,6 +1,6 @@
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index_controller::index_resolver::error::IndexResolverError;
+use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, DumpActorError>;
 

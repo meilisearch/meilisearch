@@ -4,7 +4,7 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::index::{Settings, Unchecked};
+use crate::{index::{Settings, Unchecked}, index_resolver::IndexUid};
 
 use super::batch::BatchId;
 
@@ -50,7 +50,7 @@ pub enum TaskEvent {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Task {
     pub id: TaskId,
-    pub index_uid: String,
+    pub index_uid: IndexUid,
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
 }
@@ -93,7 +93,7 @@ mod test {
         fn arbitrary(g: &mut Gen) -> Self {
             Self {
                 id: TaskId::arbitrary(g),
-                index_uid: String::arbitrary(g),
+                index_uid: IndexUid::new_unchecked(String::arbitrary(g)),
                 content: TaskContent::arbitrary(g),
                 events: Vec::arbitrary(g),
             }

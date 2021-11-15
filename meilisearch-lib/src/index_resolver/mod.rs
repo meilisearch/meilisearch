@@ -2,6 +2,7 @@ pub mod error;
 pub mod index_store;
 pub mod uuid_store;
 
+use std::convert::TryInto;
 use std::path::Path;
 
 use chrono::Utc;
@@ -11,6 +12,7 @@ use meilisearch_error::ResponseError;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
+use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
 use crate::options::IndexerOpts;
@@ -35,7 +37,7 @@ where
         if let Some(task) = batch.tasks.first_mut() {
             task.events.push(TaskEvent::Processing(Utc::now()));
 
-            match self.process_task(batch.index_uid.clone(), task).await {
+            match self.process_task(task).await {
                 Ok(success) => {
                     task.events.push(TaskEvent::Succeded {
                         result: success,
@@ -63,6 +65,45 @@ pub fn create_index_resolver(
     Ok(IndexResolver::new(uuid_store, index_store))
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct IndexUid(String);
+
+impl IndexUid {
+    pub fn new(uid: String) -> Result<Self> {
+    if uid.chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+            Ok(Self(uid))
+        } else {
+            Err(IndexResolverError::BadlyFormatted(uid))
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_unchecked(s: String) -> Self {
+        Self(s)
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::ops::Deref for IndexUid {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryInto<IndexUid> for String {
+    type Error = IndexResolverError;
+
+    fn try_into(self) -> Result<IndexUid> {
+        IndexUid::new(self)
+    }
+}
+
 pub struct IndexResolver<U, I> {
     index_uuid_store: U,
     index_store: I,
@@ -75,12 +116,7 @@ impl IndexResolver<HeedUuidStore, MapIndexStore> {
     //     index_db_size: usize,
     //     indexer_opts: &IndexerOpts,
     // ) -> anyhow::Result<()> {
-    //     HeedUuidStore::load_dump(&src, &dst)?;
-
-    //     let indexes_path = src.as_ref().join("indexes");
-    //     let indexes = indexes_path.read_dir()?;
-
-    //     let update_handler = UpdateHandler::new(indexer_opts)?;
+    //     HeedUuidStore::load_dump(&src, &dst)?; let indexes_path = src.as_ref().join("indexes"); let indexes = indexes_path.read_dir()?; let update_handler = UpdateHandler::new(indexer_opts)?;
     //     for index in indexes {
     //         let index = index?;
     //         Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
@@ -102,7 +138,8 @@ where
         }
     }
 
-    async fn process_task(&self, index_uid: String, task: &Task) -> Result<TaskResult> {
+    async fn process_task(&self, task: &Task) -> Result<TaskResult> {
+        let index_uid = task.index_uid.clone();
         match &task.content {
             TaskContent::DocumentAddition {
                 content_uuid,
@@ -124,12 +161,12 @@ where
                 }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
-                let index = self.get_index(index_uid).await?;
+                let index = self.get_index(index_uid.into_inner()).await?;
                 let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
                 Ok(TaskResult::DocumentDeletion { number_of_documents:  deleted })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                let index = self.get_index(index_uid).await?;
+                let index = self.get_index(index_uid.into_inner()).await?;
                 spawn_blocking(move || index.clear_documents()).await??;
 
                 Ok(TaskResult::Other)
@@ -147,7 +184,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::IndexDeletion => {
-                self.delete_index(index_uid).await?;
+                self.delete_index(index_uid.into_inner()).await?;
                 // TODO: handle task deletion
 
                 Ok(TaskResult::Other)
@@ -164,7 +201,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::UpdateIndex { primary_key } => {
-                let index = self.get_index(index_uid).await?;
+                let index = self.get_index(index_uid.into_inner()).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -204,12 +241,8 @@ where
     //      Ok(indexes)
     //  }
 
-    async fn create_index(&self, uid: String, task_id: TaskId) -> Result<Index> {
-        if !is_index_uid_valid(&uid) {
-            return Err(IndexResolverError::BadlyFormatted(uid));
-        }
-
-        match self.index_uuid_store.get_uuid(uid).await? {
+    async fn create_index(&self, uid: IndexUid, task_id: TaskId) -> Result<Index> {
+        match self.index_uuid_store.get_uuid(uid.into_inner()).await? {
             (uid, Some(_)) => Err(IndexResolverError::IndexAlreadyExists(uid)),
             (uid, None) => {
                 let uuid = Uuid::new_v4();
@@ -232,7 +265,7 @@ where
     }
 
     /// Get or create an index with name `uid`.
-    pub async fn get_or_create_index(&self, uid: String, task_id: TaskId) -> Result<Index> {
+    pub async fn get_or_create_index(&self, uid: IndexUid, task_id: TaskId) -> Result<Index> {
         match self.create_index(uid, task_id).await {
             Ok(index) => Ok(index),
             Err(IndexResolverError::IndexAlreadyExists(uid)) => self.get_index(uid).await,
@@ -307,9 +340,4 @@ where
     //         (name, _) => Err(IndexResolverError::UnexistingIndex(name)),
     //     }
     // }
-}
-
-fn is_index_uid_valid(uid: &str) -> bool {
-    uid.chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
 }

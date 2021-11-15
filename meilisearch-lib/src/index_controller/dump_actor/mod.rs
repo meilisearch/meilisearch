@@ -13,9 +13,9 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 
-use super::index_resolver::index_store::IndexStore;
-use super::index_resolver::uuid_store::UuidStore;
-use super::index_resolver::IndexResolver;
+use crate::index_resolver::index_store::IndexStore;
+use crate::index_resolver::uuid_store::UuidStore;
+use crate::index_resolver::IndexResolver;
 // use crate::analytics;
 use crate::compression::from_tar_gz;
 // use crate::index_controller::dump_actor::error::DumpActorError;
@@ -295,9 +295,9 @@ mod test {
     use super::*;
     use crate::index::error::Result as IndexResult;
     use crate::index::Index;
-    use crate::index_controller::index_resolver::error::IndexResolverError;
-    use crate::index_controller::index_resolver::index_store::MockIndexStore;
-    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_resolver::error::IndexResolverError;
+    use crate::index_resolver::index_store::MockIndexStore;
+    use crate::index_resolver::uuid_store::MockUuidStore;
 
     fn setup() {
         static SETUP: Lazy<()> = Lazy::new(|| {

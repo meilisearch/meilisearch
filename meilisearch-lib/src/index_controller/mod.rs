@@ -24,7 +24,6 @@ use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
-use crate::index_controller::index_resolver::create_index_resolver;
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
@@ -37,15 +36,14 @@ use error::Result;
 use self::error::IndexControllerError;
 // use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
-use self::index_resolver::index_store::{IndexStore, MapIndexStore};
-use self::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
-use self::index_resolver::IndexResolver;
+use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
+use crate::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
+use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
 use self::update_file_store::UpdateFileStore;
 //use self::updates::UpdateMsg;
 
 mod dump_actor;
 pub mod error;
-mod index_resolver;
 // mod snapshot;
 pub mod update_file_store;
 // pub mod updates;
@@ -314,6 +312,7 @@ where
     }
 
     pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {
+        let uid = IndexUid::new(uid)?;
         let content = match update {
             Update::DeleteDocuments(ids) => {
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
@@ -468,7 +467,7 @@ where
     }
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> Result<SearchResult> {
-        let index = self.index_resolver.get_index(uid.clone()).await?;
+        let index = self.index_resolver.get_index(uid).await?;
         let result = spawn_blocking(move || index.perform_search(query)).await??;
         Ok(result)
     }
@@ -563,10 +562,10 @@ mod test {
     use crate::index::error::Result as IndexResult;
     use crate::index::Index;
     // use crate::index_controller::dump_actor::MockDumpActorHandle;
-    use crate::index_controller::index_resolver::index_store::MockIndexStore;
-    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_resolver::index_store::MockIndexStore;
+    use crate::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_resolver::IndexResolver;
 
-    use super::index_resolver::IndexResolver;
     use super::*;
 
     impl IndexController<MockUuidStore, MockIndexStore> {
