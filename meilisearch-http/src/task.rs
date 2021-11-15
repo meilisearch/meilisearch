@@ -140,7 +140,7 @@ impl From<Task> for TaskResponse {
             TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
             TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
             TaskEvent::Succeded { timestamp, result } => {
-                match (result, &mut details) {
+                match (result, dbg!(&mut details)) {
                     (
                         TaskResult::DocumentAddition {
                             number_of_documents,
@@ -163,11 +163,7 @@ impl From<Task> for TaskResponse {
                     ) => {
                         deleted_documents.replace(*number_of_documents);
                     }
-                    (TaskResult::Other, None)
-                    | (TaskResult::Other, Some(TaskDetails::IndexInfo { .. })) => (),
-                    _ => unreachable!(
-                        "Update type from the task content should match that of its result."
-                    ),
+                    _ => (),
                 }
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
