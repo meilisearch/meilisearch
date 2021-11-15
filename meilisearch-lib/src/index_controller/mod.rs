@@ -316,7 +316,7 @@ where
                 mut payload,
                 primary_key,
                 format,
-                ..
+                method,
             } => {
                 let mut buffer = Vec::new();
                 while let Some(bytes) = payload.next().await {
@@ -350,7 +350,7 @@ where
 
                 TaskContent::DocumentAddition {
                     content_uuid,
-                    merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+                    merge_strategy: method,
                     primary_key,
                     documents_count,
                 }
