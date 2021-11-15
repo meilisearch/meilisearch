@@ -123,7 +123,11 @@ pub struct Stats {
 pub enum Update {
     DeleteDocuments(Vec<String>),
     ClearDocuments,
-    Settings(Settings<Unchecked>),
+    Settings {
+        settings: Settings<Unchecked>,
+        /// Indicates whether the update was a deletion
+        is_deletion: bool,
+    },
     DocumentAddition {
         #[derivative(Debug = "ignore")]
         payload: Payload,
@@ -315,7 +319,7 @@ where
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
             }
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
-            Update::Settings(settings) => TaskContent::SettingsUpdate(settings),
+            Update::Settings { settings, is_deletion } => TaskContent::SettingsUpdate { settings, is_deletion },
             Update::DocumentAddition {
                 mut payload,
                 primary_key,

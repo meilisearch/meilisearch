@@ -103,7 +103,7 @@ where
     }
 
     async fn process_task(&self, index_uid: String, task: &Task) -> Result<TaskResult> {
-        match &task.content {
+        match dbg!(&task.content) {
             TaskContent::DocumentAddition {
                 content_uuid,
                 merge_strategy,
@@ -134,8 +134,13 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::SettingsUpdate(settings) => {
-                let index = self.get_or_create_index(index_uid, task.id).await?;
+            TaskContent::SettingsUpdate { settings, is_deletion } => {
+                let index = if *is_deletion {
+                        self.get_index(index_uid).await?
+                    } else {
+                        self.get_or_create_index(index_uid, task.id).await?
+                };
+
                 let settings = settings.clone();
                 spawn_blocking(move || index.update_settings(&settings.check())).await??;
 

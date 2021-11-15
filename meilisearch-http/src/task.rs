@@ -120,7 +120,7 @@ impl From<Task> for TaskResponse {
             ),
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
             TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
-            TaskContent::SettingsUpdate(settings) => (
+            TaskContent::SettingsUpdate { settings, .. } => (
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
@@ -174,7 +174,7 @@ impl From<Task> for TaskResponse {
 
         let enqueued_at = match events.first() {
             Some(TaskEvent::Created(ts)) => *ts,
-            _ => unreachable!("A task first element should always be a cretion event."),
+            _ => unreachable!("A task must always have a creation event."),
         };
 
         let duration = finished_at.map(|ts| (ts - enqueued_at));
