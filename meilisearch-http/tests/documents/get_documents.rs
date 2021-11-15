@@ -17,6 +17,7 @@ async fn error_get_unexisting_document() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
+    index.wait_task(0).await;
     let (response, code) = index.get_document(1, None).await;
 
     let expected_response = json!({
@@ -75,11 +76,13 @@ async fn error_get_unexisting_index_all_documents() {
 }
 
 #[actix_rt::test]
-async fn get_no_documents() {
+async fn get_no_document() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_, code) = index.create(None).await;
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
+
+    index.wait_task(0).await;
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions::default())

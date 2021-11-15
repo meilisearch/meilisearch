@@ -39,10 +39,17 @@ async fn loop_delete_add_documents() {
     let server = Server::new().await;
     let index = server.index("test");
     let documents = json!([{"id": 1, "field1": "hello"}]);
+    let mut tasks = Vec::new();
     for _ in 0..50 {
         let (response, code) = index.add_documents(documents.clone(), None).await;
+        tasks.push(response["uid"].as_u64().unwrap());
         assert_eq!(code, 202, "{}", response);
         let (response, code) = index.delete().await;
-        assert_eq!(code, 204, "{}", response);
+        tasks.push(response["uid"].as_u64().unwrap());
+        assert_eq!(code, 202, "{}", response);
+    }
+
+    for task in tasks {
+        assert_eq!(index.wait_task(task).await["status"], "succeeded");
     }
 }

@@ -34,7 +34,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response, json!({ "updateId": 0 }));
+    assert_eq!(response["uid"], 0);
 
     // put
     let req = test::TestRequest::put()
@@ -47,7 +47,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response, json!({ "updateId": 1 }));
+    assert_eq!(response["uid"], 1);
 }
 
 /// any other content-type is must be refused
@@ -538,7 +538,7 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["updateId"], 0);
+    assert_eq!(response["uid"], 0);
     /*
      * currently we don’t check these field to stay ISO with meilisearch
      * assert_eq!(response["status"], "pending");
@@ -552,13 +552,15 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["updateId"], 0);
-    assert_eq!(response["type"]["name"], "DocumentsAddition");
-    assert_eq!(response["type"]["number"], 1);
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["uid"], 0);
+    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["details"]["receivedDocuments"], 1);
+    assert_eq!(response["details"]["indexedDocuments"], 1);
 
+    dbg!(&response);
     let processed_at =
-        DateTime::parse_from_rfc3339(response["processedAt"].as_str().unwrap()).unwrap();
+        DateTime::parse_from_rfc3339(response["finishedAt"].as_str().unwrap()).unwrap();
     let enqueued_at =
         DateTime::parse_from_rfc3339(response["enqueuedAt"].as_str().unwrap()).unwrap();
     assert!(processed_at > enqueued_at);
@@ -573,7 +575,7 @@ async fn add_documents_no_index_creation() {
 async fn error_document_add_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    let (response, code) = index.add_documents(json!([]), None).await;
+    index.add_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
         "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
@@ -582,15 +584,16 @@ async fn error_document_add_create_index_bad_uid() {
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
     });
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["error"], expected_response);
 }
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    let (response, code) = index.update_documents(json!([]), None).await;
+    index.update_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
         "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
@@ -599,8 +602,9 @@ async fn error_document_update_create_index_bad_uid() {
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
     });
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["error"], expected_response);
 }
 
 #[actix_rt::test]
@@ -621,10 +625,11 @@ async fn document_addition_with_primary_key() {
 
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["updateId"], 0);
-    assert_eq!(response["type"]["name"], "DocumentsAddition");
-    assert_eq!(response["type"]["number"], 1);
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["uid"], 0);
+    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["details"]["receivedDocuments"], 1);
+    assert_eq!(response["details"]["indexedDocuments"], 1);
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -649,10 +654,11 @@ async fn document_update_with_primary_key() {
 
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
-    assert_eq!(response["updateId"], 0);
-    assert_eq!(response["type"]["name"], "DocumentsPartial");
-    assert_eq!(response["type"]["number"], 1);
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["uid"], 0);
+    assert_eq!(response["type"], "documentsPartial");
+    assert_eq!(response["details"]["indexedDocuments"], 1);
+    assert_eq!(response["details"]["receivedDocuments"], 1);
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -690,7 +696,7 @@ async fn replace_document() {
 
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
+    assert_eq!(response["status"], "succeeded");
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
@@ -710,7 +716,7 @@ async fn error_add_no_documents() {
         "link": "https://docs.meilisearch.com/errors#malformed_payload"
     });
 
-    assert_eq!(response, expected_response);
+    assert_eq!(dbg!(response), expected_response);
     assert_eq!(code, 400);
 }
 
@@ -745,7 +751,7 @@ async fn update_document() {
 
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "processed");
+    assert_eq!(response["status"], "succeeded");
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
@@ -785,8 +791,8 @@ async fn update_larger_dataset() {
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["type"]["name"], "DocumentsPartial");
-    assert_eq!(response["type"]["number"], 77);
+    assert_eq!(response["type"], "documentsPartial");
+    assert_eq!(response["details"]["indexedDocuments"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
             limit: Some(1000),
@@ -809,15 +815,16 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
+    index.wait_task(1).await;
+    let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
+    dbg!(&response);
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
-    assert_eq!(response["code"], json!("invalid_document_id"));
-    assert_eq!(response["type"], json!("invalid_request"));
+    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(response["error"]["code"], json!("invalid_document_id"));
+    assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
-        response["link"],
+        response["error"]["link"],
         json!("https://docs.meilisearch.com/errors#invalid_document_id")
     );
 }
@@ -834,15 +841,13 @@ async fn error_update_documents_bad_document_id() {
         }
     ]);
     index.update_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
-    assert_eq!(code, 200);
+    let response = index.wait_task(1).await;
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
-    assert_eq!(response["code"], json!("invalid_document_id"));
-    assert_eq!(response["type"], json!("invalid_request"));
+    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(response["error"]["code"], json!("invalid_document_id"));
+    assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
-        response["link"],
+        response["error"]["link"],
         json!("https://docs.meilisearch.com/errors#invalid_document_id")
     );
 }
@@ -859,18 +864,18 @@ async fn error_add_documents_missing_document_id() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
+    index.wait_task(1).await;
+    let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
     assert_eq!(
-        response["message"],
+        response["error"]["message"],
         json!(r#"Document doesn't have a `docid` attribute: `{"id":"11","content":"foobar"}`."#)
     );
-    assert_eq!(response["code"], json!("missing_document_id"));
-    assert_eq!(response["type"], json!("invalid_request"));
+    assert_eq!(response["error"]["code"], json!("missing_document_id"));
+    assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
-        response["link"],
+        response["error"]["link"],
         json!("https://docs.meilisearch.com/errors#missing_document_id")
     );
 }
@@ -887,18 +892,16 @@ async fn error_update_documents_missing_document_id() {
         }
     ]);
     index.update_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
-    assert_eq!(code, 200);
+    let response = index.wait_task(1).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(
-        response["message"],
+        response["error"]["message"],
         r#"Document doesn't have a `docid` attribute: `{"id":"11","content":"foobar"}`."#
     );
-    assert_eq!(response["code"], "missing_document_id");
-    assert_eq!(response["type"], "invalid_request");
+    assert_eq!(response["error"]["code"], "missing_document_id");
+    assert_eq!(response["error"]["type"], "invalid_request");
     assert_eq!(
-        response["link"],
+        response["error"]["link"],
         "https://docs.meilisearch.com/errors#missing_document_id"
     );
 }

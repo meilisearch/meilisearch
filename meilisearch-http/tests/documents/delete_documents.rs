@@ -5,8 +5,13 @@ use crate::common::{GetAllDocumentsOptions, Server};
 #[actix_rt::test]
 async fn delete_one_document_unexisting_index() {
     let server = Server::new().await;
-    let (_response, code) = server.index("test").delete_document(0).await;
-    assert_eq!(code, 404);
+    let index = server.index("test");
+    let (_response, code) = index.delete_document(0).await;
+    assert_eq!(code, 202);
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "failed");
 }
 
 #[actix_rt::test]
@@ -17,7 +22,7 @@ async fn delete_one_unexisting_document() {
     let (response, code) = index.delete_document(0).await;
     assert_eq!(code, 202, "{}", response);
     let update = index.wait_task(0).await;
-    assert_eq!(update["status"], "processed");
+    assert_eq!(update["status"], "succeeded");
 }
 
 #[actix_rt::test]
@@ -39,8 +44,13 @@ async fn delete_one_document() {
 #[actix_rt::test]
 async fn clear_all_documents_unexisting_index() {
     let server = Server::new().await;
-    let (_response, code) = server.index("test").clear_all_documents().await;
-    assert_eq!(code, 404);
+    let index = server.index("test");
+    let (_response, code) = index.clear_all_documents().await;
+    assert_eq!(code, 202);
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "failed");
 }
 
 #[actix_rt::test]
@@ -85,15 +95,20 @@ async fn clear_all_documents_empty_index() {
 #[actix_rt::test]
 async fn error_delete_batch_unexisting_index() {
     let server = Server::new().await;
-    let (response, code) = server.index("test").delete_batch(vec![]).await;
+    let index = server.index("test");
+    let (_, code) = index.delete_batch(vec![]).await;
     let expected_response = json!({
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
-    assert_eq!(code, 404);
-    assert_eq!(response, expected_response);
+    assert_eq!(code, 202);
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "failed");
+    assert_eq!(response["error"], expected_response);
 }
 
 #[actix_rt::test]
