@@ -34,6 +34,7 @@ use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
 
+use self::error::IndexControllerError;
 // use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
 use self::index_resolver::index_store::{IndexStore, MapIndexStore};
@@ -320,19 +321,14 @@ where
             } => {
                 let mut buffer = Vec::new();
                 while let Some(bytes) = payload.next().await {
-                    match bytes {
-                        Ok(bytes) => {
-                            buffer.extend_from_slice(&bytes);
-                        }
-                        Err(_e) => todo!("handle payload errors"),
-                    }
+                    let bytes = bytes?;
+                    buffer.extend_from_slice(&bytes);
                 }
                 let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
                 let documents_count = tokio::task::spawn_blocking(move || -> Result<_> {
                     // check if the payload is empty, and return an error
                     if buffer.is_empty() {
-                        todo!("empty payload error")
-                        //return Err(UpdateLoopError::MissingPayload(format));
+                        return Err(IndexControllerError::MissingPayload(format));
                     }
 
                     let reader = Cursor::new(buffer);

@@ -90,7 +90,7 @@ impl From<Task> for TaskResponse {
             index_uid,
             content,
             events,
-        } = task;
+        } = dbg!(task);
 
         let (task_type, mut details) = match content {
             TaskContent::DocumentAddition {
