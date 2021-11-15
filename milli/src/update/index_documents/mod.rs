@@ -35,9 +35,12 @@ static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
 static TOTAL_POSTING_DATABASE_COUNT: usize = MERGED_DATABASE_COUNT + PREFIX_DATABASE_COUNT;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentAdditionResult {
-    pub nb_documents: usize,
+    /// The number of documents that were indexed during the update
+    pub indexed_documents: u64,
+    /// The total number of documents in the index after the update
+    pub number_of_documents: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -137,7 +140,10 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
     {
         // Early return when there is no document to add
         if reader.is_empty() {
-            return Ok(DocumentAdditionResult { nb_documents: 0 });
+            return Ok(DocumentAdditionResult {
+                indexed_documents: 0,
+                number_of_documents: self.index.number_of_documents(self.wtxn)?,
+            });
         }
 
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
@@ -157,16 +163,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         };
 
         let output = transform.read_documents(reader, progress_callback)?;
-        let nb_documents = output.documents_count;
+        let indexed_documents = output.documents_count as u64;
 
         info!("Update transformed in {:.02?}", before_transform.elapsed());
 
-        self.execute_raw(output, progress_callback)?;
-        Ok(DocumentAdditionResult { nb_documents })
-    }
+        let number_of_documents = self.execute_raw(output, progress_callback)?;
 
+        Ok(DocumentAdditionResult { indexed_documents, number_of_documents })
+    }
+    /// Returns the total number of documents in the index after the update.
     #[logging_timer::time("IndexDocuments::{}")]
-    pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> Result<()>
+    pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> Result<u64>
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
@@ -294,7 +301,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             debug!("documents to delete {:?}", replaced_documents_ids);
             deletion_builder.delete_documents(&replaced_documents_ids);
             let deleted_documents_count = deletion_builder.execute()?;
-            debug!("{} documents actually deleted", deleted_documents_count);
+            debug!("{} documents actually deleted", deleted_documents_count.deleted_documents);
         }
 
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
@@ -325,7 +332,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             if is_merged_database {
                 databases_seen += 1;
                 progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-                    databases_seen: databases_seen,
+                    databases_seen,
                     total_databases: TOTAL_POSTING_DATABASE_COUNT,
                 });
             }
@@ -343,7 +350,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        self.execute_prefix_databases(progress_callback)
+        self.execute_prefix_databases(progress_callback)?;
+
+        Ok(all_documents_ids.len())
     }
 
     #[logging_timer::time("IndexDocuments::{}")]

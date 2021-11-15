@@ -6,6 +6,7 @@ use fst::IntoStreamer;
 use heed::types::ByteSlice;
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::ClearDocuments;
@@ -23,6 +24,12 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     external_documents_ids: ExternalDocumentsIds<'static>,
     documents_ids: RoaringBitmap,
     update_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentDeletionResult {
+    pub deleted_documents: u64,
+    pub remaining_documents: u64,
 }
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
@@ -56,26 +63,34 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Some(docid)
     }
 
-    pub fn execute(self) -> Result<u64> {
+    pub fn execute(self) -> Result<DocumentDeletionResult> {
         self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
+        let current_documents_ids_len = documents_ids.len();
 
         // We can and must stop removing documents in a database that is empty.
         if documents_ids.is_empty() {
-            return Ok(0);
+            return Ok(DocumentDeletionResult {
+                deleted_documents: 0,
+                remaining_documents: current_documents_ids_len,
+            });
         }
 
         // We remove the documents ids that we want to delete
         // from the documents in the database and write them back.
-        let current_documents_ids_len = documents_ids.len();
         documents_ids -= &self.documents_ids;
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         // We can execute a ClearDocuments operation when the number of documents
         // to delete is exactly the number of documents in the database.
         if current_documents_ids_len == self.documents_ids.len() {
-            return ClearDocuments::new(self.wtxn, self.index, self.update_id).execute();
+            let remaining_documents =
+                ClearDocuments::new(self.wtxn, self.index, self.update_id).execute()?;
+            return Ok(DocumentDeletionResult {
+                deleted_documents: current_documents_ids_len,
+                remaining_documents,
+            });
         }
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -86,11 +101,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         })?;
 
-        // If we can't find the id of the primary key it means that the database
-        // is empty and it should be safe to return that we deleted 0 documents.
+        // Since we already checked if the DB was empty, if we can't find the primary key, then
+        // something is wrong, and we must return an error.
         let id_field = match fields_ids_map.id(primary_key) {
             Some(field) => field,
-            None => return Ok(0),
+            None => return Err(UserError::MissingPrimaryKey.into()),
         };
 
         let Index {
@@ -439,7 +454,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             )?;
         }
 
-        Ok(self.documents_ids.len())
+        Ok(DocumentDeletionResult {
+            deleted_documents: self.documents_ids.len(),
+            remaining_documents: documents_ids.len(),
+        })
     }
 }
 
