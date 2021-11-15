@@ -8,11 +8,18 @@ async fn update_primary_key() {
     let index = server.index("test");
     let (_, code) = index.create(None).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
 
-    let (response, code) = index.update(Some("primary")).await;
+    index.update(Some("primary")).await;
+
+    let response = index.wait_task(1).await;
+
+    assert_eq!(response["status"], "succeeded");
+
+    let (response, code) = index.get().await;
 
     assert_eq!(code, 200);
+
     assert_eq!(response["uid"], "test");
     assert_eq!(response["name"], "test");
     assert!(response.get("createdAt").is_some());
@@ -30,14 +37,19 @@ async fn update_primary_key() {
 async fn update_nothing() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (response, code) = index.create(None).await;
+    let (_, code) = index.create(None).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
 
-    let (update, code) = index.update(None).await;
+    index.wait_task(0).await;
 
-    assert_eq!(code, 200);
-    assert_eq!(response, update);
+    let (_, code) = index.update(None).await;
+
+    assert_eq!(code, 202);
+
+    let response = index.wait_task(1).await;
+
+    assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]
@@ -46,7 +58,7 @@ async fn error_update_existing_primary_key() {
     let index = server.index("test");
     let (_response, code) = index.create(Some("id")).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
 
     let documents = json!([
         {
@@ -55,9 +67,12 @@ async fn error_update_existing_primary_key() {
         }
     ]);
     index.add_documents(documents, None).await;
-    index.wait_task(0).await;
 
-    let (response, code) = index.update(Some("primary")).await;
+    let (_, code) = index.update(Some("primary")).await;
+
+    assert_eq!(code, 202);
+
+    let response = index.wait_task(2).await;
 
     let expected_response = json!({
         "message": "Index already has a primary key: `id`.",
@@ -66,14 +81,17 @@ async fn error_update_existing_primary_key() {
         "link": "https://docs.meilisearch.com/errors#index_primary_key_already_exists"
     });
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    assert_eq!(response["error"], expected_response);
 }
 
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
     let server = Server::new().await;
-    let (response, code) = server.index("test").update(None).await;
+    let (_, code) = server.index("test").update(None).await;
+
+    assert_eq!(code, 202);
+
+    let response = server.index("test").wait_task(0).await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",
@@ -82,6 +100,5 @@ async fn error_update_unexisting_index() {
         "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 404);
+    assert_eq!(response["error"], expected_response);
 }
