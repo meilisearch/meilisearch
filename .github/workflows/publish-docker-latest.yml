@@ -2,7 +2,6 @@
 on:
   release:
     types: [released]
-  workflow_dispatch:
 
 name: Publish latest image to Docker Hub
 
