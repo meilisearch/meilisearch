@@ -135,6 +135,9 @@ pub enum Update {
     CreateIndex {
         primary_key: Option<String>,
     },
+    UpdateIndex {
+        primary_key: Option<String>,
+    }
 }
 
 #[derive(Default, Debug)]
@@ -353,6 +356,7 @@ where
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,
             Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
+            Update::UpdateIndex { primary_key } => TaskContent::UpdateIndex { primary_key },
         };
 
         let task = self.task_store.register(uid, content).await?;
