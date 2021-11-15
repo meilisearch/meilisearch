@@ -155,13 +155,13 @@ impl TaskStore {
         filter: Option<TaskFilter>,
         limit: Option<usize>,
         offset: Option<TaskId>,
-        _until: Option<TaskId>,
+        until: Option<TaskId>,
     ) -> Result<Vec<Task>> {
         let store = self.store.clone();
 
         tokio::task::spawn_blocking(move || {
             let txn = store.rtxn()?;
-            let tasks = store.list_tasks(&txn, offset, filter, limit)?;
+            let tasks = store.list_tasks(&txn, offset, filter, limit, until)?;
             Ok(tasks)
         })
         .await?
