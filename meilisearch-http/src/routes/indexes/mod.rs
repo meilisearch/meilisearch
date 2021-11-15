@@ -72,7 +72,7 @@ pub async fn create_index(
     let update = Update::CreateIndex { primary_key };
     let task: TaskResponse = meilisearch.register_update(uid, update).await?.into();
 
-    Ok(HttpResponse::Created().json(task))
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,7 +135,7 @@ pub async fn delete_index(
     let update = Update::DeleteIndex;
     let task: TaskResponse = meilisearch.register_update(uid, update).await?.into();
 
-    Ok(HttpResponse::Ok().json(task))
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_index_stats(
