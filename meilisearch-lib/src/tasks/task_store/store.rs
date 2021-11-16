@@ -92,6 +92,11 @@ impl Store {
         Ok(id)
     }
 
+    /// Return the last task that was pushed in the store.
+    pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
+        Ok(self.tasks.last(txn)?.map(|(_, task)| task))
+    }
+
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
         self.tasks.put(txn, &BEU64::new(task.id), task)?;
         self.uids_task_ids
@@ -235,6 +240,13 @@ pub mod test {
         pub fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
             match self {
                 MockStore::Real(index) => index.get(txn, id),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
+            match self {
+                MockStore::Real(index) => index.get_last_task(txn),
                 MockStore::Fake(_) => todo!(),
             }
         }

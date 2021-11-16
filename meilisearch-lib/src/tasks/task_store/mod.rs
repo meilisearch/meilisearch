@@ -99,6 +99,15 @@ impl TaskStore {
         self.pending_queue.read().await.peek().map(|rid| rid.0)
     }
 
+    // Returns the next task to process.
+    pub async fn get_pending_task(&self) -> Result<Option<Task>> {
+        if let Some(uid) = self.peek_pending().await {
+            Ok(Some(self.get_task(uid - 1, None).await?))
+        } else {
+            self.store.get_last_task(&self.store.rtxn()?)
+        }
+    }
+
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
@@ -210,6 +219,16 @@ pub mod test {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
+            }
+        }
+
+        pub async fn get_pending_task(&self) -> Result<Option<Task>> {
+            match self {
+                Self::Real(s) => s.get_pending_task().await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Result<Option<Task>>>("get_pending_task")
+                        .call(())
+                },
             }
         }
 

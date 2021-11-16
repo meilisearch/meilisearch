@@ -28,7 +28,7 @@ use crate::index::{
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -36,10 +36,10 @@ use error::Result;
 use self::error::IndexControllerError;
 // use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
+use self::update_file_store::UpdateFileStore;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
 use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
-use self::update_file_store::UpdateFileStore;
 //use self::updates::UpdateMsg;
 
 mod dump_actor;
@@ -139,7 +139,7 @@ pub enum Update {
     },
     UpdateIndex {
         primary_key: Option<String>,
-    }
+    },
 }
 
 #[derive(Default, Debug)]
@@ -318,7 +318,13 @@ where
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
             }
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
-            Update::Settings { settings, is_deletion } => TaskContent::SettingsUpdate { settings, is_deletion },
+            Update::Settings {
+                settings,
+                is_deletion,
+            } => TaskContent::SettingsUpdate {
+                settings,
+                is_deletion,
+            },
             Update::DocumentAddition {
                 mut payload,
                 primary_key,
@@ -373,18 +379,19 @@ where
     }
 
     pub async fn get_index_task(&self, index_uid: String, task_id: TaskId) -> Result<Task> {
-        let creation_task_id = self.index_resolver.get_index_creation_task_id(index_uid.clone()).await?;
+        let creation_task_id = self
+            .index_resolver
+            .get_index_creation_task_id(index_uid.clone())
+            .await?;
         if task_id < creation_task_id {
             return Err(TaskError::UnexistingTask(task_id).into());
         }
 
         let mut filter = TaskFilter::default();
         filter.filter_index(index_uid);
-        let task = self.task_store
-            .get_task(task_id, Some(filter))
-            .await?;
+        let task = self.task_store.get_task(task_id, Some(filter)).await?;
 
-            Ok(task)
+        Ok(task)
     }
 
     pub async fn list_tasks(
@@ -393,7 +400,10 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let tasks = self.task_store.list_tasks(filter, limit, offset, None).await?;
+        let tasks = self
+            .task_store
+            .list_tasks(filter, limit, offset, None)
+            .await?;
 
         Ok(tasks)
     }
@@ -404,16 +414,20 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let task_id = self.index_resolver.get_index_creation_task_id(index_uid.clone()).await?;
+        let task_id = self
+            .index_resolver
+            .get_index_creation_task_id(index_uid.clone())
+            .await?;
 
         let mut filter = TaskFilter::default();
         filter.filter_index(index_uid);
 
-        let tasks = self.task_store
+        let tasks = self
+            .task_store
             .list_tasks(Some(filter), limit, offset, Some(task_id))
             .await?;
 
-            Ok(tasks)
+        Ok(tasks)
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {
@@ -497,38 +511,43 @@ where
     }
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
-        todo!()
-        //let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
-        //let mut database_size = self.index_resolver.get_uuids_size().await? + update_infos.size;
-        //let mut last_update: Option<DateTime<_>> = None;
-        //let mut indexes = BTreeMap::new();
+        let mut last_update: Option<DateTime<_>> = None;
+        let mut indexes = BTreeMap::new();
+        let mut database_size = 0;
+        let last_task = self.task_store.get_pending_task().await?;
+        dbg!(&last_task);
+        let task_is_indexing = last_task
+            .as_ref()
+            .map(|task| matches!(task.events.last(), Some(TaskEvent::Processing(_))))
+            .unwrap_or(false);
+        let indexing_uid = last_task.map(|task| task.index_uid.into_inner());
 
-        //for (index_uid, index) in self.index_resolver.list().await? {
-        //let uuid = index.uuid;
-        //let (mut stats, meta) = spawn_blocking::<_, IndexResult<_>>(move || {
-        //let stats = index.stats()?;
-        //let meta = index.meta()?;
-        //Ok((stats, meta))
-        //})
-        //.await??;
+        for (index_uid, index) in self.index_resolver.list().await? {
+            let (mut stats, meta) =
+                spawn_blocking::<_, Result<(IndexStats, IndexMeta)>>(move || {
+                    Ok((index.stats()?, index.meta()?))
+                })
+                .await??;
 
-        //database_size += stats.size;
+            database_size += stats.size;
 
-        //last_update = last_update.map_or(Some(meta.updated_at), |last| {
-        //Some(last.max(meta.updated_at))
-        //});
+            last_update = last_update.map_or(Some(meta.updated_at), |last| {
+                Some(last.max(meta.updated_at))
+            });
 
-        //// Check if the currently indexing update is from our index.
-        //stats.is_indexing = Some(Some(uuid) == update_infos.processing);
+            if task_is_indexing {
+                // Check if the currently indexing update is from our index.
+                stats.is_indexing = Some(Some(&index_uid) == indexing_uid.as_ref());
+            }
 
-        //indexes.insert(index_uid, stats);
-        //}
+            indexes.insert(index_uid, stats);
+        }
 
-        //Ok(Stats {
-        //database_size,
-        //last_update,
-        //indexes,
-        //})
+        Ok(Stats {
+            database_size,
+            last_update,
+            indexes,
+        })
     }
 
     // pub async fn create_dump(&self) -> Result<DumpInfo> {
