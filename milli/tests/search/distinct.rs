@@ -16,9 +16,9 @@ macro_rules! test_distinct {
 
             // update distinct attribute
             let mut wtxn = index.write_txn().unwrap();
-            let mut builder = Settings::new(&mut wtxn, &index, 0);
+            let mut builder = Settings::new(&mut wtxn, &index);
             builder.set_distinct_field(S(stringify!($distinct)));
-            builder.execute(|_, _| ()).unwrap();
+            builder.execute(|_| ()).unwrap();
             wtxn.commit().unwrap();
 
             let rtxn = index.read_txn().unwrap();

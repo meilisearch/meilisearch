@@ -343,7 +343,7 @@ async fn main() -> anyhow::Result<()> {
         // the type hint is necessary: https://github.com/rust-lang/rust/issues/32600
         move |update_id, meta, content: &_| {
             // We prepare the update by using the update builder.
-            let mut update_builder = UpdateBuilder::new(update_id);
+            let mut update_builder = UpdateBuilder::new();
             if let Some(max_nb_chunks) = indexer_opt_cloned.max_nb_chunks {
                 update_builder.max_nb_chunks(max_nb_chunks);
             }
@@ -393,7 +393,7 @@ async fn main() -> anyhow::Result<()> {
 
                         let documents = DocumentBatchReader::from_reader(Cursor::new(documents))?;
 
-                        let result = builder.execute(documents, |indexing_step, update_id| {
+                        let result = builder.execute(documents, |indexing_step| {
                             let (current, total) = match indexing_step {
                                 RemapDocumentAddition { documents_seen } => (documents_seen, None),
                                 ComputeIdsAndMergeDocuments { documents_seen, total_documents } => {
@@ -494,7 +494,7 @@ async fn main() -> anyhow::Result<()> {
                             Setting::NotSet => (),
                         }
 
-                        let result = builder.execute(|indexing_step, update_id| {
+                        let result = builder.execute(|indexing_step| {
                             let (current, total) = match indexing_step {
                                 RemapDocumentAddition { documents_seen } => (documents_seen, None),
                                 ComputeIdsAndMergeDocuments { documents_seen, total_documents } => {

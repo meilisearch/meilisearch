@@ -39,7 +39,7 @@ fn indexing_songs_default(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -61,17 +61,17 @@ fn indexing_songs_default(c: &mut Criterion) {
                         .map(|s| s.to_string())
                         .collect();
                 builder.set_filterable_fields(faceted_fields);
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let builder = update_builder.index_documents(&mut wtxn, &index);
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -88,7 +88,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -107,17 +107,17 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 let faceted_fields =
                     ["genre", "country", "artist"].iter().map(|s| s.to_string()).collect();
                 builder.set_filterable_fields(faceted_fields);
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let builder = update_builder.index_documents(&mut wtxn, &index);
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -134,7 +134,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -149,17 +149,17 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 let searchable_fields =
                     ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
                 builder.set_searchable_fields(searchable_fields);
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let builder = update_builder.index_documents(&mut wtxn, &index);
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -176,7 +176,7 @@ fn indexing_wiki(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -190,18 +190,18 @@ fn indexing_wiki(c: &mut Criterion) {
 
                 // there is NO faceted fields at all
 
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.index_documents(&mut wtxn, &index);
                 builder.enable_autogenerate_docids();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -218,7 +218,7 @@ fn indexing_movies_default(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -237,17 +237,17 @@ fn indexing_movies_default(c: &mut Criterion) {
                     ["released_date", "genres"].iter().map(|s| s.to_string()).collect();
                 builder.set_filterable_fields(faceted_fields);
 
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let builder = update_builder.index_documents(&mut wtxn, &index);
 
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -264,7 +264,7 @@ fn indexing_geo(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -288,17 +288,17 @@ fn indexing_geo(c: &mut Criterion) {
                     ["_geo", "population", "elevation"].iter().map(|s| s.to_string()).collect();
                 builder.set_sortable_fields(sortable_fields);
 
-                builder.execute(|_, _| ()).unwrap();
+                builder.execute(|_| ()).unwrap();
                 wtxn.commit().unwrap();
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new(0);
+                let update_builder = UpdateBuilder::new();
                 let mut wtxn = index.write_txn().unwrap();
                 let builder = update_builder.index_documents(&mut wtxn, &index);
 
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                builder.execute(documents, |_, _| ()).unwrap();
+                builder.execute(documents, |_| ()).unwrap();
 
                 wtxn.commit().unwrap();
 

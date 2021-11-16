@@ -122,7 +122,7 @@ impl DocumentAddition {
         println!("Adding {} documents to the index.", reader.len());
 
         let mut txn = index.env.write_txn()?;
-        let mut addition = milli::update::IndexDocuments::new(&mut txn, &index, 0);
+        let mut addition = milli::update::IndexDocuments::new(&mut txn, &index);
 
         if self.update_documents {
             addition.index_documents_method(milli::update::IndexDocumentsMethod::UpdateDocuments);
@@ -146,7 +146,7 @@ impl DocumentAddition {
             progesses.join().unwrap();
         });
 
-        let result = addition.execute(reader, |step, _| indexing_callback(step, &bars))?;
+        let result = addition.execute(reader, |step| indexing_callback(step, &bars))?;
 
         txn.commit()?;
 
@@ -292,7 +292,7 @@ impl SettingsUpdate {
     fn perform(&self, index: milli::Index) -> Result<()> {
         let mut txn = index.env.write_txn()?;
 
-        let mut update = milli::update::Settings::new(&mut txn, &index, 0);
+        let mut update = milli::update::Settings::new(&mut txn, &index);
         update.log_every_n(100);
 
         if let Some(ref filterable_attributes) = self.filterable_attributes {
@@ -315,7 +315,7 @@ impl SettingsUpdate {
             progesses.join().unwrap();
         });
 
-        update.execute(|step, _| indexing_callback(step, &bars))?;
+        update.execute(|step| indexing_callback(step, &bars))?;
 
         txn.commit()?;
         Ok(())

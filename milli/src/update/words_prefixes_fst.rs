@@ -10,22 +10,14 @@ pub struct WordsPrefixesFst<'t, 'u, 'i> {
     index: &'i Index,
     threshold: u32,
     max_prefix_length: usize,
-    _update_id: u64,
 }
 
 impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-        update_id: u64,
     ) -> WordsPrefixesFst<'t, 'u, 'i> {
-        WordsPrefixesFst {
-            wtxn,
-            index,
-            threshold: 100,
-            max_prefix_length: 4,
-            _update_id: update_id,
-        }
+        WordsPrefixesFst { wtxn, index, threshold: 100, max_prefix_length: 4 }
     }
 
     /// Set the number of words required to make a prefix be part of the words prefixes

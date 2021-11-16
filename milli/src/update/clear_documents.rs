@@ -6,16 +6,11 @@ use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    _update_id: u64,
 }
 
 impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
-    pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        index: &'i Index,
-        update_id: u64,
-    ) -> ClearDocuments<'t, 'u, 'i> {
-        ClearDocuments { wtxn, index, _update_id: update_id }
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> ClearDocuments<'t, 'u, 'i> {
+        ClearDocuments { wtxn, index }
     }
 
     pub fn execute(self) -> Result<u64> {
@@ -97,10 +92,10 @@ mod tests {
             { "id": 1, "name": "kevina" },
             { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
         ]);
-        IndexDocuments::new(&mut wtxn, &index, 0).execute(content, |_, _| ()).unwrap();
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_| ()).unwrap();
 
         // Clear all documents from the database.
-        let builder = ClearDocuments::new(&mut wtxn, &index, 1);
+        let builder = ClearDocuments::new(&mut wtxn, &index);
         assert_eq!(builder.execute().unwrap(), 3);
 
         wtxn.commit().unwrap();

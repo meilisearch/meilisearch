@@ -32,7 +32,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     let mut wtxn = index.write_txn().unwrap();
 
-    let mut builder = Settings::new(&mut wtxn, &index, 0);
+    let mut builder = Settings::new(&mut wtxn, &index);
 
     let criteria = criteria.iter().map(|c| c.to_string()).collect();
     builder.set_criteria(criteria);
@@ -51,10 +51,10 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(|_, _| ()).unwrap();
+    builder.execute(|_| ()).unwrap();
 
     // index documents
-    let mut builder = UpdateBuilder::new(0);
+    let mut builder = UpdateBuilder::new();
     builder.max_memory(10 * 1024 * 1024); // 10MiB
     let mut builder = builder.index_documents(&mut wtxn, &index);
     builder.enable_autogenerate_docids();
@@ -73,7 +73,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     // index documents
     let content = DocumentBatchReader::from_reader(cursor).unwrap();
-    builder.execute(content, |_, _| ()).unwrap();
+    builder.execute(content, |_| ()).unwrap();
 
     wtxn.commit().unwrap();
 

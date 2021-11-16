@@ -908,8 +908,8 @@ pub(crate) mod tests {
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.execute(content, |_, _| ()).unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -927,13 +927,13 @@ pub(crate) mod tests {
         // we add all the documents a second time. we are supposed to get the same
         // field_distribution in the end
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        let builder = IndexDocuments::new(&mut wtxn, &index);
         let content = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 }
         ]);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -955,8 +955,8 @@ pub(crate) mod tests {
         ]);
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(&mut wtxn, &index, 0);
-        builder.execute(content, |_, _| ()).unwrap();
+        let builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

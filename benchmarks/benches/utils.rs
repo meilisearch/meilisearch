@@ -65,7 +65,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     options.max_readers(10);
     let index = Index::new(options, conf.database_name).unwrap();
 
-    let update_builder = UpdateBuilder::new(0);
+    let update_builder = UpdateBuilder::new();
     let mut wtxn = index.write_txn().unwrap();
     let mut builder = update_builder.settings(&mut wtxn, &index);
 
@@ -84,10 +84,10 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(|_, _| ()).unwrap();
+    builder.execute(|_| ()).unwrap();
     wtxn.commit().unwrap();
 
-    let update_builder = UpdateBuilder::new(0);
+    let update_builder = UpdateBuilder::new();
     let mut wtxn = index.write_txn().unwrap();
     let mut builder = update_builder.index_documents(&mut wtxn, &index);
     if let None = conf.primary_key {
@@ -96,7 +96,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     let documents = documents_from(conf.dataset, conf.dataset_format);
 
     builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-    builder.execute(documents, |_, _| ()).unwrap();
+    builder.execute(documents, |_| ()).unwrap();
     wtxn.commit().unwrap();
 
     index

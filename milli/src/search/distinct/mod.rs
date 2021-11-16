@@ -84,19 +84,19 @@ mod test {
         let mut txn = index.write_txn().unwrap();
 
         // set distinct and faceted attributes for the index.
-        let builder = UpdateBuilder::new(0);
+        let builder = UpdateBuilder::new();
         let mut update = builder.settings(&mut txn, &index);
         update.set_distinct_field(distinct.to_string());
-        update.execute(|_, _| ()).unwrap();
+        update.execute(|_| ()).unwrap();
 
         // add documents to the index
-        let builder = UpdateBuilder::new(1);
+        let builder = UpdateBuilder::new();
         let mut addition = builder.index_documents(&mut txn, &index);
 
         addition.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
         let reader =
             crate::documents::DocumentBatchReader::from_reader(Cursor::new(&*JSON)).unwrap();
-        addition.execute(reader, |_, _| ()).unwrap();
+        addition.execute(reader, |_| ()).unwrap();
 
         let fields_map = index.fields_ids_map(&txn).unwrap();
         let fid = fields_map.id(&distinct).unwrap();
