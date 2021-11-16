@@ -103,7 +103,7 @@ where
     }
 
     async fn process_task(&self, index_uid: String, task: &Task) -> Result<TaskResult> {
-        match dbg!(&task.content) {
+        match &task.content {
             TaskContent::DocumentAddition {
                 content_uuid,
                 merge_strategy,

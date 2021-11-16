@@ -558,7 +558,6 @@ async fn add_documents_no_index_creation() {
     assert_eq!(response["details"]["receivedDocuments"], 1);
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
-    dbg!(&response);
     let processed_at =
         DateTime::parse_from_rfc3339(response["finishedAt"].as_str().unwrap()).unwrap();
     let enqueued_at =
@@ -716,7 +715,7 @@ async fn error_add_no_documents() {
         "link": "https://docs.meilisearch.com/errors#malformed_payload"
     });
 
-    assert_eq!(dbg!(response), expected_response);
+    assert_eq!(response, expected_response);
     assert_eq!(code, 400);
 }
 
@@ -818,7 +817,6 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(1).await;
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
-    dbg!(&response);
     assert_eq!(response["status"], json!("failed"));
     assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));

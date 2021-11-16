@@ -109,6 +109,7 @@ mod test {
     use nelson::Mocker;
 
     use crate::tasks::task::Task;
+    use crate::tasks::task_store::TaskFilter;
 
     use super::super::task::{TaskContent, TaskEvent, TaskId, TaskResult};
     use super::super::MockTaskPerformer;
@@ -119,9 +120,9 @@ mod test {
         let mocker = Mocker::default();
 
         mocker
-            .when::<TaskId, Result<Option<Task>>>("get_task")
+            .when::<(TaskId, Option<TaskFilter>), Result<Option<Task>>>("get_task")
             .once()
-            .then(|id| {
+            .then(|(id, _filter)| {
                 let task = Task {
                     id,
                     index_uid: "Test".to_string(),
@@ -177,9 +178,9 @@ mod test {
             .when::<(), Option<TaskId>>("peek_pending")
             .then(move |()| id.take());
         mocker
-            .when::<TaskId, Result<Option<Task>>>("get_task")
+            .when::<(TaskId, Option<TaskFilter>), Result<Option<Task>>>("get_task")
             .once()
-            .then(|id| {
+            .then(|(id, _)| {
                 let task = Task {
                     id,
                     index_uid: "Test".to_string(),

@@ -90,7 +90,7 @@ impl From<Task> for TaskResponse {
             index_uid,
             content,
             events,
-        } = dbg!(task);
+        } = task;
 
         let (task_type, mut details) = match content {
             TaskContent::DocumentAddition {
@@ -140,7 +140,7 @@ impl From<Task> for TaskResponse {
             TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
             TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
             TaskEvent::Succeded { timestamp, result } => {
-                match (result, dbg!(&mut details)) {
+                match (result, &mut details) {
                     (
                         TaskResult::DocumentAddition {
                             number_of_documents,
@@ -150,7 +150,7 @@ impl From<Task> for TaskResponse {
                             ..
                         }),
                     ) => {
-                        indexed_documents.replace(dbg!(*number_of_documents));
+                        indexed_documents.replace(*number_of_documents);
                     }
                     (
                         TaskResult::DocumentDeletion {

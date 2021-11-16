@@ -172,6 +172,7 @@ pub mod test {
     use super::*;
 
     use nelson::Mocker;
+    use quickcheck::{Arbitrary, Gen};
     use tempfile::tempdir;
 
     pub enum MockTaskStore {
@@ -246,10 +247,17 @@ pub mod test {
 
         let mut txn = store.wtxn().unwrap();
         assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
-        assert_eq!(store.next_task_id(&mut txn).unwrap(), 1);
+        assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
+
+        let mut g = Gen::new(10);
+        let mut task = Task::arbitrary(&mut g);
+        task.id = 0;
+
+        store.put(&mut txn, &task).unwrap();
+
         txn.commit().unwrap();
 
         let mut txn = store.wtxn().unwrap();
-        assert_eq!(store.next_task_id(&mut txn).unwrap(), 2);
+        assert_eq!(store.next_task_id(&mut txn).unwrap(), 1);
     }
 }

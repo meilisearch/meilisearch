@@ -68,7 +68,6 @@ async fn update_settings_unknown_field() {
     let server = Server::new().await;
     let index = server.index("test");
     let (response, code) = index.update_settings(json!({"foo": 12})).await;
-    dbg!(response);
     assert_eq!(code, 400);
 }
 

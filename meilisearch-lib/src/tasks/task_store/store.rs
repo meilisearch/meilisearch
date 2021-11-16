@@ -7,6 +7,7 @@ const TASKS: &str = "tasks";
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
+use std::mem::size_of;
 use std::path::Path;
 use std::result::Result as StdResult;
 
@@ -42,10 +43,10 @@ impl<'a> BytesDecode<'a> for IndexUidTaskIdCodec {
     type DItem = (&'a str, TaskId);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let str_end = bytes.iter().position(|&it| it == 0)?;
-        let str_bytes = &bytes[..str_end];
+        let len = bytes.len();
+        let str_bytes = &bytes[..(len - size_of::<TaskId>() - 1)];
         let str = std::str::from_utf8(str_bytes).ok()?;
-        let id = TaskId::from_be_bytes(bytes[str_end + 1..].try_into().ok()?);
+        let id = TaskId::from_be_bytes(bytes[(len - size_of::<TaskId>())..].try_into().ok()?);
         Some((str, id))
     }
 }
@@ -187,6 +188,7 @@ pub mod test {
     use nelson::Mocker;
     use quickcheck::{Arbitrary, Gen, TestResult};
     use quickcheck_macros::quickcheck;
+    use k9::assert_equal as assert_eq;
 
     use super::*;
 
@@ -264,6 +266,7 @@ pub mod test {
         {
             return TestResult::discard();
         }
+
         let tmp = tempfile::tempdir().unwrap();
 
         let store = Store::new(tmp.path(), 4096 * 10000000).unwrap();
@@ -271,6 +274,9 @@ pub mod test {
         let mut txn = store.wtxn().unwrap();
 
         for task in tasks.iter() {
+            if task.index_uid.len() > 400 {
+                return TestResult::discard();
+            }
             store.put(&mut txn, task).unwrap();
         }
 
@@ -278,11 +284,15 @@ pub mod test {
 
         let txn = store.rtxn().unwrap();
 
-        assert_eq!(store.task_count(&txn).unwrap(), tasks.len());
+        if store.task_count(&txn).unwrap() != tasks.len() {
+            return TestResult::failed()
+        }
 
         for task in tasks {
             let found_task = store.get(&txn, task.id).unwrap().unwrap();
-            assert_eq!(found_task, task);
+            if found_task != task {
+                return TestResult::failed()
+            }
         }
 
         TestResult::passed()
