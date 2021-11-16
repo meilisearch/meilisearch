@@ -116,15 +116,16 @@ impl Store {
         from: Option<TaskId>,
         filter: Option<TaskFilter>,
         limit: Option<usize>,
-        until: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let range = from.unwrap_or_default()..until.unwrap_or(TaskId::MAX);
+        let from = from.unwrap_or_default();
+        let range = from..limit
+            .map(|limit| (limit as u64).saturating_add(from))
+            .unwrap_or(u64::MAX);
         let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
             Some(filter) => {
                 let iter = self
                     .compute_candidates(txn, filter, range)?
                     .into_iter()
-                    .skip_while(|&id| from.map(|from| from == id).unwrap_or_default())
                     .filter_map(|id| self.tasks.get(txn, &BEU64::new(id)).transpose());
 
                 Box::new(iter)
@@ -161,6 +162,7 @@ impl Store {
                 // prefix, i.e test and test1.
                 let mut index_uid = index.as_bytes().to_vec();
                 index_uid.push(0);
+
                 self.uids_task_ids
                     .remap_key_type::<ByteSlice>()
                     .rev_prefix_iter(txn, &index_uid)?
@@ -170,17 +172,27 @@ impl Store {
                             IndexUidTaskIdCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
                         Ok(id)
                     })
+                    .skip_while(|entry| {
+                        entry
+                            .as_ref()
+                            .ok()
+                            // we skip all elements till we enter in the range
+                            .map(|key| !range.contains(key))
+                            // if we encounter an error we returns true to collect it later
+                            .unwrap_or(true)
+                    })
                     .take_while(|entry| {
                         entry
                             .as_ref()
                             .ok()
                             // as soon as we are out of the range we exit
-                            .map(|key| !range.contains(key))
+                            .map(|key| range.contains(key))
+                            // if we encounter an error we returns true to collect it later
                             .unwrap_or(true)
-                        // if we encountered an error we returns true to collect it later
                     })
                     .try_for_each::<_, StdResult<(), heed::Error>>(|id| {
-                        Ok(drop(candidates.insert(id?)))
+                        candidates.insert(id?);
+                        Ok(())
                     })?;
             }
         }
@@ -260,10 +272,9 @@ pub mod test {
             from: Option<TaskId>,
             filter: Option<TaskFilter>,
             limit: Option<usize>,
-            until: Option<TaskId>,
         ) -> Result<Vec<Task>> {
             match self {
-                MockStore::Real(index) => index.list_tasks(txn, from, filter, limit, until),
+                MockStore::Real(index) => index.list_tasks(txn, from, filter, limit),
                 MockStore::Fake(_) => todo!(),
             }
         }

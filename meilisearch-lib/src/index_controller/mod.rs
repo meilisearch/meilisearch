@@ -373,18 +373,19 @@ where
     }
 
     pub async fn get_index_task(&self, index_uid: String, task_id: TaskId) -> Result<Task> {
-        let creation_task_id = self.index_resolver.get_index_creation_task_id(index_uid.clone()).await?;
+        let creation_task_id = self
+            .index_resolver
+            .get_index_creation_task_id(index_uid.clone())
+            .await?;
         if task_id < creation_task_id {
             return Err(TaskError::UnexistingTask(task_id).into());
         }
 
         let mut filter = TaskFilter::default();
         filter.filter_index(index_uid);
-        let task = self.task_store
-            .get_task(task_id, Some(filter))
-            .await?;
+        let task = self.task_store.get_task(task_id, Some(filter)).await?;
 
-            Ok(task)
+        Ok(task)
     }
 
     pub async fn list_tasks(
@@ -393,7 +394,7 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let tasks = self.task_store.list_tasks(filter, limit, offset, None).await?;
+        let tasks = self.task_store.list_tasks(offset, filter, limit).await?;
 
         Ok(tasks)
     }
@@ -404,16 +405,24 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let task_id = self.index_resolver.get_index_creation_task_id(index_uid.clone()).await?;
+        let task_id = self
+            .index_resolver
+            .get_index_creation_task_id(index_uid.clone())
+            .await?;
 
         let mut filter = TaskFilter::default();
         filter.filter_index(index_uid);
 
-        let tasks = self.task_store
-            .list_tasks(Some(filter), limit, offset, Some(task_id))
+        let tasks = self
+            .task_store
+            .list_tasks(
+                Some(offset.unwrap_or_default() + task_id),
+                Some(filter),
+                limit,
+            )
             .await?;
 
-            Ok(tasks)
+        Ok(tasks)
     }
 
     pub async fn list_indexes(&self) -> Result<Vec<IndexMetadata>> {

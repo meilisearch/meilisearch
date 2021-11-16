@@ -9,10 +9,10 @@ use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
+use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 use uuid_store::{HeedUuidStore, UuidStore};
-use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
 use crate::options::IndexerOpts;
@@ -70,8 +70,10 @@ pub struct IndexUid(String);
 
 impl IndexUid {
     pub fn new(uid: String) -> Result<Self> {
-    if uid.chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+        if uid
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        {
             Ok(Self(uid))
         } else {
             Err(IndexResolverError::BadlyFormatted(uid))
@@ -147,23 +149,25 @@ where
                 primary_key,
                 ..
             } => {
-                    let primary_key = primary_key.clone();
-                    let content_uuid = *content_uuid;
-                    let method = *merge_strategy;
+                let primary_key = primary_key.clone();
+                let content_uuid = *content_uuid;
+                let method = *merge_strategy;
 
-                    let index = self.get_or_create_index(index_uid, task.id).await?;
-                    let result = spawn_blocking(move || {
-                        index.update_documents(method, content_uuid, primary_key)
-                    })
-                    .await??;
+                let index = self.get_or_create_index(index_uid, task.id).await?;
+                let result = spawn_blocking(move || {
+                    index.update_documents(method, content_uuid, primary_key)
+                })
+                .await??;
 
-                    Ok(result.into())
-                }
+                Ok(result.into())
+            }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid.into_inner()).await?;
                 let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
-                Ok(TaskResult::DocumentDeletion { number_of_documents:  deleted })
+                Ok(TaskResult::DocumentDeletion {
+                    number_of_documents: deleted,
+                })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                 let index = self.get_index(index_uid.into_inner()).await?;
@@ -171,11 +175,14 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::SettingsUpdate { settings, is_deletion } => {
+            TaskContent::SettingsUpdate {
+                settings,
+                is_deletion,
+            } => {
                 let index = if *is_deletion {
-                        self.get_index(index_uid).await?
-                    } else {
-                        self.get_or_create_index(index_uid, task.id).await?
+                    self.get_index(index_uid.into_inner()).await?
+                } else {
+                    self.get_or_create_index(index_uid, task.id).await?
                 };
 
                 let settings = settings.clone();
@@ -194,8 +201,7 @@ where
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
-                    spawn_blocking(move || index.update_primary_key(primary_key))
-                    .await??;
+                    spawn_blocking(move || index.update_primary_key(primary_key)).await??;
                 }
 
                 Ok(TaskResult::Other)
@@ -205,12 +211,11 @@ where
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
-                    spawn_blocking(move || index.update_primary_key(primary_key))
-                    .await??;
+                    spawn_blocking(move || index.update_primary_key(primary_key)).await??;
                 }
 
                 Ok(TaskResult::Other)
-            },
+            }
         }
     }
 
@@ -331,7 +336,9 @@ where
     }
 
     pub async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
-        self.index_uuid_store.get_index_creation_task_id(index_uid).await
+        self.index_uuid_store
+            .get_index_creation_task_id(index_uid)
+            .await
     }
 
     // pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
