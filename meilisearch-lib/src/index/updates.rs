@@ -320,47 +320,8 @@ pub fn apply_settings_to_builder(
 }
 
 #[cfg(test)]
-mod test {
-    use quickcheck::Arbitrary;
-
+pub(crate) mod test {
     use super::*;
-
-    #[derive(Clone)]
-    struct ArbitrarySetting<T>(Setting<T>);
-
-    impl<T: Arbitrary> ArbitrarySetting<T> {
-        fn into_inner(self) -> Setting<T> {
-            self.0
-        }
-    }
-
-    impl<T: Arbitrary> Arbitrary for ArbitrarySetting<T> {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            let rand = g.choose(&[1, 2, 3]).unwrap();
-            match rand {
-                1 => Self(Setting::Set(T::arbitrary(g))),
-                2 => Self(Setting::Reset),
-                3 => Self(Setting::NotSet),
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    impl<T: Clone + 'static> Arbitrary for Settings<T> {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            Settings {
-                displayed_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                searchable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                filterable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                sortable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                ranking_rules: ArbitrarySetting::arbitrary(g).into_inner(),
-                stop_words: ArbitrarySetting::arbitrary(g).into_inner(),
-                synonyms: ArbitrarySetting::arbitrary(g).into_inner(),
-                distinct_attribute: ArbitrarySetting::arbitrary(g).into_inner(),
-                _kind: PhantomData,
-            }
-        }
-    }
 
     #[test]
     fn test_setting_check() {

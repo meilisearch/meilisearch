@@ -81,8 +81,8 @@ impl IndexUid {
     }
 
     #[cfg(test)]
-    pub fn new_unchecked(s: String) -> Self {
-        Self(s)
+    pub fn new_unchecked(s: impl AsRef<str>) -> Self {
+        Self(s.as_ref().to_string())
     }
 
     pub fn into_inner(self) -> String {
