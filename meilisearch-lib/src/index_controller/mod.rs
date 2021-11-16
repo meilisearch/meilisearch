@@ -500,9 +500,9 @@ where
     }
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
-        let last_task = self.task_store.get_pending_task().await?;
+        let last_task = self.task_store.get_processing_task().await?;
         // Check if the currently indexing update is from our index.
-        let is_indexing = last_task.map(|task| task.index_uid == uid);
+        let is_indexing = last_task.map(|task| task.index_uid.into_inner() == uid);
 
         let index = self.index_resolver.get_index(uid).await?;
         let mut stats = spawn_blocking(move || index.stats()).await??;
@@ -512,15 +512,10 @@ where
     }
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
-        let mut last_update: Option<DateTime<_>> = None;
+        let mut last_task: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
-        let last_task = self.task_store.get_pending_task().await?;
-        let task_is_indexing = last_task
-            .as_ref()
-            .map(|task| matches!(task.events.last(), Some(TaskEvent::Processing(_))))
-            .unwrap_or(false);
-        let indexing_uid = last_task.map(|task| task.index_uid.into_inner());
+        let processing_task = self.task_store.get_processing_task().await?;
 
         for (index_uid, index) in self.index_resolver.list().await? {
             let (mut stats, meta) =
@@ -531,13 +526,15 @@ where
 
             database_size += stats.size;
 
-            last_update = last_update.map_or(Some(meta.updated_at), |last| {
+            last_task = last_task.map_or(Some(meta.updated_at), |last| {
                 Some(last.max(meta.updated_at))
             });
 
-            if task_is_indexing {
-                // Check if the currently indexing update is from our index.
-                stats.is_indexing = Some(Some(&index_uid) == indexing_uid.as_ref());
+            // Check if the currently indexing update is from our index.
+            if let Some(ref processing_task) = processing_task {
+                // maybe we should write true or false instead of null or true?
+                stats.is_indexing =
+                    (processing_task.index_uid.as_str() == &index_uid).then(|| true);
             }
 
             indexes.insert(index_uid, stats);
@@ -545,7 +542,7 @@ where
 
         Ok(Stats {
             database_size,
-            last_update,
+            last_update: last_task,
             indexes,
         })
     }

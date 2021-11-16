@@ -88,6 +88,11 @@ impl IndexUid {
     pub fn into_inner(self) -> String {
         self.0
     }
+
+    /// Return a reference over the inner str.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for IndexUid {
