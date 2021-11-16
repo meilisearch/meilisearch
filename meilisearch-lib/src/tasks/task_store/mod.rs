@@ -94,12 +94,12 @@ impl TaskStore {
         Ok(task)
     }
 
-    // Returns the next task to process.
+    /// Returns the next task to process.
     pub async fn peek_pending(&self) -> Option<TaskId> {
         self.pending_queue.read().await.peek().map(|rid| rid.0)
     }
 
-    // Returns the next task to process.
+    /// Returns the next task to process.
     pub async fn get_pending_task(&self) -> Result<Option<Task>> {
         if let Some(uid) = self.peek_pending().await {
             Ok(Some(self.get_task(uid - 1, None).await?))

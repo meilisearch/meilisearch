@@ -499,15 +499,16 @@ where
         Ok(meta)
     }
 
-    pub async fn get_index_stats(&self, _uid: String) -> Result<IndexStats> {
-        todo!()
-        //let update_infos = UpdateMsg::get_info(&self.update_sender).await?;
-        //let index = self.index_resolver.get_index(uid).await?;
-        //let uuid = index.uuid;
-        //let mut stats = spawn_blocking(move || index.stats()).await??;
-        //// Check if the currently indexing update is from our index.
-        //stats.is_indexing = Some(Some(uuid) == update_infos.processing);
-        //Ok(stats)
+    pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
+        let last_task = self.task_store.get_pending_task().await?;
+        // Check if the currently indexing update is from our index.
+        let is_indexing = last_task.map(|task| task.index_uid == uid);
+
+        let index = self.index_resolver.get_index(uid).await?;
+        let mut stats = spawn_blocking(move || index.stats()).await??;
+        stats.is_indexing = is_indexing;
+
+        Ok(stats)
     }
 
     pub async fn get_all_stats(&self) -> Result<Stats> {
@@ -515,7 +516,6 @@ where
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
         let last_task = self.task_store.get_pending_task().await?;
-        dbg!(&last_task);
         let task_is_indexing = last_task
             .as_ref()
             .map(|task| matches!(task.events.last(), Some(TaskEvent::Processing(_))))
