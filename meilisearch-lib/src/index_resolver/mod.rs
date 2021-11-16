@@ -69,7 +69,8 @@ pub fn create_index_resolver(
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct IndexUid(String);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct IndexUid(#[cfg_attr(test, proptest(regex("[a-zA-Z0-9_-]*")))] String);
 
 impl IndexUid {
     pub fn new(uid: String) -> Result<Self> {
