@@ -296,11 +296,11 @@ pub mod test {
 
     proptest! {
         #[test]
-        fn encode_decode_roundtrip(index_uid in "[a-zA-Z0-9_-]*", task_id in 0..TaskId::MAX) {
+        fn encode_decode_roundtrip(index_uid in any::<IndexUid>(), task_id in 0..TaskId::MAX) {
             let value = (index_uid.as_ref(), task_id);
             let bytes = IndexUidTaskIdCodec::bytes_encode(&value).unwrap();
             let (index, id) = IndexUidTaskIdCodec::bytes_decode(bytes.as_ref()).unwrap();
-            assert_eq!(index_uid, index);
+            assert_eq!(&*index_uid, index);
             assert_eq!(task_id, id);
         }
 

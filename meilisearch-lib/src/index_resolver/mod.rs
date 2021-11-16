@@ -68,19 +68,22 @@ pub fn create_index_resolver(
     Ok(IndexResolver::new(uuid_store, index_store))
 }
 
+/// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
+/// bytes long
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct IndexUid(#[cfg_attr(test, proptest(regex("[a-zA-Z0-9_-]*")))] String);
+pub struct IndexUid(#[cfg_attr(test, proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String);
 
 impl IndexUid {
     pub fn new(uid: String) -> Result<Self> {
-        if uid
+        if !uid
             .chars()
             .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+            || (1..=400).contains(&uid.len())
         {
-            Ok(Self(uid))
-        } else {
             Err(IndexResolverError::BadlyFormatted(uid))
+        } else {
+            Ok(Self(uid))
         }
     }
 
