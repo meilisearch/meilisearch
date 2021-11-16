@@ -400,10 +400,7 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let tasks = self
-            .task_store
-            .list_tasks(filter, limit, offset, None)
-            .await?;
+        let tasks = self.task_store.list_tasks(offset, filter, limit).await?;
 
         Ok(tasks)
     }
@@ -424,7 +421,11 @@ where
 
         let tasks = self
             .task_store
-            .list_tasks(Some(filter), limit, offset, Some(task_id))
+            .list_tasks(
+                Some(offset.unwrap_or_default() + task_id),
+                Some(filter),
+                limit,
+            )
             .await?;
 
         Ok(tasks)

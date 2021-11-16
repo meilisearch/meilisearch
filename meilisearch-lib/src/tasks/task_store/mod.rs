@@ -161,10 +161,9 @@ impl TaskStore {
 
     pub async fn list_tasks(
         &self,
+        offset: Option<TaskId>,
         filter: Option<TaskFilter>,
         limit: Option<usize>,
-        offset: Option<TaskId>,
-        _until: Option<TaskId>,
     ) -> Result<Vec<Task>> {
         let store = self.store.clone();
 
@@ -248,13 +247,12 @@ pub mod test {
 
         pub async fn list_tasks(
             &self,
+            from: Option<TaskId>,
             filter: Option<TaskFilter>,
             limit: Option<usize>,
-            from: Option<TaskId>,
-            until: Option<TaskId>,
         ) -> Result<Vec<Task>> {
             match self {
-                Self::Real(s) => s.list_tasks(filter, limit, from, until).await,
+                Self::Real(s) => s.list_tasks(from, filter, limit).await,
                 Self::Mock(_m) => todo!(),
             }
         }

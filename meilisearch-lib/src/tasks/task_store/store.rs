@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::mem::size_of;
+use std::ops::Range;
 use std::path::Path;
 use std::result::Result as StdResult;
 
@@ -121,24 +122,24 @@ impl Store {
         filter: Option<TaskFilter>,
         limit: Option<usize>,
     ) -> Result<Vec<Task>> {
+        let from = from.unwrap_or_default();
+        let range = from..limit
+            .map(|limit| (limit as u64).saturating_add(from))
+            .unwrap_or(u64::MAX);
         let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
             Some(filter) => {
                 let iter = self
-                    .compute_candidates(txn, filter)?
+                    .compute_candidates(txn, filter, range)?
                     .into_iter()
-                    .skip_while(|&id| from.map(|from| from == id).unwrap_or_default())
                     .filter_map(|id| self.tasks.get(txn, &BEU64::new(id)).transpose());
 
                 Box::new(iter)
             }
-            None => match from {
-                Some(id) => Box::new(
-                    self.tasks
-                        .rev_range(txn, &(..BEU64::new(id)))?
-                        .map(|r| r.map(|(_, t)| t)),
-                ),
-                None => Box::new(self.tasks.rev_iter(txn)?.map(|r| r.map(|(_, t)| t))),
-            },
+            None => Box::new(
+                self.tasks
+                    .rev_range(txn, &(BEU64::new(range.start)..BEU64::new(range.end)))?
+                    .map(|r| r.map(|(_, t)| t)),
+            ),
         };
 
         // Collect 'limit' task if it exists or all of them.
@@ -156,6 +157,7 @@ impl Store {
         &self,
         txn: &heed::RoTxn,
         filter: TaskFilter,
+        range: Range<TaskId>,
     ) -> Result<BTreeSet<TaskId>> {
         let mut candidates = BTreeSet::new();
         if let Some(indexes) = filter.indexes {
@@ -165,20 +167,38 @@ impl Store {
                 // prefix, i.e test and test1.
                 let mut index_uid = index.as_bytes().to_vec();
                 index_uid.push(0);
+
                 self.uids_task_ids
                     .remap_key_type::<ByteSlice>()
-                    .prefix_iter(txn, &index_uid)?
-                    .try_fold(
-                        &mut candidates,
-                        |candidates, entry| -> StdResult<_, heed::Error> {
-                            let (key, _) = entry?;
-                            let (_, id) = IndexUidTaskIdCodec::bytes_decode(key)
-                                .ok_or(heed::Error::Decoding)?;
-                            candidates.insert(id);
-
-                            Ok(candidates)
-                        },
-                    )?;
+                    .rev_prefix_iter(txn, &index_uid)?
+                    .map(|entry| -> StdResult<_, heed::Error> {
+                        let (key, _) = entry?;
+                        let (_, id) =
+                            IndexUidTaskIdCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                        Ok(id)
+                    })
+                    .skip_while(|entry| {
+                        entry
+                            .as_ref()
+                            .ok()
+                            // we skip all elements till we enter in the range
+                            .map(|key| !range.contains(key))
+                            // if we encounter an error we returns true to collect it later
+                            .unwrap_or(true)
+                    })
+                    .take_while(|entry| {
+                        entry
+                            .as_ref()
+                            .ok()
+                            // as soon as we are out of the range we exit
+                            .map(|key| range.contains(key))
+                            // if we encounter an error we returns true to collect it later
+                            .unwrap_or(true)
+                    })
+                    .try_for_each::<_, StdResult<(), heed::Error>>(|id| {
+                        candidates.insert(id?);
+                        Ok(())
+                    })?;
             }
         }
 
@@ -190,10 +210,10 @@ impl Store {
 pub mod test {
     use std::collections::{HashMap, HashSet};
 
+    use k9::assert_equal as assert_eq;
     use nelson::Mocker;
     use quickcheck::{Arbitrary, Gen, TestResult};
     use quickcheck_macros::quickcheck;
-    use k9::assert_equal as assert_eq;
 
     use crate::index_resolver::IndexUid;
 
@@ -299,13 +319,13 @@ pub mod test {
         let txn = store.rtxn().unwrap();
 
         if store.task_count(&txn).unwrap() != tasks.len() {
-            return TestResult::failed()
+            return TestResult::failed();
         }
 
         for task in tasks {
             let found_task = store.get(&txn, task.id).unwrap().unwrap();
             if found_task != task {
-                return TestResult::failed()
+                return TestResult::failed();
             }
         }
 
