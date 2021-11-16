@@ -186,7 +186,7 @@ impl From<Task> for TaskResponse {
 
         Self {
             uid: id,
-            index_uid,
+            index_uid: index_uid.into_inner(),
             status,
             task_type,
             details,

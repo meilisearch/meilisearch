@@ -71,3 +71,22 @@ async fn list_multiple_indexes() {
         .iter()
         .any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
 }
+
+#[actix_rt::test]
+async fn get_invalid_index_uid() {
+    let server = Server::new().await;
+    let index = server.index("this is not a valid index name");
+    let (response, code) = index.get().await;
+
+    assert_eq!(code, 404);
+    assert_eq!(
+        response,
+        json!(
+        {
+        "message": "Index `lasdhf&&a` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+            })
+    );
+}

@@ -108,6 +108,7 @@ where
 mod test {
     use nelson::Mocker;
 
+    use crate::index_resolver::IndexUid;
     use crate::tasks::task::Task;
     use crate::tasks::task_store::TaskFilter;
 
@@ -125,7 +126,7 @@ mod test {
             .then(|(id, _filter)| {
                 let task = Task {
                     id,
-                    index_uid: "Test".to_string(),
+                    index_uid: IndexUid::new("Test".to_string()).unwrap(),
                     content: TaskContent::IndexDeletion,
                     events: vec![TaskEvent::Created(Utc::now())],
                 };
@@ -183,7 +184,7 @@ mod test {
             .then(|(id, _)| {
                 let task = Task {
                     id,
-                    index_uid: "Test".to_string(),
+                    index_uid: IndexUid::new("Test".to_string()).unwrap(),
                     content: TaskContent::IndexDeletion,
                     events: vec![TaskEvent::Created(Utc::now())],
                 };

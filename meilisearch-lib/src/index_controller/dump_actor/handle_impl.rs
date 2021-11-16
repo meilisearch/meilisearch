@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::index_controller::index_resolver::HardStateIndexResolver;
+use crate::index_resolver::HardStateIndexResolver;
 
 use super::error::Result;
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};

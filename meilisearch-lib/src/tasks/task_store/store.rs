@@ -190,6 +190,8 @@ pub mod test {
     use quickcheck_macros::quickcheck;
     use k9::assert_equal as assert_eq;
 
+    use crate::index_resolver::IndexUid;
+
     use super::*;
 
     pub enum MockStore {
@@ -379,7 +381,7 @@ pub mod test {
         assert_eq!(store.task_count(&txn).unwrap(), validator.len());
 
         let mut filter = TaskFilter::default();
-        filter.filter_index(index_to_filter.clone());
+        filter.filter_index(index_to_filter.to_string());
 
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
@@ -400,10 +402,10 @@ pub mod test {
 
         // task1 and 2 share the same index_uid prefix
         let mut task_1 = Task::arbitrary(&mut gen);
-        task_1.index_uid = "test".into();
+        task_1.index_uid = IndexUid::new_unchecked("test".into());
 
         let mut task_2 = Task::arbitrary(&mut gen);
-        task_2.index_uid = "test1".into();
+        task_2.index_uid = IndexUid::new_unchecked("test1".into());
 
         let mut txn = store.wtxn().unwrap();
         store.put(&mut txn, &task_1).unwrap();
@@ -415,6 +417,6 @@ pub mod test {
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks.first().unwrap().index_uid, "test");
+        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
     }
 }

@@ -13,9 +13,9 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
-use crate::index_controller::index_resolver::index_store::IndexStore;
-use crate::index_controller::index_resolver::uuid_store::UuidStore;
-use crate::index_controller::index_resolver::IndexResolver;
+use crate::index_resolver::index_store::IndexStore;
+use crate::index_resolver::uuid_store::UuidStore;
+use crate::index_resolver::IndexResolver;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 

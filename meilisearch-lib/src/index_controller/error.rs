@@ -11,7 +11,7 @@ use super::DocumentAdditionFormat;
 use super::update_file_store::UpdateFileStoreError;
 
 // use super::dump_actor::error::DumpActorError;
-use super::index_resolver::error::IndexResolverError;
+use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
