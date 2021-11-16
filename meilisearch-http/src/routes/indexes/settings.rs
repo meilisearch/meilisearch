@@ -34,7 +34,10 @@ macro_rules! make_setting_route {
                     $attr: Setting::Reset,
                     ..Default::default()
                 };
-                let update = Update::Settings(settings);
+                let update = Update::Settings {
+                    settings,
+                    is_deletion: true,
+                };
                 let task: TaskResponse = meilisearch
                     .register_update(index_uid.into_inner(), update)
                     .await?
@@ -63,7 +66,10 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let update = Update::Settings(settings);
+                let update = Update::Settings {
+                    settings,
+                    is_deletion: false,
+                };
                 let task: TaskResponse = meilisearch
                     .register_update(index_uid.into_inner(), update)
                     .await?
@@ -263,7 +269,10 @@ pub async fn update_all(
         Some(&req),
     );
 
-    let update = Update::Settings(settings);
+    let update = Update::Settings {
+        settings,
+        is_deletion: false,
+    };
     let task: TaskResponse = meilisearch
         .register_update(index_uid.into_inner(), update)
         .await?
@@ -286,9 +295,12 @@ pub async fn delete_all(
     data: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = Settings::cleared();
+    let settings = Settings::cleared().into_unchecked();
 
-    let update = Update::Settings(settings.into_unchecked());
+    let update = Update::Settings {
+        settings,
+        is_deletion: true,
+    };
     let task: TaskResponse = data
         .register_update(index_uid.into_inner(), update)
         .await?

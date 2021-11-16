@@ -8,7 +8,9 @@ async fn create_and_get_index() {
     let index = server.index("test");
     let (_, code) = index.create(None).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
+
+    index.wait_task(0).await;
 
     let (response, code) = index.get().await;
 
@@ -54,6 +56,8 @@ async fn list_multiple_indexes() {
     let server = Server::new().await;
     server.index("test").create(None).await;
     server.index("test1").create(Some("key")).await;
+
+    server.index("test").wait_task(1).await;
 
     let (response, code) = server.list_indexes().await;
     assert_eq!(code, 200);

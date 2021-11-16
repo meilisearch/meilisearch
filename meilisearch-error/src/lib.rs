@@ -290,7 +290,7 @@ mod test {
         fn arbitrary(g: &mut quickcheck::Gen) -> Self {
             Self {
                 // generate valid http code between 100 and 999
-                code: StatusCode::from_u16(((u16::arbitrary(g) % 999) + 100) % 999).unwrap(),
+                code: StatusCode::from_u16((u16::arbitrary(g) % 899) + 100).unwrap(),
                 message: String::arbitrary(g),
                 error_code: String::arbitrary(g),
                 error_type: String::arbitrary(g),

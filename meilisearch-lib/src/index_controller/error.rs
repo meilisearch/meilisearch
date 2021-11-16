@@ -7,6 +7,7 @@ use tokio::task::JoinError;
 use crate::document_formats::DocumentFormatError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
+use super::DocumentAdditionFormat;
 use super::update_file_store::UpdateFileStoreError;
 
 // use super::dump_actor::error::DumpActorError;
@@ -28,12 +29,24 @@ pub enum IndexControllerError {
     TaskError(#[from] TaskError),
     #[error("{0}")]
     DocumentFormatError(#[from] DocumentFormatError),
-
+    #[error("A {0} payload is missing.")]
+    MissingPayload(DocumentAdditionFormat),
+    #[error("The provided payload reached the size limit.")]
+    PayloadTooLarge,
 }
 
 internal_error!(IndexControllerError:
     JoinError, UpdateFileStoreError
 );
+
+impl From<actix_web::error::PayloadError> for IndexControllerError {
+    fn from(other: actix_web::error::PayloadError) -> Self {
+        match other {
+            actix_web::error::PayloadError::Overflow => Self::PayloadTooLarge,
+            _ => Self::Internal(Box::new(other)),
+        }
+    }
+}
 
 impl ErrorCode for IndexControllerError {
     fn error_code(&self) -> Code {
@@ -44,6 +57,8 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::Internal(_) => Code::Internal,
             IndexControllerError::TaskError(e) => e.error_code(),
             IndexControllerError::DocumentFormatError(e) => e.error_code(),
+            IndexControllerError::MissingPayload(_) => Code::MissingPayload,
+            IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
         }
     }
 }

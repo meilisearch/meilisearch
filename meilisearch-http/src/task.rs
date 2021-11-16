@@ -120,7 +120,7 @@ impl From<Task> for TaskResponse {
             ),
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
             TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
-            TaskContent::SettingsUpdate(settings) => (
+            TaskContent::SettingsUpdate { settings, .. } => (
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
@@ -150,7 +150,7 @@ impl From<Task> for TaskResponse {
                             ..
                         }),
                     ) => {
-                        indexed_documents.replace(dbg!(*number_of_documents));
+                        indexed_documents.replace(*number_of_documents);
                     }
                     (
                         TaskResult::DocumentDeletion {
@@ -163,11 +163,7 @@ impl From<Task> for TaskResponse {
                     ) => {
                         deleted_documents.replace(*number_of_documents);
                     }
-                    (TaskResult::Other, None)
-                    | (TaskResult::Other, Some(TaskDetails::IndexInfo { .. })) => (),
-                    _ => unreachable!(
-                        "Update type from the task content should match that of its result."
-                    ),
+                    _ => (),
                 }
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
@@ -178,7 +174,7 @@ impl From<Task> for TaskResponse {
 
         let enqueued_at = match events.first() {
             Some(TaskEvent::Created(ts)) => *ts,
-            _ => unreachable!("A task first element should always be a cretion event."),
+            _ => unreachable!("A task must always have a creation event."),
         };
 
         let duration = finished_at.map(|ts| (ts - enqueued_at));

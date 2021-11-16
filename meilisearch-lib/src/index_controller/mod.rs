@@ -34,6 +34,7 @@ use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
 
+use self::error::IndexControllerError;
 // use self::dump_actor::load_dump;
 //use self::index_resolver::error::IndexResolverError;
 use self::index_resolver::index_store::{IndexStore, MapIndexStore};
@@ -122,7 +123,11 @@ pub struct Stats {
 pub enum Update {
     DeleteDocuments(Vec<String>),
     ClearDocuments,
-    Settings(Settings<Unchecked>),
+    Settings {
+        settings: Settings<Unchecked>,
+        /// Indicates whether the update was a deletion
+        is_deletion: bool,
+    },
     DocumentAddition {
         #[derivative(Debug = "ignore")]
         payload: Payload,
@@ -134,6 +139,9 @@ pub enum Update {
     CreateIndex {
         primary_key: Option<String>,
     },
+    UpdateIndex {
+        primary_key: Option<String>,
+    }
 }
 
 #[derive(Default, Debug)]
@@ -311,28 +319,23 @@ where
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
             }
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
-            Update::Settings(settings) => TaskContent::SettingsUpdate(settings),
+            Update::Settings { settings, is_deletion } => TaskContent::SettingsUpdate { settings, is_deletion },
             Update::DocumentAddition {
                 mut payload,
                 primary_key,
                 format,
-                ..
+                method,
             } => {
                 let mut buffer = Vec::new();
                 while let Some(bytes) = payload.next().await {
-                    match bytes {
-                        Ok(bytes) => {
-                            buffer.extend_from_slice(&bytes);
-                        }
-                        Err(_e) => todo!("handle payload errors"),
-                    }
+                    let bytes = bytes?;
+                    buffer.extend_from_slice(&bytes);
                 }
                 let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
                 let documents_count = tokio::task::spawn_blocking(move || -> Result<_> {
                     // check if the payload is empty, and return an error
                     if buffer.is_empty() {
-                        todo!("empty payload error")
-                        //return Err(UpdateLoopError::MissingPayload(format));
+                        return Err(IndexControllerError::MissingPayload(format));
                     }
 
                     let reader = Cursor::new(buffer);
@@ -350,13 +353,14 @@ where
 
                 TaskContent::DocumentAddition {
                     content_uuid,
-                    merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+                    merge_strategy: method,
                     primary_key,
                     documents_count,
                 }
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,
             Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
+            Update::UpdateIndex { primary_key } => TaskContent::UpdateIndex { primary_key },
         };
 
         let task = self.task_store.register(uid, content).await?;

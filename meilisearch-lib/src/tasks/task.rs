@@ -70,7 +70,11 @@ pub enum TaskContent {
         documents_count: usize,
     },
     DocumentDeletion(DocumentDeletion),
-    SettingsUpdate(Settings<Unchecked>),
+    SettingsUpdate {
+        settings: Settings<Unchecked>,
+        /// Indicates whether the task was a deletion
+        is_deletion: bool,
+    },
     IndexDeletion,
     CreateIndex {
         primary_key: Option<String>,
@@ -114,7 +118,10 @@ mod test {
                 },
                 2 => Self::DocumentDeletion(DocumentDeletion::arbitrary(g)),
                 3 => Self::IndexDeletion,
-                4 => Self::SettingsUpdate(Settings::arbitrary(g)),
+                4 => Self::SettingsUpdate {
+                    settings: Settings::arbitrary(g),
+                    is_deletion: bool::arbitrary(g),
+                },
                 _ => unreachable!(),
             }
         }
