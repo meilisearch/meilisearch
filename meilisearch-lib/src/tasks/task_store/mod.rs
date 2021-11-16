@@ -94,9 +94,19 @@ impl TaskStore {
         Ok(task)
     }
 
-    // Returns the next task to process.
+    /// Returns the next task to process.
     pub async fn peek_pending(&self) -> Option<TaskId> {
         self.pending_queue.read().await.peek().map(|rid| rid.0)
+    }
+
+    /// Returns the next task to process if there is one.
+    pub async fn get_processing_task(&self) -> Result<Option<Task>> {
+        if let Some(uid) = self.peek_pending().await {
+            let task = self.get_task(uid, None).await?;
+            Ok(matches!(task.events.last(), Some(TaskEvent::Processing(_))).then(|| task))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
@@ -120,9 +130,6 @@ impl TaskStore {
 
     pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
         let store = self.store.clone();
-        let pending_queue = self.pending_queue.clone();
-
-        let to_remove = tasks.iter().map(|t| t.id).collect::<HashSet<_>>();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
             let mut txn = store.wtxn()?;
@@ -137,16 +144,18 @@ impl TaskStore {
         })
         .await??;
 
-        let mut pending_queue = pending_queue.write().await;
+        Ok(())
+    }
+
+    pub async fn delete_tasks(&self, to_remove: HashSet<TaskId>) -> Result<()> {
+        let mut pending_queue = self.pending_queue.write().await;
 
         // currently retain is not stable: https://doc.rust-lang.org/stable/std/collections/struct.BinaryHeap.html#method.retain
         // pending_queue.retain(|id| !to_remove.contains(&id.0));
-
         *pending_queue = pending_queue
             .drain()
             .filter(|id| !to_remove.contains(&id.0))
             .collect();
-
         Ok(())
     }
 
@@ -206,10 +215,27 @@ pub mod test {
             }
         }
 
+        pub async fn delete_tasks(&self, to_delete: HashSet<TaskId>) -> Result<()> {
+            match self {
+                Self::Real(s) => s.delete_tasks(to_delete).await,
+                Self::Mock(m) => unsafe { m.get::<_, Result<()>>("delete_tasks").call(to_delete) },
+            }
+        }
+
         pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
+            }
+        }
+
+        pub async fn get_processing_task(&self) -> Result<Option<Task>> {
+            match self {
+                Self::Real(s) => s.get_processing_task().await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Result<Option<Task>>>("get_pending_task")
+                        .call(())
+                },
             }
         }
 
