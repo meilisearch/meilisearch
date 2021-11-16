@@ -51,7 +51,12 @@ where
 
     async fn process_next_batch(&self) -> Result<()> {
         match self.prepare_batch().await? {
-            Some(batch) => {
+            Some(mut batch) => {
+                for task in &mut batch.tasks {
+                    task.events.push(TaskEvent::Processing(Utc::now()));
+                }
+                self.store.update_tasks(batch.tasks.clone()).await?;
+
                 let performer = self.performer.clone();
                 let batch_result = performer.process(batch).await;
                 self.handle_batch_result(batch_result).await?;
@@ -72,10 +77,7 @@ where
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
         match self.store.peek_pending().await {
             Some(next_task_id) => {
-                let mut task = self
-                    .store
-                    .get_task(next_task_id, None)
-                    .await?;
+                let mut task = self.store.get_task(next_task_id, None).await?;
 
                 task.events.push(TaskEvent::Batched {
                     timestamp: Utc::now(),
@@ -99,7 +101,9 @@ where
     /// When a task is processed, the result of the processing is pushed to its event list. The
     /// handle batch result make sure that the new state is save into its store.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
-        self.store.update_tasks(batch.tasks).await?;
+        self.store
+            .delete_tasks(batch.tasks.iter().map(|task| task.id).collect())
+            .await?;
         Ok(())
     }
 }
