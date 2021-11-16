@@ -66,3 +66,4 @@ paste = "1.0.5"
 nelson = { path = "../../nelson" }
 meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
 proptest = "1.0.0"
+proptest-derive = "0.3.0"
