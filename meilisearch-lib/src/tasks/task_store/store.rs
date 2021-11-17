@@ -59,7 +59,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<(Vec<TaskId>, Self)> {
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         options.max_dbs(1000);
@@ -68,11 +68,42 @@ impl Store {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
-        Ok(Self {
-            env,
-            uids_task_ids,
-            tasks,
-        })
+        // we are going to save all unfinished tasks for the `TaskStore`.
+        let mut unfinished_tasks: Vec<TaskId> = Vec::new();
+
+        let mut wtxn = env.write_txn()?;
+        let mut iter = tasks.rev_iter_mut(&mut wtxn)?;
+
+        while let Some(entry) = iter.next() {
+            let entry = entry?;
+            let (id, mut task): (BEU64, Task) = entry;
+
+            // Since all tasks are ordered, we can stop iterating on all tasks when we encounter our first non-finished task.
+            if task.is_finished() {
+                break;
+            }
+
+            // we only keep the first state. It’s supposed to be a `Created` state.
+            task.events.drain(1..);
+            unfinished_tasks.push(id.get());
+
+            // the id stayed unchanged so this is a safe operation.
+            unsafe {
+                iter.put_current(&id, &task)?;
+            }
+        }
+
+        drop(iter);
+        wtxn.commit()?;
+
+        Ok((
+            unfinished_tasks,
+            Self {
+                env,
+                uids_task_ids,
+                tasks,
+            },
+        ))
     }
 
     pub fn wtxn(&self) -> Result<RwTxn> {
@@ -96,6 +127,18 @@ impl Store {
     /// Return the last task that was pushed in the store.
     pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
         Ok(self.tasks.last(txn)?.map(|(_, task)| task))
+    }
+
+    /// Return the last tasks that were pushed in the store.
+    pub fn get_last_tasks<'a>(
+        &self,
+        txn: &'a RoTxn,
+    ) -> Result<impl Iterator<Item = Result<Task>> + 'a> {
+        Ok(self
+            .tasks
+            .rev_iter(txn)?
+            .map(|res| res.map(|(_, task)| task))
+            .map(|res| res.map_err(|e| e.into())))
     }
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
@@ -225,8 +268,9 @@ pub mod test {
     }
 
     impl MockStore {
-        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Real(Store::new(path, size)?))
+        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<(Vec<TaskId>, Self)> {
+            let (unfinished_tasks, store) = Store::new(path, size)?;
+            Ok((unfinished_tasks, Self::Real(store)))
         }
 
         pub fn wtxn(&self) -> Result<RwTxn> {
@@ -267,6 +311,16 @@ pub mod test {
         pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
             match self {
                 MockStore::Real(index) => index.get_last_task(txn),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn get_last_tasks<'a>(
+            &self,
+            txn: &'a RoTxn,
+        ) -> Result<impl Iterator<Item = Result<Task>> + 'a> {
+            match self {
+                MockStore::Real(index) => index.get_last_tasks(txn),
                 MockStore::Fake(_) => todo!(),
             }
         }
