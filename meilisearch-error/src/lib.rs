@@ -53,7 +53,6 @@ pub enum Code {
     IndexAlreadyExists,
     IndexNotFound,
     InvalidIndexUid,
-    OpenIndex,
 
     // invalid state error
     InvalidState,
@@ -64,19 +63,21 @@ pub enum Code {
     MissingDocumentId,
     InvalidDocumentId,
 
-    Facet,
     Filter,
     Sort,
 
     BadParameter,
     BadRequest,
+    DatabaseSizeLimitReached,
     DocumentNotFound,
     Internal,
     InvalidGeoField,
     InvalidRankingRule,
+    InvalidStore,
     InvalidToken,
     MissingAuthorizationHeader,
-    NotFound,
+    NoSpaceLeftOnDevice,
+    DumpNotFound,
     TaskNotFound,
     PayloadTooLarge,
     RetrieveDocument,
@@ -100,25 +101,31 @@ impl Code {
         match self {
             // index related errors
             // create index is thrown on internal error while creating an index.
-            CreateIndex => ErrCode::internal("index_creation_failed", StatusCode::BAD_REQUEST),
+            CreateIndex => {
+                ErrCode::internal("index_creation_failed", StatusCode::INTERNAL_SERVER_ERROR)
+            }
             IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::CONFLICT),
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
-            OpenIndex => {
-                ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR)
-            }
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set
-            MissingPrimaryKey => ErrCode::invalid("missing_primary_key", StatusCode::BAD_REQUEST),
+            MissingPrimaryKey => {
+                ErrCode::invalid("primary_key_inference_failed", StatusCode::BAD_REQUEST)
+            }
             // error thrown when trying to set an already existing primary key
             PrimaryKeyAlreadyPresent => {
                 ErrCode::invalid("index_primary_key_already_exists", StatusCode::BAD_REQUEST)
             }
             // invalid ranking rule
-            InvalidRankingRule => ErrCode::invalid("invalid_request", StatusCode::BAD_REQUEST),
+            InvalidRankingRule => ErrCode::invalid("invalid_ranking_rule", StatusCode::BAD_REQUEST),
+
+            // invalid database
+            InvalidStore => {
+                ErrCode::internal("invalid_store_file", StatusCode::INTERNAL_SERVER_ERROR)
+            }
 
             // invalid document
             MaxFieldsLimitExceeded => {
@@ -127,8 +134,6 @@ impl Code {
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
             InvalidDocumentId => ErrCode::invalid("invalid_document_id", StatusCode::BAD_REQUEST),
 
-            // error related to facets
-            Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
             // error related to filters
             Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
             // error related to sorts
@@ -136,17 +141,22 @@ impl Code {
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
+            DatabaseSizeLimitReached => ErrCode::internal(
+                "database_size_limit_reached",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
-            InvalidGeoField => {
-                ErrCode::authentication("invalid_geo_field", StatusCode::BAD_REQUEST)
-            }
+            InvalidGeoField => ErrCode::invalid("invalid_geo_field", StatusCode::BAD_REQUEST),
             InvalidToken => ErrCode::authentication("invalid_api_key", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
-            NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
+            DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
+            NoSpaceLeftOnDevice => {
+                ErrCode::internal("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)
+            }
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
             RetrieveDocument => {
                 ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST)
@@ -158,7 +168,7 @@ impl Code {
 
             // error related to dump
             DumpAlreadyInProgress => {
-                ErrCode::invalid("dump_already_in_progress", StatusCode::CONFLICT)
+                ErrCode::invalid("dump_already_processing", StatusCode::CONFLICT)
             }
             DumpProcessFailed => {
                 ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR)
