@@ -243,7 +243,7 @@ where
             let chunk_iter = grenad_obkv_into_chunks(
                 documents_file,
                 params.clone(),
-                self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 128), // 128MiB
+                self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
             );
 
             let result = chunk_iter.map(|chunk_iter| {
