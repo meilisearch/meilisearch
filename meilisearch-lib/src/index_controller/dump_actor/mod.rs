@@ -288,9 +288,9 @@ mod test {
     use std::collections::HashSet;
 
     use futures::future::{err, ok};
+    use nelson::Mocker;
     use once_cell::sync::Lazy;
     use uuid::Uuid;
-    use nelson::Mocker;
 
     use super::*;
     use crate::index::error::Result as IndexResult;
@@ -340,7 +340,7 @@ mod test {
                 .when::<&Path, IndexResult<()>>("dump")
                 .once()
                 .then(move |_| Ok(()));
-            Box::pin(ok(Some(Index::faux(mocker))))
+            Box::pin(ok(Some(Index::mock(mocker))))
         });
 
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));

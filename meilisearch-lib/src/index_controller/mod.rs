@@ -28,7 +28,7 @@ use crate::index::{
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -654,7 +654,7 @@ mod test {
                         assert_eq!(&q, &query);
                         Ok(result.clone())
                     });
-                let index = Index::faux(mocker);
+                let index = Index::mock(mocker);
                 Box::pin(ok(Some(index)))
             });
 

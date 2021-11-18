@@ -217,6 +217,8 @@ pub mod test {
     use proptest::collection::vec;
     use proptest::prelude::*;
 
+    use crate::index_resolver::IndexUid;
+
     use super::*;
 
     pub enum MockStore {
@@ -315,8 +317,8 @@ pub mod test {
 
         #[test]
         fn test_filter_same_index_prefix(
-            task1 in any::<Task>(),
-            task2 in any::<Task>(),
+            mut task_1 in any::<Task>(),
+            mut task_2 in any::<Task>(),
         ) {
             let tmp = tempfile::tempdir().unwrap();
 
@@ -324,10 +326,8 @@ pub mod test {
 
 
             // task1 and 2 share the same index_uid prefix
-            task_1.index_uid = IndexUid::new_unchecked("test".into());
-
-            let mut task_2 = Task::arbitrary(&mut gen);
-            task_2.index_uid = IndexUid::new_unchecked("test1".into());
+            task_1.index_uid = IndexUid::new_unchecked("test".to_string());
+            task_2.index_uid = IndexUid::new_unchecked("test1".to_string());
 
             let mut txn = store.wtxn().unwrap();
             store.put(&mut txn, &task_1).unwrap();
