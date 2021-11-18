@@ -285,3 +285,17 @@ impl Index {
         Ok(())
     }
 }
+
+/// When running test, when a server instance is dropped, the environnement is not actually closed,
+/// leaving a lot of open file descriptors.
+impl Drop for Index {
+    fn drop(&mut self) {
+        // When dropping the last instance of an index, we want to close the index
+        // Note that the close is actually performed only if all the instances a effectively
+        // dropped
+
+        if Arc::strong_count(&self.inner) == 1 {
+            self.inner.as_ref().clone().prepare_for_closing();
+        }
+    }
+}
