@@ -101,9 +101,9 @@ where
     /// When a task is processed, the result of the processing is pushed to its event list. The
     /// handle batch result make sure that the new state is save into its store.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
-        self.store
-            .delete_tasks(batch.tasks.iter().map(|task| task.id).collect())
-            .await?;
+        let to_remove = batch.tasks.iter().map(|task| task.id).collect();
+        self.store.update_tasks(batch.tasks).await?;
+        self.store.delete_tasks(to_remove).await?;
         Ok(())
     }
 }
