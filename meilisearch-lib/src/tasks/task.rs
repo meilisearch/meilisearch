@@ -17,6 +17,7 @@ pub type TaskId = u64;
 pub enum TaskResult {
     DocumentAddition { indexed_documents: u64 },
     DocumentDeletion { deleted_documents: u64 },
+    ClearAll { deleted_documents: u64 },
     Other,
 }
 
