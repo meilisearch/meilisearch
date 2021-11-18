@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::error::{IndexResolverError, Result};
-use crate::EnvSizer;
 use crate::tasks::task::TaskId;
+use crate::EnvSizer;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
@@ -137,8 +137,11 @@ impl HeedUuidStore {
         let txn = self.env.read_txn()?;
 
         match self.db.get(&txn, &index_uid)? {
-            Some(IndexMeta {index_creation_task_id, .. }) => Ok(index_creation_task_id),
-            None => Err(IndexResolverError::UnexistingIndex(index_uid))
+            Some(IndexMeta {
+                index_creation_task_id,
+                ..
+            }) => Ok(index_creation_task_id),
+            None => Err(IndexResolverError::UnexistingIndex(index_uid)),
         }
     }
 

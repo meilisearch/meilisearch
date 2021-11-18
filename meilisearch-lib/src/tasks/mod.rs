@@ -11,14 +11,14 @@ pub use task_store::test::MockTaskStore as TaskStore;
 pub use task_store::TaskStore;
 
 use batch::Batch;
-use scheduler::Scheduler;
 use error::Result;
+use scheduler::Scheduler;
 
 pub mod batch;
+pub mod error;
 pub mod scheduler;
 pub mod task;
 pub mod task_store;
-pub mod error;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]
@@ -44,8 +44,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use serde::{Deserialize, Serialize};
     use std::fmt::Display;
-    use serde::{Serialize, Deserialize};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct DebugError;

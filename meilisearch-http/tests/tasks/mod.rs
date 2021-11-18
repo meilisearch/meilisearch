@@ -4,9 +4,7 @@ use serde_json::json;
 #[actix_rt::test]
 async fn error_get_task_unexisting_index() {
     let server = Server::new().await;
-    let (response, code) = server.service
-        .get("/indexes/test/tasks")
-        .await;
+    let (response, code) = server.service.get("/indexes/test/tasks").await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",

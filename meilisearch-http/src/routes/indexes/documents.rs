@@ -3,6 +3,7 @@ use actix_web::web::Bytes;
 use actix_web::{web, HttpRequest, HttpResponse};
 use futures::{Stream, StreamExt};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
@@ -10,7 +11,6 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
-use meilisearch_error::ResponseError;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;

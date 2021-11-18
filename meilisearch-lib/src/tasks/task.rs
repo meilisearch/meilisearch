@@ -4,25 +4,24 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{index::{Settings, Unchecked}, index_resolver::IndexUid};
 use super::batch::BatchId;
+use crate::{
+    index::{Settings, Unchecked},
+    index_resolver::IndexUid,
+};
 
 pub type TaskId = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskResult {
-    DocumentAddition {
-        number_of_documents: usize,
-    },
-    DocumentDeletion {
-        number_of_documents: u64,
-    },
+    DocumentAddition { number_of_documents: usize },
+    DocumentDeletion { number_of_documents: u64 },
     Other,
 }
 
 impl From<DocumentAdditionResult> for TaskResult {
-    fn from(other : DocumentAdditionResult) -> Self {
+    fn from(other: DocumentAdditionResult) -> Self {
         Self::DocumentAddition {
             number_of_documents: other.nb_documents,
         }
@@ -100,7 +99,7 @@ mod test {
     use super::*;
 
     pub(super) fn index_document_method_strategy() -> impl Strategy<Value = IndexDocumentsMethod> {
-        prop_oneof! [
+        prop_oneof![
             Just(IndexDocumentsMethod::ReplaceDocuments),
             Just(IndexDocumentsMethod::UpdateDocuments),
         ]

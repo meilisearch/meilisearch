@@ -1,11 +1,11 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use meilisearch_error::ResponseError;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -108,16 +108,16 @@ pub async fn update_index(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-   debug!("called with params: {:?}", body);
-   let body = body.into_inner();
-   analytics.publish(
-       "Index Updated".to_string(),
-       json!({ "primary_key": body.primary_key}),
-       Some(&req),
-   );
+    debug!("called with params: {:?}", body);
+    let body = body.into_inner();
+    analytics.publish(
+        "Index Updated".to_string(),
+        json!({ "primary_key": body.primary_key}),
+        Some(&req),
+    );
 
-   let update = Update::UpdateIndex {
-       primary_key: body.primary_key,
+    let update = Update::UpdateIndex {
+        primary_key: body.primary_key,
     };
 
     let task: TaskResponse = meilisearch
@@ -125,8 +125,8 @@ pub async fn update_index(
         .await?
         .into();
 
-   debug!("returns: {:?}", task);
-   Ok(HttpResponse::Accepted().json(task))
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn delete_index(

@@ -1,7 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
+use meilisearch_error::ResponseError;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
-use meilisearch_error::ResponseError;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};

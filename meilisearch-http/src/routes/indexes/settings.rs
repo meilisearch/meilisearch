@@ -22,9 +22,9 @@ macro_rules! make_setting_route {
             use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
             use crate::analytics::Analytics;
-            use meilisearch_error::ResponseError;
             use crate::extractors::authentication::{policies::*, GuardedData};
             use crate::task::TaskResponse;
+            use meilisearch_error::ResponseError;
 
             pub async fn delete(
                 meilisearch: GuardedData<Private, MeiliSearch>,
