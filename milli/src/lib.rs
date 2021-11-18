@@ -20,6 +20,7 @@ use std::hash::BuildHasherDefault;
 pub use filter_parser::{Condition, FilterCondition};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
+pub use meilisearch_tokenizer as tokenizer;
 use serde_json::{Map, Value};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
