@@ -635,7 +635,15 @@ mod test {
         uuid_store
             .expect_get()
             .with(eq(index_uid.to_owned()))
-            .returning(move |s| Box::pin(ok((s, Some(index_uuid)))));
+            .returning(move |s| {
+                Box::pin(ok((
+                    s,
+                    Some(crate::index_resolver::meta_store::IndexMeta {
+                        uuid: index_uuid,
+                        creation_task_id: 0,
+                    }),
+                )))
+            });
 
         let mut index_store = MockIndexStore::new();
         let result_clone = result.clone();
