@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct ResponseError {
     #[serde(skip)]
-    #[cfg_attr(feature = "test-traits", proptest(strategy = "strategy::status_code_strategy()"))]
+    #[cfg_attr(
+        feature = "test-traits",
+        proptest(strategy = "strategy::status_code_strategy()")
+    )]
     code: StatusCode,
     message: String,
     #[serde(rename = "code")]
@@ -55,7 +58,6 @@ impl aweb::error::ResponseError for ResponseError {
         self.code
     }
 }
-
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;

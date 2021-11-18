@@ -3,9 +3,9 @@ use chrono::{DateTime, Utc};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::MeiliSearch;
-use meilisearch_error::ResponseError;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::ApiKeys;

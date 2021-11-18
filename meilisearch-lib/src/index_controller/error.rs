@@ -4,11 +4,11 @@ use meilisearch_error::Code;
 use meilisearch_error::ErrorCode;
 use tokio::task::JoinError;
 
+use super::update_file_store::UpdateFileStoreError;
+use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
-use super::DocumentAdditionFormat;
-use super::update_file_store::UpdateFileStoreError;
 
 // use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;
@@ -35,9 +35,7 @@ pub enum IndexControllerError {
     PayloadTooLarge,
 }
 
-internal_error!(IndexControllerError:
-    JoinError, UpdateFileStoreError
-);
+internal_error!(IndexControllerError: JoinError, UpdateFileStoreError);
 
 impl From<actix_web::error::PayloadError> for IndexControllerError {
     fn from(other: actix_web::error::PayloadError) -> Self {

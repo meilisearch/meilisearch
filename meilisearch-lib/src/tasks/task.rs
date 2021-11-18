@@ -4,12 +4,11 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::batch::BatchId;
 use crate::{
     index::{Settings, Unchecked},
     index_resolver::IndexUid,
 };
-
-use super::batch::BatchId;
 
 pub type TaskId = u64;
 
@@ -101,7 +100,7 @@ mod test {
     use super::*;
 
     pub(super) fn index_document_method_strategy() -> impl Strategy<Value = IndexDocumentsMethod> {
-        prop_oneof! [
+        prop_oneof![
             Just(IndexDocumentsMethod::ReplaceDocuments),
             Just(IndexDocumentsMethod::UpdateDocuments),
         ]
