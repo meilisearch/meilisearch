@@ -43,7 +43,7 @@ impl IndexUid {
         if !uid
             .chars()
             .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-            || (1..=400).contains(&uid.len())
+            || !(1..=400).contains(&uid.len())
         {
             Err(IndexResolverError::BadlyFormatted(uid))
         } else {
