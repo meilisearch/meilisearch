@@ -580,14 +580,14 @@ mod test {
     use crate::index::Index;
     // use crate::index_controller::dump_actor::MockDumpActorHandle;
     use crate::index_resolver::index_store::MockIndexStore;
-    use crate::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_resolver::meta_store::MockIndexMetaStore;
     use crate::index_resolver::IndexResolver;
 
     use super::*;
 
-    impl IndexController<MockUuidStore, MockIndexStore> {
+    impl IndexController<MockIndexMetaStore, MockIndexStore> {
         pub fn mock(
-            index_resolver: IndexResolver<MockUuidStore, MockIndexStore>,
+            index_resolver: IndexResolver<MockIndexMetaStore, MockIndexStore>,
             task_store: TaskStore,
             update_file_store: UpdateFileStore,
             //     dump_handle: D,
@@ -631,9 +631,9 @@ mod test {
             exhaustive_facets_count: Some(true),
         };
 
-        let mut uuid_store = MockUuidStore::new();
+        let mut uuid_store = MockIndexMetaStore::new();
         uuid_store
-            .expect_get_uuid()
+            .expect_get()
             .with(eq(index_uid.to_owned()))
             .returning(move |s| Box::pin(ok((s, Some(index_uuid)))));
 

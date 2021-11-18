@@ -3,10 +3,9 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
-use heed::RoTxn;
 use indexmap::IndexMap;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
-use milli::{AscDesc, FieldId, FieldsIdsMap, FilterCondition, MatchingWords, SortError};
+use milli::{AscDesc, FieldId, FieldsIdsMap, Filter, MatchingWords, SortError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -102,7 +101,7 @@ impl Index {
         search.offset(query.offset.unwrap_or_default());
 
         if let Some(ref filter) = query.filter {
-            if let Some(facets) = parse_filter(filter, self, &rtxn)? {
+            if let Some(facets) = parse_filter(filter)? {
                 search.filter(facets);
             }
         }
@@ -647,31 +646,27 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     }
 }
 
-fn parse_filter(facets: &Value, index: &Index, txn: &RoTxn) -> Result<Option<FilterCondition>> {
+fn parse_filter(facets: &Value) -> Result<Option<Filter>> {
     match facets {
         Value::String(expr) => {
-            let condition = FilterCondition::from_str(txn, index, expr)?;
+            let condition = Filter::from_str(&expr)?;
             Ok(Some(condition))
         }
-        Value::Array(arr) => parse_filter_array(txn, index, arr),
+        Value::Array(arr) => parse_filter_array(arr),
         v => Err(FacetError::InvalidExpression(&["Array"], v.clone()).into()),
     }
 }
 
-fn parse_filter_array(
-    txn: &RoTxn,
-    index: &Index,
-    arr: &[Value],
-) -> Result<Option<FilterCondition>> {
+fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>> {
     let mut ands = Vec::new();
     for value in arr {
         match value {
-            Value::String(s) => ands.push(Either::Right(s.clone())),
+            Value::String(s) => ands.push(Either::Right(s.as_str())),
             Value::Array(arr) => {
                 let mut ors = Vec::new();
                 for value in arr {
                     match value {
-                        Value::String(s) => ors.push(s.clone()),
+                        Value::String(s) => ors.push(s.as_str()),
                         v => {
                             return Err(FacetError::InvalidExpression(&["String"], v.clone()).into())
                         }
@@ -687,7 +682,7 @@ fn parse_filter_array(
         }
     }
 
-    Ok(FilterCondition::from_array(txn, index, ands)?)
+    Ok(Filter::from_array(ands)?)
 }
 
 #[cfg(test)]

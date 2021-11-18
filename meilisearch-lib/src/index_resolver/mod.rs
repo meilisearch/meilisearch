@@ -10,6 +10,7 @@ use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
+use milli::update::DocumentDeletionResult;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -171,10 +172,12 @@ where
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid.into_inner()).await?;
-                let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
-                Ok(TaskResult::DocumentDeletion {
-                    number_of_documents: deleted,
-                })
+
+                let DocumentDeletionResult {
+                    deleted_documents, ..
+                } = spawn_blocking(move || index.delete_documents(&ids)).await??;
+
+                Ok(TaskResult::DocumentDeletion { deleted_documents })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                 let index = self.get_index(index_uid.into_inner()).await?;

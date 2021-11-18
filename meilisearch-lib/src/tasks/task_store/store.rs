@@ -210,7 +210,6 @@ impl Store {
 pub mod test {
     use std::collections::{HashMap, HashSet};
 
-    use k9::assert_equal as assert_eq;
     use nelson::Mocker;
     use quickcheck::{Arbitrary, Gen, TestResult};
     use quickcheck_macros::quickcheck;
