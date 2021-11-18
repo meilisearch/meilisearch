@@ -282,7 +282,7 @@ pub mod test {
         let gen_task = |id: TaskId| Task {
             id,
             index_uid: IndexUid::new_unchecked("test"),
-            content: TaskContent::CreateIndex { primary_key: None },
+            content: TaskContent::IndexCreation { primary_key: None },
             events: Vec::new(),
         };
 

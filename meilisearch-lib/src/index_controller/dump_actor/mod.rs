@@ -340,7 +340,7 @@ mod test {
                 .when::<&Path, IndexResult<()>>("dump")
                 .once()
                 .then(move |_| Ok(()));
-            Box::pin(ok(Some(Index::faux(mocker))))
+            Box::pin(ok(Some(Index::mock(mocker))))
         });
 
         let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));

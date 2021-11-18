@@ -26,7 +26,7 @@ pub type Document = Map<String, Value>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMeta {
-    created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub primary_key: Option<String>,
 }
@@ -102,8 +102,9 @@ impl Index {
         })
     }
 
-    pub fn inner(&self) -> &milli::Index {
-        &self.inner
+    /// Asyncronously close the underlying index
+    pub fn close(self) {
+        self.inner.as_ref().clone().prepare_for_closing();
     }
 
     pub fn stats(&self) -> Result<IndexStats> {

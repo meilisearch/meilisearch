@@ -662,7 +662,7 @@ mod test {
                         assert_eq!(&q, &query);
                         Ok(result.clone())
                     });
-                let index = Index::faux(mocker);
+                let index = Index::mock(mocker);
                 Box::pin(ok(Some(index)))
             });
 
