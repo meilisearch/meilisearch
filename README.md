@@ -80,7 +80,7 @@ Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisear
 </a>
 
 #### Deploy on Gitpod.io
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/nemke82/meilisearch-gitpod>)
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/nemke82/meilisearch-gitpod)
 
 #### APT (Debian & Ubuntu)
 
