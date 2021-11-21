@@ -79,6 +79,9 @@ Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisear
     <img src="https://platform.sh/images/deploy/lg-blue.svg" alt="Deploy on Platform.sh" width="180px" />
 </a>
 
+#### Deploy on Gitpod.io
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/nemke82/meilisearch-gitpod>)
+
 #### APT (Debian & Ubuntu)
 
 ```bash
