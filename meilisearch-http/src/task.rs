@@ -20,6 +20,19 @@ enum TaskType {
     ClearAll,
 }
 
+impl From<TaskContent> for TaskType {
+    fn from(other: TaskContent) -> Self {
+        match other {
+            TaskContent::DocumentAddition { .. } => TaskType::DocumentsAddition,
+            TaskContent::DocumentDeletion(_) => TaskType::DocumentsDeletion,
+            TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
+            TaskContent::IndexDeletion => TaskType::IndexDeletion,
+            TaskContent::CreateIndex { .. } => TaskType::IndexCreation,
+            TaskContent::UpdateIndex { .. } => TaskType::IndexUpdate,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum TaskStatus {
@@ -207,5 +220,39 @@ pub struct TaskListView {
 impl From<Vec<TaskView>> for TaskListView {
     fn from(results: Vec<TaskView>) -> Self {
         Self { results }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummarizedTaskView {
+    uid: TaskId,
+    index_uid: String,
+    status: TaskStatus,
+    #[serde(rename = "type")]
+    task_type: TaskType,
+    enqueued_at: DateTime<Utc>,
+}
+
+impl From<Task> for SummarizedTaskView {
+    fn from(mut other: Task) -> Self {
+        let created_event = other
+            .events
+            .drain(..1)
+            .next()
+            .expect("Task must have an enqueued event.");
+
+        let enqueued_at = match created_event {
+            TaskEvent::Created(ts) => ts,
+            _ => unreachable!("Thsi first event of a task must always be 'Created'"),
+        };
+
+        Self {
+            uid: other.id,
+            index_uid: other.index_uid.to_string(),
+            status: TaskStatus::Enqueued,
+            task_type: other.content.into(),
+            enqueued_at,
+        }
     }
 }

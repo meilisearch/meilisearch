@@ -16,7 +16,7 @@ use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
-use crate::task::TaskView;
+use crate::task::SummarizedTaskView;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
 const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
@@ -77,7 +77,7 @@ pub async fn delete_document(
         index_uid,
     } = path.into_inner();
     let update = Update::DeleteDocuments(vec![document_id]);
-    let task: TaskView = meilisearch.register_update(index_uid, update).await?.into();
+    let task: SummarizedTaskView = meilisearch.register_update(index_uid, update).await?.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -197,7 +197,7 @@ async fn document_addition(
     primary_key: Option<String>,
     body: Payload,
     method: IndexDocumentsMethod,
-) -> Result<TaskView, ResponseError> {
+) -> Result<SummarizedTaskView, ResponseError> {
     static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
         vec![
             "application/json".to_string(),
@@ -252,7 +252,7 @@ pub async fn delete_documents(
         .collect();
 
     let update = Update::DeleteDocuments(ids);
-    let task: TaskView = meilisearch
+    let task: SummarizedTaskView = meilisearch
         .register_update(path.into_inner(), update)
         .await?
         .into();
@@ -266,7 +266,7 @@ pub async fn clear_all_documents(
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let update = Update::ClearDocuments;
-    let task: TaskView = meilisearch
+    let task: SummarizedTaskView = meilisearch
         .register_update(path.into_inner(), update)
         .await?
         .into();

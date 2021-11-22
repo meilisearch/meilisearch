@@ -9,7 +9,7 @@ use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::TaskView;
+use crate::task::SummarizedTaskView;
 
 pub mod documents;
 pub mod search;
@@ -70,7 +70,7 @@ pub async fn create_index(
     );
 
     let update = Update::CreateIndex { primary_key };
-    let task: TaskView = meilisearch.register_update(uid, update).await?.into();
+    let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -120,7 +120,7 @@ pub async fn update_index(
         primary_key: body.primary_key,
     };
 
-    let task: TaskView = meilisearch
+    let task: SummarizedTaskView = meilisearch
         .register_update(path.into_inner(), update)
         .await?
         .into();
@@ -135,7 +135,7 @@ pub async fn delete_index(
 ) -> Result<HttpResponse, ResponseError> {
     let uid = path.into_inner();
     let update = Update::DeleteIndex;
-    let task: TaskView = meilisearch.register_update(uid, update).await?.into();
+    let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
 
     Ok(HttpResponse::Accepted().json(task))
 }
