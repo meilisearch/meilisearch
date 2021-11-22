@@ -5,7 +5,8 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
@@ -59,7 +60,12 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<(Vec<TaskId>, Self)> {
+    /// Create a new store from the specified `Path`.
+    /// Be really cautious when calling this function, the returned `Store` is
+    /// not altered and is a direct representation of what was laying on the disk.
+    /// You probably want to put back all un-finished update in your queue with the
+    /// `reset_and_return_unfinished_update` method.
+    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         options.max_dbs(1000);
@@ -68,24 +74,35 @@ impl Store {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
-        // we are going to save all unfinished tasks for the `TaskStore`.
-        let mut unfinished_tasks: Vec<TaskId> = Vec::new();
+        Ok(Self {
+            env,
+            uids_task_ids,
+            tasks,
+        })
+    }
 
-        let mut wtxn = env.write_txn()?;
-        let mut iter = tasks.rev_iter_mut(&mut wtxn)?;
+    /// This function should be called *right after* creating the store.
+    /// It put back all unfinished update in the `Created` state. This
+    /// allow us to re-enqueue an update that didn't had the time to finish
+    /// when Meilisearch closed.
+    pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
+        let mut unfinished_tasks: BinaryHeap<Reverse<TaskId>> = BinaryHeap::new();
+
+        let mut wtxn = self.wtxn()?;
+        let mut iter = self.tasks.rev_iter_mut(&mut wtxn)?;
 
         while let Some(entry) = iter.next() {
             let entry = entry?;
             let (id, mut task): (BEU64, Task) = entry;
 
-            // Since all tasks are ordered, we can stop iterating on all tasks when we encounter our first non-finished task.
+            // Since all tasks are ordered, we can stop iterating when we encounter our first non-finished task.
             if task.is_finished() {
                 break;
             }
 
             // we only keep the first state. It’s supposed to be a `Created` state.
             task.events.drain(1..);
-            unfinished_tasks.push(id.get());
+            unfinished_tasks.push(Reverse(id.get()));
 
             // the id stayed unchanged so this is a safe operation.
             unsafe {
@@ -96,14 +113,7 @@ impl Store {
         drop(iter);
         wtxn.commit()?;
 
-        Ok((
-            unfinished_tasks,
-            Self {
-                env,
-                uids_task_ids,
-                tasks,
-            },
-        ))
+        Ok(unfinished_tasks)
     }
 
     pub fn wtxn(&self) -> Result<RwTxn> {
@@ -255,9 +265,15 @@ pub mod test {
     }
 
     impl MockStore {
-        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<(Vec<TaskId>, Self)> {
-            let (unfinished_tasks, store) = Store::new(path, size)?;
-            Ok((unfinished_tasks, Self::Real(store)))
+        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+            Ok(Self::Real(Store::new(path, size)?))
+        }
+
+        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
+            match self {
+                MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
+                MockStore::Fake(_) => todo!(),
+            }
         }
 
         pub fn wtxn(&self) -> Result<RwTxn> {
