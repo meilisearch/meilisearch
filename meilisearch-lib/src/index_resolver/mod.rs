@@ -10,11 +10,12 @@ use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
+use milli::update::DocumentDeletionResult;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::index::Index;
+use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
@@ -171,16 +172,23 @@ where
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid.into_inner()).await?;
-                let deleted = spawn_blocking(move || index.delete_documents(&ids)).await??;
-                Ok(TaskResult::DocumentDeletion {
-                    number_of_documents: deleted,
-                })
+
+                let DocumentDeletionResult {
+                    deleted_documents, ..
+                } = spawn_blocking(move || index.delete_documents(&ids)).await??;
+
+                Ok(TaskResult::DocumentDeletion { deleted_documents })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
                 let index = self.get_index(index_uid.into_inner()).await?;
-                spawn_blocking(move || index.clear_documents()).await??;
+                let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
+                    let number_documents = index.stats()?.number_of_documents;
+                    index.clear_documents()?;
+                    Ok(number_documents)
+                })
+                .await??;
 
-                Ok(TaskResult::Other)
+                Ok(TaskResult::ClearAll { deleted_documents })
             }
             TaskContent::SettingsUpdate {
                 settings,
@@ -198,10 +206,14 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::IndexDeletion => {
-                self.delete_index(index_uid.into_inner()).await?;
-                // TODO: handle task deletion
+                let index = self.delete_index(index_uid.into_inner()).await?;
 
-                Ok(TaskResult::Other)
+                let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
+                    Ok(index.stats()?.number_of_documents)
+                })
+                .await??;
+
+                Ok(TaskResult::ClearAll { deleted_documents })
             }
             TaskContent::IndexCreation { primary_key } => {
                 let index = self.create_index(index_uid, task.id).await?;
@@ -311,18 +323,15 @@ where
         Ok(indexes)
     }
 
-    pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
+    pub async fn delete_index(&self, uid: String) -> Result<Index> {
         match self.index_uuid_store.delete(uid.clone()).await? {
-            Some(IndexMeta { uuid, .. }) => {
-                match self.index_store.delete(uuid).await {
-                    Ok(Some(index)) => {
-                        index.inner().clone().prepare_for_closing();
-                    }
-                    Ok(None) => (),
-                    Err(e) => log::error!("Error while deleting index: {:?}", e),
+            Some(IndexMeta { uuid, .. }) => match self.index_store.delete(uuid).await? {
+                Some(index) => {
+                    index.inner().clone().prepare_for_closing();
+                    Ok(index)
                 }
-                Ok(uuid)
-            }
+                None => Err(IndexResolverError::UnexistingIndex(uid)),
+            },
             None => Err(IndexResolverError::UnexistingIndex(uid)),
         }
     }

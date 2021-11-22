@@ -27,10 +27,11 @@ pub mod test {
     use std::sync::Arc;
 
     use milli::update::DocumentAdditionResult;
+    use milli::update::DocumentDeletionResult;
     use milli::update::IndexDocumentsMethod;
+    use nelson::Mocker;
     use serde_json::{Map, Value};
     use uuid::Uuid;
-    use nelson::Mocker;
 
     use crate::index_controller::update_file_store::UpdateFileStore;
 
@@ -184,7 +185,7 @@ pub mod test {
             }
         }
 
-        pub fn delete_documents(&self, ids: &[String]) -> Result<u64> {
+        pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
             match self {
                 MockIndex::Real(index) => index.delete_documents(ids),
                 MockIndex::Mock(_) => todo!(),

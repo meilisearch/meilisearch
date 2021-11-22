@@ -297,7 +297,7 @@ mod test {
     use crate::index::Index;
     use crate::index_resolver::error::IndexResolverError;
     use crate::index_resolver::index_store::MockIndexStore;
-    use crate::index_resolver::uuid_store::MockUuidStore;
+    use crate::index_resolver::meta_store::MockIndexMetaStore;
 
     fn setup() {
         static SETUP: Lazy<()> = Lazy::new(|| {
@@ -321,7 +321,7 @@ mod test {
         let uuids = std::iter::repeat_with(Uuid::new_v4)
             .take(4)
             .collect::<HashSet<_>>();
-        let mut uuid_store = MockUuidStore::new();
+        let mut uuid_store = MockIndexMetaStore::new();
         let uuids_cloned = uuids.clone();
         uuid_store
             .expect_dump()
@@ -366,7 +366,7 @@ mod test {
     async fn error_performing_dump() {
         let tmp = tempfile::tempdir().unwrap();
 
-        let mut uuid_store = MockUuidStore::new();
+        let mut uuid_store = MockIndexMetaStore::new();
         uuid_store
             .expect_dump()
             .once()

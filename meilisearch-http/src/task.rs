@@ -27,8 +27,8 @@ impl From<TaskContent> for TaskType {
             TaskContent::DocumentDeletion(_) => TaskType::DocumentsDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
-            TaskContent::CreateIndex { .. } => TaskType::IndexCreation,
-            TaskContent::UpdateIndex { .. } => TaskType::IndexUpdate,
+            TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
+            TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
         }
     }
 }
@@ -48,7 +48,7 @@ enum TaskDetails {
     #[serde(rename_all = "camelCase")]
     DocumentsAddition {
         received_documents: usize,
-        indexed_documents: Option<usize>,
+        indexed_documents: Option<u64>,
     },
     #[serde(rename_all = "camelCase")]
     Settings {
@@ -62,6 +62,8 @@ enum TaskDetails {
         received_document_ids: usize,
         deleted_documents: Option<u64>,
     },
+    #[serde(rename_all = "camelCase")]
+    ClearAll { deleted_documents: Option<u64> },
 }
 
 fn serialize_duration<S: Serializer>(
@@ -131,8 +133,18 @@ impl From<Task> for TaskView {
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (TaskType::ClearAll, None),
-            TaskContent::IndexDeletion => (TaskType::IndexDeletion, None),
+            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (
+                TaskType::ClearAll,
+                Some(TaskDetails::ClearAll {
+                    deleted_documents: None,
+                }),
+            ),
+            TaskContent::IndexDeletion => (
+                TaskType::IndexDeletion,
+                Some(TaskDetails::ClearAll {
+                    deleted_documents: None,
+                }),
+            ),
             TaskContent::SettingsUpdate { settings, .. } => (
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
@@ -156,25 +168,37 @@ impl From<Task> for TaskView {
                 match (result, &mut details) {
                     (
                         TaskResult::DocumentAddition {
-                            number_of_documents,
+                            indexed_documents: num,
+                            ..
                         },
                         Some(TaskDetails::DocumentsAddition {
                             ref mut indexed_documents,
                             ..
                         }),
                     ) => {
-                        indexed_documents.replace(*number_of_documents);
+                        indexed_documents.replace(*num);
                     }
                     (
                         TaskResult::DocumentDeletion {
-                            number_of_documents,
+                            deleted_documents: docs,
+                            ..
                         },
                         Some(TaskDetails::DocumentDeletion {
                             ref mut deleted_documents,
                             ..
                         }),
                     ) => {
-                        deleted_documents.replace(*number_of_documents);
+                        deleted_documents.replace(*docs);
+                    }
+                    (
+                        TaskResult::ClearAll {
+                            deleted_documents: docs,
+                        },
+                        Some(TaskDetails::ClearAll {
+                            ref mut deleted_documents,
+                        }),
+                    ) => {
+                        deleted_documents.replace(*docs);
                     }
                     _ => (),
                 }
