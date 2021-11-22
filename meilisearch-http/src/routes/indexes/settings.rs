@@ -9,7 +9,7 @@ use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::TaskResponse;
+use crate::task::TaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -22,9 +22,9 @@ macro_rules! make_setting_route {
             use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
             use crate::analytics::Analytics;
-            use meilisearch_error::ResponseError;
             use crate::extractors::authentication::{policies::*, GuardedData};
             use crate::task::TaskResponse;
+            use meilisearch_error::ResponseError;
 
             pub async fn delete(
                 meilisearch: GuardedData<Private, MeiliSearch>,
@@ -273,7 +273,7 @@ pub async fn update_all(
         settings,
         is_deletion: false,
     };
-    let task: TaskResponse = meilisearch
+    let task: TaskView = meilisearch
         .register_update(index_uid.into_inner(), update)
         .await?
         .into();
@@ -301,7 +301,7 @@ pub async fn delete_all(
         settings,
         is_deletion: true,
     };
-    let task: TaskResponse = data
+    let task: TaskView = data
         .register_update(index_uid.into_inner(), update)
         .await?
         .into();

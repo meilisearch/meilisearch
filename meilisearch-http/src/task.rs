@@ -66,7 +66,7 @@ fn serialize_duration<S: Serializer>(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskResponse {
+pub struct TaskView {
     uid: TaskId,
     index_uid: String,
     status: TaskStatus,
@@ -83,7 +83,7 @@ pub struct TaskResponse {
     finished_at: Option<DateTime<Utc>>,
 }
 
-impl From<Task> for TaskResponse {
+impl From<Task> for TaskView {
     fn from(task: Task) -> Self {
         let Task {
             id,
@@ -200,12 +200,12 @@ impl From<Task> for TaskResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub struct TaskListResponse {
-    results: Vec<TaskResponse>,
+pub struct TaskListView {
+    results: Vec<TaskView>,
 }
 
-impl From<Vec<TaskResponse>> for TaskListResponse {
-    fn from(results: Vec<TaskResponse>) -> Self {
+impl From<Vec<TaskView>> for TaskListView {
+    fn from(results: Vec<TaskView>) -> Self {
         Self { results }
     }
 }
