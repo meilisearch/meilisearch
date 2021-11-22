@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
 use crate::index_resolver::index_store::IndexStore;
-use crate::index_resolver::uuid_store::UuidStore;
+use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
@@ -38,7 +38,7 @@ fn generate_uid() -> String {
 
 impl<U, I> DumpActor<U, I>
 where
-    U: UuidStore + Sync + Send + 'static,
+    U: IndexMetaStore + Sync + Send + 'static,
     I: IndexStore + Sync + Send + 'static,
 {
     pub fn new(

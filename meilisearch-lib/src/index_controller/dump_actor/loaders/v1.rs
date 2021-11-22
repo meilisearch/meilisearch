@@ -15,8 +15,8 @@ use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
 use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
-use crate::index_resolver::uuid_store::HeedUuidStore;
 use crate::index_controller::{self, IndexMetadata};
+use crate::index_resolver::meta_store::{HeedMetaStore, IndexMeta};
 use crate::{index::Unchecked, options::IndexerOpts};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -35,11 +35,15 @@ impl MetadataV1 {
         size: usize,
         indexer_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        let uuid_store = HeedUuidStore::new(&dst)?;
+        let uuid_store = HeedMetaStore::new(&dst)?;
         for index in self.indexes {
             let uuid = Uuid::new_v4();
             // Since we don't know when the index was created, we assume it's from 0
-            uuid_store.insert(index.uid.clone(), uuid, 0)?;
+            let meta = IndexMeta {
+                uuid,
+                creation_task_id: 0,
+            };
+            uuid_store.insert(index.uid.clone(), meta)?;
             let src = src.as_ref().join(index.uid);
             load_index(
                 &src,
