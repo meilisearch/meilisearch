@@ -203,7 +203,7 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::CreateIndex { primary_key } => {
+            TaskContent::IndexCreation { primary_key } => {
                 let index = self.create_index(index_uid, task.id).await?;
 
                 if let Some(primary_key) = primary_key {
@@ -213,7 +213,7 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::UpdateIndex { primary_key } => {
+            TaskContent::IndexUpdate { primary_key } => {
                 let index = self.get_index(index_uid.into_inner()).await?;
 
                 if let Some(primary_key) = primary_key {

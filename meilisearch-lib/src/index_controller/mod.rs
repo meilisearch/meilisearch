@@ -364,8 +364,8 @@ where
                 }
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,
-            Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
-            Update::UpdateIndex { primary_key } => TaskContent::UpdateIndex { primary_key },
+            Update::CreateIndex { primary_key } => TaskContent::IndexCreation { primary_key },
+            Update::UpdateIndex { primary_key } => TaskContent::IndexUpdate { primary_key },
         };
 
         let task = self.task_store.register(uid, content).await?;
