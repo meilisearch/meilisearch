@@ -55,8 +55,8 @@ pub struct Task {
 }
 
 impl Task {
-    /// Return true will no longer change its state. We can consider the task as `finished`.
-    /// The only two state that makes a task finished are the `Succeeded` and `Failed` states.
+    /// Return true when a task is finished.
+    /// A task is finished when its last state is either `Succeeded` or `Failed`.
     pub fn is_finished(&self) -> bool {
         self.events.last().map_or(false, |event| {
             matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
