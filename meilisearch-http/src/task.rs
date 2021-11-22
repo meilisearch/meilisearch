@@ -244,7 +244,7 @@ impl From<Task> for SummarizedTaskView {
 
         let enqueued_at = match created_event {
             TaskEvent::Created(ts) => ts,
-            _ => unreachable!("Thsi first event of a task must always be 'Created'"),
+            _ => unreachable!("The first event of a task must always be 'Created'"),
         };
 
         Self {
