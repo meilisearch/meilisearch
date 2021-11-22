@@ -6,7 +6,7 @@ use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::{TaskListResponse, TaskResponse};
+use crate::task::{TaskListView, TaskView};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(get_all_tasks_status)))
@@ -35,7 +35,7 @@ pub async fn get_task_status(
 ) -> Result<HttpResponse, ResponseError> {
     let UpdateParam { index_uid, task_id } = index_uid.into_inner();
 
-    let task: TaskResponse = meilisearch.get_index_task(index_uid, task_id).await?.into();
+    let task: TaskView = meilisearch.get_index_task(index_uid, task_id).await?.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Ok().json(task))
@@ -45,11 +45,11 @@ pub async fn get_all_tasks_status(
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let tasks: TaskListResponse = meilisearch
+    let tasks: TaskListView = meilisearch
         .list_index_task(index_uid.into_inner(), None, None)
         .await?
         .into_iter()
-        .map(TaskResponse::from)
+        .map(TaskView::from)
         .collect::<Vec<_>>()
         .into();
 

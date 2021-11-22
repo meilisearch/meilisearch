@@ -1,12 +1,11 @@
 use crate::common::Server;
-use serde_json::json;
+use chrono::{DateTime, Utc};
+use serde_json::{json, Value};
 
 #[actix_rt::test]
 async fn error_get_task_unexisting_index() {
     let server = Server::new().await;
-    let (response, code) = server.service
-        .get("/indexes/test/tasks")
-        .await;
+    let (response, code) = server.service.get("/indexes/test/tasks").await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",
@@ -89,4 +88,46 @@ async fn list_tasks() {
     let (response, code) = index.list_tasks().await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+macro_rules! assert_valid_summarized_task {
+    ($response:expr, $task_type:literal, $index:literal) => {{
+        assert_eq!($response.as_object().unwrap().len(), 5);
+        assert!($response["uid"].as_u64().is_some());
+        assert_eq!($response["indexUid"], $index);
+        assert_eq!($response["status"], "enqueued");
+        assert_eq!($response["type"], $task_type);
+        let date = $response["enqueued_at"].as_str().unwrap();
+        date.parse::<DateTime<Utc>>().unwrap();
+    }};
+}
+
+#[actix_web::test]
+async fn test_summarized_task_view() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, _) = index.create(None).await;
+    assert_valid_summarized_task!(response, "indexCreation", "index");
+
+    let (response, _) = index.update(None).await;
+    assert_valid_summarized_task!(response, "indexUpdate", "index");
+
+    let (response, _) = index.update_settings(json!({})).await;
+    assert_valid_summarized_task!(response, "settingsUpdate", "index");
+
+    let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
+    assert_valid_summarized_task!(response, "documentsPartial", "index");
+
+    let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
+    assert_valid_summarized_task!(response, "documentsAddition", "index");
+
+    let (response, _) = index.delete_document(1).await;
+    assert_valid_summarized_task!(response, "documentsDeletion", "index");
+
+    let (response, _) = index.clear_all_documents().await;
+    assert_valid_summarized_task!(response, "clearAll", "index");
+
+    let (response, _) = index.delete().await;
+    assert_valid_summarized_task!(response, "indexDeletion", "index");
 }
