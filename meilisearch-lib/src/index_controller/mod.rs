@@ -28,7 +28,7 @@ use crate::index::{
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -364,8 +364,8 @@ where
                 }
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,
-            Update::CreateIndex { primary_key } => TaskContent::CreateIndex { primary_key },
-            Update::UpdateIndex { primary_key } => TaskContent::UpdateIndex { primary_key },
+            Update::CreateIndex { primary_key } => TaskContent::IndexCreation { primary_key },
+            Update::UpdateIndex { primary_key } => TaskContent::IndexUpdate { primary_key },
         };
 
         let task = self.task_store.register(uid, content).await?;

@@ -124,11 +124,11 @@ impl From<Task> for TaskResponse {
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
-            TaskContent::CreateIndex { primary_key } => (
+            TaskContent::IndexCreation { primary_key } => (
                 TaskType::IndexCreation,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
-            TaskContent::UpdateIndex { primary_key } => (
+            TaskContent::IndexUpdate { primary_key } => (
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),

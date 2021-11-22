@@ -4,7 +4,10 @@ use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{index::{Settings, Unchecked}, index_resolver::IndexUid};
+use crate::{
+    index::{Settings, Unchecked},
+    index_resolver::IndexUid,
+};
 
 use super::batch::BatchId;
 
@@ -12,17 +15,13 @@ pub type TaskId = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskResult {
-    DocumentAddition {
-        number_of_documents: usize,
-    },
-    DocumentDeletion {
-        number_of_documents: u64,
-    },
+    DocumentAddition { number_of_documents: usize },
+    DocumentDeletion { number_of_documents: u64 },
     Other,
 }
 
 impl From<DocumentAdditionResult> for TaskResult {
-    fn from(other : DocumentAdditionResult) -> Self {
+    fn from(other: DocumentAdditionResult) -> Self {
         Self::DocumentAddition {
             number_of_documents: other.nb_documents,
         }
@@ -76,10 +75,10 @@ pub enum TaskContent {
         is_deletion: bool,
     },
     IndexDeletion,
-    CreateIndex {
+    IndexCreation {
         primary_key: Option<String>,
     },
-    UpdateIndex {
+    IndexUpdate {
         primary_key: Option<String>,
     },
 }
@@ -160,9 +159,13 @@ mod test {
             let n = g.choose(&[1, 2, 3]).unwrap();
             match n {
                 1 => Self::Other,
-                2 => Self::DocumentAddition { number_of_documents: usize::arbitrary(g) },
-                3 => Self::DocumentDeletion { number_of_documents: u64::arbitrary(g) },
-                _ => unreachable!()
+                2 => Self::DocumentAddition {
+                    number_of_documents: usize::arbitrary(g),
+                },
+                3 => Self::DocumentDeletion {
+                    number_of_documents: u64::arbitrary(g),
+                },
+                _ => unreachable!(),
             }
         }
     }
