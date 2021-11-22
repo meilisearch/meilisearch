@@ -61,10 +61,10 @@ pub struct Store {
 
 impl Store {
     /// Create a new store from the specified `Path`.
-    /// Be really cautious when calling this function, the returned `Store` is
-    /// not altered and is a direct representation of what was laying on the disk.
-    /// You probably want to put back all un-finished update in your queue with the
-    /// `reset_and_return_unfinished_update` method.
+    /// Be really cautious when calling this function, the returned `Store` may
+    /// be in an invalid state, with dangling processing tasks.
+    /// You want to patch  all un-finished tasks and put them in your pending
+    /// queue with the `reset_and_return_unfinished_update` method.
     pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
@@ -104,7 +104,7 @@ impl Store {
             task.events.drain(1..);
             unfinished_tasks.push(Reverse(id.get()));
 
-            // the id stayed unchanged so this is a safe operation.
+            // Since we own the id and the task this is a safe operation.
             unsafe {
                 iter.put_current(&id, &task)?;
             }
