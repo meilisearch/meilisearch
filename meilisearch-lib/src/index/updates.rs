@@ -4,7 +4,9 @@ use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
-use milli::update::{DocumentAdditionResult, IndexDocumentsMethod, Setting};
+use milli::update::{
+    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod, Setting,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -183,7 +185,7 @@ impl Index {
     }
 
     /// Deletes `ids` from the index, and returns how many documents were deleted.
-    pub fn delete_documents(&self, ids: &[String]) -> Result<u64> {
+    pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
         let mut txn = self.write_txn()?;
         let mut builder = self
             .update_handler

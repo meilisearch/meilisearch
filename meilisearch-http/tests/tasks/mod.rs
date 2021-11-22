@@ -1,6 +1,6 @@
 use crate::common::Server;
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::json;
 
 #[actix_rt::test]
 async fn error_get_task_unexisting_index() {
