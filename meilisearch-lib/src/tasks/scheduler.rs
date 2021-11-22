@@ -102,11 +102,10 @@ where
     /// handle batch result make sure that the new state is save into its store.
     /// The tasks are then removed from the processing queue.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
-        let finished_tasks = batch.tasks.iter().map(|task| task.id).collect();
-
+        let to_remove = batch.tasks.iter().map(|task| task.id).collect();
         self.store.update_tasks(batch.tasks).await?;
-        self.store.delete_tasks(finished_tasks).await?;
-
+        self.store.delete_tasks(to_remove).await?;
+        
         Ok(())
     }
 }

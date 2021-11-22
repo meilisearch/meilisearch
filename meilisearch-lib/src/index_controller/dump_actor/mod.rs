@@ -14,7 +14,7 @@ pub use handle_impl::*;
 pub use message::DumpMsg;
 
 use crate::index_resolver::index_store::IndexStore;
-use crate::index_resolver::uuid_store::UuidStore;
+use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
 // use crate::analytics;
 use crate::compression::from_tar_gz;
@@ -242,7 +242,7 @@ struct DumpTask<U, I> {
 
 impl<U, I> DumpTask<U, I>
 where
-    U: UuidStore + Sync + Send + 'static,
+    U: IndexMetaStore + Sync + Send + 'static,
     I: IndexStore + Sync + Send + 'static,
 {
     async fn run(self) -> Result<()> {
@@ -288,9 +288,9 @@ mod test {
     use std::collections::HashSet;
 
     use futures::future::{err, ok};
+    use nelson::Mocker;
     use once_cell::sync::Lazy;
     use uuid::Uuid;
-    use nelson::Mocker;
 
     use super::*;
     use crate::index::error::Result as IndexResult;

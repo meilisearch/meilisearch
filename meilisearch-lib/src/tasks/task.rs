@@ -85,10 +85,10 @@ pub enum TaskContent {
         is_deletion: bool,
     },
     IndexDeletion,
-    CreateIndex {
+    IndexCreation {
         primary_key: Option<String>,
     },
-    UpdateIndex {
+    IndexUpdate {
         primary_key: Option<String>,
     },
 }

@@ -4,7 +4,7 @@ use meilisearch_lib::tasks::task::TaskId;
 use meilisearch_lib::MeiliSearch;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::{TaskListResponse, TaskResponse};
+use crate::task::{TaskListView, TaskView};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(get_tasks)))
@@ -14,11 +14,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 async fn get_tasks(
     meilisearch: GuardedData<Private, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let tasks: TaskListResponse = meilisearch
+    let tasks: TaskListView = meilisearch
         .list_tasks(None, None, None)
         .await?
         .into_iter()
-        .map(TaskResponse::from)
+        .map(TaskView::from)
         .collect::<Vec<_>>()
         .into();
 
@@ -29,7 +29,7 @@ async fn get_task(
     meilisearch: GuardedData<Private, MeiliSearch>,
     task_id: web::Path<TaskId>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task: TaskResponse = meilisearch
+    let task: TaskView = meilisearch
         .get_task(task_id.into_inner(), None)
         .await?
         .into();

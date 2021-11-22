@@ -1,6 +1,6 @@
 pub mod error;
 pub mod index_store;
-pub mod uuid_store;
+pub mod meta_store;
 
 use std::convert::TryInto;
 use std::path::Path;
@@ -9,10 +9,10 @@ use chrono::Utc;
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
+use meta_store::{HeedMetaStore, IndexMetaStore};
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
-use uuid_store::{HeedUuidStore, UuidStore};
 
 use crate::index::Index;
 use crate::options::IndexerOpts;
@@ -20,12 +20,14 @@ use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
 use crate::tasks::TaskPerformer;
 
-pub type HardStateIndexResolver = IndexResolver<HeedUuidStore, MapIndexStore>;
+use self::meta_store::IndexMeta;
+
+pub type HardStateIndexResolver = IndexResolver<HeedMetaStore, MapIndexStore>;
 
 #[async_trait::async_trait]
 impl<U, I> TaskPerformer for IndexResolver<U, I>
 where
-    U: UuidStore + Send + Sync + 'static,
+    U: IndexMetaStore + Send + Sync + 'static,
     I: IndexStore + Send + Sync + 'static,
 {
     type Error = ResponseError;
@@ -60,7 +62,7 @@ pub fn create_index_resolver(
     index_size: usize,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<HardStateIndexResolver> {
-    let uuid_store = HeedUuidStore::new(&path)?;
+    let uuid_store = HeedMetaStore::new(&path)?;
     let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
     Ok(IndexResolver::new(uuid_store, index_store))
 }
@@ -116,7 +118,7 @@ pub struct IndexResolver<U, I> {
     index_store: I,
 }
 
-impl IndexResolver<HeedUuidStore, MapIndexStore> {
+impl IndexResolver<HeedMetaStore, MapIndexStore> {
     // pub fn load_dump(
     //     src: impl AsRef<Path>,
     //     dst: impl AsRef<Path>,
@@ -135,7 +137,7 @@ impl IndexResolver<HeedUuidStore, MapIndexStore> {
 
 impl<U, I> IndexResolver<U, I>
 where
-    U: UuidStore,
+    U: IndexMetaStore,
     I: IndexStore,
 {
     pub fn new(index_uuid_store: U, index_store: I) -> Self {
@@ -201,7 +203,7 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::CreateIndex { primary_key } => {
+            TaskContent::IndexCreation { primary_key } => {
                 let index = self.create_index(index_uid, task.id).await?;
 
                 if let Some(primary_key) = primary_key {
@@ -211,7 +213,7 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::UpdateIndex { primary_key } => {
+            TaskContent::IndexUpdate { primary_key } => {
                 let index = self.get_index(index_uid.into_inner()).await?;
 
                 if let Some(primary_key) = primary_key {
@@ -251,13 +253,23 @@ where
     //      Ok(indexes)
     //  }
 
-    async fn create_index(&self, uid: IndexUid, task_id: TaskId) -> Result<Index> {
-        match self.index_uuid_store.get_uuid(uid.into_inner()).await? {
+    async fn create_index(&self, uid: IndexUid, creation_task_id: TaskId) -> Result<Index> {
+        match self.index_uuid_store.get(uid.into_inner()).await? {
             (uid, Some(_)) => Err(IndexResolverError::IndexAlreadyExists(uid)),
             (uid, None) => {
                 let uuid = Uuid::new_v4();
                 let index = self.index_store.create(uuid).await?;
-                match self.index_uuid_store.insert(uid, uuid, task_id).await {
+                match self
+                    .index_uuid_store
+                    .insert(
+                        uid,
+                        IndexMeta {
+                            uuid,
+                            creation_task_id,
+                        },
+                    )
+                    .await
+                {
                     Err(e) => {
                         match self.index_store.delete(uuid).await {
                             Ok(Some(index)) => {
@@ -286,7 +298,7 @@ where
     pub async fn list(&self) -> Result<Vec<(String, Index)>> {
         let uuids = self.index_uuid_store.list().await?;
         let mut indexes = Vec::new();
-        for (name, uuid) in uuids {
+        for (name, IndexMeta { uuid, .. }) in uuids {
             match self.index_store.get(uuid).await? {
                 Some(index) => indexes.push((name, index)),
                 None => {
@@ -301,7 +313,7 @@ where
 
     pub async fn delete_index(&self, uid: String) -> Result<Uuid> {
         match self.index_uuid_store.delete(uid.clone()).await? {
-            Some(uuid) => {
+            Some(IndexMeta { uuid, .. }) => {
                 match self.index_store.delete(uuid).await {
                     Ok(Some(index)) => {
                         index.inner().clone().prepare_for_closing();
@@ -324,8 +336,8 @@ where
     // }
 
     pub async fn get_index(&self, uid: String) -> Result<Index> {
-        match self.index_uuid_store.get_uuid(uid).await? {
-            (name, Some(uuid)) => {
+        match self.index_uuid_store.get(uid).await? {
+            (name, Some(IndexMeta { uuid, .. })) => {
                 match self.index_store.get(uuid).await? {
                     Some(index) => Ok(index),
                     None => {
@@ -341,9 +353,13 @@ where
     }
 
     pub async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
-        self.index_uuid_store
-            .get_index_creation_task_id(index_uid)
-            .await
+        let (uid, meta) = self.index_uuid_store.get(index_uid).await?;
+        meta.map(
+            |IndexMeta {
+                 creation_task_id, ..
+             }| creation_task_id,
+        )
+        .ok_or(IndexResolverError::UnexistingIndex(uid))
     }
 
     // pub async fn get_uuid(&self, uid: String) -> Result<Uuid> {
