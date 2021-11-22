@@ -1,6 +1,6 @@
 pub use self::available_documents_ids::AvailableDocumentsIds;
 pub use self::clear_documents::ClearDocuments;
-pub use self::delete_documents::DeleteDocuments;
+pub use self::delete_documents::{DeleteDocuments, DocumentDeletionResult};
 pub use self::facets::Facets;
 pub use self::index_documents::{DocumentAdditionResult, IndexDocuments, IndexDocumentsMethod};
 pub use self::settings::{Setting, Settings};
