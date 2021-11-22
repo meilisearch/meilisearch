@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::error::{IndexResolverError, Result};
-use crate::EnvSizer;
 use crate::tasks::task::TaskId;
+use crate::EnvSizer;
 
 const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
@@ -23,32 +23,31 @@ const UUIDS_DB_PATH: &str = "index_uuids";
 
 #[async_trait::async_trait]
 #[cfg_attr(test, mockall::automock)]
-pub trait UuidStore: Sized {
+pub trait IndexMetaStore: Sized {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
-    async fn get_uuid(&self, uid: String) -> Result<(String, Option<Uuid>)>;
-    async fn delete(&self, uid: String) -> Result<Option<Uuid>>;
-    async fn list(&self) -> Result<Vec<(String, Uuid)>>;
-    async fn insert(&self, name: String, uuid: Uuid, task_id: TaskId) -> Result<()>;
+    async fn get(&self, uid: String) -> Result<(String, Option<IndexMeta>)>;
+    async fn delete(&self, uid: String) -> Result<Option<IndexMeta>>;
+    async fn list(&self) -> Result<Vec<(String, IndexMeta)>>;
+    async fn insert(&self, name: String, meta: IndexMeta) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
     async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
-    async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct IndexMeta {
-    uuid: Uuid,
-    index_creation_task_id: TaskId,
+pub struct IndexMeta {
+    pub uuid: Uuid,
+    pub creation_task_id: TaskId,
 }
 
 #[derive(Clone)]
-pub struct HeedUuidStore {
+pub struct HeedMetaStore {
     env: Env,
     db: Database<Str, SerdeBincode<IndexMeta>>,
 }
 
-impl HeedUuidStore {
+impl HeedMetaStore {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().join(UUIDS_DB_PATH);
         create_dir_all(&path)?;
@@ -60,43 +59,43 @@ impl HeedUuidStore {
         Ok(Self { env, db })
     }
 
-    fn get_uuid(&self, name: &str) -> Result<Option<Uuid>> {
+    fn get(&self, name: &str) -> Result<Option<IndexMeta>> {
         let env = self.env.clone();
         let db = self.db;
         let txn = env.read_txn()?;
         match db.get(&txn, name)? {
-            Some(IndexMeta { uuid, .. }) => Ok(Some(uuid)),
+            Some(meta) => Ok(Some(meta)),
             None => Ok(None),
         }
     }
 
-    fn delete(&self, uid: String) -> Result<Option<Uuid>> {
+    fn delete(&self, uid: String) -> Result<Option<IndexMeta>> {
         let env = self.env.clone();
         let db = self.db;
         let mut txn = env.write_txn()?;
         match db.get(&txn, &uid)? {
-            Some(IndexMeta { uuid, .. }) => {
+            Some(meta) => {
                 db.delete(&mut txn, &uid)?;
                 txn.commit()?;
-                Ok(Some(uuid))
+                Ok(Some(meta))
             }
             None => Ok(None),
         }
     }
 
-    fn list(&self) -> Result<Vec<(String, Uuid)>> {
+    fn list(&self) -> Result<Vec<(String, IndexMeta)>> {
         let env = self.env.clone();
         let db = self.db;
         let txn = env.read_txn()?;
         let mut entries = Vec::new();
         for entry in db.iter(&txn)? {
-            let (name, IndexMeta { uuid, .. }) = entry?;
-            entries.push((name.to_owned(), uuid))
+            let (name, meta) = entry?;
+            entries.push((name.to_string(), meta))
         }
         Ok(entries)
     }
 
-    pub(crate) fn insert(&self, name: String, uuid: Uuid, task_id: TaskId) -> Result<()> {
+    pub(crate) fn insert(&self, name: String, meta: IndexMeta) -> Result<()> {
         let env = self.env.clone();
         let db = self.db;
         let mut txn = env.write_txn()?;
@@ -105,10 +104,6 @@ impl HeedUuidStore {
             return Err(IndexResolverError::IndexAlreadyExists(name));
         }
 
-        let meta = IndexMeta {
-            uuid,
-            index_creation_task_id: task_id,
-        };
         db.put(&mut txn, &name, &meta)?;
         txn.commit()?;
         Ok(())
@@ -131,15 +126,6 @@ impl HeedUuidStore {
             self.env.copy_to_path(path, CompactionOption::Enabled)?;
         }
         Ok(entries)
-    }
-
-    fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
-        let txn = self.env.read_txn()?;
-
-        match self.db.get(&txn, &index_uid)? {
-            Some(IndexMeta {index_creation_task_id, .. }) => Ok(index_creation_task_id),
-            None => Err(IndexResolverError::UnexistingIndex(index_uid))
-        }
     }
 
     fn get_size(&self) -> Result<u64> {
@@ -202,25 +188,25 @@ impl HeedUuidStore {
 }
 
 #[async_trait::async_trait]
-impl UuidStore for HeedUuidStore {
-    async fn get_uuid(&self, name: String) -> Result<(String, Option<Uuid>)> {
+impl IndexMetaStore for HeedMetaStore {
+    async fn get(&self, name: String) -> Result<(String, Option<IndexMeta>)> {
         let this = self.clone();
-        tokio::task::spawn_blocking(move || this.get_uuid(&name).map(|res| (name, res))).await?
+        tokio::task::spawn_blocking(move || this.get(&name).map(|res| (name, res))).await?
     }
 
-    async fn delete(&self, uid: String) -> Result<Option<Uuid>> {
+    async fn delete(&self, uid: String) -> Result<Option<IndexMeta>> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.delete(uid)).await?
     }
 
-    async fn list(&self) -> Result<Vec<(String, Uuid)>> {
+    async fn list(&self) -> Result<Vec<(String, IndexMeta)>> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.list()).await?
     }
 
-    async fn insert(&self, name: String, uuid: Uuid, task_id: TaskId) -> Result<()> {
+    async fn insert(&self, name: String, meta: IndexMeta) -> Result<()> {
         let this = self.clone();
-        tokio::task::spawn_blocking(move || this.insert(name, uuid, task_id)).await?
+        tokio::task::spawn_blocking(move || this.insert(name, meta)).await?
     }
 
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
@@ -236,10 +222,5 @@ impl UuidStore for HeedUuidStore {
         todo!()
         // let this = self.clone();
         // tokio::task::spawn_blocking(move || this.dump(path)).await?
-    }
-
-    async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
-        let this = self.clone();
-        tokio::task::spawn_blocking(move || this.get_index_creation_task_id(index_uid)).await?
     }
 }

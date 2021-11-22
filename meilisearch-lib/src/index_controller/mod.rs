@@ -28,7 +28,7 @@ use crate::index::{
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -38,7 +38,7 @@ use self::error::IndexControllerError;
 //use self::index_resolver::error::IndexResolverError;
 use self::update_file_store::UpdateFileStore;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
-use crate::index_resolver::uuid_store::{HeedUuidStore, UuidStore};
+use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
 use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
 //use self::updates::UpdateMsg;
 
@@ -49,7 +49,7 @@ pub mod update_file_store;
 // pub mod updates;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
-pub type MeiliSearch = IndexController<HeedUuidStore, MapIndexStore>;
+pub type MeiliSearch = IndexController<HeedMetaStore, MapIndexStore>;
 
 pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
@@ -304,7 +304,7 @@ impl IndexControllerBuilder {
 
 impl<U, I> IndexController<U, I>
 where
-    U: UuidStore,
+    U: IndexMetaStore,
     I: IndexStore,
 {
     pub fn builder() -> IndexControllerBuilder {
