@@ -25,7 +25,7 @@ pub struct IndexerOpts {
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
-    #[clap(long, default_value_t)]
+    #[clap(long, default_value_t, env = "MEILI_MAX_MEMORY")]
     pub max_memory: MaxMemory,
 
     /// The name of the compression algorithm to use when compressing intermediate
@@ -40,7 +40,7 @@ pub struct IndexerOpts {
     pub chunk_compression_level: Option<u32>,
 
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
-    #[clap(long)]
+    #[clap(long, env = "MEILI_INDEXING_JOBS")]
     pub indexing_jobs: Option<usize>,
 }
 

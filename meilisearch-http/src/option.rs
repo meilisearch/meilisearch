@@ -146,7 +146,7 @@ pub struct Opt {
     pub log_level: String,
 
     #[serde(skip)]
-    #[clap(skip)]
+    #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
     #[serde(flatten)]
