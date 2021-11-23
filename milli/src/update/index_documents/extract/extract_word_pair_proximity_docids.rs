@@ -53,7 +53,9 @@ pub fn extract_word_pair_proximity_docids<R: io::Read>(
         }
 
         let word = word.to_string();
-        let mut iter = read_u32_ne_bytes(value).collect::<Vec<_>>().into_iter();
+        let mut positions: Vec<_> = read_u32_ne_bytes(value).collect();
+        positions.sort_unstable();
+        let mut iter = positions.into_iter();
         if let Some(position) = iter.next() {
             document_word_positions_heap.push(PeekedWordPosition { word, position, iter });
         }
