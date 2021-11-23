@@ -1,4 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse};
+use log::debug;
 use meilisearch_error::ResponseError;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,7 @@ struct DumpStatusResponse {
 
 #[derive(Deserialize)]
 struct DumpParam {
-    _dump_uid: String,
+    dump_uid: String,
 }
 
 async fn get_dump_status(

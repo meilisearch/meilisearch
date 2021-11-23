@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
 use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
@@ -59,6 +61,11 @@ pub struct Task {
 pub enum DocumentDeletion {
     Clear,
     Ids(Vec<String>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PriorityTask {
+    Dump(PathBuf),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

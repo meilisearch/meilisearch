@@ -43,7 +43,10 @@ where
 
     pub async fn run(self) {
         loop {
-            if let Err(e) = self.process_next_batch().await {
+            if let Some(priority_task) = self.store.get_priority_task().await {
+                todo!("trying to process a priority update");
+                // priority_task.execute();
+            } else if let Err(e) = self.process_next_batch().await {
                 log::error!("an error occured while processing an update batch: {}", e);
             }
         }

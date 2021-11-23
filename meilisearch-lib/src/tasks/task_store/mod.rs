@@ -1,7 +1,7 @@
 mod store;
 
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
 
 use super::error::TaskError;
-use super::task::{Task, TaskContent, TaskId};
+use super::task::{PriorityTask, Task, TaskContent, TaskId};
 use super::Result;
 
 #[cfg(test)]
@@ -46,6 +46,7 @@ impl TaskFilter {
 pub struct TaskStore {
     store: Arc<Store>,
     pending_queue: Arc<RwLock<BinaryHeap<Reverse<TaskId>>>>,
+    priority_queue: Arc<RwLock<VecDeque<PriorityTask>>>,
 }
 
 impl Clone for TaskStore {
@@ -53,17 +54,17 @@ impl Clone for TaskStore {
         Self {
             store: self.store.clone(),
             pending_queue: self.pending_queue.clone(),
+            priority_queue: self.priority_queue.clone(),
         }
     }
 }
 
 impl TaskStore {
     pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-        let store = Arc::new(Store::new(path, size)?);
-        let pending_queue = Arc::default();
         Ok(Self {
-            store,
-            pending_queue,
+            store: Arc::new(Store::new(path, size)?),
+            pending_queue: Arc::default(),
+            priority_queue: Arc::default(),
         })
     }
 
@@ -92,6 +93,13 @@ impl TaskStore {
         self.pending_queue.write().await.push(Reverse(task.id));
 
         Ok(task)
+    }
+
+    /// Register an update that applies on multiple indexes.
+    /// Currently the update is considered as a priority.
+    pub async fn register_multi_index(&self, index_uids: &[IndexUid], content: PriorityTask) {
+        debug!("registering a multi index update: {:?}", content);
+        self.priority_queue.write().await.push_back(content);
     }
 
     /// Returns the next task to process.
@@ -126,6 +134,10 @@ impl TaskStore {
                 .ok_or(TaskError::UnexistingTask(id)),
             None => Ok(task),
         }
+    }
+
+    pub async fn get_priority_task(&self) -> Option<PriorityTask> {
+        self.priority_queue.write().await.pop_front()
     }
 
     pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
@@ -228,6 +240,16 @@ pub mod test {
             }
         }
 
+        pub async fn get_priority_task(&self) -> Option<PriorityTask> {
+            match self {
+                Self::Real(s) => s.get_priority_task().await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Option<PriorityTask>>("get_priority_task")
+                        .call(())
+                },
+            }
+        }
+
         pub async fn get_processing_task(&self) -> Result<Option<Task>> {
             match self {
                 Self::Real(s) => s.get_processing_task().await,
@@ -260,6 +282,13 @@ pub mod test {
         pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn register_multi_index(&self, index_uids: &[IndexUid], content: PriorityTask) {
+            match self {
+                Self::Real(s) => s.register_multi_index(index_uids, content).await,
                 Self::Mock(_m) => todo!(),
             }
         }

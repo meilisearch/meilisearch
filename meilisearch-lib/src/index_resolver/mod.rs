@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
+use crate::index::update_handler::UpdateHandler;
 use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
@@ -120,20 +121,30 @@ pub struct IndexResolver<U, I> {
 }
 
 impl IndexResolver<HeedMetaStore, MapIndexStore> {
-    // pub fn load_dump(
-    //     src: impl AsRef<Path>,
-    //     dst: impl AsRef<Path>,
-    //     index_db_size: usize,
-    //     indexer_opts: &IndexerOpts,
-    // ) -> anyhow::Result<()> {
-    //     HeedUuidStore::load_dump(&src, &dst)?; let indexes_path = src.as_ref().join("indexes"); let indexes = indexes_path.read_dir()?; let update_handler = UpdateHandler::new(indexer_opts)?;
-    //     for index in indexes {
-    //         let index = index?;
-    //         Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
-    //     }
+    pub fn load_dump(
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        index_db_size: usize,
+        indexer_opts: &IndexerOpts,
+    ) -> anyhow::Result<()> {
+        HeedMetaStore::load_dump(&src, &dst)?;
+        let indexes_path = src.as_ref().join("indexes");
+        let indexes = indexes_path.read_dir()?;
+        let update_handler = UpdateHandler::new(indexer_opts)?;
+        dbg!(&indexes);
+        std::process::exit(12);
+        /*
+        TODO: REMOVE ALL OF THIS
+        println!("before for");
+        for index in indexes {
+            println!("found one index to import");
+            let index = index?;
+            Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
+        }
 
-    //     Ok(())
-    // }
+        */
+        Ok(())
+    }
 }
 
 impl<U, I> IndexResolver<U, I>
@@ -238,15 +249,16 @@ where
         }
     }
 
-    // pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-    //     let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
-    //     let mut indexes = Vec::new();
-    //     for uuid in uuids {
-    //         indexes.push(self.get_index_by_uuid(uuid).await?);
-    //     }
+    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
+        let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
+        let mut indexes = Vec::new();
+        for uuid in uuids {
+            // TODO remove unwrap
+            indexes.push(self.index_uuid_store.get(uuid).await?.unwrap());
+        }
 
-    //     Ok(indexes)
-    // }
+        Ok(indexes)
+    }
 
     //  pub async fn get_uuids_size(&self) -> Result<u64> {
     //      Ok(self.index_uuid_store.get_size().await?)

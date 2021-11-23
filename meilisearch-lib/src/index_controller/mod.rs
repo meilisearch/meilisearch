@@ -21,12 +21,13 @@ use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
-use crate::index_controller::dump_actor::DumpActor;
+use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
 //use crate::index_controller::snapshot::SnapshotService;
+use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
+use crate::tasks::task::{DocumentDeletion, PriorityTask, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -140,6 +141,13 @@ pub enum Update {
     },
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(derivative::Derivative)]
+#[derivative(Debug)]
+pub enum MultiIndexUpdate {
+    Dump(PathBuf),
+}
+
 #[derive(Default, Debug)]
 pub struct IndexControllerBuilder {
     max_index_size: Option<usize>,
@@ -175,15 +183,16 @@ impl IndexControllerBuilder {
         //          self.ignore_snapshot_if_db_exists,
         //          self.ignore_missing_snapshot,
         //      )?;
-        //  } else if let Some(ref src_path) = self.dump_src {
-        //      load_dump(
-        //          db_path.as_ref(),
-        //          src_path,
-        //          index_size,
-        //          update_store_size,
-        //          &indexer_options,
-        //      )?;
-        //  }
+        // } else
+        if let Some(ref src_path) = self.dump_src {
+            load_dump(
+                db_path.as_ref(),
+                src_path,
+                index_size,
+                update_store_size,
+                &indexer_options,
+            )?;
+        }
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
@@ -193,18 +202,19 @@ impl IndexControllerBuilder {
             &indexer_options,
         )?);
 
+        // TODO: remove the two expects
         let task_store = create_task_store(&db_path, update_store_size, index_resolver.clone())
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .expect("unknown error");
+        // .map_err(|e| anyhow::anyhow!(e))?;
 
-        let dump_path = self
-            .dump_dst
-            .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        let dump_path = self.dump_dst.expect("missing dump directory path");
+        // .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
         let dump_handle = {
-            let analytics_path = index_resolver.clone();
+            let analytics_path = &db_path;
             let (sender, receiver) = mpsc::channel(10);
             let actor = DumpActor::new(
                 receiver,
-                task_store,
+                index_resolver.clone(),
                 // update,
                 dump_path,
                 analytics_path,
@@ -214,8 +224,8 @@ impl IndexControllerBuilder {
 
             tokio::task::spawn(actor.run());
 
-            Ok(Self { sender })
-        }?;
+            DumpActorHandleImpl { sender }
+        };
 
         // let dump_handle = dump_actor::DumpActorHandleImpl { sender };
 
@@ -317,6 +327,16 @@ where
 {
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
+    }
+
+    pub async fn register_multi_index_update(&self, uids: &[IndexUid], update: MultiIndexUpdate) {
+        match update {
+            MultiIndexUpdate::Dump(path) => {
+                self.task_store
+                    .register_multi_index(&uids, PriorityTask::Dump(path))
+                    .await
+            }
+        }
     }
 
     pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {
