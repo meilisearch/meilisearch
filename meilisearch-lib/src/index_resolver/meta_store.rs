@@ -33,7 +33,7 @@ pub trait IndexMetaStore: Sized {
     async fn insert(&self, name: String, meta: IndexMeta) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
-    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
+    async fn dump(&self, path: PathBuf) -> Result<()>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -133,27 +133,23 @@ impl HeedMetaStore {
         Ok(self.env.size())
     }
 
-    pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
+    pub fn dump(&self, path: PathBuf) -> Result<()> {
         let dump_path = path.join(UUIDS_DB_PATH);
         create_dir_all(&dump_path)?;
         let dump_file_path = dump_path.join("data.jsonl");
         let mut dump_file = File::create(&dump_file_path)?;
-        let mut uuids = HashSet::new();
 
         let txn = self.env.read_txn()?;
         for entry in self.db.iter(&txn)? {
             let (uid, index_meta) = entry?;
             let uid = uid.to_string();
-            let uuid = index_meta.uuid.clone();
 
             let entry = DumpEntry { uid, index_meta };
             serde_json::to_writer(&mut dump_file, &entry)?;
             dump_file.write_all(b"\n").unwrap();
-
-            uuids.insert(uuid);
         }
 
-        Ok(uuids)
+        Ok(())
     }
 
     pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
@@ -219,7 +215,7 @@ impl IndexMetaStore for HeedMetaStore {
         self.get_size()
     }
 
-    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
+    async fn dump(&self, path: PathBuf) -> Result<()> {
         let this = self.clone();
         Ok(tokio::task::spawn_blocking(move || this.dump(path)).await??)
     }

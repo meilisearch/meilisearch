@@ -5,7 +5,8 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
@@ -19,7 +20,7 @@ use crate::tasks::task::{Task, TaskId};
 
 use super::super::Result;
 
-use super::TaskFilter;
+use super::{PendingTask, TaskFilter};
 
 enum IndexUidTaskIdCodec {}
 
@@ -73,6 +74,43 @@ impl Store {
             uids_task_ids,
             tasks,
         })
+    }
+
+    /// This function should be called *right after* creating the store.
+    /// It put back all unfinished update in the `Created` state. This
+    /// allow us to re-enqueue an update that didn't had the time to finish
+    /// when Meilisearch closed.
+    pub fn reset_and_return_unfinished_tasks(
+        &mut self,
+    ) -> Result<BinaryHeap<Reverse<PendingTask<TaskId>>>> {
+        let mut unfinished_tasks: BinaryHeap<Reverse<PendingTask<TaskId>>> = BinaryHeap::new();
+
+        let mut wtxn = self.wtxn()?;
+        let mut iter = self.tasks.rev_iter_mut(&mut wtxn)?;
+
+        while let Some(entry) = iter.next() {
+            let entry = entry?;
+            let (id, mut task): (BEU64, Task) = entry;
+
+            // Since all tasks are ordered, we can stop iterating when we encounter our first non-finished task.
+            if task.is_finished() {
+                break;
+            }
+
+            // we only keep the first state. It’s supposed to be a `Created` state.
+            task.events.drain(1..);
+            unfinished_tasks.push(Reverse(PendingTask::Real(id.get())));
+
+            // Since we own the id and the task this is a safe operation.
+            unsafe {
+                iter.put_current(&id, &task)?;
+            }
+        }
+
+        drop(iter);
+        wtxn.commit()?;
+
+        Ok(unfinished_tasks)
     }
 
     pub fn wtxn(&self) -> Result<RwTxn> {
@@ -226,6 +264,13 @@ pub mod test {
     impl MockStore {
         pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
             Ok(Self::Real(Store::new(path, size)?))
+        }
+
+        pub fn reset_and_return_unfinished_tasks(&mut self) -> BinaryHeap<Reverse<PendingTasks>> {
+            match self {
+                MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
+                MockStore::Fake(_) => todo!(),
+            }
         }
 
         pub fn wtxn(&self) -> Result<RwTxn> {

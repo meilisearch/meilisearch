@@ -1,8 +1,8 @@
 mod store;
 
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BinaryHeap, HashSet, VecDeque};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -43,10 +43,63 @@ impl TaskFilter {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum GhostTask {
+    Dump { path: PathBuf },
+    Snapshot {},
+    Task(Task),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PendingTask<T> {
+    // The id of a task to process
+    Real(T),
+    // A ghost task, without an id. Ghost tasks always have a higher priority over normal tasks
+    Ghost(GhostTask),
+}
+
+impl PendingTask<TaskId> {
+    /// Return the `TaskId` of the task if it's a realy Task.
+    pub fn get_task_id(&self) -> Option<TaskId> {
+        match self {
+            Self::Real(tid) => Some(*tid),
+            _ => None,
+        }
+    }
+}
+
+impl PendingTask<Task> {
+    /// Return the `TaskId` of the task if it's a realy Task.
+    pub fn get_task_id(&self) -> Option<TaskId> {
+        match self {
+            Self::Real(task) => Some(task.id),
+            _ => None,
+        }
+    }
+}
+
+impl Eq for PendingTask<TaskId> {}
+
+impl PartialOrd for PendingTask<TaskId> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (PendingTask::Real(lhs), PendingTask::Real(rhs)) => Some(lhs.cmp(rhs)),
+            (PendingTask::Real(_), PendingTask::Ghost(_)) => Some(Ordering::Less),
+            (PendingTask::Ghost(_), PendingTask::Real(_)) => Some(Ordering::Greater),
+            (PendingTask::Ghost(_), PendingTask::Ghost(_)) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Ord for PendingTask<TaskId> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 pub struct TaskStore {
     store: Arc<Store>,
-    pending_queue: Arc<RwLock<BinaryHeap<Reverse<TaskId>>>>,
-    priority_queue: Arc<RwLock<VecDeque<PriorityTask>>>,
+    pending_queue: Arc<RwLock<BinaryHeap<Reverse<PendingTask<TaskId>>>>>,
 }
 
 impl Clone for TaskStore {
@@ -54,7 +107,6 @@ impl Clone for TaskStore {
         Self {
             store: self.store.clone(),
             pending_queue: self.pending_queue.clone(),
-            priority_queue: self.priority_queue.clone(),
         }
     }
 }
@@ -64,7 +116,6 @@ impl TaskStore {
         Ok(Self {
             store: Arc::new(Store::new(path, size)?),
             pending_queue: Arc::default(),
-            priority_queue: Arc::default(),
         })
     }
 
@@ -90,30 +141,42 @@ impl TaskStore {
         })
         .await??;
 
-        self.pending_queue.write().await.push(Reverse(task.id));
+        self.pending_queue
+            .write()
+            .await
+            .push(Reverse(PendingTask::Real(task.id)));
 
         Ok(task)
     }
 
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
-    pub async fn register_multi_index(&self, index_uids: &[IndexUid], content: PriorityTask) {
-        debug!("registering a multi index update: {:?}", content);
-        self.priority_queue.write().await.push_back(content);
+    pub async fn register_ghost_task(&self, content: GhostTask) {
+        debug!("registering a ghost task: {:?}", content);
+        self.pending_queue
+            .write()
+            .await
+            .push(Reverse(PendingTask::Ghost(content)));
     }
 
     /// Returns the next task to process.
-    pub async fn peek_pending(&self) -> Option<TaskId> {
-        self.pending_queue.read().await.peek().map(|rid| rid.0)
+    pub async fn peek_pending_task(&self) -> Option<PendingTask<TaskId>> {
+        self.pending_queue
+            .read()
+            .await
+            .peek()
+            // we don't want to keep the mutex thus we clone the data.
+            .map(|Reverse(pending_task)| pending_task.clone())
     }
 
     /// Returns the next task to process if there is one.
     pub async fn get_processing_task(&self) -> Result<Option<Task>> {
-        if let Some(uid) = self.peek_pending().await {
-            let task = self.get_task(uid, None).await?;
-            Ok(matches!(task.events.last(), Some(TaskEvent::Processing(_))).then(|| task))
-        } else {
-            Ok(None)
+        match self.peek_pending_task().await {
+            Some(PendingTask::Real(tid)) => {
+                let task = self.get_task(tid, None).await?;
+                Ok(matches!(task.events.last(), Some(TaskEvent::Processing(_))).then(|| task))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -136,18 +199,17 @@ impl TaskStore {
         }
     }
 
-    pub async fn get_priority_task(&self) -> Option<PriorityTask> {
-        self.priority_queue.write().await.pop_front()
-    }
-
-    pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
+    pub async fn update_tasks(&self, tasks: Vec<PendingTask<Task>>) -> Result<()> {
         let store = self.store.clone();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
             let mut txn = store.wtxn()?;
 
             for task in tasks {
-                store.put(&mut txn, &task)?;
+                match task {
+                    PendingTask::Real(task) => store.put(&mut txn, &task)?,
+                    PendingTask::Ghost(_) => (),
+                }
             }
 
             txn.commit()?;
@@ -166,7 +228,12 @@ impl TaskStore {
         // pending_queue.retain(|id| !to_remove.contains(&id.0));
         *pending_queue = pending_queue
             .drain()
-            .filter(|id| !to_remove.contains(&id.0))
+            .filter(|Reverse(task)| {
+                task.get_task_id()
+                    // If it's a ghost task we keep it.
+                    // If it was a task to delete we remove it.
+                    .map_or(true, |id| !to_remove.contains(&id))
+            })
             .collect();
         Ok(())
     }
@@ -219,7 +286,7 @@ pub mod test {
             Self::Mock(Arc::new(mocker))
         }
 
-        pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
+        pub async fn update_tasks(&self, tasks: Vec<PendingTask<Task>>) -> Result<()> {
             match self {
                 Self::Real(s) => s.update_tasks(tasks).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
@@ -240,16 +307,6 @@ pub mod test {
             }
         }
 
-        pub async fn get_priority_task(&self) -> Option<PriorityTask> {
-            match self {
-                Self::Real(s) => s.get_priority_task().await,
-                Self::Mock(m) => unsafe {
-                    m.get::<_, Option<PriorityTask>>("get_priority_task")
-                        .call(())
-                },
-            }
-        }
-
         pub async fn get_processing_task(&self) -> Result<Option<Task>> {
             match self {
                 Self::Real(s) => s.get_processing_task().await,
@@ -260,10 +317,13 @@ pub mod test {
             }
         }
 
-        pub async fn peek_pending(&self) -> Option<TaskId> {
+        pub async fn peek_pending_task(&self) -> Option<PendingTask<TaskId>> {
             match self {
-                Self::Real(s) => s.peek_pending().await,
-                Self::Mock(m) => unsafe { m.get::<_, Option<TaskId>>("peek_pending").call(()) },
+                Self::Real(s) => s.peek_pending_task().await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Option<PendingTask<TaskId>>>("peek_pending_task")
+                        .call(())
+                },
             }
         }
 
@@ -286,9 +346,9 @@ pub mod test {
             }
         }
 
-        pub async fn register_multi_index(&self, index_uids: &[IndexUid], content: PriorityTask) {
+        pub async fn register_ghost_task(&self, content: GhostTask) {
             match self {
-                Self::Real(s) => s.register_multi_index(index_uids, content).await,
+                Self::Real(s) => s.register_ghost_task(content).await,
                 Self::Mock(_m) => todo!(),
             }
         }

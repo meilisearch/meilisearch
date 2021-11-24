@@ -265,10 +265,11 @@ where
         analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
-        let indexes = self.index_resolver.dump(temp_dump_path.clone()).await?;
+        // dump all indexes in the tmp directory.
+        self.index_resolver.dump(temp_dump_path.clone()).await?;
 
         self.meilisearch
-            .register_multi_index_update(&indexes, MultiIndexUpdate::Dump(temp_dump_path.clone()));
+            .register_ghost_task(MultiIndexUpdate::Dump(temp_dump_path.clone()));
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;

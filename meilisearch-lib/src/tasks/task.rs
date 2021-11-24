@@ -57,6 +57,16 @@ pub struct Task {
     pub events: Vec<TaskEvent>,
 }
 
+impl Task {
+    /// Return true when a task is finished.
+    /// A task is finished when its last state is either `Succeeded` or `Failed`.
+    pub fn is_finished(&self) -> bool {
+        self.events.last().map_or(false, |event| {
+            matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum DocumentDeletion {
     Clear,

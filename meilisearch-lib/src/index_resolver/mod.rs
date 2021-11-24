@@ -20,6 +20,7 @@ use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task_store::PendingTask;
 use crate::tasks::TaskPerformer;
 
 use self::meta_store::IndexMeta;
@@ -38,21 +39,28 @@ where
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
-        if let Some(task) = batch.tasks.first_mut() {
-            task.events.push(TaskEvent::Processing(Utc::now()));
+        match batch.tasks.first_mut() {
+            Some(PendingTask::Real(task)) => {
+                task.events.push(TaskEvent::Processing(Utc::now()));
 
-            match self.process_task(task).await {
-                Ok(success) => {
-                    task.events.push(TaskEvent::Succeded {
-                        result: success,
+                match self.process_task(task).await {
+                    Ok(success) => {
+                        task.events.push(TaskEvent::Succeded {
+                            result: success,
+                            timestamp: Utc::now(),
+                        });
+                    }
+                    Err(err) => task.events.push(TaskEvent::Failed {
+                        error: err.into(),
                         timestamp: Utc::now(),
-                    });
+                    }),
                 }
-                Err(err) => task.events.push(TaskEvent::Failed {
-                    error: err.into(),
-                    timestamp: Utc::now(),
-                }),
             }
+            Some(PendingTask::Ghost(task)) => {
+                todo!();
+            }
+
+            None => (),
         }
 
         batch
@@ -69,7 +77,7 @@ pub fn create_index_resolver(
     Ok(IndexResolver::new(uuid_store, index_store))
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUid(String);
 
 impl IndexUid {
@@ -249,15 +257,9 @@ where
         }
     }
 
-    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-        let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
-        let mut indexes = Vec::new();
-        for uuid in uuids {
-            // TODO remove unwrap
-            indexes.push(self.index_uuid_store.get(uuid).await?.unwrap());
-        }
-
-        Ok(indexes)
+    /// Dump each indexes
+    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
+        self.index_uuid_store.dump(path.as_ref().to_owned()).await
     }
 
     //  pub async fn get_uuids_size(&self) -> Result<u64> {

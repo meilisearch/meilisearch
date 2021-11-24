@@ -28,7 +28,7 @@ use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, PriorityTask, Task, TaskContent, TaskId};
-use crate::tasks::task_store::TaskFilter;
+use crate::tasks::task_store::{GhostTask, TaskFilter};
 use crate::tasks::TaskStore;
 use error::Result;
 
@@ -329,11 +329,11 @@ where
         IndexControllerBuilder::default()
     }
 
-    pub async fn register_multi_index_update(&self, uids: &[IndexUid], update: MultiIndexUpdate) {
+    pub async fn register_ghost_task(&self, update: MultiIndexUpdate) {
         match update {
             MultiIndexUpdate::Dump(path) => {
                 self.task_store
-                    .register_multi_index(&uids, PriorityTask::Dump(path))
+                    .register_ghost_task(GhostTask::Dump { path })
                     .await
             }
         }

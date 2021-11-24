@@ -13,6 +13,7 @@ use super::TaskPerformer;
 use super::batch::Batch;
 #[cfg(test)]
 use super::task_store::test::MockTaskStore as TaskStore;
+use super::task_store::PendingTask;
 #[cfg(not(test))]
 use super::task_store::TaskStore;
 
@@ -43,10 +44,7 @@ where
 
     pub async fn run(self) {
         loop {
-            if let Some(priority_task) = self.store.get_priority_task().await {
-                todo!("trying to process a priority update");
-                // priority_task.execute();
-            } else if let Err(e) = self.process_next_batch().await {
+            if let Err(e) = self.process_next_batch().await {
                 log::error!("an error occured while processing an update batch: {}", e);
             }
         }
@@ -56,7 +54,12 @@ where
         match self.prepare_batch().await? {
             Some(mut batch) => {
                 for task in &mut batch.tasks {
-                    task.events.push(TaskEvent::Processing(Utc::now()));
+                    match task {
+                        PendingTask::Real(task) => {
+                            task.events.push(TaskEvent::Processing(Utc::now()))
+                        }
+                        PendingTask::Ghost(_) => (),
+                    }
                 }
                 self.store.update_tasks(batch.tasks.clone()).await?;
 
@@ -78,8 +81,8 @@ where
     ///
     /// Until batching is properly implemented, the batches contain only one task.
     async fn prepare_batch(&self) -> Result<Option<Batch>> {
-        match self.store.peek_pending().await {
-            Some(next_task_id) => {
+        match self.store.peek_pending_task().await {
+            Some(PendingTask::Real(next_task_id)) => {
                 let mut task = self.store.get_task(next_task_id, None).await?;
 
                 task.events.push(TaskEvent::Batched {
@@ -89,12 +92,17 @@ where
 
                 let batch = Batch {
                     id: 0,
-                    index_uid: task.index_uid.clone(),
+                    // index_uid: task.index_uid.clone(),
                     created_at: Utc::now(),
-                    tasks: vec![task],
+                    tasks: vec![PendingTask::Real(task)],
                 };
                 Ok(Some(batch))
             }
+            Some(PendingTask::Ghost(task)) => Ok(Some(Batch {
+                id: 0,
+                created_at: Utc::now(),
+                tasks: vec![PendingTask::Ghost(task)],
+            })),
             None => Ok(None),
         }
     }
@@ -104,7 +112,11 @@ where
     /// When a task is processed, the result of the processing is pushed to its event list. The
     /// handle batch result make sure that the new state is save into its store.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
-        let to_remove = batch.tasks.iter().map(|task| task.id).collect();
+        let to_remove = batch
+            .tasks
+            .iter()
+            .filter_map(|task| task.get_task_id())
+            .collect();
         self.store.update_tasks(batch.tasks).await?;
         self.store.delete_tasks(to_remove).await?;
         Ok(())
