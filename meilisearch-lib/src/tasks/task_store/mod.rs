@@ -1,8 +1,8 @@
 mod store;
 
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BinaryHeap, HashSet, VecDeque};
-use std::path::{Path, PathBuf};
+use std::collections::{BinaryHeap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -13,7 +13,7 @@ use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
 
 use super::error::TaskError;
-use super::task::{PriorityTask, Task, TaskContent, TaskId};
+use super::task::{GhostTask, Task, TaskContent, TaskId};
 use super::Result;
 
 #[cfg(test)]
@@ -43,19 +43,22 @@ impl TaskFilter {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum GhostTask {
-    Dump { path: PathBuf },
-    Snapshot {},
-    Task(Task),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum PendingTask<T> {
     // The id of a task to process
     Real(T),
     // A ghost task, without an id. Ghost tasks always have a higher priority over normal tasks
     Ghost(GhostTask),
+}
+
+impl<T> PendingTask<T> {
+    /// Map the content of the `PendingTask::Real(content)` changing the type of the `PendingTask`.
+    pub fn map_real<U, F: FnOnce(T) -> U>(self, f: F) -> PendingTask<U> {
+        match self {
+            Self::Real(task) => PendingTask::Real(f(task)),
+            Self::Ghost(task) => PendingTask::Ghost(task),
+        }
+    }
 }
 
 impl PendingTask<TaskId> {

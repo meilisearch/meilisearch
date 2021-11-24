@@ -23,12 +23,11 @@ use crate::index::{
 };
 use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
 //use crate::index_controller::snapshot::SnapshotService;
-use crate::index::Index;
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, PriorityTask, Task, TaskContent, TaskId};
-use crate::tasks::task_store::{GhostTask, TaskFilter};
+use crate::tasks::task::{DocumentDeletion, GhostTask, Task, TaskContent, TaskId};
+use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
 

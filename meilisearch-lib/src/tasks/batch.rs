@@ -1,7 +1,5 @@
 use chrono::{DateTime, Utc};
 
-use crate::index_resolver::IndexUid;
-
 use super::{task::Task, task_store::PendingTask};
 
 pub type BatchId = u32;

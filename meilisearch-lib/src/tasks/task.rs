@@ -67,15 +67,17 @@ impl Task {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum GhostTask {
+    Dump { path: PathBuf },
+    // Snapshot {},
+    // Task(Task),
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum DocumentDeletion {
     Clear,
     Ids(Vec<String>),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum PriorityTask {
-    Dump(PathBuf),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
