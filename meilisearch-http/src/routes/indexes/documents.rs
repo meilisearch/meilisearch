@@ -1,6 +1,9 @@
 use actix_web::error::PayloadError;
+use actix_web::http::header::CONTENT_TYPE;
+use actix_web::http::HeaderMap;
 use actix_web::web::Bytes;
 use actix_web::{web, HttpRequest, HttpResponse};
+use bstr::ByteSlice;
 use futures::{Stream, StreamExt};
 use log::debug;
 use meilisearch_error::ResponseError;
@@ -144,9 +147,7 @@ pub async fn add_documents(
     );
 
     let task = document_addition(
-        req.headers()
-            .get("Content-type")
-            .map(|s| s.to_str().unwrap_or("unkown")),
+        extract_content_type(req.headers()),
         meilisearch,
         index_uid,
         params.primary_key,
@@ -176,9 +177,7 @@ pub async fn update_documents(
     );
 
     let task = document_addition(
-        req.headers()
-            .get("Content-type")
-            .map(|s| s.to_str().unwrap_or("unkown")),
+        extract_content_type(req.headers()),
         meilisearch,
         index_uid,
         params.into_inner().primary_key,
@@ -191,7 +190,7 @@ pub async fn update_documents(
 }
 
 async fn document_addition(
-    content_type: Option<&str>,
+    content_type: Option<String>,
     meilisearch: GuardedData<Private, MeiliSearch>,
     index_uid: String,
     primary_key: Option<String>,
@@ -205,7 +204,8 @@ async fn document_addition(
             "text/csv".to_string(),
         ]
     });
-    let format = match content_type {
+
+    let format = match content_type.as_ref().map(AsRef::as_ref) {
         Some("application/json") => DocumentAdditionFormat::Json,
         Some("application/x-ndjson") => DocumentAdditionFormat::Ndjson,
         Some("text/csv") => DocumentAdditionFormat::Csv,
@@ -273,4 +273,24 @@ pub async fn clear_all_documents(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+/// Returns the Content-Type header value without the charset=utf-8 or anything,
+/// only the value that is before the first semicolon (;).
+///
+/// Here is the composition of an HTTP Content-Type header
+/// <https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1>.
+fn extract_content_type(headers: &HeaderMap) -> Option<String> {
+    match headers.get(CONTENT_TYPE) {
+        Some(value) => match value.to_str() {
+            Ok(content) => Some(
+                content
+                    .split_once(";")
+                    .map_or(content, |(ct, _)| ct.trim())
+                    .to_string(),
+            ),
+            Err(_) => Some(format!("{}", value.as_bytes().as_bstr())), // convenient bytes display
+        },
+        None => None,
+    }
 }
