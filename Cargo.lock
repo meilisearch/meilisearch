@@ -1629,6 +1629,7 @@ dependencies = [
  "arc-swap",
  "async-stream",
  "async-trait",
+ "bstr",
  "byte-unit",
  "bytes",
  "cargo_toml",
