@@ -14,17 +14,16 @@ pub use handle_impl::*;
 pub use message::DumpMsg;
 use tokio::fs::create_dir_all;
 
+use crate::analytics;
+use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::MultiIndexUpdate;
+use crate::index_controller::dump_actor::loaders::v3;
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
-use crate::{analytics, MeiliSearch};
-// use crate::analytics;
-use crate::compression::{from_tar_gz, to_tar_gz};
-// use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::v3;
 use crate::options::IndexerOpts;
+use crate::tasks::task::GhostTask;
+use crate::tasks::task_store::TaskStore;
 use error::Result;
 
 mod actor;
@@ -235,11 +234,10 @@ pub fn load_dump(
 
 #[allow(dead_code)]
 struct DumpTask<U, I> {
-    meilisearch: MeiliSearch,
     dump_path: PathBuf,
     db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
-    // update_sender: UpdateSender,
+    task_store: TaskStore,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
@@ -268,8 +266,9 @@ where
         // dump all indexes in the tmp directory.
         self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        self.meilisearch
-            .register_ghost_task(MultiIndexUpdate::Dump(temp_dump_path.clone()));
+        self.task_store.register_ghost_task(GhostTask::Dump {
+            path: temp_dump_path.clone(),
+        });
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;

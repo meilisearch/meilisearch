@@ -26,7 +26,7 @@ use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleI
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
-use crate::tasks::task::{DocumentDeletion, GhostTask, Task, TaskContent, TaskId};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
 use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
@@ -140,13 +140,6 @@ pub enum Update {
     },
 }
 
-#[allow(clippy::large_enum_variant)]
-#[derive(derivative::Derivative)]
-#[derivative(Debug)]
-pub enum MultiIndexUpdate {
-    Dump(PathBuf),
-}
-
 #[derive(Default, Debug)]
 pub struct IndexControllerBuilder {
     max_index_size: Option<usize>,
@@ -214,7 +207,7 @@ impl IndexControllerBuilder {
             let actor = DumpActor::new(
                 receiver,
                 index_resolver.clone(),
-                // update,
+                task_store.clone(),
                 dump_path,
                 analytics_path,
                 index_size,
@@ -326,16 +319,6 @@ where
 {
     pub fn builder() -> IndexControllerBuilder {
         IndexControllerBuilder::default()
-    }
-
-    pub async fn register_ghost_task(&self, update: MultiIndexUpdate) {
-        match update {
-            MultiIndexUpdate::Dump(path) => {
-                self.task_store
-                    .register_ghost_task(GhostTask::Dump { path })
-                    .await
-            }
-        }
     }
 
     pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {

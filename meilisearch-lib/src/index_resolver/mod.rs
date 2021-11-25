@@ -19,7 +19,9 @@ use crate::index::update_handler::UpdateHandler;
 use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task::{
+    DocumentDeletion, GhostTask, Task, TaskContent, TaskEvent, TaskId, TaskResult,
+};
 use crate::tasks::task_store::PendingTask;
 use crate::tasks::TaskPerformer;
 
@@ -57,7 +59,7 @@ where
                 }
             }
             Some(PendingTask::Ghost(task)) => {
-                todo!();
+                self.process_ghost_task(task).await;
             }
 
             None => (),
@@ -257,8 +259,22 @@ where
         }
     }
 
+    async fn process_ghost_task(&self, task: &GhostTask) {
+        match task {
+            GhostTask::Dump { path } => {
+                eprintln!("The Dump task is getting executed");
+                // TODO: send the result in a channel
+                self.dump(path).await;
+            }
+        }
+        todo!();
+    }
+
     /// Dump each indexes
     pub async fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
+        for (_, index) in self.list().await? {
+            index.dump(&path)?;
+        }
         self.index_uuid_store.dump(path.as_ref().to_owned()).await
     }
 

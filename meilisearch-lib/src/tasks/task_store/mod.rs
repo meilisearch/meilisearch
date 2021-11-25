@@ -45,9 +45,9 @@ impl TaskFilter {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PendingTask<T> {
-    // The id of a task to process
+    // A task stored on disk that must be processed.
     Real(T),
-    // A ghost task, without an id. Ghost tasks always have a higher priority over normal tasks
+    // Ghost tasks always have a higher priority over normal tasks and are not stored on disk.
     Ghost(GhostTask),
 }
 
@@ -137,7 +137,6 @@ impl TaskStore {
             };
 
             store.put(&mut txn, &task)?;
-
             txn.commit()?;
 
             Ok(task)

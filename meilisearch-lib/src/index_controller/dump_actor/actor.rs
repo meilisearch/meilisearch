@@ -16,13 +16,14 @@ use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
+use crate::tasks::task_store::TaskStore;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
 pub struct DumpActor<U, I> {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
     index_resolver: Arc<IndexResolver<U, I>>,
-    // update: UpdateSender,
+    task_store: TaskStore,
     dump_path: PathBuf,
     analytics_path: PathBuf,
     lock: Arc<Mutex<()>>,
@@ -44,7 +45,7 @@ where
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
         index_resolver: Arc<IndexResolver<U, I>>,
-        // update: UpdateSender,
+        task_store: TaskStore,
         dump_path: impl AsRef<Path>,
         analytics_path: impl AsRef<Path>,
         index_db_size: usize,
@@ -55,7 +56,7 @@ where
         Self {
             inbox: Some(inbox),
             index_resolver,
-            //       update,
+            task_store,
             dump_path: dump_path.as_ref().into(),
             analytics_path: analytics_path.as_ref().into(),
             dump_infos,
@@ -126,7 +127,7 @@ where
             dump_path: self.dump_path.clone(),
             db_path: self.analytics_path.clone(),
             index_resolver: self.index_resolver.clone(),
-            // update_sender: self.update.clone(),
+            task_store: self.task_store.clone(),
             uid: uid.clone(),
             update_db_size: self.update_db_size,
             index_db_size: self.index_db_size,
