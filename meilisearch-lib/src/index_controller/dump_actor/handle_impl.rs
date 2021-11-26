@@ -5,7 +5,6 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::index_resolver::HardStateIndexResolver;
 use crate::tasks::task_store::TaskStore;
-use crate::MeiliSearch;
 
 use super::error::Result;
 use super::{DumpActor, DumpActorHandle, DumpInfo, DumpMsg};

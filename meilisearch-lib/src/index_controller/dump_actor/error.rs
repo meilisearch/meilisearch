@@ -34,6 +34,7 @@ internal_error!(
     heed::Error,
     std::io::Error,
     tokio::task::JoinError,
+    tokio::sync::oneshot::error::RecvError,
     serde_json::error::Error,
     tempfile::PersistError
 );

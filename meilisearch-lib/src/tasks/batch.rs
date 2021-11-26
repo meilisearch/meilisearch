@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use super::{task::Task, task_store::PendingTask};
+use super::{task::Task, task_store::Pending};
 
 pub type BatchId = u32;
 
@@ -9,7 +9,7 @@ pub struct Batch {
     pub id: BatchId,
     // pub index_uid: IndexUid,
     pub created_at: DateTime<Utc>,
-    pub tasks: Vec<PendingTask<Task>>,
+    pub tasks: Vec<Pending<Task>>,
 }
 
 impl Batch {

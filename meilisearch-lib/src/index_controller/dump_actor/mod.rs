@@ -13,6 +13,7 @@ pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
 use tokio::fs::create_dir_all;
+use tokio::sync::oneshot;
 
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
@@ -22,7 +23,7 @@ use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
-use crate::tasks::task::GhostTask;
+use crate::tasks::task::Job;
 use crate::tasks::task_store::TaskStore;
 use error::Result;
 
@@ -266,9 +267,15 @@ where
         // dump all indexes in the tmp directory.
         self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        self.task_store.register_ghost_task(GhostTask::Dump {
-            path: temp_dump_path.clone(),
-        });
+        let (sender, receiver) = oneshot::channel();
+
+        self.task_store
+            .register_ghost_task(Job::Dump {
+                ret: Arc::new(sender),
+                path: temp_dump_path.clone(),
+            })
+            .await;
+        receiver.await??;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;

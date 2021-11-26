@@ -4,6 +4,7 @@ pub mod meta_store;
 
 use std::convert::TryInto;
 use std::path::Path;
+use std::sync::Arc;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
@@ -19,10 +20,8 @@ use crate::index::update_handler::UpdateHandler;
 use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{
-    DocumentDeletion, GhostTask, Task, TaskContent, TaskEvent, TaskId, TaskResult,
-};
-use crate::tasks::task_store::PendingTask;
+use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task_store::Pending;
 use crate::tasks::TaskPerformer;
 
 use self::meta_store::IndexMeta;
@@ -42,7 +41,7 @@ where
         debug_assert_eq!(batch.len(), 1);
 
         match batch.tasks.first_mut() {
-            Some(PendingTask::Real(task)) => {
+            Some(Pending::Task(task)) => {
                 task.events.push(TaskEvent::Processing(Utc::now()));
 
                 match self.process_task(task).await {
@@ -58,8 +57,9 @@ where
                     }),
                 }
             }
-            Some(PendingTask::Ghost(task)) => {
-                self.process_ghost_task(task).await;
+            Some(Pending::Job(job)) => {
+                let job = std::mem::take(job);
+                self.process_job(job).await;
             }
 
             None => (),
@@ -259,15 +259,24 @@ where
         }
     }
 
-    async fn process_ghost_task(&self, task: &GhostTask) {
-        match task {
-            GhostTask::Dump { path } => {
-                eprintln!("The Dump task is getting executed");
-                // TODO: send the result in a channel
-                self.dump(path).await;
+    async fn process_job(&self, job: Job) {
+        match job {
+            Job::Dump { ret, path } => {
+                log::trace!("The Dump task is getting executed");
+
+                match Arc::try_unwrap(ret) {
+                    Ok(ret) => {
+                        if let Err(_) = ret.send(self.dump(path).await) {
+                            log::error!("The dump actor died.");
+                        }
+                    }
+                    Err(_) => {
+                        log::error!("Tried to execute a Job while there was still a reference to it somewhere.");
+                    }
+                }
             }
+            Job::Empty => log::error!("Tried to process an empty task."),
         }
-        todo!();
     }
 
     /// Dump each indexes

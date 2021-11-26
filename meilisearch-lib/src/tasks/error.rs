@@ -13,10 +13,7 @@ pub enum TaskError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-internal_error!(
-    TaskError: heed::Error,
-        JoinError
-);
+internal_error!(TaskError: heed::Error, JoinError);
 
 impl ErrorCode for TaskError {
     fn error_code(&self) -> Code {
