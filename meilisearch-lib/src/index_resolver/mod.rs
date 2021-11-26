@@ -4,7 +4,6 @@ pub mod meta_store;
 
 use std::convert::TryInto;
 use std::path::Path;
-use std::sync::Arc;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
@@ -264,15 +263,8 @@ where
             Job::Dump { ret, path } => {
                 log::trace!("The Dump task is getting executed");
 
-                match Arc::try_unwrap(ret) {
-                    Ok(ret) => {
-                        if let Err(_) = ret.send(self.dump(path).await) {
-                            log::error!("The dump actor died.");
-                        }
-                    }
-                    Err(_) => {
-                        log::error!("Tried to execute a Job while there was still a reference to it somewhere.");
-                    }
+                if let Err(_) = ret.send(self.dump(path).await) {
+                    log::error!("The dump actor died.");
                 }
             }
             Job::Empty => log::error!("Tried to process an empty task."),

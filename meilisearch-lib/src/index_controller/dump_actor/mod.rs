@@ -271,7 +271,7 @@ where
 
         self.task_store
             .register_ghost_task(Job::Dump {
-                ret: Arc::new(sender),
+                ret: sender,
                 path: temp_dump_path.clone(),
             })
             .await;

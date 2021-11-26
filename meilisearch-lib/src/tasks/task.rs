@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use meilisearch_error::ResponseError;
@@ -75,12 +75,12 @@ impl Task {
 /// A job is like a volatile priority `Task`.
 /// It should be processed as fast as possible and is not stored on disk.
 /// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
-#[derive(Debug, Clone, derivative::Derivative)]
+#[derive(Debug, derivative::Derivative)]
 #[derivative(PartialEq)]
 pub enum Job {
     Dump {
         #[derivative(PartialEq = "ignore")]
-        ret: Arc<oneshot::Sender<Result<(), IndexResolverError>>>,
+        ret: oneshot::Sender<Result<(), IndexResolverError>>,
         path: PathBuf,
     },
     // Snapshot {},
