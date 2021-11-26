@@ -142,9 +142,13 @@ impl Clone for TaskStore {
 
 impl TaskStore {
     pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
+        let mut store = Store::new(path, size)?;
+        let unfinished_tasks = store.reset_and_return_unfinished_tasks()?;
+        let store = Arc::new(store);
+
         Ok(Self {
-            store: Arc::new(Store::new(path, size)?),
-            pending_queue: Arc::default(),
+            store,
+            pending_queue: Arc::new(RwLock::new(unfinished_tasks)),
         })
     }
 

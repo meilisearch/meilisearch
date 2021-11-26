@@ -60,6 +60,11 @@ pub struct Store {
 }
 
 impl Store {
+    /// Create a new store from the specified `Path`.
+    /// Be really cautious when calling this function, the returned `Store` may
+    /// be in an invalid state, with dangling processing tasks.
+    /// You want to patch  all un-finished tasks and put them in your pending
+    /// queue with the `reset_and_return_unfinished_update` method.
     pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
@@ -266,9 +271,18 @@ pub mod test {
             Ok(Self::Task(Store::new(path, size)?))
         }
 
-        pub fn reset_and_return_unfinished_tasks(&mut self) -> BinaryHeap<Reverse<Pending>> {
+        pub fn reset_and_return_unfinished_tasks(
+            &mut self,
+        ) -> BinaryHeap<Reverse<Pending<TaskId>>> {
             match self {
                 MockStore::Task(index) => index.reset_and_return_unfinished_tasks(),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
+            match self {
+                MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
                 MockStore::Fake(_) => todo!(),
             }
         }

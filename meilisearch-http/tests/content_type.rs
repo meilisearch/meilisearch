@@ -110,3 +110,39 @@ async fn error_json_bad_content_type() {
         }
     }
 }
+
+#[actix_rt::test]
+async fn extract_actual_content_type() {
+    let route = "/indexes/doggo/documents";
+    let documents = "[{}]";
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        true,
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+    .await;
+
+    // Good content-type, we probably have an error since we didn't send anything in the json
+    // so we only ensure we didn't get a bad media type error.
+    let req = test::TestRequest::post()
+        .uri(route)
+        .set_payload(documents)
+        .insert_header(("content-type", "application/json; charset=utf-8"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    assert_ne!(status_code, 415,
+    "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
+
+    let req = test::TestRequest::put()
+        .uri(route)
+        .set_payload(documents)
+        .insert_header(("content-type", "application/json; charset=latin-1"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    assert_ne!(status_code, 415,
+    "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
+}
