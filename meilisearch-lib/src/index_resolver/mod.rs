@@ -140,18 +140,10 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
         let update_handler = UpdateHandler::new(indexer_opts)?;
-        dbg!(&indexes);
-        std::process::exit(12);
-        /*
-        TODO: REMOVE ALL OF THIS
-        println!("before for");
         for index in indexes {
-            println!("found one index to import");
-            let index = index?;
-            Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
+            Index::load_dump(&index?.path(), &dst, index_db_size, &update_handler)?;
         }
 
-        */
         Ok(())
     }
 }
