@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,14 +10,14 @@ pub use task_store::test::MockTaskStore as TaskStore;
 pub use task_store::TaskStore;
 
 use batch::Batch;
-use scheduler::Scheduler;
 use error::Result;
+use scheduler::Scheduler;
 
 pub mod batch;
+pub mod error;
 pub mod scheduler;
 pub mod task;
 pub mod task_store;
-pub mod error;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]
@@ -28,15 +27,11 @@ pub trait TaskPerformer: Sync + Send + 'static {
     async fn process(&self, batch: Batch) -> Batch;
 }
 
-pub fn create_task_store<P>(
-    path: impl AsRef<Path>,
-    size: usize,
-    performer: Arc<P>,
-) -> Result<TaskStore>
+pub fn create_task_store<P>(env: heed::Env, performer: Arc<P>) -> Result<TaskStore>
 where
     P: TaskPerformer,
 {
-    let task_store = TaskStore::new(path, size)?;
+    let task_store = TaskStore::new(env)?;
     let scheduler = Scheduler::new(task_store.clone(), performer, Duration::from_millis(1));
     tokio::task::spawn_local(scheduler.run());
     Ok(task_store)
@@ -44,8 +39,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use serde::{Deserialize, Serialize};
     use std::fmt::Display;
-    use serde::{Serialize, Deserialize};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct DebugError;

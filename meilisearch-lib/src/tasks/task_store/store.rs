@@ -10,11 +10,10 @@ use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
-use std::path::Path;
 use std::result::Result as StdResult;
 
 use heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
-use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn};
+use heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
 
 use crate::tasks::task::{Task, TaskId};
 
@@ -65,12 +64,7 @@ impl Store {
     /// be in an invalid state, with dangling processing tasks.
     /// You want to patch  all un-finished tasks and put them in your pending
     /// queue with the `reset_and_return_unfinished_update` method.
-    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-        let mut options = EnvOpenOptions::new();
-        options.map_size(size);
-        options.max_dbs(1000);
-        let env = options.open(path)?;
-
+    pub fn new(env: heed::Env) -> Result<Self> {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
@@ -251,9 +245,11 @@ impl Store {
 pub mod test {
     use std::collections::{HashMap, HashSet};
 
+    use heed::EnvOpenOptions;
     use nelson::Mocker;
     use quickcheck::{Arbitrary, Gen, TestResult};
     use quickcheck_macros::quickcheck;
+    use tempfile::TempDir;
 
     use crate::index_resolver::IndexUid;
 
@@ -264,9 +260,27 @@ pub mod test {
         Fake(Mocker),
     }
 
+    pub struct TmpEnv(TempDir, heed::Env);
+
+    impl TmpEnv {
+        pub fn env(&self) -> heed::Env {
+            self.1.clone()
+        }
+    }
+
+    pub fn tmp_env() -> TmpEnv {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100000);
+        let env = options.open(tmp.path()).unwrap();
+
+        TmpEnv(tmp, env)
+    }
+
     impl MockStore {
-        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Real(Store::new(path, size)?))
+        pub fn new(env: heed::Env) -> Result<Self> {
+            Ok(Self::Real(Store::new(env)?))
         }
 
         pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
@@ -348,9 +362,8 @@ pub mod test {
             return TestResult::discard();
         }
 
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 10000000).unwrap();
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
 
         let mut txn = store.wtxn().unwrap();
 
@@ -388,9 +401,8 @@ pub mod test {
             return TestResult::discard();
         }
 
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
 
         let mut txn = store.wtxn().unwrap();
 
@@ -439,9 +451,8 @@ pub mod test {
 
         let index_to_filter = tasks.first().unwrap().index_uid.clone();
 
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
 
         let mut txn = store.wtxn().unwrap();
 
@@ -473,9 +484,8 @@ pub mod test {
 
     #[test]
     fn test_filter_same_index_prefix() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
 
         let mut gen = Gen::new(30);
 

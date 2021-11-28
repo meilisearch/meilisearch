@@ -62,8 +62,9 @@ pub fn create_index_resolver(
     path: impl AsRef<Path>,
     index_size: usize,
     indexer_opts: &IndexerOpts,
+    meta_env: heed::Env,
 ) -> anyhow::Result<HardStateIndexResolver> {
-    let uuid_store = HeedMetaStore::new(&path)?;
+    let uuid_store = HeedMetaStore::new(meta_env)?;
     let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
     Ok(IndexResolver::new(uuid_store, index_store))
 }
