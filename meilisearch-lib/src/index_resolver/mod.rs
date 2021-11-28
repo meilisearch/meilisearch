@@ -270,7 +270,11 @@ where
                 }
             }
             Job::Empty => log::error!("Tried to process an empty task."),
-            Job::Snapshot { path } => todo!("perform snapshot at {}", path.display()),
+            Job::Snapshot(job) => {
+                if let Err(e) = job.run().await {
+                    log::error!("Error performing snapshot: {}", e);
+                }
+            }
         }
     }
 

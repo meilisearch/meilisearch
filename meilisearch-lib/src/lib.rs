@@ -5,6 +5,7 @@ pub mod options;
 pub mod index;
 pub mod index_controller;
 mod index_resolver;
+mod snapshot;
 pub mod tasks;
 
 mod analytics;
