@@ -90,6 +90,7 @@ impl Index {
         uuid: Uuid,
         update_handler: Arc<UpdateHandler>,
     ) -> Result<Self> {
+        log::debug!("opening index in {}", path.as_ref().display());
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);

@@ -10,20 +10,21 @@ use log::{error, info, trace};
 use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
-use walkdir::WalkDir;
 
 use crate::analytics;
 use crate::compression::from_tar_gz;
-use crate::index_resolver::IndexResolver;
-use crate::tasks::task_store::TaskStore;
+
+use super::index_resolver::index_store::IndexStore;
+use super::index_resolver::uuid_store::UuidStore;
+use super::index_resolver::IndexResolver;
 
 pub struct SnapshotService<U, I> {
-    db_path: PathBuf,
+    index_resolver: Arc<IndexResolver<U, I>>,
+    update_sender: UpdateSender,
     snapshot_period: Duration,
     snapshot_path: PathBuf,
-    index_size: usize,
-    meta_env_size: usize,
-    task_store: TaskStore,
+    db_path: PathBuf,
+    db_name: String,
 }
 
 impl<U, I> SnapshotService<U, I>
@@ -133,95 +134,6 @@ pub fn load_snapshot(
                 .unwrap_or_else(|_| snapshot_path.as_ref().to_owned())
         )
     } else {
-        Ok(())
-    }
-}
-
-pub struct SnapshotJob {
-    dest_path: PathBuf,
-    src_path: PathBuf,
-
-    meta_env_size: usize,
-    index_size: usize,
-}
-
-impl SnapshotJob {
-    pub async fn run(self) -> Result<()> {
-        Ok(tokio::task::spawn_blocking(|| self.run_sync()).await?)
-    }
-
-    fn run_sync(self) -> Result<()> {
-        trace!("Performing snapshot.");
-
-        let snapshot_dir = self.snapshot_path.clone();
-        std::fs::create_dir_all(&snapshot_dir)?;
-        let temp_snapshot_dir = tempfile::tempdir()?;
-        let temp_snapshot_path = temp_snapshot_dir.path();
-
-        self.snapshot_meta_env(temp_snapshot_path)?;
-        self.snapshot_file_store(temp_snapshot_path)?;
-        self.snapshot_indexes(temp_snapshot_path)?;
-
-        let snapshot_path = self
-            .snapshot_path
-            .join(format!("{}.snapshot", self.db_name));
-        let temp_snapshot_file = tempfile::NamedTempFile::new_in(&snapshot_dir)?;
-        let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
-        crate::compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
-        temp_snapshot_file.persist(&snapshot_path)?;
-
-        trace!("Created snapshot in {:?}.", snapshot_path);
-
-        Ok(())
-    }
-
-    fn snapshot_meta_env(&self, path: &Path) -> Result<()> {
-        let mut options = heed::EnvOpenOptions::new();
-        options.map_size(self.meta_env_size);
-        let env = options.open(&self.src_path)?;
-
-        env.copy_to_path(path, heed::CompactionOption::Enabled)?;
-
-        Ok(())
-    }
-
-    fn snapshot_file_store(&self, path: &Path) -> Result<()> {
-        // for now we simply copy the updates/updates_files
-        // FIXME(marin): We may copy more files than necessary, if new files are added while we are
-        // performing the snapshop. We need a way to filter them out.
-
-        let update_files_path = self.src_path.join("updates/updates_files/");
-        let dst = path.join("updates/updates_files/");
-        std::fs::create_dir_all(&dst)?;
-
-        for entry in WalkDir::new(update_files_path).into_iter().skip(1) {
-            let entry = entry?;
-            let name = entry.file_name();
-            let dst = dst.join(name);
-            std::fs::copy(entry.path(), dst)?;
-        }
-
-        Ok(())
-    }
-
-    fn snapshot_indexes(&self, path: &Path) -> Result<()> {
-        let indexes_path = self.src_path.join("indexes/");
-        let dst = path.join("indexes/");
-
-        for entry in WalkDir::new(update_files_path).into_iter().skip(1) {
-            let entry = entry?;
-            let name = entry.file_name();
-            let dst = dst.join(name);
-
-            std::fs::create_dir_all(dst);
-
-            let mut options = heed::EnvOpenOptions::new();
-            options.map_size(self.index_size());
-            let env = options.open(entry.path())?;
-
-            env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
-        }
-
         Ok(())
     }
 }
