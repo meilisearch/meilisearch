@@ -88,7 +88,9 @@ pub enum Job {
         ret: oneshot::Sender<Result<(), IndexResolverError>>,
         path: PathBuf,
     },
-    // Snapshot {},
+    Snapshot {
+        path: PathBuf,
+    },
     // Task(Task),
     Empty,
 }
@@ -96,6 +98,12 @@ pub enum Job {
 impl Default for Job {
     fn default() -> Self {
         Self::Empty
+    }
+}
+
+impl Job {
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
     }
 }
 

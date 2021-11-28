@@ -270,6 +270,7 @@ where
                 }
             }
             Job::Empty => log::error!("Tried to process an empty task."),
+            Job::Snapshot { path } => todo!("perform snapshot at {}", path.display()),
         }
     }
 

@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ use super::error::Result;
 use super::TaskPerformer;
 
 use super::batch::Batch;
+use super::task::Job;
 #[cfg(test)]
 use super::task_store::test::MockTaskStore as TaskStore;
 use super::task_store::Pending;
@@ -56,9 +58,21 @@ where
                 for task in &mut batch.tasks {
                     match task {
                         Pending::Task(task) => task.events.push(TaskEvent::Processing(Utc::now())),
-                        Pending::Job(_) => (),
+                        Pending::Job(job) => {
+                            match job {
+                                Job::Snapshot { path } => {
+                                    if let Err(e) = self.perform_snapshot(&path).await {
+                                        log::error!("error performing snapshot: {}", e);
+                                        // Remove the job so it is not processed by the performer.
+                                        job.take();
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
                     }
                 }
+
                 // the jobs are ignored
                 batch.tasks = self.store.update_tasks(batch.tasks).await?;
 
@@ -115,6 +129,10 @@ where
         self.store.update_tasks(batch.tasks).await?;
         self.store.pop_pending().await;
         Ok(())
+    }
+
+    async fn perform_snapshot(&self, _path: &Path) -> Result<()> {
+        todo!()
     }
 }
 
