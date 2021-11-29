@@ -10,7 +10,6 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use futures::StreamExt;
-use heed::EnvOpenOptions;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -23,9 +22,8 @@ use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
 use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
-//use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
-use crate::snapshot::SnapshotService;
+use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
@@ -39,7 +37,6 @@ use self::update_file_store::UpdateFileStore;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
 use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
-//use self::updates::UpdateMsg;
 
 mod dump_actor;
 pub mod error;
@@ -167,16 +164,15 @@ impl IndexControllerBuilder {
             .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
-        //  if let Some(ref path) = self.import_snapshot {
-        //      info!("Loading from snapshot {:?}", path);
-        //      load_snapshot(
-        //          db_path.as_ref(),
-        //          path,
-        //          self.ignore_snapshot_if_db_exists,
-        //          self.ignore_missing_snapshot,
-        //      )?;
-        // } else
-        if let Some(ref src_path) = self.dump_src {
+        if let Some(ref path) = self.import_snapshot {
+            log::info!("Loading from snapshot {:?}", path);
+            load_snapshot(
+                db_path.as_ref(),
+                path,
+                self.ignore_snapshot_if_db_exists,
+                self.ignore_missing_snapshot,
+            )?;
+        } else if let Some(ref src_path) = self.dump_src {
             load_dump(
                 db_path.as_ref(),
                 src_path,
@@ -188,7 +184,7 @@ impl IndexControllerBuilder {
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
-        let mut options = EnvOpenOptions::new();
+        let mut options = heed::EnvOpenOptions::new();
         options.map_size(task_store_size);
         options.max_dbs(20);
 
@@ -242,7 +238,7 @@ impl IndexControllerBuilder {
                 snapshot_period,
                 snapshot_path,
                 index_size,
-                meta_env_size: update_store_size,
+                meta_env_size: task_store_size,
                 task_store: task_store.clone(),
             };
 

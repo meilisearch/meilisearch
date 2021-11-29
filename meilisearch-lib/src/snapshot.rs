@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::compression::from_tar_gz;
 use crate::tasks::task::Job;
-use crate::tasks::task_store::TaskStore;
+use crate::tasks::TaskStore;
 
 pub struct SnapshotService {
     pub(crate) db_path: PathBuf,
@@ -33,7 +33,7 @@ impl SnapshotService {
                 index_size: self.index_size,
             };
             let job = Job::Snapshot(snapshot_job);
-            self.task_store.register_ghost_task(job).await;
+            self.task_store.register_job(job).await;
 
             sleep(self.snapshot_period).await;
         }
@@ -177,6 +177,7 @@ impl SnapshotJob {
     }
 }
 
+/*
 #[cfg(test)]
 mod test {
     use std::{collections::HashSet, sync::Arc};
@@ -350,3 +351,4 @@ mod test {
         assert!(snapshot_service.perform_snapshot().await.is_err());
     }
 }
+*/
