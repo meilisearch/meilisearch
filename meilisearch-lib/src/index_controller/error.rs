@@ -59,7 +59,9 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::DocumentFormatError(e) => e.error_code(),
             IndexControllerError::MissingPayload(_) => Code::MissingPayload,
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
-            // TODO: it's not always this code
+            IndexControllerError::DumpError(DumpActorError::DumpAlreadyRunning) => {
+                Code::DumpAlreadyInProgress
+            }
             IndexControllerError::DumpError(_) => Code::DumpProcessFailed,
         }
     }

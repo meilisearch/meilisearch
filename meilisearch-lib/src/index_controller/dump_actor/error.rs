@@ -14,8 +14,6 @@ pub enum DumpActorError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
     IndexResolver(#[from] IndexResolverError),
-    // #[error("{0}")]
-    // UpdateLoop(#[from] UpdateLoopError),
 }
 
 macro_rules! internal_error {
@@ -46,7 +44,6 @@ impl ErrorCode for DumpActorError {
             DumpActorError::DumpDoesNotExist(_) => Code::NotFound,
             DumpActorError::Internal(_) => Code::Internal,
             DumpActorError::IndexResolver(e) => e.error_code(),
-            // DumpActorError::UpdateLoop(e) => e.error_code(),
         }
     }
 }
