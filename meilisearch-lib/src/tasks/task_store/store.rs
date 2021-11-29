@@ -5,7 +5,6 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
@@ -20,7 +19,7 @@ use crate::tasks::task::{Task, TaskId};
 
 use super::super::Result;
 
-use super::TaskFilter;
+use super::{Pending, TaskFilter};
 
 enum IndexUidTaskIdCodec {}
 
@@ -85,8 +84,8 @@ impl Store {
     /// It put back all unfinished update in the `Created` state. This
     /// allow us to re-enqueue an update that didn't had the time to finish
     /// when Meilisearch closed.
-    pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
-        let mut unfinished_tasks: BinaryHeap<Reverse<TaskId>> = BinaryHeap::new();
+    pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
+        let mut unfinished_tasks: BinaryHeap<Pending<TaskId>> = BinaryHeap::new();
 
         let mut wtxn = self.wtxn()?;
         let mut iter = self.tasks.rev_iter_mut(&mut wtxn)?;
@@ -102,7 +101,7 @@ impl Store {
 
             // we only keep the first state. It’s supposed to be a `Created` state.
             task.events.drain(1..);
-            unfinished_tasks.push(Reverse(id.get()));
+            unfinished_tasks.push(Pending::Task(id.get()));
 
             // Since we own the id and the task this is a safe operation.
             unsafe {
@@ -269,7 +268,7 @@ pub mod test {
             Ok(Self::Real(Store::new(path, size)?))
         }
 
-        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
+        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
             match self {
                 MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
                 MockStore::Fake(_) => todo!(),

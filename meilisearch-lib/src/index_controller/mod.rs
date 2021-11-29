@@ -12,18 +12,16 @@ use futures::Stream;
 use futures::StreamExt;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use uuid::Uuid;
-
-//use dump_actor::DumpActorHandle;
-//pub use dump_actor::{DumpInfo, DumpStatus};
-//use snapshot::load_snapshot;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
+use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
 //use crate::index_controller::snapshot::SnapshotService;
 use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
@@ -33,9 +31,8 @@ use crate::tasks::task_store::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
 
+use self::dump_actor::{DumpActorHandle, DumpInfo};
 use self::error::IndexControllerError;
-// use self::dump_actor::load_dump;
-//use self::index_resolver::error::IndexResolverError;
 use self::update_file_store::UpdateFileStore;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
@@ -75,7 +72,7 @@ pub struct IndexSettings {
 pub struct IndexController<U, I> {
     index_resolver: Arc<IndexResolver<U, I>>,
     task_store: TaskStore,
-    // dump_handle: dump_actor::DumpActorHandleImpl,
+    dump_handle: dump_actor::DumpActorHandleImpl,
     update_file_store: UpdateFileStore,
 }
 
@@ -85,6 +82,7 @@ impl<U, I> Clone for IndexController<U, I> {
         Self {
             index_resolver: self.index_resolver.clone(),
             task_store: self.task_store.clone(),
+            dump_handle: self.dump_handle.clone(),
             update_file_store: self.update_file_store.clone(),
         }
     }
@@ -177,15 +175,16 @@ impl IndexControllerBuilder {
         //          self.ignore_snapshot_if_db_exists,
         //          self.ignore_missing_snapshot,
         //      )?;
-        //  } else if let Some(ref src_path) = self.dump_src {
-        //      load_dump(
-        //          db_path.as_ref(),
-        //          src_path,
-        //          index_size,
-        //          update_store_size,
-        //          &indexer_options,
-        //      )?;
-        //  }
+        // } else
+        if let Some(ref src_path) = self.dump_src {
+            load_dump(
+                db_path.as_ref(),
+                src_path,
+                index_size,
+                update_store_size,
+                &indexer_options,
+            )?;
+        }
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
@@ -198,16 +197,26 @@ impl IndexControllerBuilder {
         let task_store = create_task_store(&db_path, update_store_size, index_resolver.clone())
             .map_err(|e| anyhow::anyhow!(e))?;
 
-        //let dump_path = self
-        //.dump_dst
-        //.ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
-        //let dump_handle = dump_actor::DumpActorHandleImpl::new(
-        //dump_path,
-        //index_resolver.clone(),
-        //task_store,
-        //index_size,
-        //update_store_size,
-        //)?;
+        let dump_path = self
+            .dump_dst
+            .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        let dump_handle = {
+            let analytics_path = &db_path;
+            let (sender, receiver) = mpsc::channel(10);
+            let actor = DumpActor::new(
+                receiver,
+                index_resolver.clone(),
+                task_store.clone(),
+                dump_path,
+                analytics_path,
+                index_size,
+                update_store_size,
+            );
+
+            tokio::task::spawn(actor.run());
+
+            DumpActorHandleImpl { sender }
+        };
 
         // let dump_handle = dump_actor::DumpActorHandleImpl { sender };
 
@@ -234,7 +243,7 @@ impl IndexControllerBuilder {
         Ok(IndexController {
             index_resolver,
             task_store,
-            //  dump_handle,
+            dump_handle,
             update_file_store,
         })
     }
@@ -548,13 +557,13 @@ where
         })
     }
 
-    // pub async fn create_dump(&self) -> Result<DumpInfo> {
-    //     Ok(self.dump_handle.create_dump().await?)
-    // }
+    pub async fn create_dump(&self) -> Result<DumpInfo> {
+        Ok(self.dump_handle.create_dump().await?)
+    }
 
-    // pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
-    //     Ok(self.dump_handle.dump_info(uid).await?)
-    // }
+    pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
+        Ok(self.dump_handle.dump_info(uid).await?)
+    }
 }
 
 pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {

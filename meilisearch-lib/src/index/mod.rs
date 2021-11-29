@@ -68,8 +68,7 @@ pub mod test {
             size: usize,
             update_handler: &UpdateHandler,
         ) -> anyhow::Result<()> {
-            Index::load_dump(src, dst, size, update_handler)?;
-            Ok(())
+            Index::load_dump(src, dst, size, update_handler)
         }
 
         pub fn uuid(&self) -> Uuid {

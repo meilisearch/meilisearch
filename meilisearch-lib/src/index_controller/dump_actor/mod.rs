@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use log::{info, warn};
+use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 // use tokio::fs::create_dir_all;
 
@@ -12,15 +12,19 @@ use loaders::v1::MetadataV1;
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
+use tokio::fs::create_dir_all;
+use tokio::sync::oneshot;
 
+use crate::analytics;
+use crate::compression::{from_tar_gz, to_tar_gz};
+use crate::index_controller::dump_actor::error::DumpActorError;
+use crate::index_controller::dump_actor::loaders::v3;
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
-// use crate::analytics;
-use crate::compression::from_tar_gz;
-// use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::v3;
 use crate::options::IndexerOpts;
+use crate::tasks::task::Job;
+use crate::tasks::task_store::TaskStore;
 use error::Result;
 
 mod actor;
@@ -229,57 +233,64 @@ pub fn load_dump(
     Ok(())
 }
 
-#[allow(dead_code)]
-struct DumpTask<U, I> {
+struct DumpJob<U, I> {
     dump_path: PathBuf,
     db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
-    // update_sender: UpdateSender,
+    task_store: TaskStore,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
 }
 
-impl<U, I> DumpTask<U, I>
+impl<U, I> DumpJob<U, I>
 where
     U: IndexMetaStore + Sync + Send + 'static,
     I: IndexStore + Sync + Send + 'static,
 {
     async fn run(self) -> Result<()> {
-        todo!()
-        // trace!("Performing dump.");
+        trace!("Performing dump.");
 
-        // create_dir_all(&self.dump_path).await?;
+        create_dir_all(&self.dump_path).await?;
 
-        // let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
-        // let temp_dump_path = temp_dump_dir.path().to_owned();
+        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
+        let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        // let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
-        // let meta_path = temp_dump_path.join(META_FILE_NAME);
-        // let mut meta_file = File::create(&meta_path)?;
-        // serde_json::to_writer(&mut meta_file, &meta)?;
-        // analytics::copy_user_id(&self.db_path, &temp_dump_path);
+        let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
+        let meta_path = temp_dump_path.join(META_FILE_NAME);
+        let mut meta_file = File::create(&meta_path)?;
+        serde_json::to_writer(&mut meta_file, &meta)?;
+        analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
-        // create_dir_all(&temp_dump_path.join("indexes")).await?;
-        // let uuids = self.index_resolver.dump(temp_dump_path.clone()).await?;
+        create_dir_all(&temp_dump_path.join("indexes")).await?;
+        // dump all indexes in the tmp directory.
+        self.index_resolver.dump(temp_dump_path.clone()).await?;
 
-        // UpdateMsg::dump(&self.update_sender, uuids, temp_dump_path.clone()).await?;
+        let (sender, receiver) = oneshot::channel();
 
-        // let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-        //     let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
-        //     to_tar_gz(temp_dump_path, temp_dump_file.path())
-        //         .map_err(|e| DumpActorError::Internal(e.into()))?;
+        self.task_store
+            .register_job(Job::Dump {
+                ret: sender,
+                path: temp_dump_path.clone(),
+            })
+            .await;
+        receiver.await??;
 
-        //     let dump_path = self.dump_path.join(self.uid).with_extension("dump");
-        //     temp_dump_file.persist(&dump_path)?;
+        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
+            to_tar_gz(temp_dump_path, temp_dump_file.path())
+                .map_err(|e| DumpActorError::Internal(e.into()))?;
 
-        //     Ok(dump_path)
-        // })
-        // .await??;
+            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+            temp_dump_file.persist(&dump_path)?;
 
-        // info!("Created dump in {:?}.", dump_path);
+            Ok(dump_path)
+        })
+        .await??;
 
-        // Ok(())
+        info!("Created dump in {:?}.", dump_path);
+
+        Ok(())
     }
 }
 
@@ -348,7 +359,7 @@ mod test {
         //let update_sender =
         //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
-        let task = DumpTask {
+        let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
@@ -378,7 +389,7 @@ mod test {
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
-        let task = DumpTask {
+        let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),

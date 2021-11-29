@@ -1,5 +1,6 @@
 use std::collections::HashSet;
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, File};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use heed::types::{SerdeBincode, Str};
@@ -15,8 +16,8 @@ const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
 #[derive(Serialize, Deserialize)]
 struct DumpEntry {
-    uuid: Uuid,
     uid: String,
+    index_meta: IndexMeta,
 }
 
 const UUIDS_DB_PATH: &str = "index_uuids";
@@ -32,7 +33,7 @@ pub trait IndexMetaStore: Sized {
     async fn insert(&self, name: String, meta: IndexMeta) -> Result<()>;
     async fn snapshot(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
     async fn get_size(&self) -> Result<u64>;
-    async fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>>;
+    async fn dump(&self, path: PathBuf) -> Result<()>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -132,59 +133,55 @@ impl HeedMetaStore {
         Ok(self.env.size())
     }
 
-    // pub fn dump(&self, path: PathBuf) -> Result<HashSet<Uuid>> {
-    //     let dump_path = path.join(UUIDS_DB_PATH);
-    //     create_dir_all(&dump_path)?;
-    //     let dump_file_path = dump_path.join("data.jsonl");
-    //     let mut dump_file = File::create(&dump_file_path)?;
-    //     let mut uuids = HashSet::new();
+    pub fn dump(&self, path: PathBuf) -> Result<()> {
+        let dump_path = path.join(UUIDS_DB_PATH);
+        create_dir_all(&dump_path)?;
+        let dump_file_path = dump_path.join("data.jsonl");
+        let mut dump_file = File::create(&dump_file_path)?;
 
-    //     let txn = self.env.read_txn()?;
-    //     for entry in self.db.iter(&txn)? {
-    //         let (uid, uuid) = entry?;
-    //         let uid = uid.to_string();
-    //         let uuid = Uuid::from_slice(uuid)?;
+        let txn = self.env.read_txn()?;
+        for entry in self.db.iter(&txn)? {
+            let (uid, index_meta) = entry?;
+            let uid = uid.to_string();
 
-    //         let entry = DumpEntry { uuid, uid };
-    //         serde_json::to_writer(&mut dump_file, &entry)?;
-    //         dump_file.write_all(b"\n").unwrap();
+            let entry = DumpEntry { uid, index_meta };
+            serde_json::to_writer(&mut dump_file, &entry)?;
+            dump_file.write_all(b"\n").unwrap();
+        }
 
-    //         uuids.insert(uuid);
-    //     }
+        Ok(())
+    }
 
-    //     Ok(uuids)
-    // }
+    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+        let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
+        std::fs::create_dir_all(&uuid_resolver_path)?;
 
-    // pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-    //     let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
-    //     std::fs::create_dir_all(&uuid_resolver_path)?;
+        let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
+        let indexes = File::open(&src_indexes)?;
+        let mut indexes = BufReader::new(indexes);
+        let mut line = String::new();
 
-    //     let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
-    //     let indexes = File::open(&src_indexes)?;
-    //     let mut indexes = BufReader::new(indexes);
-    //     let mut line = String::new();
+        let db = Self::new(dst)?;
+        let mut txn = db.env.write_txn()?;
 
-    //     let db = Self::new(dst)?;
-    //     let mut txn = db.env.write_txn()?;
+        loop {
+            match indexes.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let DumpEntry { uid, index_meta } = serde_json::from_str(&line)?;
+                    db.db.put(&mut txn, &uid, &index_meta)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
 
-    //     loop {
-    //         match indexes.read_line(&mut line) {
-    //             Ok(0) => break,
-    //             Ok(_) => {
-    //                 let DumpEntry { uuid, uid } = serde_json::from_str(&line)?;
-    //                 db.db.put(&mut txn, &uid, uuid.as_bytes())?;
-    //             }
-    //             Err(e) => return Err(e.into()),
-    //         }
+            line.clear();
+        }
+        txn.commit()?;
 
-    //         line.clear();
-    //     }
-    //     txn.commit()?;
+        db.env.prepare_for_closing().wait();
 
-    //     db.env.prepare_for_closing().wait();
-
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -218,9 +215,8 @@ impl IndexMetaStore for HeedMetaStore {
         self.get_size()
     }
 
-    async fn dump(&self, _path: PathBuf) -> Result<HashSet<Uuid>> {
-        todo!()
-        // let this = self.clone();
-        // tokio::task::spawn_blocking(move || this.dump(path)).await?
+    async fn dump(&self, path: PathBuf) -> Result<()> {
+        let this = self.clone();
+        Ok(tokio::task::spawn_blocking(move || this.dump(path)).await??)
     }
 }

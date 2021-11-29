@@ -1,6 +1,6 @@
 mod store;
 
-use std::cmp::Reverse;
+use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
 
 use super::error::TaskError;
-use super::task::{Task, TaskContent, TaskId};
+use super::task::{Job, Task, TaskContent, TaskId};
 use super::Result;
 
 #[cfg(test)]
@@ -43,9 +43,71 @@ impl TaskFilter {
     }
 }
 
+/// You can't clone a job because of its volatile nature.
+/// If you need to take the `Job` with you though. You can call the method
+/// `Pending::take`. It'll return the `Pending` as-is but `Empty` the original.
+#[derive(Debug, PartialEq)]
+pub enum Pending<T> {
+    /// A task stored on disk that must be processed.
+    Task(T),
+    /// Job always have a higher priority over normal tasks and are not stored on disk.
+    /// It can be refered as `Volatile job`.
+    Job(Job),
+}
+
+impl Pending<TaskId> {
+    /// Return the `TaskId` of the task if it's a realy Task.
+    pub fn get_task_id(&self) -> Option<TaskId> {
+        match self {
+            Self::Task(tid) => Some(*tid),
+            _ => None,
+        }
+    }
+
+    /// Makes a copy of the task or take the content of the volatile job.
+    pub fn take(&mut self) -> Self {
+        match self {
+            Self::Task(id) => Self::Task(*id),
+            Self::Job(ghost) => Self::Job(std::mem::take(ghost)),
+        }
+    }
+}
+
+impl Pending<Task> {
+    /// Return the `TaskId` of the task if it's a realy Task.
+    pub fn get_task_id(&self) -> Option<TaskId> {
+        match self {
+            Self::Task(task) => Some(task.id),
+            _ => None,
+        }
+    }
+}
+
+impl Eq for Pending<TaskId> {}
+
+impl PartialOrd for Pending<TaskId> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // in case of two tasks we want to return the lowest taskId first.
+            (Pending::Task(lhs), Pending::Task(rhs)) => Some(lhs.cmp(rhs).reverse()),
+            // A job is always better than a task.
+            (Pending::Task(_), Pending::Job(_)) => Some(Ordering::Less),
+            (Pending::Job(_), Pending::Task(_)) => Some(Ordering::Greater),
+            // When there is two jobs we consider them equals.
+            (Pending::Job(_), Pending::Job(_)) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Ord for Pending<TaskId> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 pub struct TaskStore {
     store: Arc<Store>,
-    pending_queue: Arc<RwLock<BinaryHeap<Reverse<TaskId>>>>,
+    pending_queue: Arc<RwLock<BinaryHeap<Pending<TaskId>>>>,
 }
 
 impl Clone for TaskStore {
@@ -84,30 +146,45 @@ impl TaskStore {
             };
 
             store.put(&mut txn, &task)?;
-
             txn.commit()?;
 
             Ok(task)
         })
         .await??;
 
-        self.pending_queue.write().await.push(Reverse(task.id));
+        self.pending_queue
+            .write()
+            .await
+            .push(Pending::Task(task.id));
 
         Ok(task)
     }
 
+    /// Register an update that applies on multiple indexes.
+    /// Currently the update is considered as a priority.
+    pub async fn register_job(&self, content: Job) {
+        debug!("registering a ghost task: {:?}", content);
+        self.pending_queue.write().await.push(Pending::Job(content));
+    }
+
     /// Returns the next task to process.
-    pub async fn peek_pending(&self) -> Option<TaskId> {
-        self.pending_queue.read().await.peek().map(|rid| rid.0)
+    pub async fn peek_pending_task(&self) -> Option<Pending<TaskId>> {
+        self.pending_queue
+            .write()
+            .await
+            .peek_mut()
+            // we don't want to keep the mutex thus we clone the data.
+            .map(|mut pending_task| pending_task.take())
     }
 
     /// Returns the next task to process if there is one.
     pub async fn get_processing_task(&self) -> Result<Option<Task>> {
-        if let Some(uid) = self.peek_pending().await {
-            let task = self.get_task(uid, None).await?;
-            Ok(matches!(task.events.last(), Some(TaskEvent::Processing(_))).then(|| task))
-        } else {
-            Ok(None)
+        match self.peek_pending_task().await {
+            Some(Pending::Task(tid)) => {
+                let task = self.get_task(tid, None).await?;
+                Ok(matches!(task.events.last(), Some(TaskEvent::Processing(_))).then(|| task))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -130,35 +207,32 @@ impl TaskStore {
         }
     }
 
-    pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
+    pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<Vec<Pending<Task>>> {
         let store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<()> {
+        let tasks = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut txn = store.wtxn()?;
 
-            for task in tasks {
-                store.put(&mut txn, &task)?;
+            for task in &tasks {
+                match task {
+                    Pending::Task(task) => store.put(&mut txn, task)?,
+                    Pending::Job(_) => (),
+                }
             }
 
             txn.commit()?;
 
-            Ok(())
+            Ok(tasks)
         })
         .await??;
 
-        Ok(())
+        Ok(tasks)
     }
 
-    pub async fn delete_tasks(&self, to_remove: HashSet<TaskId>) -> Result<()> {
-        let mut pending_queue = self.pending_queue.write().await;
-
-        // currently retain is not stable: https://doc.rust-lang.org/stable/std/collections/struct.BinaryHeap.html#method.retain
-        // pending_queue.retain(|id| !to_remove.contains(&id.0));
-        *pending_queue = pending_queue
-            .drain()
-            .filter(|id| !to_remove.contains(&id.0))
-            .collect();
-        Ok(())
+    /// Since we only handle dump of ONE task. Currently this function take
+    /// no parameters and pop the current task out of the pending_queue.
+    pub async fn pop_pending(&self) {
+        let _ = self.pending_queue.write().await.pop();
     }
 
     pub async fn list_tasks(
@@ -209,17 +283,20 @@ pub mod test {
             Self::Mock(Arc::new(mocker))
         }
 
-        pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<()> {
+        pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<Vec<Pending<Task>>> {
             match self {
                 Self::Real(s) => s.update_tasks(tasks).await,
-                Self::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Result<Vec<Pending<Task>>>>("update_tasks")
+                        .call(tasks)
+                },
             }
         }
 
-        pub async fn delete_tasks(&self, to_delete: HashSet<TaskId>) -> Result<()> {
+        pub async fn pop_pending(&self) {
             match self {
-                Self::Real(s) => s.delete_tasks(to_delete).await,
-                Self::Mock(m) => unsafe { m.get::<_, Result<()>>("delete_tasks").call(to_delete) },
+                Self::Real(s) => s.pop_pending().await,
+                Self::Mock(m) => unsafe { m.get("pop_pending").call(()) },
             }
         }
 
@@ -240,10 +317,13 @@ pub mod test {
             }
         }
 
-        pub async fn peek_pending(&self) -> Option<TaskId> {
+        pub async fn peek_pending_task(&self) -> Option<Pending<TaskId>> {
             match self {
-                Self::Real(s) => s.peek_pending().await,
-                Self::Mock(m) => unsafe { m.get::<_, Option<TaskId>>("peek_pending").call(()) },
+                Self::Real(s) => s.peek_pending_task().await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Option<Pending<TaskId>>>("peek_pending_task")
+                        .call(())
+                },
             }
         }
 
@@ -262,6 +342,13 @@ pub mod test {
         pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn register_job(&self, content: Job) {
+            match self {
+                Self::Real(s) => s.register_job(content).await,
                 Self::Mock(_m) => todo!(),
             }
         }

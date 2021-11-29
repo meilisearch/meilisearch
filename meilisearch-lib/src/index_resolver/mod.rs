@@ -15,10 +15,12 @@ use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
+use crate::index::update_handler::UpdateHandler;
 use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task_store::Pending;
 use crate::tasks::TaskPerformer;
 
 use self::meta_store::IndexMeta;
@@ -37,21 +39,29 @@ where
         // Until batching is implemented, all batch should contain only one update.
         debug_assert_eq!(batch.len(), 1);
 
-        if let Some(task) = batch.tasks.first_mut() {
-            task.events.push(TaskEvent::Processing(Utc::now()));
+        match batch.tasks.first_mut() {
+            Some(Pending::Task(task)) => {
+                task.events.push(TaskEvent::Processing(Utc::now()));
 
-            match self.process_task(task).await {
-                Ok(success) => {
-                    task.events.push(TaskEvent::Succeded {
-                        result: success,
+                match self.process_task(task).await {
+                    Ok(success) => {
+                        task.events.push(TaskEvent::Succeded {
+                            result: success,
+                            timestamp: Utc::now(),
+                        });
+                    }
+                    Err(err) => task.events.push(TaskEvent::Failed {
+                        error: err.into(),
                         timestamp: Utc::now(),
-                    });
+                    }),
                 }
-                Err(err) => task.events.push(TaskEvent::Failed {
-                    error: err.into(),
-                    timestamp: Utc::now(),
-                }),
             }
+            Some(Pending::Job(job)) => {
+                let job = std::mem::take(job);
+                self.process_job(job).await;
+            }
+
+            None => (),
         }
 
         batch
@@ -68,7 +78,7 @@ pub fn create_index_resolver(
     Ok(IndexResolver::new(uuid_store, index_store))
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUid(String);
 
 impl IndexUid {
@@ -120,20 +130,22 @@ pub struct IndexResolver<U, I> {
 }
 
 impl IndexResolver<HeedMetaStore, MapIndexStore> {
-    // pub fn load_dump(
-    //     src: impl AsRef<Path>,
-    //     dst: impl AsRef<Path>,
-    //     index_db_size: usize,
-    //     indexer_opts: &IndexerOpts,
-    // ) -> anyhow::Result<()> {
-    //     HeedUuidStore::load_dump(&src, &dst)?; let indexes_path = src.as_ref().join("indexes"); let indexes = indexes_path.read_dir()?; let update_handler = UpdateHandler::new(indexer_opts)?;
-    //     for index in indexes {
-    //         let index = index?;
-    //         Index::load_dump(&index.path(), &dst, index_db_size, &update_handler)?;
-    //     }
+    pub fn load_dump(
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        index_db_size: usize,
+        indexer_opts: &IndexerOpts,
+    ) -> anyhow::Result<()> {
+        HeedMetaStore::load_dump(&src, &dst)?;
+        let indexes_path = src.as_ref().join("indexes");
+        let indexes = indexes_path.read_dir()?;
+        let update_handler = UpdateHandler::new(indexer_opts)?;
+        for index in indexes {
+            Index::load_dump(&index?.path(), &dst, index_db_size, &update_handler)?;
+        }
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
 
 impl<U, I> IndexResolver<U, I>
@@ -238,15 +250,26 @@ where
         }
     }
 
-    // pub async fn dump(&self, path: impl AsRef<Path>) -> Result<Vec<Index>> {
-    //     let uuids = self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
-    //     let mut indexes = Vec::new();
-    //     for uuid in uuids {
-    //         indexes.push(self.get_index_by_uuid(uuid).await?);
-    //     }
+    async fn process_job(&self, job: Job) {
+        match job {
+            Job::Dump { ret, path } => {
+                log::trace!("The Dump task is getting executed");
 
-    //     Ok(indexes)
-    // }
+                if let Err(_) = ret.send(self.dump(path).await) {
+                    log::error!("The dump actor died.");
+                }
+            }
+            Job::Empty => log::error!("Tried to process an empty task."),
+        }
+    }
+
+    /// Dump each indexes
+    pub async fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
+        for (_, index) in self.list().await? {
+            index.dump(&path)?;
+        }
+        self.index_uuid_store.dump(path.as_ref().to_owned()).await
+    }
 
     //  pub async fn get_uuids_size(&self) -> Result<u64> {
     //      Ok(self.index_uuid_store.get_size().await?)
