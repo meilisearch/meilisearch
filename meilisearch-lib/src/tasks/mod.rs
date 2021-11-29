@@ -10,6 +10,8 @@ pub use task_store::test::MockTaskStore as TaskStore;
 #[cfg(not(test))]
 pub use task_store::TaskStore;
 
+pub use task_store::{Pending, TaskFilter};
+
 use batch::Batch;
 use error::Result;
 use scheduler::Scheduler;
@@ -18,7 +20,7 @@ pub mod batch;
 pub mod error;
 pub mod scheduler;
 pub mod task;
-pub mod task_store;
+mod task_store;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]

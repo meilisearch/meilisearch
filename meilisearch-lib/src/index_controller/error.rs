@@ -10,7 +10,7 @@ use crate::document_formats::DocumentFormatError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
 
-// use super::dump_actor::error::DumpActorError;
+use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
@@ -27,6 +27,8 @@ pub enum IndexControllerError {
     Internal(Box<dyn Error + Send + Sync + 'static>),
     #[error("{0}")]
     TaskError(#[from] TaskError),
+    #[error("{0}")]
+    DumpError(#[from] DumpActorError),
     #[error("{0}")]
     DocumentFormatError(#[from] DocumentFormatError),
     #[error("A {0} payload is missing.")]
@@ -57,6 +59,10 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::DocumentFormatError(e) => e.error_code(),
             IndexControllerError::MissingPayload(_) => Code::MissingPayload,
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
+            IndexControllerError::DumpError(DumpActorError::DumpAlreadyRunning) => {
+                Code::DumpAlreadyInProgress
+            }
+            IndexControllerError::DumpError(_) => Code::DumpProcessFailed,
         }
     }
 }

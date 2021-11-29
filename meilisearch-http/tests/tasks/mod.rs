@@ -97,7 +97,7 @@ macro_rules! assert_valid_summarized_task {
         assert_eq!($response["indexUid"], $index);
         assert_eq!($response["status"], "enqueued");
         assert_eq!($response["type"], $task_type);
-        let date = $response["enqueued_at"].as_str().unwrap();
+        let date = $response["enqueuedAt"].as_str().expect("missing date");
         date.parse::<DateTime<Utc>>().unwrap();
     }};
 }

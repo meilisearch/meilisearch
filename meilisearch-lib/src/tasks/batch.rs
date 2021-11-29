@@ -1,17 +1,15 @@
 use chrono::{DateTime, Utc};
 
-use crate::index_resolver::IndexUid;
-
-use super::task::Task;
+use super::{task::Task, task_store::Pending};
 
 pub type BatchId = u32;
 
 #[derive(Debug)]
 pub struct Batch {
     pub id: BatchId,
-    pub index_uid: IndexUid,
+    // pub index_uid: IndexUid,
     pub created_at: DateTime<Utc>,
-    pub tasks: Vec<Task>,
+    pub tasks: Vec<Pending<Task>>,
 }
 
 impl Batch {

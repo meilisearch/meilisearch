@@ -1634,6 +1634,7 @@ dependencies = [
  "arc-swap",
  "async-stream",
  "async-trait",
+ "bstr",
  "byte-unit",
  "bytes",
  "cargo_toml",
@@ -1936,6 +1937,7 @@ dependencies = [
 [[package]]
 name = "nelson"
 version = "0.1.0"
+source = "git+https://github.com/MarinPostma/nelson.git?rev=e5f4ff046c21e7e986c7cb31550d1c9e7f0b693b#e5f4ff046c21e7e986c7cb31550d1c9e7f0b693b"
 
 [[package]]
 name = "nom"
