@@ -59,8 +59,8 @@ where
                         Pending::Job(_) => (),
                     }
                 }
-                // the jobs are getting ignored by this clone
-                self.store.update_tasks(batch.tasks.clone()).await?;
+                // the jobs are ignored
+                batch.tasks = self.store.update_tasks(batch.tasks).await?;
 
                 let performer = self.performer.clone();
                 let batch_result = performer.process(batch).await;

@@ -44,8 +44,6 @@ impl TaskFilter {
 }
 
 /// You can't clone a job because of its volatile nature.
-/// If you try to do it it'll be replaced by a `Job::Empty` and the
-/// original `Job` will stay untouched.
 /// If you need to take the `Job` with you though. You can call the method
 /// `Pending::take`. It'll return the `Pending` as-is but `Empty` the original.
 #[derive(Debug, PartialEq)]
@@ -55,28 +53,6 @@ pub enum Pending<T> {
     /// Job always have a higher priority over normal tasks and are not stored on disk.
     /// It can be refered as `Volatile job`.
     Job(Job),
-}
-
-impl<T: Clone> Clone for Pending<T> {
-    // Be cautious when you clone a `Pending`. If it was a `Job` you
-    // will get an empty ghost task instead of a copy of the original ghost task.
-    // See the `take` methods defined on the `Pending`.
-    fn clone(&self) -> Self {
-        match self {
-            Self::Task(task) => Self::Task(task.clone()),
-            Self::Job(_) => Self::Job(Job::Empty),
-        }
-    }
-}
-
-impl<T> Pending<T> {
-    /// Map the content of the `Pending::Task(content)` changing the type of the `Pending`.
-    pub fn map_real<U, F: FnOnce(T) -> U>(self, f: F) -> Pending<U> {
-        match self {
-            Self::Task(task) => Pending::Task(f(task)),
-            Self::Job(task) => Pending::Job(task),
-        }
-    }
 }
 
 impl Pending<TaskId> {
@@ -245,26 +221,26 @@ impl TaskStore {
         }
     }
 
-    pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<()> {
+    pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<Vec<Pending<Task>>> {
         let store = self.store.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<()> {
+        let tasks = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut txn = store.wtxn()?;
 
-            for task in tasks {
+            for task in &tasks {
                 match task {
-                    Pending::Task(task) => store.put(&mut txn, &task)?,
+                    Pending::Task(task) => store.put(&mut txn, task)?,
                     Pending::Job(_) => (),
                 }
             }
 
             txn.commit()?;
 
-            Ok(())
+            Ok(tasks)
         })
         .await??;
 
-        Ok(())
+        Ok(tasks)
     }
 
     /// Since we only handle dump of ONE task. Currently this function take
@@ -321,7 +297,7 @@ pub mod test {
             Self::Mock(Arc::new(mocker))
         }
 
-        pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<()> {
+        pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<Vec<Pending<Task>>> {
             match self {
                 Self::Task(s) => s.update_tasks(tasks).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
