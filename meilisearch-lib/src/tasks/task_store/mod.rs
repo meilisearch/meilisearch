@@ -163,7 +163,7 @@ impl TaskStore {
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
     pub async fn register_job(&self, content: Job) {
-        debug!("registering job: {:?}", content);
+        debug!("registering a ghost task: {:?}", content);
         self.pending_queue.write().await.push(Pending::Job(content));
     }
 
@@ -231,7 +231,7 @@ impl TaskStore {
 
     /// Since we only handle dump of ONE task. Currently this function take
     /// no parameters and pop the current task out of the pending_queue.
-    pub async fn delete_task(&self) {
+    pub async fn pop_pending(&self) {
         let _ = self.pending_queue.write().await.pop();
     }
 
@@ -261,14 +261,14 @@ pub mod test {
     use tempfile::tempdir;
 
     pub enum MockTaskStore {
-        Task(TaskStore),
+        Real(TaskStore),
         Mock(Arc<Mocker>),
     }
 
     impl Clone for MockTaskStore {
         fn clone(&self) -> Self {
             match self {
-                Self::Task(x) => Self::Task(x.clone()),
+                Self::Real(x) => Self::Real(x.clone()),
                 Self::Mock(x) => Self::Mock(x.clone()),
             }
         }
@@ -276,7 +276,7 @@ pub mod test {
 
     impl MockTaskStore {
         pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Task(TaskStore::new(path, size)?))
+            Ok(Self::Real(TaskStore::new(path, size)?))
         }
 
         pub fn mock(mocker: Mocker) -> Self {
@@ -285,28 +285,31 @@ pub mod test {
 
         pub async fn update_tasks(&self, tasks: Vec<Pending<Task>>) -> Result<Vec<Pending<Task>>> {
             match self {
-                Self::Task(s) => s.update_tasks(tasks).await,
-                Self::Mock(m) => unsafe { m.get::<_, Result<()>>("update_tasks").call(tasks) },
+                Self::Real(s) => s.update_tasks(tasks).await,
+                Self::Mock(m) => unsafe {
+                    m.get::<_, Result<Vec<Pending<Task>>>>("update_tasks")
+                        .call(tasks)
+                },
             }
         }
 
-        pub async fn delete_task(&self) {
+        pub async fn pop_pending(&self) {
             match self {
-                Self::Task(s) => s.delete_task().await,
-                Self::Mock(m) => unsafe { m.get::<_, Result<()>>("delete_task").call() },
+                Self::Real(s) => s.pop_pending().await,
+                Self::Mock(m) => unsafe { m.get("pop_pending").call(()) },
             }
         }
 
         pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
             match self {
-                Self::Task(s) => s.get_task(id, filter).await,
+                Self::Real(s) => s.get_task(id, filter).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
             }
         }
 
         pub async fn get_processing_task(&self) -> Result<Option<Task>> {
             match self {
-                Self::Task(s) => s.get_processing_task().await,
+                Self::Real(s) => s.get_processing_task().await,
                 Self::Mock(m) => unsafe {
                     m.get::<_, Result<Option<Task>>>("get_pending_task")
                         .call(())
@@ -316,7 +319,7 @@ pub mod test {
 
         pub async fn peek_pending_task(&self) -> Option<Pending<TaskId>> {
             match self {
-                Self::Task(s) => s.peek_pending_task().await,
+                Self::Real(s) => s.peek_pending_task().await,
                 Self::Mock(m) => unsafe {
                     m.get::<_, Option<Pending<TaskId>>>("peek_pending_task")
                         .call(())
@@ -331,21 +334,21 @@ pub mod test {
             limit: Option<usize>,
         ) -> Result<Vec<Task>> {
             match self {
-                Self::Task(s) => s.list_tasks(from, filter, limit).await,
+                Self::Real(s) => s.list_tasks(from, filter, limit).await,
                 Self::Mock(_m) => todo!(),
             }
         }
 
         pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
-                Self::Task(s) => s.register(index_uid, content).await,
+                Self::Real(s) => s.register(index_uid, content).await,
                 Self::Mock(_m) => todo!(),
             }
         }
 
         pub async fn register_job(&self, content: Job) {
             match self {
-                Self::Task(s) => s.register_job(content).await,
+                Self::Real(s) => s.register_job(content).await,
                 Self::Mock(_m) => todo!(),
             }
         }

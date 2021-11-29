@@ -113,7 +113,7 @@ where
     /// The tasks are then removed from the processing queue.
     async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
         self.store.update_tasks(batch.tasks).await?;
-        self.store.delete_task().await;
+        self.store.pop_pending().await;
         Ok(())
     }
 }
