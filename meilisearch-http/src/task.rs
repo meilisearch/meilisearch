@@ -23,12 +23,21 @@ enum TaskType {
 impl From<TaskContent> for TaskType {
     fn from(other: TaskContent) -> Self {
         match other {
-            TaskContent::DocumentAddition { .. } => TaskType::DocumentsAddition,
-            TaskContent::DocumentDeletion(_) => TaskType::DocumentsDeletion,
+            TaskContent::DocumentAddition {
+                merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+                ..
+            } => TaskType::DocumentsAddition,
+            TaskContent::DocumentAddition {
+                merge_strategy: IndexDocumentsMethod::UpdateDocuments,
+                ..
+            } => TaskType::DocumentsPartial,
+            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => TaskType::ClearAll,
+            TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)) => TaskType::DocumentsDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
+            _ => unreachable!("unexpected task type"),
         }
     }
 }

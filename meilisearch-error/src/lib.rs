@@ -6,8 +6,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct ResponseError {
     #[serde(skip)]
+    #[cfg_attr(
+        feature = "test-traits",
+        proptest(strategy = "strategy::status_code_strategy()")
+    )]
     code: StatusCode,
     message: String,
     #[serde(rename = "code")]
@@ -53,7 +58,6 @@ impl aweb::error::ResponseError for ResponseError {
         self.code
     }
 }
-
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
@@ -280,22 +284,13 @@ impl ErrCode {
     }
 }
 
-#[cfg(feature="test-traits")]
-mod test {
-    use quickcheck::Arbitrary;
+#[cfg(feature = "test-traits")]
+mod strategy {
+    use proptest::strategy::Strategy;
 
     use super::*;
 
-    impl Arbitrary for ResponseError {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            Self {
-                // generate valid http code between 100 and 999
-                code: StatusCode::from_u16((u16::arbitrary(g) % 899) + 100).unwrap(),
-                message: String::arbitrary(g),
-                error_code: String::arbitrary(g),
-                error_type: String::arbitrary(g),
-                error_link: String::arbitrary(g),
-            }
-        }
+    pub(super) fn status_code_strategy() -> impl Strategy<Value = StatusCode> {
+        (100..999u16).prop_map(|i| StatusCode::from_u16(i).unwrap())
     }
 }

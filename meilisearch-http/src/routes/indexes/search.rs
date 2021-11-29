@@ -1,10 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
-use meilisearch_error::ResponseError;
 
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::{policies::*, GuardedData};

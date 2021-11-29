@@ -574,7 +574,7 @@ async fn add_documents_no_index_creation() {
 async fn error_document_add_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    index.add_documents(json!([{"id": 1}]), None).await;
+    let (response, code) = index.add_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
         "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
@@ -583,16 +583,15 @@ async fn error_document_add_create_index_bad_uid() {
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
     });
 
-    let response = index.wait_task(0).await;
-
-    assert_eq!(response["error"], expected_response);
+    assert_eq!(code, 400);
+    assert_eq!(response, expected_response);
 }
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
     let server = Server::new().await;
     let index = server.index("883  fj!");
-    index.update_documents(json!([{"id": 1}]), None).await;
+    let (response, code) = index.update_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
         "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
@@ -601,9 +600,8 @@ async fn error_document_update_create_index_bad_uid() {
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
     });
 
-    let response = index.wait_task(0).await;
-
-    assert_eq!(response["error"], expected_response);
+    assert_eq!(code, 400);
+    assert_eq!(response, expected_response);
 }
 
 #[actix_rt::test]

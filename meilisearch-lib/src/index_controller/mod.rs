@@ -27,7 +27,7 @@ use crate::options::IndexerOpts;
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::task_store::TaskFilter;
+use crate::tasks::TaskFilter;
 use crate::tasks::TaskStore;
 use error::Result;
 
@@ -512,11 +512,13 @@ where
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
         let last_task = self.task_store.get_processing_task().await?;
         // Check if the currently indexing update is from our index.
-        let is_indexing = last_task.map(|task| task.index_uid.into_inner() == uid);
+        let is_indexing = last_task
+            .map(|task| task.index_uid.into_inner() == uid)
+            .unwrap_or_default();
 
         let index = self.index_resolver.get_index(uid).await?;
         let mut stats = spawn_blocking(move || index.stats()).await??;
-        stats.is_indexing = is_indexing;
+        stats.is_indexing = Some(is_indexing);
 
         Ok(stats)
     }
@@ -541,11 +543,10 @@ where
             });
 
             // Check if the currently indexing update is from our index.
-            if let Some(ref processing_task) = processing_task {
-                // maybe we should write true or false instead of null or true?
-                stats.is_indexing =
-                    (processing_task.index_uid.as_str() == &index_uid).then(|| true);
-            }
+            stats.is_indexing = processing_task
+                .as_ref()
+                .map(|p| p.index_uid.as_str() == &index_uid)
+                .or(Some(false));
 
             indexes.insert(index_uid, stats);
         }
@@ -599,12 +600,12 @@ mod test {
             index_resolver: IndexResolver<MockIndexMetaStore, MockIndexStore>,
             task_store: TaskStore,
             update_file_store: UpdateFileStore,
-            //     dump_handle: D,
+            dump_handle: DumpActorHandleImpl,
         ) -> Self {
             IndexController {
                 index_resolver: Arc::new(index_resolver),
                 task_store,
-                // dump_handle: Arc::new(dump_handle),
+                dump_handle,
                 update_file_store,
             }
         }
@@ -671,7 +672,7 @@ mod test {
                         assert_eq!(&q, &query);
                         Ok(result.clone())
                     });
-                let index = Index::faux(mocker);
+                let index = Index::mock(mocker);
                 Box::pin(ok(Some(index)))
             });
 
@@ -681,7 +682,10 @@ mod test {
         // let dump_actor = MockDumpActorHandle::new();
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
-        let index_controller = IndexController::mock(index_resolver, task_store, update_file_store);
+        let (sender, _) = mpsc::channel(1);
+        let dump_handle = DumpActorHandleImpl { sender };
+        let index_controller =
+            IndexController::mock(index_resolver, task_store, update_file_store, dump_handle);
 
         let r = index_controller
             .search(index_uid.to_owned(), query.clone())

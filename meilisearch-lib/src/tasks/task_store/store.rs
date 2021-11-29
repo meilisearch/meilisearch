@@ -45,7 +45,8 @@ impl<'a> BytesDecode<'a> for IndexUidTaskIdCodec {
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let len = bytes.len();
-        let str_bytes = &bytes[..(len - size_of::<TaskId>() - 1)];
+        let s_end = len.checked_sub(size_of::<TaskId>())?.checked_sub(1)?;
+        let str_bytes = &bytes[..s_end];
         let str = std::str::from_utf8(str_bytes).ok()?;
         let id = TaskId::from_be_bytes(bytes[(len - size_of::<TaskId>())..].try_into().ok()?);
         Some((str, id))
@@ -123,6 +124,10 @@ impl Store {
         Ok(self.env.read_txn()?)
     }
 
+    /// Returns the id for the next task.
+    ///
+    /// The required `mut txn` acts as a reservation system. It guarantees that as long as you commit
+    /// the task to the store in the same transaction, no one else will hav this task id.
     pub fn next_task_id(&self, txn: &mut RwTxn) -> Result<TaskId> {
         let id = self
             .tasks
@@ -131,11 +136,6 @@ impl Store {
             .map(|(id, _)| id.get() + 1)
             .unwrap_or(0);
         Ok(id)
-    }
-
-    /// Return the last task that was pushed in the store.
-    pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
-        Ok(self.tasks.last(txn)?.map(|(_, task)| task))
     }
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
@@ -149,10 +149,6 @@ impl Store {
     pub fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
         let task = self.tasks.get(txn, &BEU64::new(id))?;
         Ok(task)
-    }
-
-    pub fn task_count(&self, txn: &RoTxn) -> Result<usize> {
-        Ok(self.tasks.len(txn)?)
     }
 
     pub fn list_tasks<'a>(
@@ -248,16 +244,16 @@ impl Store {
 
 #[cfg(test)]
 pub mod test {
-    use std::collections::{HashMap, HashSet};
-
     use nelson::Mocker;
-    use quickcheck::{Arbitrary, Gen, TestResult};
-    use quickcheck_macros::quickcheck;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
 
     use crate::index_resolver::IndexUid;
 
     use super::*;
 
+    /// TODO: use this mock to test the task store properly.
+    #[allow(dead_code)]
     pub enum MockStore {
         Real(Store),
         Fake(Mocker),
@@ -310,20 +306,6 @@ pub mod test {
             }
         }
 
-        pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
-            match self {
-                MockStore::Real(index) => index.get_last_task(txn),
-                MockStore::Fake(_) => todo!(),
-            }
-        }
-
-        pub fn task_count(&self, txn: &RoTxn) -> Result<usize> {
-            match self {
-                MockStore::Real(index) => index.task_count(txn),
-                MockStore::Fake(_) => todo!(),
-            }
-        }
-
         pub fn list_tasks<'a>(
             &self,
             txn: &'a RoTxn,
@@ -338,163 +320,52 @@ pub mod test {
         }
     }
 
-    #[quickcheck]
-    fn put_retrieve_task(tasks: Vec<Task>) -> TestResult {
-        // if two task have the same id, we discard the test.
-        if tasks.is_empty()
-            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
-        {
-            return TestResult::discard();
+    proptest! {
+        #[test]
+        fn encode_decode_roundtrip(index_uid in any::<IndexUid>(), task_id in 0..TaskId::MAX) {
+            let value = (index_uid.as_ref(), task_id);
+            let bytes = IndexUidTaskIdCodec::bytes_encode(&value).unwrap();
+            let (index, id) = IndexUidTaskIdCodec::bytes_decode(bytes.as_ref()).unwrap();
+            assert_eq!(&*index_uid, index);
+            assert_eq!(task_id, id);
         }
 
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 10000000).unwrap();
-
-        let mut txn = store.wtxn().unwrap();
-
-        for task in tasks.iter() {
-            if task.index_uid.len() > 400 {
-                return TestResult::discard();
-            }
-            store.put(&mut txn, task).unwrap();
+        #[test]
+        fn encode_doesnt_crash(index_uid in "\\PC*", task_id in 0..TaskId::MAX) {
+            let value = (index_uid.as_ref(), task_id);
+            IndexUidTaskIdCodec::bytes_encode(&value);
         }
 
-        txn.commit().unwrap();
-
-        let txn = store.rtxn().unwrap();
-
-        if store.task_count(&txn).unwrap() != tasks.len() {
-            return TestResult::failed();
+        #[test]
+        fn decode_doesnt_crash(bytes in vec(any::<u8>(), 0..1000)) {
+            IndexUidTaskIdCodec::bytes_decode(&bytes);
         }
 
-        for task in tasks {
-            let found_task = store.get(&txn, task.id).unwrap().unwrap();
-            if found_task != task {
-                return TestResult::failed();
-            }
+        #[test]
+        fn test_filter_same_index_prefix(
+            mut task_1 in any::<Task>(),
+            mut task_2 in any::<Task>(),
+        ) {
+            let tmp = tempfile::tempdir().unwrap();
+
+            let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
+
+
+            // task1 and 2 share the same index_uid prefix
+            task_1.index_uid = IndexUid::new_unchecked("test".to_string());
+            task_2.index_uid = IndexUid::new_unchecked("test1".to_string());
+
+            let mut txn = store.wtxn().unwrap();
+            store.put(&mut txn, &task_1).unwrap();
+            store.put(&mut txn, &task_2).unwrap();
+
+            let mut filter = TaskFilter::default();
+            filter.filter_index("test".into());
+
+            let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(&*tasks.first().unwrap().index_uid, "test");
         }
-
-        TestResult::passed()
-    }
-
-    #[quickcheck]
-    fn list_updates(tasks: Vec<Task>) -> TestResult {
-        // if two task have the same id, we discard the test.
-        if tasks.is_empty()
-            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
-        {
-            return TestResult::discard();
-        }
-
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
-
-        let mut txn = store.wtxn().unwrap();
-
-        for task in tasks.iter() {
-            store.put(&mut txn, task).unwrap();
-        }
-
-        txn.commit().unwrap();
-
-        let txn = store.rtxn().unwrap();
-        let validator = tasks
-            .into_iter()
-            .map(|t| (t.id, t))
-            .collect::<HashMap<_, _>>();
-
-        assert_eq!(store.task_count(&txn).unwrap(), validator.len());
-
-        let iter = store
-            .list_tasks(&txn, None, None, None)
-            .unwrap()
-            .into_iter()
-            .map(|t| (t.id, t))
-            .collect::<HashMap<_, _>>();
-
-        assert_eq!(iter, validator);
-
-        let randid = validator.values().next().unwrap().id;
-
-        store
-            .list_tasks(&txn, Some(randid), None, None)
-            .unwrap()
-            .into_iter()
-            .for_each(|t| assert!(t.id < randid, "id: {}, randid: {}", t.id, randid));
-
-        TestResult::passed()
-    }
-
-    #[quickcheck]
-    fn list_updates_filter(tasks: Vec<Task>) -> TestResult {
-        // if two task have the same id, we discard the test.
-        if tasks.is_empty()
-            || tasks.iter().map(|t| t.id).collect::<HashSet<_>>().len() != tasks.len()
-        {
-            return TestResult::discard();
-        }
-
-        let index_to_filter = tasks.first().unwrap().index_uid.clone();
-
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
-
-        let mut txn = store.wtxn().unwrap();
-
-        for task in tasks.iter() {
-            store.put(&mut txn, task).unwrap();
-        }
-
-        txn.commit().unwrap();
-
-        let txn = store.rtxn().unwrap();
-        let validator = tasks
-            .into_iter()
-            .map(|t| (t.id, t))
-            .collect::<HashMap<_, _>>();
-
-        assert_eq!(store.task_count(&txn).unwrap(), validator.len());
-
-        let mut filter = TaskFilter::default();
-        filter.filter_index(index_to_filter.to_string());
-
-        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
-
-        assert!(!tasks.is_empty());
-        tasks.into_iter().for_each(|task| {
-            assert_eq!(task.index_uid, index_to_filter);
-        });
-        TestResult::passed()
-    }
-
-    #[test]
-    fn test_filter_same_index_prefix() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
-
-        let mut gen = Gen::new(30);
-
-        // task1 and 2 share the same index_uid prefix
-        let mut task_1 = Task::arbitrary(&mut gen);
-        task_1.index_uid = IndexUid::new_unchecked("test".into());
-
-        let mut task_2 = Task::arbitrary(&mut gen);
-        task_2.index_uid = IndexUid::new_unchecked("test1".into());
-
-        let mut txn = store.wtxn().unwrap();
-        store.put(&mut txn, &task_1).unwrap();
-        store.put(&mut txn, &task_2).unwrap();
-
-        let mut filter = TaskFilter::default();
-        filter.filter_index("test".into());
-
-        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
-
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
     }
 }

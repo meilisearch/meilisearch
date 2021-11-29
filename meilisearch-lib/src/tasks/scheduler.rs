@@ -148,8 +148,8 @@ mod test {
             });
 
         mocker
-            .when::<(), Option<TaskId>>("peek_pending")
-            .then(|()| Some(1));
+            .when::<(), Option<Pending<TaskId>>>("peek_pending_task")
+            .then(|()| Some(Pending::Task(1)));
 
         let store = TaskStore::mock(mocker);
         let performer = Arc::new(MockTaskPerformer::new());
@@ -163,14 +163,18 @@ mod test {
         let batch = scheduler.prepare_batch().await.unwrap().unwrap();
 
         assert_eq!(batch.tasks.len(), 1);
-        assert_eq!(batch.tasks[0].id, 1);
+        assert!(
+            matches!(batch.tasks[0], Pending::Task(Task { id: 1, .. })),
+            "{:?}",
+            batch.tasks[0]
+        );
     }
 
     #[tokio::test]
     async fn test_prepare_batch_empty() {
         let mocker = Mocker::default();
         mocker
-            .when::<(), Option<TaskId>>("peek_pending")
+            .when::<(), Option<Pending<TaskId>>>("peek_pending_task")
             .then(|()| None);
 
         let store = TaskStore::mock(mocker);
@@ -190,10 +194,10 @@ mod test {
         let mocker = Mocker::default();
         let mut id = Some(1);
         mocker
-            .when::<(), Option<TaskId>>("peek_pending")
-            .then(move |()| id.take());
+            .when::<(), Option<Pending<TaskId>>>("peek_pending_task")
+            .then(move |()| id.take().map(Pending::Task));
         mocker
-            .when::<(TaskId, Option<TaskFilter>), Result<Option<Task>>>("get_task")
+            .when::<(TaskId, Option<TaskFilter>), Result<Task>>("get_task")
             .once()
             .then(|(id, _)| {
                 let task = Task {
@@ -202,30 +206,29 @@ mod test {
                     content: TaskContent::IndexDeletion,
                     events: vec![TaskEvent::Created(Utc::now())],
                 };
-                Ok(Some(task))
+                Ok(task)
             });
+
         mocker
-            .when::<Vec<Task>, Result<()>>("update_tasks")
-            .once()
+            .when::<Vec<Pending<Task>>, Result<Vec<Pending<Task>>>>("update_tasks")
+            .times(2)
             .then(|tasks| {
                 assert_eq!(tasks.len(), 1);
-                assert!(tasks[0]
-                    .events
-                    .iter()
-                    .find(|e| matches!(e, &TaskEvent::Succeded { .. }))
-                    .is_some());
-                Ok(())
+                Ok(tasks)
             });
+
+        mocker.when::<(), ()>("pop_pending").once().then(|_| ());
 
         let store = TaskStore::mock(mocker);
 
         let mut performer = MockTaskPerformer::new();
         performer.expect_process().once().returning(|mut batch| {
-            batch.tasks.iter_mut().for_each(|t| {
-                t.events.push(TaskEvent::Succeded {
+            batch.tasks.iter_mut().for_each(|t| match t {
+                Pending::Task(Task { ref mut events, .. }) => events.push(TaskEvent::Succeded {
                     result: TaskResult::Other,
                     timestamp: Utc::now(),
-                })
+                }),
+                _ => panic!("expected a task, found a job"),
             });
 
             batch

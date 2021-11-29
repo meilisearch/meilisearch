@@ -28,7 +28,8 @@ async fn stats() {
     let index = server.index("test");
     let (_, code) = index.create(Some("id")).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
+    index.wait_task(0).await;
 
     let (response, code) = server.stats().await;
 
@@ -52,10 +53,9 @@ async fn stats() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "{}", response);
-    assert_eq!(response["updateId"], 0);
+    assert_eq!(response["uid"], 1);
 
-    let response = index.wait_task(0).await;
-    println!("response: {}", response);
+    index.wait_task(1).await;
 
     let (response, code) = server.stats().await;
 

@@ -16,7 +16,7 @@ use super::{DumpInfo, DumpJob, DumpMsg, DumpStatus};
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
-use crate::tasks::task_store::TaskStore;
+use crate::tasks::TaskStore;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
