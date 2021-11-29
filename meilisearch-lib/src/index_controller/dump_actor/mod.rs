@@ -269,7 +269,7 @@ where
         let (sender, receiver) = oneshot::channel();
 
         self.task_store
-            .register_ghost_task(Job::Dump {
+            .register_job(Job::Dump {
                 ret: sender,
                 path: temp_dump_path.clone(),
             })

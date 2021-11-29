@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
-use log::{debug, trace};
+use log::debug;
 use tokio::sync::RwLock;
 
 use crate::index_resolver::IndexUid;
@@ -162,23 +162,9 @@ impl TaskStore {
 
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
-    pub async fn register_ghost_task(&self, content: Job) {
+    pub async fn register_job(&self, content: Job) {
         debug!("registering a ghost task: {:?}", content);
         self.pending_queue.write().await.push(Pending::Job(content));
-    }
-
-    /// Pop the current `Job` from the penging queue.
-    pub async fn pop_ghost_task(&self) -> Option<Job> {
-        trace!("Popping a ghost task");
-        let mut lock = self.pending_queue.write().await;
-        if let Some(Pending::Job(_)) = lock.peek() {
-            if let Pending::Job(task) = lock.pop().unwrap() {
-                return Some(task);
-            } else {
-                unreachable!();
-            }
-        }
-        None
     }
 
     /// Returns the next task to process.
@@ -357,9 +343,9 @@ pub mod test {
             }
         }
 
-        pub async fn register_ghost_task(&self, content: Job) {
+        pub async fn register_job(&self, content: Job) {
             match self {
-                Self::Task(s) => s.register_ghost_task(content).await,
+                Self::Task(s) => s.register_job(content).await,
                 Self::Mock(_m) => todo!(),
             }
         }
