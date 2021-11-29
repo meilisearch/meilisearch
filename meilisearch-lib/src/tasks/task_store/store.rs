@@ -5,7 +5,6 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
@@ -85,10 +84,8 @@ impl Store {
     /// It put back all unfinished update in the `Created` state. This
     /// allow us to re-enqueue an update that didn't had the time to finish
     /// when Meilisearch closed.
-    pub fn reset_and_return_unfinished_tasks(
-        &mut self,
-    ) -> Result<BinaryHeap<Reverse<Pending<TaskId>>>> {
-        let mut unfinished_tasks: BinaryHeap<Reverse<Pending<TaskId>>> = BinaryHeap::new();
+    pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
+        let mut unfinished_tasks: BinaryHeap<Pending<TaskId>> = BinaryHeap::new();
 
         let mut wtxn = self.wtxn()?;
         let mut iter = self.tasks.rev_iter_mut(&mut wtxn)?;
@@ -104,7 +101,7 @@ impl Store {
 
             // we only keep the first state. It’s supposed to be a `Created` state.
             task.events.drain(1..);
-            unfinished_tasks.push(Reverse(Pending::Task(id.get())));
+            unfinished_tasks.push(Pending::Task(id.get()));
 
             // Since we own the id and the task this is a safe operation.
             unsafe {
@@ -262,25 +259,16 @@ pub mod test {
     use super::*;
 
     pub enum MockStore {
-        Task(Store),
+        Real(Store),
         Fake(Mocker),
     }
 
     impl MockStore {
         pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Task(Store::new(path, size)?))
+            Ok(Self::Real(Store::new(path, size)?))
         }
 
-        pub fn reset_and_return_unfinished_tasks(
-            &mut self,
-        ) -> BinaryHeap<Reverse<Pending<TaskId>>> {
-            match self {
-                MockStore::Task(index) => index.reset_and_return_unfinished_tasks(),
-                MockStore::Fake(_) => todo!(),
-            }
-        }
-
-        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Reverse<TaskId>>> {
+        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
             match self {
                 MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
                 MockStore::Fake(_) => todo!(),
@@ -289,49 +277,49 @@ pub mod test {
 
         pub fn wtxn(&self) -> Result<RwTxn> {
             match self {
-                MockStore::Task(index) => index.wtxn(),
+                MockStore::Real(index) => index.wtxn(),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn rtxn(&self) -> Result<RoTxn> {
             match self {
-                MockStore::Task(index) => index.rtxn(),
+                MockStore::Real(index) => index.rtxn(),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn next_task_id(&self, txn: &mut RwTxn) -> Result<TaskId> {
             match self {
-                MockStore::Task(index) => index.next_task_id(txn),
+                MockStore::Real(index) => index.next_task_id(txn),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
             match self {
-                MockStore::Task(index) => index.put(txn, task),
+                MockStore::Real(index) => index.put(txn, task),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn get(&self, txn: &RoTxn, id: TaskId) -> Result<Option<Task>> {
             match self {
-                MockStore::Task(index) => index.get(txn, id),
+                MockStore::Real(index) => index.get(txn, id),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn get_last_task(&self, txn: &RoTxn) -> Result<Option<Task>> {
             match self {
-                MockStore::Task(index) => index.get_last_task(txn),
+                MockStore::Real(index) => index.get_last_task(txn),
                 MockStore::Fake(_) => todo!(),
             }
         }
 
         pub fn task_count(&self, txn: &RoTxn) -> Result<usize> {
             match self {
-                MockStore::Task(index) => index.task_count(txn),
+                MockStore::Real(index) => index.task_count(txn),
                 MockStore::Fake(_) => todo!(),
             }
         }
@@ -344,7 +332,7 @@ pub mod test {
             limit: Option<usize>,
         ) -> Result<Vec<Task>> {
             match self {
-                MockStore::Task(index) => index.list_tasks(txn, from, filter, limit),
+                MockStore::Real(index) => index.list_tasks(txn, from, filter, limit),
                 MockStore::Fake(_) => todo!(),
             }
         }

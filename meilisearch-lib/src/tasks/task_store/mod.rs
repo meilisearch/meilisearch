@@ -1,6 +1,6 @@
 mod store;
 
-use std::cmp::{Ordering, Reverse};
+use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -88,9 +88,12 @@ impl Eq for Pending<TaskId> {}
 impl PartialOrd for Pending<TaskId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Pending::Task(lhs), Pending::Task(rhs)) => Some(lhs.cmp(rhs)),
+            // in case of two tasks we want to return the lowest taskId first.
+            (Pending::Task(lhs), Pending::Task(rhs)) => Some(lhs.cmp(rhs).reverse()),
+            // A job is always better than a task.
             (Pending::Task(_), Pending::Job(_)) => Some(Ordering::Less),
             (Pending::Job(_), Pending::Task(_)) => Some(Ordering::Greater),
+            // When there is two jobs we consider them equals.
             (Pending::Job(_), Pending::Job(_)) => Some(Ordering::Equal),
         }
     }
@@ -104,7 +107,7 @@ impl Ord for Pending<TaskId> {
 
 pub struct TaskStore {
     store: Arc<Store>,
-    pending_queue: Arc<RwLock<BinaryHeap<Reverse<Pending<TaskId>>>>>,
+    pending_queue: Arc<RwLock<BinaryHeap<Pending<TaskId>>>>,
 }
 
 impl Clone for TaskStore {
@@ -152,7 +155,7 @@ impl TaskStore {
         self.pending_queue
             .write()
             .await
-            .push(Reverse(Pending::Task(task.id)));
+            .push(Pending::Task(task.id));
 
         Ok(task)
     }
@@ -161,18 +164,15 @@ impl TaskStore {
     /// Currently the update is considered as a priority.
     pub async fn register_ghost_task(&self, content: Job) {
         debug!("registering a ghost task: {:?}", content);
-        self.pending_queue
-            .write()
-            .await
-            .push(Reverse(Pending::Job(content)));
+        self.pending_queue.write().await.push(Pending::Job(content));
     }
 
     /// Pop the current `Job` from the penging queue.
     pub async fn pop_ghost_task(&self) -> Option<Job> {
         trace!("Popping a ghost task");
         let mut lock = self.pending_queue.write().await;
-        if let Some(Reverse(Pending::Job(_))) = lock.peek() {
-            if let Reverse(Pending::Job(task)) = lock.pop().unwrap() {
+        if let Some(Pending::Job(_)) = lock.peek() {
+            if let Pending::Job(task) = lock.pop().unwrap() {
                 return Some(task);
             } else {
                 unreachable!();
@@ -188,7 +188,7 @@ impl TaskStore {
             .await
             .peek_mut()
             // we don't want to keep the mutex thus we clone the data.
-            .map(|mut pending_task| pending_task.0.take())
+            .map(|mut pending_task| pending_task.take())
     }
 
     /// Returns the next task to process if there is one.
