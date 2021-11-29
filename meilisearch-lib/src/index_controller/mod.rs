@@ -194,13 +194,12 @@ impl IndexControllerBuilder {
             &indexer_options,
         )?);
 
-        // TODO: remove the two expects
         let task_store = create_task_store(&db_path, update_store_size, index_resolver.clone())
-            .expect("unknown error");
-        // .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| anyhow::anyhow!(e))?;
 
-        let dump_path = self.dump_dst.expect("missing dump directory path");
-        // .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
+        let dump_path = self
+            .dump_dst
+            .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
         let dump_handle = {
             let analytics_path = &db_path;
             let (sender, receiver) = mpsc::channel(10);
