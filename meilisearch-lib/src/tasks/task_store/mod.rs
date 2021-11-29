@@ -163,7 +163,7 @@ impl TaskStore {
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
     pub async fn register_job(&self, content: Job) {
-        debug!("registering a ghost task: {:?}", content);
+        debug!("registering job: {:?}", content);
         self.pending_queue.write().await.push(Pending::Job(content));
     }
 
