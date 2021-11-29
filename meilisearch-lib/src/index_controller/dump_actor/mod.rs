@@ -233,8 +233,7 @@ pub fn load_dump(
     Ok(())
 }
 
-#[allow(dead_code)]
-struct DumpTask<U, I> {
+struct DumpJob<U, I> {
     dump_path: PathBuf,
     db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
@@ -244,7 +243,7 @@ struct DumpTask<U, I> {
     index_db_size: usize,
 }
 
-impl<U, I> DumpTask<U, I>
+impl<U, I> DumpJob<U, I>
 where
     U: IndexMetaStore + Sync + Send + 'static,
     I: IndexStore + Sync + Send + 'static,
@@ -360,7 +359,7 @@ mod test {
         //let update_sender =
         //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
-        let task = DumpTask {
+        let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
@@ -390,7 +389,7 @@ mod test {
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
-        let task = DumpTask {
+        let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),

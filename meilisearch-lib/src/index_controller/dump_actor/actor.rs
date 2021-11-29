@@ -12,7 +12,7 @@ use log::{error, trace};
 use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
-use super::{DumpInfo, DumpMsg, DumpStatus, DumpTask};
+use super::{DumpInfo, DumpJob, DumpMsg, DumpStatus};
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
@@ -123,7 +123,7 @@ where
 
         ret.send(Ok(info)).expect("Dump actor is dead");
 
-        let task = DumpTask {
+        let task = DumpJob {
             dump_path: self.dump_path.clone(),
             db_path: self.analytics_path.clone(),
             index_resolver: self.index_resolver.clone(),
