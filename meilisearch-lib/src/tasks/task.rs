@@ -1,12 +1,15 @@
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
 use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
     index::{Settings, Unchecked},
-    index_resolver::IndexUid,
+    index_resolver::{error::IndexResolverError, IndexUid},
 };
 
 use super::batch::BatchId;
@@ -47,6 +50,10 @@ pub enum TaskEvent {
     },
 }
 
+/// A task represents an operation that Meilisearch must do.
+/// It's stored on disk and executed from the lowest to highest Task id.
+/// Everytime a new task is created it has a higher Task id than the previous one.
+/// See also `Job`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Task {
     pub id: TaskId,
@@ -62,6 +69,28 @@ impl Task {
         self.events.last().map_or(false, |event| {
             matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
         })
+    }
+}
+
+/// A job is like a volatile priority `Task`.
+/// It should be processed as fast as possible and is not stored on disk.
+/// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
+#[derive(Debug, derivative::Derivative)]
+#[derivative(PartialEq)]
+pub enum Job {
+    Dump {
+        #[derivative(PartialEq = "ignore")]
+        ret: oneshot::Sender<Result<(), IndexResolverError>>,
+        path: PathBuf,
+    },
+    // Snapshot {},
+    // Task(Task),
+    Empty,
+}
+
+impl Default for Job {
+    fn default() -> Self {
+        Self::Empty
     }
 }
 
