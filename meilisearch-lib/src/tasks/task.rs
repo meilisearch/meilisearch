@@ -52,7 +52,7 @@ pub enum TaskEvent {
 
 /// A task represent an operation that Meilisearch must do.
 /// It's stored on disk and executed from the lowest to higher Task id.
-/// Everytime a new task is created it's have a higher Task id than the previous one.
+/// Everytime a new task is created it has a higher Task id than the previous one.
 /// See also `Job`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Task {
