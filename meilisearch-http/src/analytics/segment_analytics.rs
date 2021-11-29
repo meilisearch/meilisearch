@@ -75,7 +75,24 @@ impl SegmentAnalytics {
 
         let client = HttpClient::default();
         let user = User::UserId { user_id };
-        let batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
+        let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
+
+        // If Meilisearch is Launched for the first time:
+        // 1. Send an event Launched associated to the user `total_launch`.
+        // 2. Batch an event Launched with the real instance-id and send it in one hour.
+        if first_time_run {
+            let _ = batcher.push(Track {
+                user: User::UserId { user_id: "total_launch".to_string() },
+                event: "Launched".to_string(),
+                ..Default::default()
+            }).await;
+            let _ = batcher.flush().await;
+            let _ = batcher.push(Track {
+                user: user.clone(),
+                event: "Launched".to_string(),
+                ..Default::default()
+            }).await;
+        }
 
         let (sender, inbox) = mpsc::channel(100); // How many analytics can we bufferize
 
@@ -95,10 +112,6 @@ impl SegmentAnalytics {
             sender,
             user: user.clone(),
         };
-        // batch the launched for the first time track event
-        if first_time_run {
-            this.publish("Launched".to_string(), json!({}), None);
-        }
 
         (Arc::new(this), user.to_string())
     }
@@ -216,7 +229,8 @@ impl Segment {
 
     async fn run(mut self, meilisearch: MeiliSearch) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
-        let mut interval = tokio::time::interval(INTERVAL);
+        // The first batch must be sent in one hour.
+        let mut interval = tokio::time::interval_at(tokio::time::Instant::now() + INTERVAL, INTERVAL);
 
         loop {
             select! {
