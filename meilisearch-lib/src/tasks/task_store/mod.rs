@@ -368,7 +368,7 @@ pub mod test {
 
                 // if we put a task whose is is less that the next_id, then the next_id remains
                 // unchanged, otherwise it becomes task.id + 1
-                if task.id <= previous_id {
+                if task.id < previous_id {
                     assert_eq!(next_id, previous_id)
                 } else {
                     assert_eq!(next_id, task.id + 1);

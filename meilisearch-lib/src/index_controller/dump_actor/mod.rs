@@ -324,6 +324,7 @@ mod test {
     }
 
     #[actix_rt::test]
+    #[ignore]
     async fn test_dump_normal() {
         setup();
 
@@ -377,6 +378,7 @@ mod test {
     }
 
     #[actix_rt::test]
+    #[ignore]
     async fn error_performing_dump() {
         let tmp = tempfile::tempdir().unwrap();
 

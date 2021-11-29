@@ -408,6 +408,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     use futures::future::ok;
@@ -417,7 +419,7 @@ mod test {
 
     use crate::index::{
         error::{IndexError, Result as IndexResult},
-        Checked, IndexMeta, Settings,
+        Checked, IndexMeta, IndexStats, Settings,
     };
     use index_store::MockIndexStore;
     use meta_store::MockIndexMetaStore;
@@ -502,6 +504,9 @@ mod test {
                             }
                     }
                 }
+
+                mocker.when::<(), IndexResult<IndexStats>>("stats")
+            .then(|()| Ok(IndexStats { size: 0, number_of_documents: 0, is_indexing: Some(false), field_distribution: BTreeMap::new() }));
 
                 let index = Index::mock(mocker);
 

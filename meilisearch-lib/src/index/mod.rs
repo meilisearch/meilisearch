@@ -81,7 +81,7 @@ pub mod test {
         pub fn stats(&self) -> Result<IndexStats> {
             match self {
                 MockIndex::Real(index) => index.stats(),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("stats").call(()) },
             }
         }
 
