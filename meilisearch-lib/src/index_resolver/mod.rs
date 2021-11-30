@@ -7,6 +7,7 @@ use std::path::Path;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
+use heed::EnvOpenOptions;
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
@@ -27,21 +28,22 @@ use self::meta_store::IndexMeta;
 
 pub type HardStateIndexResolver = IndexResolver<HeedMetaStore, MapIndexStore>;
 
-pub fn create_index_resolver(
-    path: impl AsRef<Path>,
-    index_size: usize,
-    indexer_opts: &IndexerOpts,
-) -> anyhow::Result<HardStateIndexResolver> {
-    let uuid_store = HeedMetaStore::new(&path)?;
-    let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
-    Ok(IndexResolver::new(uuid_store, index_store))
-}
-
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct IndexUid(#[cfg_attr(test, proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String);
+
+pub fn create_index_resolver(
+    path: impl AsRef<Path>,
+    index_size: usize,
+    indexer_opts: &IndexerOpts,
+    meta_env: heed::Env,
+) -> anyhow::Result<HardStateIndexResolver> {
+    let uuid_store = HeedMetaStore::new(meta_env)?;
+    let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
+    Ok(IndexResolver::new(uuid_store, index_store))
+}
 
 impl IndexUid {
     pub fn new(uid: String) -> Result<Self> {
@@ -138,9 +140,13 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         index_db_size: usize,
+        meta_env_size: usize,
         indexer_opts: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        HeedMetaStore::load_dump(&src, &dst)?;
+        let mut options = EnvOpenOptions::new();
+        options.map_size(meta_env_size);
+        let env = options.open(&dst)?;
+        HeedMetaStore::load_dump(&src, env.clone())?;
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
         let update_handler = UpdateHandler::new(indexer_opts)?;

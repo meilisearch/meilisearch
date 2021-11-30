@@ -9,11 +9,10 @@ use std::collections::{BTreeSet, BinaryHeap};
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
-use std::path::Path;
 use std::result::Result as StdResult;
 
 use heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
-use heed::{BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn};
+use heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
 
 use crate::tasks::task::{Task, TaskId};
 
@@ -65,12 +64,7 @@ impl Store {
     /// be in an invalid state, with dangling processing tasks.
     /// You want to patch  all un-finished tasks and put them in your pending
     /// queue with the `reset_and_return_unfinished_update` method.
-    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-        let mut options = EnvOpenOptions::new();
-        options.map_size(size);
-        options.max_dbs(1000);
-        let env = options.open(path)?;
-
+    pub fn new(env: heed::Env) -> Result<Self> {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
@@ -244,11 +238,14 @@ impl Store {
 
 #[cfg(test)]
 pub mod test {
+    use heed::EnvOpenOptions;
     use nelson::Mocker;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use tempfile::TempDir;
 
     use crate::index_resolver::IndexUid;
+    use crate::tasks::task::TaskContent;
 
     use super::*;
 
@@ -259,9 +256,28 @@ pub mod test {
         Fake(Mocker),
     }
 
+    pub struct TmpEnv(TempDir, heed::Env);
+
+    impl TmpEnv {
+        pub fn env(&self) -> heed::Env {
+            self.1.clone()
+        }
+    }
+
+    pub fn tmp_env() -> TmpEnv {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100000);
+        options.max_dbs(1000);
+        let env = options.open(tmp.path()).unwrap();
+
+        TmpEnv(tmp, env)
+    }
+
     impl MockStore {
-        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Real(Store::new(path, size)?))
+        pub fn new(env: heed::Env) -> Result<Self> {
+            Ok(Self::Real(Store::new(env)?))
         }
 
         pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
@@ -320,6 +336,65 @@ pub mod test {
         }
     }
 
+    #[test]
+    fn test_filter_same_index_prefix() {
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
+
+        let task_1 = Task {
+            id: 1,
+            index_uid: IndexUid::new_unchecked("test".to_string()),
+            content: TaskContent::IndexDeletion,
+            events: vec![],
+        };
+
+        let task_2 = Task {
+            id: 0,
+            index_uid: IndexUid::new_unchecked("test1".to_string()),
+            content: TaskContent::IndexDeletion,
+            events: vec![],
+        };
+
+        let mut txn = store.wtxn().unwrap();
+        store.put(&mut txn, &task_1).unwrap();
+        store.put(&mut txn, &task_2).unwrap();
+
+        let mut filter = TaskFilter::default();
+        filter.filter_index("test".into());
+
+        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+        txn.abort().unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
+
+        // same thing but invert the ids
+        let task_1 = Task {
+            id: 0,
+            index_uid: IndexUid::new_unchecked("test".to_string()),
+            content: TaskContent::IndexDeletion,
+            events: vec![],
+        };
+        let task_2 = Task {
+            id: 1,
+            index_uid: IndexUid::new_unchecked("test1".to_string()),
+            content: TaskContent::IndexDeletion,
+            events: vec![],
+        };
+
+        let mut txn = store.wtxn().unwrap();
+        store.put(&mut txn, &task_1).unwrap();
+        store.put(&mut txn, &task_2).unwrap();
+
+        let mut filter = TaskFilter::default();
+        filter.filter_index("test".into());
+
+        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
+    }
+
     proptest! {
         #[test]
         fn encode_decode_roundtrip(index_uid in any::<IndexUid>(), task_id in 0..TaskId::MAX) {
@@ -339,33 +414,6 @@ pub mod test {
         #[test]
         fn decode_doesnt_crash(bytes in vec(any::<u8>(), 0..1000)) {
             IndexUidTaskIdCodec::bytes_decode(&bytes);
-        }
-
-        #[test]
-        fn test_filter_same_index_prefix(
-            mut task_1 in any::<Task>(),
-            mut task_2 in any::<Task>(),
-        ) {
-            let tmp = tempfile::tempdir().unwrap();
-
-            let store = Store::new(tmp.path(), 4096 * 100000).unwrap();
-
-
-            // task1 and 2 share the same index_uid prefix
-            task_1.index_uid = IndexUid::new_unchecked("test".to_string());
-            task_2.index_uid = IndexUid::new_unchecked("test1".to_string());
-
-            let mut txn = store.wtxn().unwrap();
-            store.put(&mut txn, &task_1).unwrap();
-            store.put(&mut txn, &task_2).unwrap();
-
-            let mut filter = TaskFilter::default();
-            filter.filter_index("test".into());
-
-            let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
-
-            assert_eq!(tasks.len(), 1);
-            assert_eq!(&*tasks.first().unwrap().index_uid, "test");
         }
     }
 }

@@ -4,15 +4,13 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use heed::types::{SerdeBincode, Str};
-use heed::{CompactionOption, Database, Env, EnvOpenOptions};
+use heed::{CompactionOption, Database, Env};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::error::{IndexResolverError, Result};
 use crate::tasks::task::TaskId;
 use crate::EnvSizer;
-
-const UUID_STORE_SIZE: usize = 1_073_741_824; //1GiB
 
 #[derive(Serialize, Deserialize)]
 struct DumpEntry {
@@ -49,13 +47,7 @@ pub struct HeedMetaStore {
 }
 
 impl HeedMetaStore {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().join(UUIDS_DB_PATH);
-        create_dir_all(&path)?;
-        let mut options = EnvOpenOptions::new();
-        options.map_size(UUID_STORE_SIZE); // 1GB
-        options.max_dbs(1);
-        let env = options.open(path)?;
+    pub fn new(env: heed::Env) -> Result<Self> {
         let db = env.create_database(Some("uuids"))?;
         Ok(Self { env, db })
     }
@@ -152,16 +144,13 @@ impl HeedMetaStore {
         Ok(())
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let uuid_resolver_path = dst.as_ref().join(UUIDS_DB_PATH);
-        std::fs::create_dir_all(&uuid_resolver_path)?;
-
+    pub fn load_dump(src: impl AsRef<Path>, env: heed::Env) -> Result<()> {
         let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
         let indexes = File::open(&src_indexes)?;
         let mut indexes = BufReader::new(indexes);
         let mut line = String::new();
 
-        let db = Self::new(dst)?;
+        let db = Self::new(env)?;
         let mut txn = db.env.write_txn()?;
 
         loop {
@@ -177,8 +166,6 @@ impl HeedMetaStore {
             line.clear();
         }
         txn.commit()?;
-
-        db.env.prepare_for_closing().wait();
 
         Ok(())
     }

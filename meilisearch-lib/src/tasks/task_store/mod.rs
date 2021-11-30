@@ -2,7 +2,6 @@ mod store;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
-use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -102,8 +101,8 @@ impl Clone for TaskStore {
 }
 
 impl TaskStore {
-    pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-        let mut store = Store::new(path, size)?;
+    pub fn new(env: heed::Env) -> Result<Self> {
+        let mut store = Store::new(env)?;
         let unfinished_tasks = store.reset_and_return_unfinished_tasks()?;
         let store = Arc::new(store);
 
@@ -236,6 +235,8 @@ impl TaskStore {
 
 #[cfg(test)]
 pub mod test {
+    use crate::tasks::task_store::store::test::tmp_env;
+
     use super::*;
 
     use nelson::Mocker;
@@ -243,7 +244,6 @@ pub mod test {
         strategy::Strategy,
         test_runner::{Config, TestRunner},
     };
-    use tempfile::tempdir;
 
     pub enum MockTaskStore {
         Real(TaskStore),
@@ -260,8 +260,8 @@ pub mod test {
     }
 
     impl MockTaskStore {
-        pub fn new(path: impl AsRef<Path>, size: usize) -> Result<Self> {
-            Ok(Self::Real(TaskStore::new(path, size)?))
+        pub fn new(env: heed::Env) -> Result<Self> {
+            Ok(Self::Real(TaskStore::new(env)?))
         }
 
         pub fn mock(mocker: Mocker) -> Self {
@@ -341,10 +341,8 @@ pub mod test {
 
     #[test]
     fn test_increment_task_id() {
-        let mut runner = TestRunner::new(Config::default());
-
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path(), 4096 * 1000).unwrap();
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
 
         let mut txn = store.wtxn().unwrap();
         assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
@@ -357,6 +355,7 @@ pub mod test {
             events: Vec::new(),
         };
 
+        let mut runner = TestRunner::new(Config::default());
         runner
             .run(&(0..100u64).prop_map(gen_task), |task| {
                 let mut txn = store.wtxn().unwrap();

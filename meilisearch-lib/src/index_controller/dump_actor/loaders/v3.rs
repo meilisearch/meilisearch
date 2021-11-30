@@ -15,7 +15,7 @@ pub fn load_dump(
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
     index_db_size: usize,
-    _update_db_size: usize,
+    meta_env_size: usize,
     indexing_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
     info!(
@@ -23,7 +23,13 @@ pub fn load_dump(
         meta.dump_date, meta.db_version
     );
 
-    IndexResolver::load_dump(src.as_ref(), &dst, index_db_size, indexing_options)?;
+    IndexResolver::load_dump(
+        src.as_ref(),
+        &dst,
+        index_db_size,
+        meta_env_size,
+        indexing_options,
+    )?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
     // TaskStore::load_dump(&src, &dst, update_db_size)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());

@@ -10,6 +10,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use futures::StreamExt;
+use heed::EnvOpenOptions;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -163,7 +164,7 @@ impl IndexControllerBuilder {
         let index_size = self
             .max_index_size
             .ok_or_else(|| anyhow::anyhow!("Missing index size"))?;
-        let update_store_size = self
+        let task_store_size = self
             .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
@@ -181,21 +182,28 @@ impl IndexControllerBuilder {
                 db_path.as_ref(),
                 src_path,
                 index_size,
-                update_store_size,
+                task_store_size,
                 &indexer_options,
             )?;
         }
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
+        let mut options = EnvOpenOptions::new();
+        options.map_size(task_store_size);
+        options.max_dbs(20);
+
+        let meta_env = options.open(&db_path)?;
+
         let index_resolver = Arc::new(create_index_resolver(
             &db_path,
             index_size,
             &indexer_options,
+            meta_env.clone(),
         )?);
 
-        let task_store = create_task_store(&db_path, update_store_size, index_resolver.clone())
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let task_store =
+            create_task_store(meta_env, index_resolver.clone()).map_err(|e| anyhow::anyhow!(e))?;
 
         let dump_path = self
             .dump_dst
@@ -210,7 +218,7 @@ impl IndexControllerBuilder {
                 dump_path,
                 analytics_path,
                 index_size,
-                update_store_size,
+                task_store_size,
             );
 
             tokio::task::spawn(actor.run());

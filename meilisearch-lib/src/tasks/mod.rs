@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,15 +29,11 @@ pub trait TaskPerformer: Sync + Send + 'static {
     async fn process(&self, batch: Batch) -> Batch;
 }
 
-pub fn create_task_store<P>(
-    path: impl AsRef<Path>,
-    size: usize,
-    performer: Arc<P>,
-) -> Result<TaskStore>
+pub fn create_task_store<P>(env: heed::Env, performer: Arc<P>) -> Result<TaskStore>
 where
     P: TaskPerformer,
 {
-    let task_store = TaskStore::new(path, size)?;
+    let task_store = TaskStore::new(env)?;
     let scheduler = Scheduler::new(task_store.clone(), performer, Duration::from_millis(1));
     tokio::task::spawn_local(scheduler.run());
     Ok(task_store)
