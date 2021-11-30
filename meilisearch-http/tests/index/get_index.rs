@@ -76,7 +76,7 @@ async fn list_multiple_indexes() {
 async fn get_invalid_index_uid() {
     let server = Server::new().await;
     let index = server.index("this is not a valid index name");
-    let (response, code) = dbg!(index.get().await);
+    let (response, code) = index.get().await;
 
     assert_eq!(code, 404);
     assert_eq!(

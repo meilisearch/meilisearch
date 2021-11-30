@@ -101,9 +101,9 @@ impl SnapshotJob {
         let temp_snapshot_dir = tempfile::tempdir()?;
         let temp_snapshot_path = temp_snapshot_dir.path();
 
-        dbg!(self.snapshot_meta_env(temp_snapshot_path))?;
-        dbg!(self.snapshot_file_store(temp_snapshot_path))?;
-        dbg!(self.snapshot_indexes(temp_snapshot_path))?;
+        self.snapshot_meta_env(temp_snapshot_path)?;
+        self.snapshot_file_store(temp_snapshot_path)?;
+        self.snapshot_indexes(temp_snapshot_path)?;
 
         let db_name = self
             .src_path
@@ -168,187 +168,11 @@ impl SnapshotJob {
 
             let mut options = heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
-            let env = options.open(dbg!(entry.path()))?;
+            let env = options.open(entry.path())?;
 
-            env.copy_to_path(dbg!(dst), heed::CompactionOption::Enabled)?;
+            env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
         }
 
         Ok(())
     }
 }
-
-/*
-#[cfg(test)]
-mod test {
-    use std::{collections::HashSet, sync::Arc};
-
-    use futures::future::{err, ok};
-    use once_cell::sync::Lazy;
-    use rand::Rng;
-    use uuid::Uuid;
-
-    use crate::index::error::IndexError;
-    use crate::index::test::Mocker;
-    use crate::index::{error::Result as IndexResult, Index};
-    use crate::index_controller::index_resolver::error::IndexResolverError;
-    use crate::index_controller::index_resolver::index_store::MockIndexStore;
-    use crate::index_controller::index_resolver::uuid_store::MockUuidStore;
-    use crate::index_controller::index_resolver::IndexResolver;
-    use crate::index_controller::updates::create_update_handler;
-
-    use super::*;
-
-    fn setup() {
-        static SETUP: Lazy<()> = Lazy::new(|| {
-            if cfg!(windows) {
-                std::env::set_var("TMP", ".");
-            } else {
-                std::env::set_var("TMPDIR", ".");
-            }
-        });
-
-        // just deref to make sure the env is setup
-        *SETUP
-    }
-
-    #[actix_rt::test]
-    async fn test_normal() {
-        setup();
-
-        let mut rng = rand::thread_rng();
-        let uuids_num: usize = rng.gen_range(5..10);
-        let uuids = (0..uuids_num)
-            .map(|_| Uuid::new_v4())
-            .collect::<HashSet<_>>();
-
-        let mut uuid_store = MockUuidStore::new();
-        let uuids_clone = uuids.clone();
-        uuid_store
-            .expect_snapshot()
-            .times(1)
-            .returning(move |_| Box::pin(ok(uuids_clone.clone())));
-
-        let mut indexes = uuids.clone().into_iter().map(|uuid| {
-            let mocker = Mocker::default();
-            mocker
-                .when("snapshot")
-                .times(1)
-                .then(|_: &Path| -> IndexResult<()> { Ok(()) });
-            mocker.when("uuid").then(move |_: ()| uuid);
-            Index::faux(mocker)
-        });
-
-        let uuids_clone = uuids.clone();
-        let mut index_store = MockIndexStore::new();
-        index_store
-            .expect_get()
-            .withf(move |uuid| uuids_clone.contains(uuid))
-            .times(uuids_num)
-            .returning(move |_| Box::pin(ok(Some(indexes.next().unwrap()))));
-
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
-
-        let dir = tempfile::tempdir().unwrap();
-        let update_sender =
-            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
-
-        let snapshot_path = tempfile::tempdir().unwrap();
-        let snapshot_service = SnapshotService::new(
-            index_resolver,
-            update_sender,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            // this should do nothing
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
-
-        snapshot_service.perform_snapshot().await.unwrap();
-    }
-
-    #[actix_rt::test]
-    async fn error_performing_uuid_snapshot() {
-        setup();
-
-        let mut uuid_store = MockUuidStore::new();
-        uuid_store.expect_snapshot().once().returning(move |_| {
-            Box::pin(err(IndexResolverError::IndexAlreadyExists(
-                "test".to_string(),
-            )))
-        });
-
-        let mut index_store = MockIndexStore::new();
-        index_store.expect_get().never();
-
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
-
-        let dir = tempfile::tempdir().unwrap();
-        let update_sender =
-            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
-
-        let snapshot_path = tempfile::tempdir().unwrap();
-        let snapshot_service = SnapshotService::new(
-            index_resolver,
-            update_sender,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            // this should do nothing
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
-
-        assert!(snapshot_service.perform_snapshot().await.is_err());
-    }
-
-    #[actix_rt::test]
-    async fn error_performing_index_snapshot() {
-        setup();
-
-        let uuids: HashSet<Uuid> = vec![Uuid::new_v4()].into_iter().collect();
-
-        let mut uuid_store = MockUuidStore::new();
-        let uuids_clone = uuids.clone();
-        uuid_store
-            .expect_snapshot()
-            .once()
-            .returning(move |_| Box::pin(ok(uuids_clone.clone())));
-
-        let mut indexes = uuids.clone().into_iter().map(|uuid| {
-            let mocker = Mocker::default();
-            // index returns random error
-            mocker.when("snapshot").then(|_: &Path| -> IndexResult<()> {
-                Err(IndexError::DocumentNotFound("1".to_string()))
-            });
-            mocker.when("uuid").then(move |_: ()| uuid);
-            Index::faux(mocker)
-        });
-
-        let uuids_clone = uuids.clone();
-        let mut index_store = MockIndexStore::new();
-        index_store
-            .expect_get()
-            .withf(move |uuid| uuids_clone.contains(uuid))
-            .once()
-            .returning(move |_| Box::pin(ok(Some(indexes.next().unwrap()))));
-
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
-
-        let dir = tempfile::tempdir().unwrap();
-        let update_sender =
-            create_update_handler(index_resolver.clone(), dir.path(), 4096 * 100).unwrap();
-
-        let snapshot_path = tempfile::tempdir().unwrap();
-        let snapshot_service = SnapshotService::new(
-            index_resolver,
-            update_sender,
-            Duration::from_millis(100),
-            snapshot_path.path().to_owned(),
-            // this should do nothing
-            snapshot_path.path().to_owned(),
-            "data.ms".to_string(),
-        );
-
-        assert!(snapshot_service.perform_snapshot().await.is_err());
-    }
-}
-*/

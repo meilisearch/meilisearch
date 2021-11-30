@@ -57,7 +57,7 @@ impl HeedMetaStore {
         let db = self.db;
         let txn = env.read_txn()?;
         match db.get(&txn, name)? {
-            Some(meta) => Ok(Some(dbg!(meta))),
+            Some(meta) => Ok(Some(meta)),
             None => Ok(None),
         }
     }

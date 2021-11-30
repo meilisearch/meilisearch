@@ -7,7 +7,28 @@ use tokio::time::sleep;
 
 use meilisearch_http::Opt;
 
-#[ignore]
+macro_rules! verify_snapshot {
+    (
+        $orig:expr,
+        $snapshot: expr,
+        |$server:ident| =>
+        $($e:expr,)+) => {
+            use std::sync::Arc;
+            let snapshot = Arc::new($snapshot);
+            let orig = Arc::new($orig);
+            $(
+                {
+                    let test= |$server: Arc<Server>| async move {
+                        $e.await
+                    };
+                    let (snapshot, _) = test(snapshot.clone()).await;
+                    let (orig, _) = test(orig.clone()).await;
+                    assert_eq!(snapshot, orig);
+                }
+            )*
+    };
+}
+
 #[actix_rt::test]
 async fn perform_snapshot() {
     let temp = tempfile::tempdir().unwrap();
@@ -21,12 +42,19 @@ async fn perform_snapshot() {
     };
 
     let server = Server::new_with_options(options).await;
+
     let index = server.index("test");
+    index
+        .update_settings(serde_json::json! ({
+        "searchableAttributes": [],
+        }))
+        .await;
+
+    index.wait_task(0).await;
+
     index.load_test_set().await;
 
-    let (response, _) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    server.index("test1").create(Some("prim")).await;
 
     sleep(Duration::from_secs(2)).await;
 
@@ -42,12 +70,17 @@ async fn perform_snapshot() {
         ..default_settings(temp.path())
     };
 
-    let server = Server::new_with_options(options).await;
-    let index = server.index("test");
+    let snapshot_server = Server::new_with_options(options).await;
 
-    let (response_from_snapshot, _) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
-
-    assert_eq!(response, response_from_snapshot);
+    verify_snapshot!(server, snapshot_server, |server| =>
+        server.list_indexes(),
+        // for some reason the db sizes differ. this may be due to the compaction options we have
+        // set when performing the snapshot
+        //server.stats(),
+        server.tasks(),
+        server.index("test").get_all_documents(GetAllDocumentsOptions::default()),
+        server.index("test").settings(),
+        server.index("test1").get_all_documents(GetAllDocumentsOptions::default()),
+        server.index("test1").settings(),
+    );
 }
