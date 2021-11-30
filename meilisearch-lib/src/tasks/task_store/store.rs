@@ -232,7 +232,7 @@ impl Store {
             }
         }
 
-        Ok(dbg!(candidates))
+        Ok(candidates)
     }
 }
 
