@@ -97,7 +97,7 @@ macro_rules! assert_valid_summarized_task {
         assert_eq!($response["indexUid"], $index);
         assert_eq!($response["status"], "enqueued");
         assert_eq!($response["type"], $task_type);
-        let date = $response["enqueued_at"].as_str().unwrap();
+        let date = $response["enqueuedAt"].as_str().expect("missing date");
         date.parse::<DateTime<Utc>>().unwrap();
     }};
 }
@@ -108,26 +108,26 @@ async fn test_summarized_task_view() {
     let index = server.index("test");
 
     let (response, _) = index.create(None).await;
-    assert_valid_summarized_task!(response, "indexCreation", "index");
+    assert_valid_summarized_task!(response, "indexCreation", "test");
 
     let (response, _) = index.update(None).await;
-    assert_valid_summarized_task!(response, "indexUpdate", "index");
+    assert_valid_summarized_task!(response, "indexUpdate", "test");
 
     let (response, _) = index.update_settings(json!({})).await;
-    assert_valid_summarized_task!(response, "settingsUpdate", "index");
+    assert_valid_summarized_task!(response, "settingsUpdate", "test");
 
     let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentsPartial", "index");
+    assert_valid_summarized_task!(response, "documentsPartial", "test");
 
     let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentsAddition", "index");
+    assert_valid_summarized_task!(response, "documentsAddition", "test");
 
     let (response, _) = index.delete_document(1).await;
-    assert_valid_summarized_task!(response, "documentsDeletion", "index");
+    assert_valid_summarized_task!(response, "documentsDeletion", "test");
 
     let (response, _) = index.clear_all_documents().await;
-    assert_valid_summarized_task!(response, "clearAll", "index");
+    assert_valid_summarized_task!(response, "clearAll", "test");
 
     let (response, _) = index.delete().await;
-    assert_valid_summarized_task!(response, "indexDeletion", "index");
+    assert_valid_summarized_task!(response, "indexDeletion", "test");
 }

@@ -26,7 +26,7 @@ pub type Document = Map<String, Value>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMeta {
-    created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub primary_key: Option<String>,
 }
@@ -102,8 +102,9 @@ impl Index {
         })
     }
 
-    pub fn inner(&self) -> &milli::Index {
-        &self.inner
+    /// Asyncronously close the underlying index
+    pub fn close(self) {
+        self.inner.as_ref().clone().prepare_for_closing();
     }
 
     pub fn stats(&self) -> Result<IndexStats> {
@@ -282,5 +283,19 @@ impl Index {
             .env
             .copy_to_path(dst, heed::CompactionOption::Enabled)?;
         Ok(())
+    }
+}
+
+/// When running test, when a server instance is dropped, the environnement is not actually closed,
+/// leaving a lot of open file descriptors.
+impl Drop for Index {
+    fn drop(&mut self) {
+        // When dropping the last instance of an index, we want to close the index
+        // Note that the close is actually performed only if all the instances a effectively
+        // dropped
+
+        if Arc::strong_count(&self.inner) == 1 {
+            self.inner.as_ref().clone().prepare_for_closing();
+        }
     }
 }

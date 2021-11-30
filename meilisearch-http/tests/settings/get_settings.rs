@@ -175,10 +175,16 @@ async fn update_setting_unexisting_index() {
 async fn update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
-    let (_, code) = index.update_settings(json!({})).await;
-    assert_eq!(code, 202);
-    let response = index.wait_task(0).await;
-    assert_eq!(response["status"], "failed");
+    let (response, code) = index.update_settings(json!({})).await;
+    assert_eq!(code, 400);
+
+    let expected = json!({
+        "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+        "code": "invalid_index_uid",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"});
+
+    assert_eq!(response, expected);
 }
 
 macro_rules! test_setting_routes {

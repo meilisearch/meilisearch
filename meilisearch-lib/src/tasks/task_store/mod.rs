@@ -55,29 +55,11 @@ pub enum Pending<T> {
 }
 
 impl Pending<TaskId> {
-    /// Return the `TaskId` of the task if it's a realy Task.
-    pub fn get_task_id(&self) -> Option<TaskId> {
-        match self {
-            Self::Task(tid) => Some(*tid),
-            _ => None,
-        }
-    }
-
     /// Makes a copy of the task or take the content of the volatile job.
-    pub fn take(&mut self) -> Self {
+    pub(crate) fn take(&mut self) -> Self {
         match self {
             Self::Task(id) => Self::Task(*id),
             Self::Job(ghost) => Self::Job(std::mem::take(ghost)),
-        }
-    }
-}
-
-impl Pending<Task> {
-    /// Return the `TaskId` of the task if it's a realy Task.
-    pub fn get_task_id(&self) -> Option<TaskId> {
-        match self {
-            Self::Task(task) => Some(task.id),
-            _ => None,
         }
     }
 }
@@ -258,7 +240,10 @@ pub mod test {
     use super::*;
 
     use nelson::Mocker;
-    use quickcheck::{Arbitrary, Gen};
+    use proptest::{
+        strategy::Strategy,
+        test_runner::{Config, TestRunner},
+    };
 
     pub enum MockTaskStore {
         Real(TaskStore),
@@ -361,17 +346,37 @@ pub mod test {
 
         let mut txn = store.wtxn().unwrap();
         assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
-        assert_eq!(store.next_task_id(&mut txn).unwrap(), 0);
+        txn.abort().unwrap();
 
-        let mut g = Gen::new(10);
-        let mut task = Task::arbitrary(&mut g);
-        task.id = 0;
+        let gen_task = |id: TaskId| Task {
+            id,
+            index_uid: IndexUid::new_unchecked("test"),
+            content: TaskContent::IndexCreation { primary_key: None },
+            events: Vec::new(),
+        };
 
-        store.put(&mut txn, &task).unwrap();
+        let mut runner = TestRunner::new(Config::default());
+        runner
+            .run(&(0..100u64).prop_map(gen_task), |task| {
+                let mut txn = store.wtxn().unwrap();
+                let previous_id = store.next_task_id(&mut txn).unwrap();
 
-        txn.commit().unwrap();
+                store.put(&mut txn, &task).unwrap();
 
-        let mut txn = store.wtxn().unwrap();
-        assert_eq!(store.next_task_id(&mut txn).unwrap(), 1);
+                let next_id = store.next_task_id(&mut txn).unwrap();
+
+                // if we put a task whose is is less that the next_id, then the next_id remains
+                // unchanged, otherwise it becomes task.id + 1
+                if task.id < previous_id {
+                    assert_eq!(next_id, previous_id)
+                } else {
+                    assert_eq!(next_id, task.id + 1);
+                }
+
+                txn.commit().unwrap();
+
+                Ok(())
+            })
+            .unwrap();
     }
 }

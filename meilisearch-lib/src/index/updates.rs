@@ -42,12 +42,14 @@ pub struct Unchecked;
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Settings<T> {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -55,19 +57,26 @@ pub struct Settings<T> {
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub ranking_rules: Setting<Vec<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub distinct_attribute: Setting<String>,
 
     #[serde(skip)]
@@ -322,46 +331,17 @@ pub fn apply_settings_to_builder(
 }
 
 #[cfg(test)]
-mod test {
-    use quickcheck::Arbitrary;
+pub(crate) mod test {
+    use proptest::prelude::*;
 
     use super::*;
 
-    #[derive(Clone)]
-    struct ArbitrarySetting<T>(Setting<T>);
-
-    impl<T: Arbitrary> ArbitrarySetting<T> {
-        fn into_inner(self) -> Setting<T> {
-            self.0
-        }
-    }
-
-    impl<T: Arbitrary> Arbitrary for ArbitrarySetting<T> {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            let rand = g.choose(&[1, 2, 3]).unwrap();
-            match rand {
-                1 => Self(Setting::Set(T::arbitrary(g))),
-                2 => Self(Setting::Reset),
-                3 => Self(Setting::NotSet),
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    impl<T: Clone + 'static> Arbitrary for Settings<T> {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            Settings {
-                displayed_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                searchable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                filterable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                sortable_attributes: ArbitrarySetting::arbitrary(g).into_inner(),
-                ranking_rules: ArbitrarySetting::arbitrary(g).into_inner(),
-                stop_words: ArbitrarySetting::arbitrary(g).into_inner(),
-                synonyms: ArbitrarySetting::arbitrary(g).into_inner(),
-                distinct_attribute: ArbitrarySetting::arbitrary(g).into_inner(),
-                _kind: PhantomData,
-            }
-        }
+    pub(super) fn setting_strategy<T: Arbitrary + Clone>() -> impl Strategy<Value = Setting<T>> {
+        prop_oneof![
+            Just(Setting::NotSet),
+            Just(Setting::Reset),
+            any::<T>().prop_map(Setting::Set)
+        ]
     }
 
     #[test]

@@ -64,6 +64,6 @@ actix-rt = "2.2.0"
 mockall = "0.10.2"
 paste = "1.0.5"
 nelson = { git = "https://github.com/MarinPostma/nelson.git", rev = "e5f4ff046c21e7e986c7cb31550d1c9e7f0b693b"}
-quickcheck = "1.0.3"
-quickcheck_macros = "1.0.0"
 meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
+proptest = "1.0.0"
+proptest-derive = "0.3.0"

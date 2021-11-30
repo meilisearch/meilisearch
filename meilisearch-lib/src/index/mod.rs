@@ -47,8 +47,8 @@ pub mod test {
     }
 
     impl MockIndex {
-        pub fn faux(faux: Mocker) -> Self {
-            Self::Mock(Arc::new(faux))
+        pub fn mock(mocker: Mocker) -> Self {
+            Self::Mock(Arc::new(mocker))
         }
 
         pub fn open(
@@ -81,7 +81,7 @@ pub mod test {
         pub fn stats(&self) -> Result<IndexStats> {
             match self {
                 MockIndex::Real(index) => index.stats(),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("stats").call(()) },
             }
         }
 
@@ -137,10 +137,10 @@ pub mod test {
             }
         }
 
-        pub fn inner(&self) -> &milli::Index {
+        pub fn close(self) {
             match self {
-                MockIndex::Real(index) => index.inner(),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Real(index) => index.close(),
+                MockIndex::Mock(m) => unsafe { m.get("close").call(()) },
             }
         }
 
@@ -166,35 +166,39 @@ pub mod test {
         ) -> Result<DocumentAdditionResult> {
             match self {
                 MockIndex::Real(index) => index.update_documents(method, content_uuid, primary_key),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(mocker) => unsafe {
+                    mocker
+                        .get("update_documents")
+                        .call((method, content_uuid, primary_key))
+                },
             }
         }
 
         pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.update_settings(settings),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("update_settings").call(settings) },
             }
         }
 
         pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
             match self {
                 MockIndex::Real(index) => index.update_primary_key(primary_key),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("update_primary_key").call(primary_key) },
             }
         }
 
         pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
             match self {
                 MockIndex::Real(index) => index.delete_documents(ids),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("delete_documents").call(ids) },
             }
         }
 
         pub fn clear_documents(&self) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.clear_documents(),
-                MockIndex::Mock(_) => todo!(),
+                MockIndex::Mock(m) => unsafe { m.get("clear_documents").call(()) },
             }
         }
     }
@@ -206,7 +210,7 @@ pub mod test {
             .times(2)
             .then(|_: &Path| -> Result<()> { Ok(()) });
 
-        let index = MockIndex::faux(faux);
+        let index = MockIndex::mock(faux);
 
         let path = PathBuf::from("hello");
         index.snapshot(&path).unwrap();
@@ -218,7 +222,7 @@ pub mod test {
     fn test_faux_unexisting_method_stub() {
         let faux = Mocker::default();
 
-        let index = MockIndex::faux(faux);
+        let index = MockIndex::mock(faux);
 
         let path = PathBuf::from("hello");
         index.snapshot(&path).unwrap();
@@ -235,7 +239,7 @@ pub mod test {
                 panic!();
             });
 
-        let index = MockIndex::faux(faux);
+        let index = MockIndex::mock(faux);
 
         let path = PathBuf::from("hello");
         index.snapshot(&path).unwrap();

@@ -7,16 +7,16 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+use super::batch::BatchId;
 use crate::{
     index::{Settings, Unchecked},
     index_resolver::{error::IndexResolverError, IndexUid},
 };
 
-use super::batch::BatchId;
-
 pub type TaskId = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskResult {
     DocumentAddition { indexed_documents: u64 },
     DocumentDeletion { deleted_documents: u64 },
@@ -33,19 +33,23 @@ impl From<DocumentAdditionResult> for TaskResult {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskEvent {
-    Created(DateTime<Utc>),
+    Created(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] DateTime<Utc>),
     Batched {
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
         timestamp: DateTime<Utc>,
         batch_id: BatchId,
     },
-    Processing(DateTime<Utc>),
+    Processing(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] DateTime<Utc>),
     Succeded {
         result: TaskResult,
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
         timestamp: DateTime<Utc>,
     },
     Failed {
         error: ResponseError,
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
         timestamp: DateTime<Utc>,
     },
 }
@@ -55,6 +59,7 @@ pub enum TaskEvent {
 /// Everytime a new task is created it has a higher Task id than the previous one.
 /// See also `Job`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
     pub index_uid: IndexUid,
@@ -95,15 +100,19 @@ impl Default for Job {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum DocumentDeletion {
     Clear,
     Ids(Vec<String>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskContent {
     DocumentAddition {
+        #[cfg_attr(test, proptest(value = "Uuid::new_v4()"))]
         content_uuid: Uuid,
+        #[cfg_attr(test, proptest(strategy = "test::index_document_method_strategy()"))]
         merge_strategy: IndexDocumentsMethod,
         primary_key: Option<String>,
         documents_count: usize,
@@ -125,88 +134,18 @@ pub enum TaskContent {
 
 #[cfg(test)]
 mod test {
+    use proptest::prelude::*;
+
     use super::*;
-    use quickcheck::{Arbitrary, Gen};
 
-    impl Arbitrary for Task {
-        fn arbitrary(g: &mut Gen) -> Self {
-            Self {
-                id: TaskId::arbitrary(g),
-                index_uid: IndexUid::new_unchecked(String::arbitrary(g)),
-                content: TaskContent::arbitrary(g),
-                events: Vec::arbitrary(g),
-            }
-        }
+    pub(super) fn index_document_method_strategy() -> impl Strategy<Value = IndexDocumentsMethod> {
+        prop_oneof![
+            Just(IndexDocumentsMethod::ReplaceDocuments),
+            Just(IndexDocumentsMethod::UpdateDocuments),
+        ]
     }
 
-    impl Arbitrary for TaskContent {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let rand = g.choose(&[1, 2, 3, 4]).unwrap();
-            let merge_strategy = *g
-                .choose(&[
-                    IndexDocumentsMethod::ReplaceDocuments,
-                    IndexDocumentsMethod::UpdateDocuments,
-                ])
-                .unwrap();
-            match rand {
-                1 => Self::DocumentAddition {
-                    content_uuid: Uuid::new_v4(),
-                    merge_strategy,
-                    primary_key: Option::arbitrary(g),
-                    documents_count: usize::arbitrary(g),
-                },
-                2 => Self::DocumentDeletion(DocumentDeletion::arbitrary(g)),
-                3 => Self::IndexDeletion,
-                4 => Self::SettingsUpdate {
-                    settings: Settings::arbitrary(g),
-                    is_deletion: bool::arbitrary(g),
-                },
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    impl Arbitrary for DocumentDeletion {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let options = &[Self::Clear, Self::Ids(Vec::arbitrary(g))];
-            g.choose(options).unwrap().clone()
-        }
-    }
-
-    impl Arbitrary for TaskEvent {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let options = &[
-                Self::Created(Utc::now()),
-                Self::Batched {
-                    timestamp: Utc::now(),
-                    batch_id: BatchId::arbitrary(g),
-                },
-                Self::Failed {
-                    timestamp: Utc::now(),
-                    error: ResponseError::arbitrary(g),
-                },
-                Self::Succeded {
-                    timestamp: Utc::now(),
-                    result: TaskResult::arbitrary(g),
-                },
-            ];
-            g.choose(options).unwrap().clone()
-        }
-    }
-
-    impl Arbitrary for TaskResult {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let n = g.choose(&[1, 2, 3]).unwrap();
-            match n {
-                1 => Self::Other,
-                2 => Self::DocumentAddition {
-                    indexed_documents: u64::arbitrary(g),
-                },
-                3 => Self::DocumentDeletion {
-                    deleted_documents: u64::arbitrary(g),
-                },
-                _ => unreachable!(),
-            }
-        }
+    pub(super) fn datetime_strategy() -> impl Strategy<Value = DateTime<Utc>> {
+        Just(Utc::now())
     }
 }
