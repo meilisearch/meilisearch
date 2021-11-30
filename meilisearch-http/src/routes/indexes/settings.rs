@@ -168,7 +168,7 @@ make_setting_route!(
             "SearchableAttributes Updated".to_string(),
             json!({
                 "searchable_attributes": {
-                    "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
+                    "total": setting.as_ref().map(|searchable| searchable.len()).unwrap_or(0),
                 },
             }),
             Some(req),
@@ -256,6 +256,9 @@ pub async fn update_all(
         json!({
            "ranking_rules": {
                 "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
+            },
+            "searchable_attributes": {
+                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()).unwrap_or(0),
             },
            "sortable_attributes": {
                 "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()).unwrap_or(0),
