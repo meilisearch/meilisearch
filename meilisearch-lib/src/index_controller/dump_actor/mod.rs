@@ -28,6 +28,7 @@ use crate::tasks::TaskStore;
 use error::Result;
 
 mod actor;
+mod compat;
 pub mod error;
 mod handle_impl;
 mod loaders;

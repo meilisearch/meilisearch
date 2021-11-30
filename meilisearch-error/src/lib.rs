@@ -23,6 +23,18 @@ pub struct ResponseError {
     error_link: String,
 }
 
+impl ResponseError {
+    pub fn from_msg(message: String, code: Code) -> Self {
+        Self {
+            code: code.http(),
+            message,
+            error_code: code.err_code().error_name.to_string(),
+            error_type: code.type_(),
+            error_link: code.url(),
+        }
+    }
+}
+
 impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.message.fmt(f)
@@ -241,22 +253,22 @@ impl Code {
     }
 
     /// return the HTTP status code ascociated with the `Code`
-    fn http(&self) -> StatusCode {
+    pub fn http(&self) -> StatusCode {
         self.err_code().status_code
     }
 
     /// return error name, used as error code
-    fn name(&self) -> String {
+    pub fn name(&self) -> String {
         self.err_code().error_name.to_string()
     }
 
     /// return the error type
-    fn type_(&self) -> String {
+    pub fn type_(&self) -> String {
         self.err_code().error_type.to_string()
     }
 
     /// return the doc url ascociated with the error
-    fn url(&self) -> String {
+    pub fn url(&self) -> String {
         format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
 }
