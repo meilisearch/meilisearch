@@ -25,7 +25,7 @@ impl fmt::Display for PayloadType {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DocumentFormatError {
-    #[error("Internal error!: {0}")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("The `{1}` payload provided is malformed. `{0}`.")]
     MalformedPayload(

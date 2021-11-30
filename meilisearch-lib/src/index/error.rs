@@ -9,7 +9,7 @@ pub type Result<T> = std::result::Result<T, IndexError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
-    #[error("Internal error: {0}")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
     #[error("Document `{0}` not found.")]
     DocumentNotFound(String),

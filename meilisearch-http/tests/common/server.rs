@@ -7,7 +7,6 @@ use meilisearch_lib::options::{IndexerOpts, MaxMemory};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
-use urlencoding::encode;
 
 use meilisearch_http::option::Opt;
 
@@ -62,7 +61,7 @@ impl Server {
     /// Returns a view to an index. There is no guarantee that the index exists.
     pub fn index(&self, uid: impl AsRef<str>) -> Index<'_> {
         Index {
-            uid: encode(uid.as_ref()).to_string(),
+            uid: uid.as_ref().to_string(),
             service: &self.service,
         }
     }

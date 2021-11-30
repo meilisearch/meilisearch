@@ -927,16 +927,15 @@ async fn error_document_field_limit_reached() {
     assert_eq!(code, 200);
     // Documents without a primary key are not accepted.
     assert_eq!(response["status"], "failed");
-    assert_eq!(
-        response["message"],
-        "A document cannot contain more than 65,535 fields."
-    );
-    assert_eq!(response["code"], "document_fields_limit_reached");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#document_fields_limit_reached"
-    );
+
+    let expected_error = json!({
+        "message": "A document cannot contain more than 65,535 fields.",
+        "code": "document_fields_limit_reached",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#document_fields_limit_reached"
+    });
+
+    assert_eq!(response["error"], expected_error);
 }
 
 #[actix_rt::test]
@@ -945,27 +944,31 @@ async fn error_add_documents_invalid_geo_field() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("id")).await;
+    index
+        .update_settings(json!({"sortableAttributes": ["_geo"]}))
+        .await;
+
     let documents = json!([
         {
             "id": "11",
             "_geo": "foobar"
         }
     ]);
+
     index.add_documents(documents, None).await;
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
-    assert_eq!(
-        response["message"],
-        r#"The document with the id: `11` contains an invalid _geo field: :syntaxErrorHelper:REPLACE_ME."#
-    );
-    assert_eq!(response["code"], "invalid_geo_field");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#invalid_geo_field"
-    );
+
+    let expected_error = json!({
+        "message": r#"The document with the id: `11` contains an invalid _geo field: `foobar`."#,
+        "code": "invalid_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_geo_field"
+    });
+
+    assert_eq!(response["error"], expected_error);
 }
 
 #[actix_rt::test]

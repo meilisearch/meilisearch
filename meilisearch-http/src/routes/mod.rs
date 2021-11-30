@@ -64,8 +64,7 @@ pub struct FailedUpdateResult {
     pub update_id: u64,
     #[serde(rename = "type")]
     pub update_type: UpdateType,
-    #[serde(flatten)]
-    pub response: ResponseError,
+    pub error: ResponseError,
     pub duration: f64, // in seconds
     pub enqueued_at: DateTime<Utc>,
     pub processed_at: DateTime<Utc>,

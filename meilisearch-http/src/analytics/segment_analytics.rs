@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ fn write_user_id(db_path: &Path, user_id: &str) {
     }
 }
 
-const SEGMENT_API_KEY: &str = "vHi89WrNDckHSQssyUJqLvIyp2QFITSC";
+const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 
 pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
     request
@@ -206,7 +206,7 @@ impl Segment {
                     "kernel_version": kernel_version,
                     "cores": sys.processors().len(),
                     "ram_size": sys.total_memory(),
-                    "disk_size": sys.disks().iter().map(|disk| disk.available_space()).max(),
+                    "disk_size": sys.disks().iter().map(|disk| disk.total_space()).max(),
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
@@ -275,9 +275,9 @@ impl Segment {
                 .await;
         }
         let get_search = std::mem::take(&mut self.get_search_aggregator)
-            .into_event(&self.user, "Document Searched GET");
+            .into_event(&self.user, "Documents Searched GET");
         let post_search = std::mem::take(&mut self.post_search_aggregator)
-            .into_event(&self.user, "Document Searched POST");
+            .into_event(&self.user, "Documents Searched POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
@@ -307,7 +307,7 @@ pub struct SearchAggregator {
     // requests
     total_received: usize,
     total_succeeded: usize,
-    time_spent: Vec<usize>,
+    time_spent: BinaryHeap<usize>,
 
     // sort
     sort_with_geo_point: bool,
@@ -385,7 +385,7 @@ impl SearchAggregator {
         ret
     }
 
-    pub fn finish(&mut self, result: &SearchResult) {
+    pub fn succeed(&mut self, result: &SearchResult) {
         self.total_succeeded += 1;
         self.time_spent.push(result.processing_time_ms as usize);
     }
@@ -419,17 +419,21 @@ impl SearchAggregator {
         self.max_offset = self.max_offset.max(other.max_offset);
     }
 
-    pub fn into_event(mut self, user: &User, event_name: &str) -> Option<Track> {
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
         if self.total_received == 0 {
             None
         } else {
+            // the index of the 99th percentage of value
             let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
-            self.time_spent.drain(percentile_99th as usize..);
+            // we get all the values in a sorted manner
+            let time_spent = self.time_spent.into_sorted_vec();
+            // We are only intersted by the slowest value of the 99th fastest results
+            let time_spent = time_spent[percentile_99th as usize];
 
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  format!("{:.2}", self.time_spent.iter().sum::<usize>() as f64 / self.time_spent.len() as f64),
+                    "99th_response_time":  format!("{:.2}", time_spent),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,

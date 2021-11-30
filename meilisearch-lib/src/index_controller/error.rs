@@ -23,7 +23,7 @@ pub enum IndexControllerError {
     IndexResolver(#[from] IndexResolverError),
     #[error("{0}")]
     IndexError(#[from] IndexError),
-    #[error("Internal error: {0}")]
+    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
     #[error("{0}")]
     TaskError(#[from] TaskError),
