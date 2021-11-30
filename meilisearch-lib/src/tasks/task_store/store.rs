@@ -5,7 +5,7 @@ const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
 
 use std::borrow::Cow;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::BinaryHeap;
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
@@ -188,8 +188,8 @@ impl Store {
         txn: &heed::RoTxn,
         filter: TaskFilter,
         range: Range<TaskId>,
-    ) -> Result<BTreeSet<TaskId>> {
-        let mut candidates = BTreeSet::new();
+    ) -> Result<BinaryHeap<TaskId>> {
+        let mut candidates = BinaryHeap::new();
         if let Some(indexes) = filter.indexes {
             for index in indexes {
                 // We need to prefix search the null terminated string to make sure that we only
@@ -226,7 +226,7 @@ impl Store {
                             .unwrap_or(true)
                     })
                     .try_for_each::<_, StdResult<(), heed::Error>>(|id| {
-                        candidates.insert(id?);
+                        candidates.push(id?);
                         Ok(())
                     })?;
             }
@@ -239,6 +239,7 @@ impl Store {
 #[cfg(test)]
 pub mod test {
     use heed::EnvOpenOptions;
+    use itertools::Itertools;
     use nelson::Mocker;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -334,6 +335,38 @@ pub mod test {
                 MockStore::Fake(_) => todo!(),
             }
         }
+    }
+
+    #[test]
+    fn test_ordered_filtered_updates() {
+        let tmp = tmp_env();
+        let store = Store::new(tmp.env()).unwrap();
+
+        let tasks = (0..100)
+            .map(|_| Task {
+                id: rand::random(),
+                index_uid: IndexUid::new_unchecked("test".to_string()),
+                content: TaskContent::IndexDeletion,
+                events: vec![],
+            })
+            .collect::<Vec<_>>();
+
+        let mut txn = store.env.write_txn().unwrap();
+        tasks
+            .iter()
+            .try_for_each(|t| store.put(&mut txn, t))
+            .unwrap();
+
+        let mut filter = TaskFilter::default();
+        filter.filter_index("test".into());
+
+        let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
+
+        assert!(tasks
+            .iter()
+            .map(|t| t.id)
+            .tuple_windows()
+            .all(|(a, b)| a > b));
     }
 
     #[test]
