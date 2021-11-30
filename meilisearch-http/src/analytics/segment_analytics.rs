@@ -325,10 +325,8 @@ pub struct SearchAggregator {
     used_syntax: HashMap<String, usize>,
 
     // q
-    // everytime a request has a q field, this field must be incremented by the number of terms
-    sum_of_terms_count: usize,
-    // everytime a request has a q field, this field must be incremented by one
-    total_number_of_q: usize,
+    // The maximum number of terms in a q request
+    max_terms_number: usize,
 
     // pagination
     max_limit: usize,
@@ -375,8 +373,7 @@ impl SearchAggregator {
         }
 
         if let Some(ref q) = query.q {
-            ret.total_number_of_q = 1;
-            ret.sum_of_terms_count = q.split_whitespace().count();
+            ret.max_terms_number = q.split_whitespace().count();
         }
 
         ret.max_limit = query.limit;
@@ -412,8 +409,7 @@ impl SearchAggregator {
             *self.used_syntax.entry(key).or_insert(0) += value;
         }
         // q
-        self.sum_of_terms_count += other.sum_of_terms_count;
-        self.total_number_of_q += other.total_number_of_q;
+        self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
@@ -444,7 +440,7 @@ impl SearchAggregator {
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "q": {
-                   "avg_terms_number": format!("{:.2}", self.sum_of_terms_count as f64 / self.total_number_of_q as f64),
+                   "max_terms_number": self.max_terms_number,
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
