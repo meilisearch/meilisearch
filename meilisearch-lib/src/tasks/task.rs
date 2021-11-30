@@ -11,6 +11,7 @@ use super::batch::BatchId;
 use crate::{
     index::{Settings, Unchecked},
     index_resolver::{error::IndexResolverError, IndexUid},
+    snapshot::SnapshotJob,
 };
 
 pub type TaskId = u64;
@@ -88,7 +89,7 @@ pub enum Job {
         ret: oneshot::Sender<Result<(), IndexResolverError>>,
         path: PathBuf,
     },
-    // Snapshot {},
+    Snapshot(#[derivative(PartialEq = "ignore")] SnapshotJob),
     // Task(Task),
     Empty,
 }
@@ -96,6 +97,12 @@ pub enum Job {
 impl Default for Job {
     fn default() -> Self {
         Self::Empty
+    }
+}
+
+impl Job {
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
     }
 }
 

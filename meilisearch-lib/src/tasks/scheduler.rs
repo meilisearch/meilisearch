@@ -59,6 +59,7 @@ where
                         Pending::Job(_) => (),
                     }
                 }
+
                 // the jobs are ignored
                 batch.tasks = self.store.update_tasks(batch.tasks).await?;
 

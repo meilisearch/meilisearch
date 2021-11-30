@@ -78,6 +78,10 @@ impl Server {
     pub async fn stats(&self) -> (Value, StatusCode) {
         self.service.get("/stats").await
     }
+
+    pub async fn tasks(&self) -> (Value, StatusCode) {
+        self.service.get("/tasks").await
+    }
 }
 
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {

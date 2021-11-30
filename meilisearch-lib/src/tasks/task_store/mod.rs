@@ -59,7 +59,7 @@ impl Pending<TaskId> {
     pub(crate) fn take(&mut self) -> Self {
         match self {
             Self::Task(id) => Self::Task(*id),
-            Self::Job(ghost) => Self::Job(std::mem::take(ghost)),
+            Self::Job(ghost) => Self::Job(ghost.take()),
         }
     }
 }
