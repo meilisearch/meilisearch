@@ -1,6 +1,7 @@
 pub mod v1;
 //pub mod v2;
 pub mod v3;
+pub mod v4;
 
 mod compat {
     /// Parses the v1 version of the Asc ranking rules `asc(price)`and returns the field name.

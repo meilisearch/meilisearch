@@ -2,10 +2,12 @@ mod store;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
 use log::debug;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
 use crate::index_resolver::IndexUid;
@@ -231,6 +233,19 @@ impl TaskStore {
         })
         .await?
     }
+
+    pub async fn dump(&self, dir_path: &Path) -> Result<()> {
+        let update_dir = dir_path.join("updates");
+        tokio::fs::create_dir(&update_dir).await?;
+        let updates_file = update_dir.join("data.jsonl");
+        dbg!(&updates_file);
+        let mut updates_file = tokio::fs::File::create(updates_file).await?;
+        for task in self.list_tasks(None, None, None).await? {
+            updates_file.write_all(&serde_json::to_vec(&task)?).await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -320,6 +335,13 @@ pub mod test {
         ) -> Result<Vec<Task>> {
             match self {
                 Self::Real(s) => s.list_tasks(from, filter, limit).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn dump(&self, path: &Path) -> Result<()> {
+            match self {
+                Self::Real(s) => s.dump(path).await,
                 Self::Mock(_m) => todo!(),
             }
         }

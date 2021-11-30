@@ -10,6 +10,8 @@ pub mod tasks;
 
 mod analytics;
 
+use std::path::Path;
+
 pub use index_controller::MeiliSearch;
 
 pub use milli;
@@ -32,4 +34,17 @@ impl EnvSizer for heed::Env {
             .filter(|metadata| metadata.is_file())
             .fold(0, |acc, m| acc + m.len())
     }
+}
+
+fn copy_dir(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+
+    for entry in WalkDir::new(src).into_iter().skip(1) {
+        let entry = entry?;
+        let name = entry.file_name();
+        let dst = dst.join(name);
+        std::fs::copy(entry.path(), dst)?;
+    }
+
+    Ok(())
 }
