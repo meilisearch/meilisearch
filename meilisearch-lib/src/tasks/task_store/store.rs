@@ -200,7 +200,7 @@ impl Store {
 
                 self.uids_task_ids
                     .remap_key_type::<ByteSlice>()
-                    .rev_prefix_iter(txn, dbg!(&index_uid))?
+                    .rev_prefix_iter(txn, &index_uid)?
                     .map(|entry| -> StdResult<_, heed::Error> {
                         let (key, _) = entry?;
                         let (_, id) =
