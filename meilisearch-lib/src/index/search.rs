@@ -309,6 +309,9 @@ fn compute_value_matches<'a, A: AsRef<[u8]>>(
         Value::Object(vals) => vals
             .values()
             .for_each(|val| compute_value_matches(infos, val, matcher, analyzer)),
+        Value::Number(number) => {
+            compute_value_matches(infos, &Value::String(number.to_string()), matcher, analyzer)
+        }
         _ => (),
     }
 }
@@ -1419,13 +1422,15 @@ mod test {
             "color": "Green",
             "name": "Lucas Hess",
             "gender": "male",
+            "price": 3.5,
             "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
             "about": "Mollit ad in exercitation quis Laboris . Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n"
   }"#).unwrap();
         let mut matcher = BTreeMap::new();
-        matcher.insert("green", Some(3));
+        matcher.insert("green", Some(5));
         matcher.insert("mollit", Some(6));
         matcher.insert("laboris", Some(7));
+        matcher.insert("3", Some(1));
 
         let stop_words = fst::Set::default();
         let mut config = AnalyzerConfig::default();
@@ -1435,7 +1440,7 @@ mod test {
         let matches = compute_matches(&matcher, &value, &analyzer);
         assert_eq!(
             format!("{:?}", matches),
-            r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 3 }]}"##
+            r##"{"about": [MatchInfo { start: 0, length: 6 }, MatchInfo { start: 31, length: 7 }, MatchInfo { start: 191, length: 7 }, MatchInfo { start: 225, length: 7 }, MatchInfo { start: 233, length: 6 }], "color": [MatchInfo { start: 0, length: 5 }], "price": [MatchInfo { start: 0, length: 1 }]}"##
         );
     }
 
