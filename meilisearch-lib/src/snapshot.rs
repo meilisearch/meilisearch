@@ -40,7 +40,6 @@ impl SnapshotService {
     }
 }
 
-#[allow(dead_code)]
 pub fn load_snapshot(
     db_path: impl AsRef<Path>,
     snapshot_path: impl AsRef<Path>,
