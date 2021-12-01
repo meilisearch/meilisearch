@@ -1,15 +1,12 @@
 use chrono::{DateTime, Utc};
-
 use meilisearch_error::{Code, ResponseError};
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    index::{Settings, Unchecked},
-    index_resolver::IndexUid,
-    tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult},
-};
+use crate::index::{Settings, Unchecked};
+use crate::index_resolver::IndexUid;
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
@@ -177,17 +174,17 @@ impl Failed {
     }
 }
 
-impl From<UpdateStatus> for Task {
-    fn from(other: UpdateStatus) -> Self {
+impl From<(UpdateStatus, String)> for Task {
+    fn from((update, uid): (UpdateStatus, String)) -> Self {
         // Dummy task
         let mut task = Task {
             id: 0,
-            index_uid: IndexUid::new(String::from("null")).unwrap(),
+            index_uid: IndexUid::new(uid).unwrap(),
             content: TaskContent::IndexDeletion,
             events: Vec::new(),
         };
 
-        match other {
+        match update {
             UpdateStatus::Processing(u) => u.update_task(&mut task),
             UpdateStatus::Enqueued(u) => u.update_task(&mut task),
             UpdateStatus::Processed(u) => u.update_task(&mut task),

@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
+use anyhow::Context;
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -45,12 +47,15 @@ pub fn load_dump(
         patched_dir.path(),
         &options,
     )?;
+
+    let uuid_map = read_uuid_map(src.as_ref().join("index_uuids/data.jsonl"))?;
+
     fs::copy(
         src.as_ref().join("metadata.json"),
         patched_dir.path().join("metadata.json"),
     )?;
 
-    patch_updates(&src, patched_dir.path())?;
+    patch_updates(&src, patched_dir.path(), uuid_map)?;
 
     super::v4::load_dump(
         meta,
@@ -62,7 +67,29 @@ pub fn load_dump(
     )
 }
 
-fn patch_updates(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+fn read_uuid_map(path: impl AsRef<Path>) -> anyhow::Result<HashMap<Uuid, String>> {
+    let file = File::open(path)?;
+
+    #[derive(Serialize, Deserialize)]
+    struct DumpEntry {
+        uuid: Uuid,
+        uid: String,
+    }
+
+    serde_json::Deserializer::from_reader(file)
+        .into_iter::<DumpEntry>()
+        .try_fold(HashMap::new(), |mut map, entry| {
+            let entry = entry?;
+            map.insert(entry.uuid, entry.uid);
+            Ok(map)
+        })
+}
+
+fn patch_updates(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+    uuid_map: HashMap<Uuid, String>,
+) -> anyhow::Result<()> {
     let dst = dst.as_ref().join("updates");
     fs::create_dir_all(&dst)?;
 
@@ -76,8 +103,13 @@ fn patch_updates(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result
     }
     serde_json::Deserializer::from_reader(src_file)
         .into_iter::<UpdateEntry>()
-        .try_for_each(|update| -> anyhow::Result<()> {
-            serde_json::to_writer(&mut dst_file, &Task::from(update?.update))?;
+        .try_for_each(|entry| -> anyhow::Result<()> {
+            let entry = entry?;
+            let name = uuid_map
+                .get(&entry.uuid)
+                .with_context(|| format!("Unknown index uuid: {}", entry.uuid))?
+                .clone();
+            serde_json::to_writer(&mut dst_file, &Task::from((entry.update, name)))?;
             dst_file.write_all(b"\n")?;
             Ok(())
         })?;
