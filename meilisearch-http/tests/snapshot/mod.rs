@@ -50,11 +50,11 @@ async fn perform_snapshot() {
         }))
         .await;
 
-    index.wait_task(0).await;
-
     index.load_test_set().await;
 
     server.index("test1").create(Some("prim")).await;
+
+    index.wait_task(2).await;
 
     sleep(Duration::from_secs(2)).await;
 
