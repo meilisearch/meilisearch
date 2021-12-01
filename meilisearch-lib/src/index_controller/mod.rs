@@ -27,20 +27,18 @@ use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::TaskFilter;
-use crate::tasks::TaskStore;
+use crate::tasks::{TaskFilter, TaskStore};
 use error::Result;
 
 use self::dump_actor::{DumpActorHandle, DumpInfo};
 use self::error::IndexControllerError;
-use self::update_file_store::UpdateFileStore;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
 use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
+use crate::update_file_store::UpdateFileStore;
 
 mod dump_actor;
 pub mod error;
-pub mod update_file_store;
 
 /// Concrete implementation of the IndexController, exposed by meilisearch-lib
 pub type MeiliSearch = IndexController<HeedMetaStore, MapIndexStore>;
@@ -190,11 +188,14 @@ impl IndexControllerBuilder {
 
         let meta_env = options.open(&db_path)?;
 
+        let update_file_store = UpdateFileStore::new(&db_path)?;
+
         let index_resolver = Arc::new(create_index_resolver(
             &db_path,
             index_size,
             &indexer_options,
             meta_env.clone(),
+            update_file_store.clone(),
         )?);
 
         let task_store =
@@ -222,8 +223,6 @@ impl IndexControllerBuilder {
         };
 
         // let dump_handle = dump_actor::DumpActorHandleImpl { sender };
-
-        let update_file_store = UpdateFileStore::new(&db_path)?;
 
         if self.schedule_snapshot {
             let snapshot_period = self
@@ -682,11 +681,11 @@ mod test {
             });
 
         let task_store_mocker = nelson::Mocker::default();
-        let index_resolver = IndexResolver::new(uuid_store, index_store);
-        let task_store = TaskStore::mock(task_store_mocker);
-        // let dump_actor = MockDumpActorHandle::new();
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
+        let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store.clone());
+        let task_store = TaskStore::mock(task_store_mocker);
+        // let dump_actor = MockDumpActorHandle::new();
         let (sender, _) = mpsc::channel(1);
         let dump_handle = DumpActorHandleImpl { sender };
         let index_controller =

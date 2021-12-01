@@ -5,9 +5,9 @@ use log::info;
 use crate::analytics;
 use crate::index_controller::dump_actor::Metadata;
 // use crate::index_controller::index_resolver::IndexResolver;
-use crate::index_controller::update_file_store::UpdateFileStore;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
+use crate::update_file_store::UpdateFileStore;
 
 pub fn load_dump(
     meta: Metadata,

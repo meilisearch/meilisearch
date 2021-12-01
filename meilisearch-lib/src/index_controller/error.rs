@@ -4,11 +4,11 @@ use meilisearch_error::Code;
 use meilisearch_error::ErrorCode;
 use tokio::task::JoinError;
 
-use super::update_file_store::UpdateFileStoreError;
 use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
+use crate::update_file_store::UpdateFileStoreError;
 
 use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;

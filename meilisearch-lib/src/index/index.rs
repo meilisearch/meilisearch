@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::index_controller::update_file_store::UpdateFileStore;
 use crate::EnvSizer;
 
 use super::error::IndexError;
@@ -69,8 +68,6 @@ pub struct Index {
     #[derivative(Debug = "ignore")]
     pub inner: Arc<milli::Index>,
     #[derivative(Debug = "ignore")]
-    pub update_file_store: Arc<UpdateFileStore>,
-    #[derivative(Debug = "ignore")]
     pub update_handler: Arc<UpdateHandler>,
 }
 
@@ -86,7 +83,6 @@ impl Index {
     pub fn open(
         path: impl AsRef<Path>,
         size: usize,
-        update_file_store: Arc<UpdateFileStore>,
         uuid: Uuid,
         update_handler: Arc<UpdateHandler>,
     ) -> Result<Self> {
@@ -97,7 +93,6 @@ impl Index {
         let inner = Arc::new(milli::Index::new(options, &path)?);
         Ok(Index {
             inner,
-            update_file_store,
             uuid,
             update_handler,
         })
