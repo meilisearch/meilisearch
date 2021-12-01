@@ -1,6 +1,6 @@
 use meilisearch_error::{Code, ErrorCode};
 
-use crate::index_resolver::error::IndexResolverError;
+use crate::{index_resolver::error::IndexResolverError, tasks::error::TaskError};
 
 pub type Result<T> = std::result::Result<T, DumpActorError>;
 
@@ -34,7 +34,8 @@ internal_error!(
     tokio::task::JoinError,
     tokio::sync::oneshot::error::RecvError,
     serde_json::error::Error,
-    tempfile::PersistError
+    tempfile::PersistError,
+    TaskError
 );
 
 impl ErrorCode for DumpActorError {

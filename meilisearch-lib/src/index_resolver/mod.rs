@@ -278,7 +278,6 @@ where
         }
     }
 
-    /// Dump each indexes
     pub async fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
         for (_, index) in self.list().await? {
             index.dump(&path)?;

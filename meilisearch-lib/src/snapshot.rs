@@ -138,16 +138,10 @@ impl SnapshotJob {
         // FIXME(marin): We may copy more files than necessary, if new files are added while we are
         // performing the snapshop. We need a way to filter them out.
 
-        let update_files_path = self.src_path.join("updates/updates_files/");
-        let dst = path.join("updates/updates_files/");
-        std::fs::create_dir_all(&dst)?;
-
-        for entry in WalkDir::new(update_files_path).into_iter().skip(1) {
-            let entry = entry?;
-            let name = entry.file_name();
-            let dst = dst.join(name);
-            std::fs::copy(entry.path(), dst)?;
-        }
+        crate::copy_dir(
+            &self.src_path.join("updates/updates_files/"),
+            &path.join("updates/updates_files/"),
+        )?;
 
         Ok(())
     }

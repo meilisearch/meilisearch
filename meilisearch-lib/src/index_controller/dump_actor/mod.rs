@@ -18,7 +18,7 @@ use tokio::sync::oneshot;
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::v3;
+use crate::index_controller::dump_actor::loaders::v4;
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
@@ -33,7 +33,6 @@ mod handle_impl;
 mod loaders;
 mod message;
 
-#[allow(dead_code)]
 const META_FILE_NAME: &str = "metadata.json";
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,7 +45,6 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    #[allow(dead_code)]
     pub fn new(index_db_size: usize, update_db_size: usize) -> Self {
         Self {
             db_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -75,37 +73,37 @@ pub enum MetadataVersion {
     V1(MetadataV1),
     V2(Metadata),
     V3(Metadata),
+    V4(Metadata),
 }
 
 impl MetadataVersion {
-    #[allow(dead_code)]
-    pub fn new_v3(index_db_size: usize, update_db_size: usize) -> Self {
+    pub fn new_v4(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = Metadata::new(index_db_size, update_db_size);
-        Self::V3(meta)
+        Self::V4(meta)
     }
 
-    #[allow(dead_code)]
     pub fn db_version(&self) -> &str {
         match self {
             Self::V1(meta) => &meta.db_version,
-            Self::V2(meta) | Self::V3(meta) => &meta.db_version,
+            Self::V2(meta) | Self::V3(meta) | Self::V4(meta) => &meta.db_version,
         }
     }
 
-    #[allow(dead_code)]
     pub fn version(&self) -> &str {
         match self {
             MetadataVersion::V1(_) => "V1",
             MetadataVersion::V2(_) => "V2",
             MetadataVersion::V3(_) => "V3",
+            MetadataVersion::V4(_) => "V4",
         }
     }
 
-    #[allow(dead_code)]
     pub fn dump_date(&self) -> Option<&DateTime<Utc>> {
         match self {
             MetadataVersion::V1(_) => None,
-            MetadataVersion::V2(meta) | MetadataVersion::V3(meta) => Some(&meta.dump_date),
+            MetadataVersion::V2(meta) | MetadataVersion::V3(meta) | MetadataVersion::V4(meta) => {
+                Some(&meta.dump_date)
+            }
         }
     }
 }
@@ -152,13 +150,11 @@ impl DumpInfo {
         self.status = DumpStatus::Done;
     }
 
-    #[allow(dead_code)]
     pub fn dump_already_in_progress(&self) -> bool {
         self.status == DumpStatus::InProgress
     }
 }
 
-#[allow(dead_code)]
 pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
@@ -212,7 +208,16 @@ pub fn load_dump(
         //     update_db_size,
         //     indexer_opts,
         // )?,
-        MetadataVersion::V3(meta) => v3::load_dump(
+        MetadataVersion::V3(_meta) => todo!(),
+        // v3::load_dump(
+        //     meta,
+        //     &tmp_src_path,
+        //     tmp_dst.path(),
+        //     index_db_size,
+        //     update_db_size,
+        //     indexer_opts,
+        // )?,
+        MetadataVersion::V4(meta) => v4::load_dump(
             meta,
             &tmp_src_path,
             tmp_dst.path(),
@@ -256,7 +261,7 @@ where
         let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        let meta = MetadataVersion::new_v3(self.index_db_size, self.update_db_size);
+        let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
@@ -275,8 +280,18 @@ where
             })
             .await;
         receiver.await??;
+        self.task_store.dump(&temp_dump_path).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+            // for now we simply copy the updates/updates_files
+            // FIXME: We may copy more files than necessary, if new files are added while we are
+            // performing the dump. We need a way to filter them out.
+
+            crate::copy_dir(
+                &self.db_path.join("updates/updates_files"),
+                &temp_dump_path.join("updates/updates_files"),
+            )?;
+
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
             to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpActorError::Internal(e.into()))?;

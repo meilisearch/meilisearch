@@ -2,6 +2,8 @@ mod store;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -231,6 +233,28 @@ impl TaskStore {
         })
         .await?
     }
+
+    pub async fn dump(&self, dir_path: &Path) -> Result<()> {
+        let update_dir = dir_path.join("updates");
+        let updates_file = update_dir.join("data.jsonl");
+        let tasks = self.list_tasks(None, None, None).await?;
+
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            std::fs::create_dir(&update_dir)?;
+            let updates_file = std::fs::File::create(updates_file)?;
+            let mut updates_file = BufWriter::new(updates_file);
+
+            for task in tasks {
+                serde_json::to_writer(&mut updates_file, &task)?;
+                writeln!(&mut updates_file)?;
+            }
+            updates_file.flush()?;
+            Ok(())
+        })
+        .await??;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -320,6 +344,13 @@ pub mod test {
         ) -> Result<Vec<Task>> {
             match self {
                 Self::Real(s) => s.list_tasks(from, filter, limit).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn dump(&self, path: &Path) -> Result<()> {
+            match self {
+                Self::Real(s) => s.dump(path).await,
                 Self::Mock(_m) => todo!(),
             }
         }
