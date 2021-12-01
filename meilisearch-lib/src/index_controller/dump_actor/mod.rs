@@ -269,8 +269,6 @@ where
         analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
-        // dump all indexes in the tmp directory.
-        self.index_resolver.dump(temp_dump_path.clone()).await?;
 
         let (sender, receiver) = oneshot::channel();
 
@@ -288,10 +286,11 @@ where
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
 
+            std::fs::create_dir_all(temp_dump_path.join("updates"))?;
             let options = CopyOptions::default();
             dir::copy(
                 self.db_path.join("updates/updates_files"),
-                temp_dump_path.join("updates/updates_files"),
+                temp_dump_path.join("updates"),
                 &options,
             )?;
 

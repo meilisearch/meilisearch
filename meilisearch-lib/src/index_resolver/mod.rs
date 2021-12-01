@@ -7,7 +7,7 @@ use std::path::Path;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
-use heed::EnvOpenOptions;
+use heed::{Env, EnvOpenOptions};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
@@ -159,12 +159,9 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         index_db_size: usize,
-        meta_env_size: usize,
+        env: Env,
         indexer_opts: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        let mut options = EnvOpenOptions::new();
-        options.map_size(meta_env_size);
-        let env = options.open(&dst)?;
         HeedMetaStore::load_dump(&src, env.clone())?;
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
@@ -303,7 +300,8 @@ where
         for (_, index) in self.list().await? {
             index.dump(&path)?;
         }
-        self.index_uuid_store.dump(path.as_ref().to_owned()).await
+        self.index_uuid_store.dump(path.as_ref().to_owned()).await?;
+        Ok(())
     }
 
     //  pub async fn get_uuids_size(&self) -> Result<u64> {

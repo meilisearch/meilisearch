@@ -35,7 +35,7 @@ pub fn load_dump(
         env.clone(),
         indexing_options,
     )?;
-    // UpdateFileStore::load_dump(src.as_ref(), &dst)?;
+    UpdateFileStore::load_dump(src.as_ref(), &dst)?;
     // TaskStore::load_dump(&src, &dst, update_db_size)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
