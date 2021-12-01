@@ -373,7 +373,7 @@ mod test {
         let index_resolver = Arc::new(IndexResolver::new(
             uuid_store,
             index_store,
-            update_file_store,
+            update_file_store.clone(),
         ));
 
         //let update_sender =
@@ -386,6 +386,7 @@ mod test {
         let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
+            update_file_store,
             db_path: tmp.path().into(),
             index_resolver,
             task_store,
@@ -411,7 +412,11 @@ mod test {
         let index_store = MockIndexStore::new();
         let mocker = Mocker::default();
         let file_store = UpdateFileStore::mock(mocker);
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store, file_store));
+        let index_resolver = Arc::new(IndexResolver::new(
+            uuid_store,
+            index_store,
+            file_store.clone(),
+        ));
 
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
@@ -425,6 +430,7 @@ mod test {
             // this should do nothing
             db_path: tmp.path().into(),
             index_resolver,
+            update_file_store: file_store,
             task_store,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
