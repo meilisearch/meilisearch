@@ -2,6 +2,7 @@ mod store;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
+use std::io::BufWriter;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -236,13 +237,21 @@ impl TaskStore {
 
     pub async fn dump(&self, dir_path: &Path) -> Result<()> {
         let update_dir = dir_path.join("updates");
-        tokio::fs::create_dir(&update_dir).await?;
         let updates_file = update_dir.join("data.jsonl");
         dbg!(&updates_file);
-        let mut updates_file = tokio::fs::File::create(updates_file).await?;
-        for task in self.list_tasks(None, None, None).await? {
-            updates_file.write_all(&serde_json::to_vec(&task)?).await?;
-        }
+        let tasks = self.list_tasks(None, None, None).await?;
+
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            std::fs::create_dir(&update_dir)?;
+            let updates_file = std::fs::File::create(updates_file)?;
+            let mut updates_file = BufWriter::new(updates_file);
+
+            for task in tasks {
+                serde_json::to_writer(&mut updates_file, &task)?;
+            }
+            Ok(())
+        })
+        .await?;
 
         Ok(())
     }
