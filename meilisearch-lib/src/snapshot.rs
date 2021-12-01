@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -139,12 +140,10 @@ impl SnapshotJob {
         // FIXME(marin): We may copy more files than necessary, if new files are added while we are
         // performing the snapshop. We need a way to filter them out.
 
+        let dst = path.join("updates");
+        fs::create_dir_all(&dst)?;
         let options = CopyOptions::default();
-        dir::copy(
-            self.src_path.join("updates/updates_files/"),
-            path.join("updates/updates_files/"),
-            &options,
-        )?;
+        dir::copy(self.src_path.join("updates/updates_files"), dst, &options)?;
 
         Ok(())
     }
