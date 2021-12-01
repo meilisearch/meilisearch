@@ -112,9 +112,11 @@ where
     /// When a task is processed, the result of the processing is pushed to its event list. The
     /// handle batch result make sure that the new state is save into its store.
     /// The tasks are then removed from the processing queue.
-    async fn handle_batch_result(&self, batch: Batch) -> Result<()> {
-        self.store.update_tasks(batch.tasks).await?;
+    async fn handle_batch_result(&self, mut batch: Batch) -> Result<()> {
+        let tasks = self.store.update_tasks(batch.tasks).await?;
+        batch.tasks = tasks;
         self.store.pop_pending().await;
+        self.performer.finish(&batch).await;
         Ok(())
     }
 }
@@ -234,6 +236,8 @@ mod test {
 
             batch
         });
+
+        performer.expect_finish().once().returning(|_| ());
 
         let performer = Arc::new(performer);
 
