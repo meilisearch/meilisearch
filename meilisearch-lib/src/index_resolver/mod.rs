@@ -130,6 +130,22 @@ where
 
         batch
     }
+
+    async fn finish(&self, batch: &Batch) {
+        for task in &batch.tasks {
+            match task {
+                Pending::Task(Task {
+                    content: TaskContent::DocumentAddition { content_uuid, .. },
+                    ..
+                }) => {
+                    if let Err(e) = self.file_store.delete(*content_uuid).await {
+                        log::error!("error deleting update file: {}", e);
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
 }
 
 pub struct IndexResolver<U, I> {

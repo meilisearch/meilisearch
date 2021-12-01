@@ -27,6 +27,9 @@ pub trait TaskPerformer: Sync + Send + 'static {
     type Error: Serialize + for<'de> Deserialize<'de> + std::error::Error + Sync + Send + 'static;
     /// Processes the `Task` batch returning the batch with the `Task` updated.
     async fn process(&self, batch: Batch) -> Batch;
+    /// `finish` is called when the result of `process` has been commited to the task store. This
+    /// method can be used to perform cleanup after the update has been completed for example.
+    async fn finish(&self, batch: &Batch);
 }
 
 pub fn create_task_store<P>(env: heed::Env, performer: Arc<P>) -> Result<TaskStore>
