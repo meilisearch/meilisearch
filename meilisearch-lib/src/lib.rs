@@ -2,13 +2,13 @@
 pub mod error;
 pub mod options;
 
+mod analytics;
 pub mod index;
 pub mod index_controller;
 mod index_resolver;
 mod snapshot;
 pub mod tasks;
-
-mod analytics;
+mod update_file_store;
 
 pub use index_controller::MeiliSearch;
 

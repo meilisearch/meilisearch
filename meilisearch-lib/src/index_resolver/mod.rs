@@ -23,6 +23,7 @@ use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
 use crate::tasks::Pending;
 use crate::tasks::TaskPerformer;
+use crate::update_file_store::UpdateFileStore;
 
 use self::meta_store::IndexMeta;
 
@@ -39,10 +40,11 @@ pub fn create_index_resolver(
     index_size: usize,
     indexer_opts: &IndexerOpts,
     meta_env: heed::Env,
+    file_store: UpdateFileStore,
 ) -> anyhow::Result<HardStateIndexResolver> {
     let uuid_store = HeedMetaStore::new(meta_env)?;
     let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
-    Ok(IndexResolver::new(uuid_store, index_store))
+    Ok(IndexResolver::new(uuid_store, index_store, file_store))
 }
 
 impl IndexUid {
@@ -128,11 +130,28 @@ where
 
         batch
     }
+
+    async fn finish(&self, batch: &Batch) {
+        for task in &batch.tasks {
+            match task {
+                Pending::Task(Task {
+                    content: TaskContent::DocumentAddition { content_uuid, .. },
+                    ..
+                }) => {
+                    if let Err(e) = self.file_store.delete(*content_uuid).await {
+                        log::error!("error deleting update file: {}", e);
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
 }
 
 pub struct IndexResolver<U, I> {
     index_uuid_store: U,
     index_store: I,
+    file_store: UpdateFileStore,
 }
 
 impl IndexResolver<HeedMetaStore, MapIndexStore> {
@@ -163,10 +182,11 @@ where
     U: IndexMetaStore,
     I: IndexStore,
 {
-    pub fn new(index_uuid_store: U, index_store: I) -> Self {
+    pub fn new(index_uuid_store: U, index_store: I, file_store: UpdateFileStore) -> Self {
         Self {
             index_uuid_store,
             index_store,
+            file_store,
         }
     }
 
@@ -184,8 +204,9 @@ where
                 let method = *merge_strategy;
 
                 let index = self.get_or_create_index(index_uid, task.id).await?;
+                let file_store = self.file_store.clone();
                 let result = spawn_blocking(move || {
-                    index.update_documents(method, content_uuid, primary_key)
+                    index.update_documents(method, content_uuid, primary_key, file_store)
                 })
                 .await??;
 
@@ -461,8 +482,8 @@ mod test {
                             mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
                                 .then(move |_| Ok(IndexMeta{ created_at: Utc::now(), updated_at: Utc::now(), primary_key: None }));
                         }
-                        mocker.when::<(IndexDocumentsMethod, Uuid, Option<String>), IndexResult<DocumentAdditionResult>>("update_documents")
-                                .then(move |(_, _, _)| result());
+                        mocker.when::<(IndexDocumentsMethod, Uuid, Option<String>, UpdateFileStore), IndexResult<DocumentAdditionResult>>("update_documents")
+                                .then(move |(_, _, _, _)| result());
                     }
                     TaskContent::SettingsUpdate{..} => {
                         let result = move || if !index_op_fails {
@@ -571,7 +592,9 @@ mod test {
                     .times(matches!(task.content, TaskContent::IndexDeletion) as usize)
                     .returning(move |_| Box::pin(ok(index_exists.then(|| crate::index_resolver::meta_store::IndexMeta { uuid, creation_task_id: 0}))));
 
-                let index_resolver = IndexResolver::new(uuid_store, index_store);
+                let mocker = Mocker::default();
+                let update_file_store = UpdateFileStore::mock(mocker);
+                let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store);
 
                 let result = index_resolver.process_task(&task).await;
 

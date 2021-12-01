@@ -327,6 +327,7 @@ mod test {
     use crate::index_resolver::error::IndexResolverError;
     use crate::index_resolver::index_store::MockIndexStore;
     use crate::index_resolver::meta_store::MockIndexMetaStore;
+    use crate::update_file_store::UpdateFileStore;
 
     fn setup() {
         static SETUP: Lazy<()> = Lazy::new(|| {
@@ -372,7 +373,13 @@ mod test {
             Box::pin(ok(Some(Index::mock(mocker))))
         });
 
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+        let mocker = Mocker::default();
+        let update_file_store = UpdateFileStore::mock(mocker);
+        let index_resolver = Arc::new(IndexResolver::new(
+            uuid_store,
+            index_store,
+            update_file_store,
+        ));
 
         //let update_sender =
         //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
@@ -407,7 +414,9 @@ mod test {
             .returning(move |_| Box::pin(err(IndexResolverError::ExistingPrimaryKey)));
 
         let index_store = MockIndexStore::new();
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store));
+        let mocker = Mocker::default();
+        let file_store = UpdateFileStore::mock(mocker);
+        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store, file_store));
 
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();

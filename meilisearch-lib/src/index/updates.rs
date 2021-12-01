@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use super::error::Result;
 use super::index::{Index, IndexMeta};
+use crate::update_file_store::UpdateFileStore;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -230,6 +231,7 @@ impl Index {
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
         primary_key: Option<String>,
+        file_store: UpdateFileStore,
     ) -> Result<DocumentAdditionResult> {
         trace!("performing document addition");
         let mut txn = self.write_txn()?;
@@ -240,7 +242,7 @@ impl Index {
 
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
 
-        let content_file = self.update_file_store.get_update(content_uuid).unwrap();
+        let content_file = file_store.get_update(content_uuid).unwrap();
         let reader = DocumentBatchReader::from_reader(content_file).unwrap();
 
         let mut builder = self

@@ -33,12 +33,11 @@ pub mod test {
     use serde_json::{Map, Value};
     use uuid::Uuid;
 
-    use crate::index_controller::update_file_store::UpdateFileStore;
-
     use super::error::Result;
     use super::index::Index;
     use super::update_handler::UpdateHandler;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
+    use crate::update_file_store::UpdateFileStore;
 
     #[derive(Clone)]
     pub enum MockIndex {
@@ -54,11 +53,10 @@ pub mod test {
         pub fn open(
             path: impl AsRef<Path>,
             size: usize,
-            update_file_store: Arc<UpdateFileStore>,
             uuid: Uuid,
             update_handler: Arc<UpdateHandler>,
         ) -> Result<Self> {
-            let index = Index::open(path, size, update_file_store, uuid, update_handler)?;
+            let index = Index::open(path, size, uuid, update_handler)?;
             Ok(Self::Real(index))
         }
 
@@ -163,13 +161,19 @@ pub mod test {
             method: IndexDocumentsMethod,
             content_uuid: Uuid,
             primary_key: Option<String>,
+            file_store: UpdateFileStore,
         ) -> Result<DocumentAdditionResult> {
             match self {
-                MockIndex::Real(index) => index.update_documents(method, content_uuid, primary_key),
+                MockIndex::Real(index) => {
+                    index.update_documents(method, content_uuid, primary_key, file_store)
+                }
                 MockIndex::Mock(mocker) => unsafe {
-                    mocker
-                        .get("update_documents")
-                        .call((method, content_uuid, primary_key))
+                    mocker.get("update_documents").call((
+                        method,
+                        content_uuid,
+                        primary_key,
+                        file_store,
+                    ))
                 },
             }
         }
