@@ -36,7 +36,7 @@ impl EnvSizer for heed::Env {
     }
 }
 
-fn copy_dir(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(&dst)?;
 
     for entry in WalkDir::new(src).into_iter().skip(1) {
