@@ -141,7 +141,9 @@ impl SnapshotJob {
         crate::copy_dir(
             &self.src_path.join("updates/updates_files/"),
             &path.join("updates/updates_files/"),
-        )
+        )?;
+
+        Ok(())
     }
 
     fn snapshot_indexes(&self, path: &Path) -> anyhow::Result<()> {

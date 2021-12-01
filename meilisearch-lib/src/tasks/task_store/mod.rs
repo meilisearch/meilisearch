@@ -2,13 +2,12 @@ mod store;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
 use log::debug;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
 use crate::index_resolver::IndexUid;
@@ -238,7 +237,6 @@ impl TaskStore {
     pub async fn dump(&self, dir_path: &Path) -> Result<()> {
         let update_dir = dir_path.join("updates");
         let updates_file = update_dir.join("data.jsonl");
-        dbg!(&updates_file);
         let tasks = self.list_tasks(None, None, None).await?;
 
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -248,10 +246,12 @@ impl TaskStore {
 
             for task in tasks {
                 serde_json::to_writer(&mut updates_file, &task)?;
+                writeln!(&mut updates_file)?;
             }
+            updates_file.flush()?;
             Ok(())
         })
-        .await?;
+        .await??;
 
         Ok(())
     }

@@ -17,8 +17,7 @@ internal_error!(
     TaskError: heed::Error,
     JoinError,
     std::io::Error,
-    serde_json::Error,
-    anyhow::Error
+    serde_json::Error
 );
 
 impl ErrorCode for TaskError {
