@@ -274,8 +274,10 @@ impl TaskStore {
                 serde_json::to_writer(&mut updates_file, &task)?;
                 writeln!(&mut updates_file)?;
 
-                if let Some(content_uuid) = task.get_content_uuid() {
-                    update_file_store.dump(content_uuid, &dir_path)?;
+                if !task.is_finished() {
+                    if let Some(content_uuid) = task.get_content_uuid() {
+                        update_file_store.dump(content_uuid, &dir_path)?;
+                    }
                 }
             }
             updates_file.flush()?;
