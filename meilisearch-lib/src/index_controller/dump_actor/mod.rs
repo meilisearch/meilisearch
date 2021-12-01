@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 // use tokio::fs::create_dir_all;
@@ -18,7 +19,7 @@ use tokio::sync::oneshot;
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::v4;
+use crate::index_controller::dump_actor::loaders::{v3, v4};
 use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
@@ -209,15 +210,14 @@ pub fn load_dump(
         //     update_db_size,
         //     indexer_opts,
         // )?,
-        MetadataVersion::V3(_meta) => todo!(),
-        // v3::load_dump(
-        //     meta,
-        //     &tmp_src_path,
-        //     tmp_dst.path(),
-        //     index_db_size,
-        //     update_db_size,
-        //     indexer_opts,
-        // )?,
+        MetadataVersion::V3(meta) => v3::load_dump(
+            meta,
+            &tmp_src_path,
+            tmp_dst.path(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?,
         MetadataVersion::V4(meta) => v4::load_dump(
             meta,
             &tmp_src_path,
@@ -288,9 +288,11 @@ where
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
 
-            crate::copy_dir(
-                &self.db_path.join("updates/updates_files"),
-                &temp_dump_path.join("updates/updates_files"),
+            let options = CopyOptions::default();
+            dir::copy(
+                self.db_path.join("updates/updates_files"),
+                temp_dump_path.join("updates/updates_files"),
+                &options,
             )?;
 
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;

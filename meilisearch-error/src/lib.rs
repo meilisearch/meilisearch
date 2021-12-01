@@ -253,22 +253,22 @@ impl Code {
     }
 
     /// return the HTTP status code ascociated with the `Code`
-    pub fn http(&self) -> StatusCode {
+    fn http(&self) -> StatusCode {
         self.err_code().status_code
     }
 
     /// return error name, used as error code
-    pub fn name(&self) -> String {
+    fn name(&self) -> String {
         self.err_code().error_name.to_string()
     }
 
     /// return the error type
-    pub fn type_(&self) -> String {
+    fn type_(&self) -> String {
         self.err_code().error_type.to_string()
     }
 
     /// return the doc url ascociated with the error
-    pub fn url(&self) -> String {
+    fn url(&self) -> String {
         format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
 }
