@@ -7,7 +7,7 @@ use std::path::Path;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
-use heed::{Env, EnvOpenOptions};
+use heed::Env;
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};

@@ -278,7 +278,9 @@ where
                 path: temp_dump_path.clone(),
             })
             .await;
+        println!("Right before the error");
         receiver.await??;
+        println!("Right after the error");
         self.task_store.dump(&temp_dump_path).await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {

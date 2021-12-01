@@ -61,7 +61,7 @@ impl Pending<TaskId> {
     pub(crate) fn take(&mut self) -> Self {
         match self {
             Self::Task(id) => Self::Task(*id),
-            Self::Job(ghost) => Self::Job(ghost.take()),
+            Self::Job(job) => Self::Job(job.take()),
         }
     }
 }
@@ -146,18 +146,19 @@ impl TaskStore {
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
     pub async fn register_job(&self, content: Job) {
-        debug!("registering a ghost task: {:?}", content);
+        debug!("registering a job: {:?}", content);
         self.pending_queue.write().await.push(Pending::Job(content));
     }
 
     /// Returns the next task to process.
     pub async fn peek_pending_task(&self) -> Option<Pending<TaskId>> {
-        self.pending_queue
-            .write()
-            .await
-            .peek_mut()
-            // we don't want to keep the mutex thus we clone the data.
-            .map(|mut pending_task| pending_task.take())
+        let mut pending_queue = self.pending_queue.write().await;
+        loop {
+            match pending_queue.peek()? {
+                Pending::Job(Job::Empty) => drop(pending_queue.pop()),
+                _ => return Some(pending_queue.peek_mut()?.take()),
+            }
+        }
     }
 
     /// Returns the next task to process if there is one.
@@ -212,10 +213,19 @@ impl TaskStore {
         Ok(tasks)
     }
 
-    /// Since we only handle dump of ONE task. Currently this function take
-    /// no parameters and pop the current task out of the pending_queue.
-    pub async fn pop_pending(&self) {
-        let _ = self.pending_queue.write().await.pop();
+    /// Delete one task from the queue and remove all `Empty` job.
+    pub async fn delete_pending(&self, to_delete: &Pending<Task>) {
+        if let Pending::Task(Task { id: pending_id, .. }) = to_delete {
+            let mut pending_queue = self.pending_queue.write().await;
+            *pending_queue = std::mem::take(&mut *pending_queue)
+                .into_iter()
+                .filter(|pending| match pending {
+                    Pending::Job(Job::Empty) => false,
+                    Pending::Task(id) => pending_id != id,
+                    _ => true,
+                })
+                .collect::<BinaryHeap<Pending<TaskId>>>();
+        }
     }
 
     pub async fn list_tasks(
@@ -302,10 +312,10 @@ pub mod test {
             }
         }
 
-        pub async fn pop_pending(&self) {
+        pub async fn delete_pending(&self, to_delete: &Pending<Task>) {
             match self {
-                Self::Real(s) => s.pop_pending().await,
-                Self::Mock(m) => unsafe { m.get("pop_pending").call(()) },
+                Self::Real(s) => s.delete_pending(to_delete).await,
+                Self::Mock(m) => unsafe { m.get("delete_pending").call(to_delete) },
             }
         }
 
