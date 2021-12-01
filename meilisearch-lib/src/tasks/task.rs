@@ -76,6 +76,17 @@ impl Task {
             matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
         })
     }
+
+    /// Return the content_uuid of the `Task` if there is one.
+    pub fn get_content_uuid(&self) -> Option<Uuid> {
+        match self {
+            Task {
+                content: TaskContent::DocumentAddition { content_uuid, .. },
+                ..
+            } => Some(*content_uuid),
+            _ => None,
+        }
+    }
 }
 
 /// A job is like a volatile priority `Task`.

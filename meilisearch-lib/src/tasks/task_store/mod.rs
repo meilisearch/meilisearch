@@ -9,9 +9,11 @@ use std::sync::Arc;
 use chrono::Utc;
 use log::debug;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
+use crate::update_file_store::UpdateFileStore;
 
 use super::error::TaskError;
 use super::task::{Job, Task, TaskContent, TaskId};
@@ -78,6 +80,15 @@ impl PartialOrd for Pending<TaskId> {
             (Pending::Job(_), Pending::Task(_)) => Some(Ordering::Greater),
             // When there is two jobs we consider them equals.
             (Pending::Job(_), Pending::Job(_)) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Pending<Task> {
+    pub fn get_content_uuid(&self) -> Option<Uuid> {
+        match self {
+            Pending::Task(task) => task.get_content_uuid(),
+            _ => None,
         }
     }
 }
@@ -244,11 +255,16 @@ impl TaskStore {
         .await?
     }
 
-    pub async fn dump(&self, dir_path: &Path) -> Result<()> {
-        let update_dir = dir_path.join("updates");
+    pub async fn dump(
+        &self,
+        dir_path: impl AsRef<Path>,
+        update_file_store: UpdateFileStore,
+    ) -> Result<()> {
+        let update_dir = dir_path.as_ref().join("updates");
         let updates_file = update_dir.join("data.jsonl");
         let tasks = self.list_tasks(None, None, None).await?;
 
+        let dir_path = dir_path.as_ref().to_path_buf();
         tokio::task::spawn_blocking(move || -> Result<()> {
             std::fs::create_dir(&update_dir)?;
             let updates_file = std::fs::File::create(updates_file)?;
@@ -257,6 +273,10 @@ impl TaskStore {
             for task in tasks {
                 serde_json::to_writer(&mut updates_file, &task)?;
                 writeln!(&mut updates_file)?;
+
+                if let Some(content_uuid) = task.get_content_uuid() {
+                    update_file_store.dump(content_uuid, &dir_path)?;
+                }
             }
             updates_file.flush()?;
             Ok(())
@@ -358,9 +378,9 @@ pub mod test {
             }
         }
 
-        pub async fn dump(&self, path: &Path) -> Result<()> {
+        pub async fn dump(&self, path: &Path, update_file_store: UpdateFileStore) -> Result<()> {
             match self {
-                Self::Real(s) => s.dump(path).await,
+                Self::Real(s) => s.dump(path, update_file_store).await,
                 Self::Mock(_m) => todo!(),
             }
         }

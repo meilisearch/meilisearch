@@ -142,15 +142,21 @@ mod store {
 
         /// Peforms a dump of the given update file uuid into the provided dump path.
         pub fn dump(&self, uuid: Uuid, dump_path: impl AsRef<Path>) -> Result<()> {
+            println!("HERE1");
             let uuid_string = uuid.to_string();
             let update_file_path = self.path.join(&uuid_string);
             let mut dst = dump_path.as_ref().join(UPDATE_FILES_PATH);
             std::fs::create_dir_all(&dst)?;
+            println!("HERE3");
             dst.push(&uuid_string);
 
+            println!("trying to open {}", &update_file_path.display());
             let update_file = File::open(update_file_path)?;
+            println!("HERE2");
             let mut dst_file = NamedTempFile::new_in(&dump_path)?;
+            println!("HERE4");
             let mut document_reader = DocumentBatchReader::from_reader(update_file)?;
+            println!("HERE5");
 
             let mut document_buffer = Map::new();
             // TODO: we need to find a way to do this more efficiently. (create a custom serializer
