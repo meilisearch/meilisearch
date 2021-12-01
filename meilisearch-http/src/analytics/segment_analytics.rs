@@ -383,7 +383,7 @@ impl SearchAggregator {
     }
 
     pub fn succeed(&mut self, result: &SearchResult) {
-        self.total_succeeded += 1;
+        self.total_succeeded = self.total_succeeded.saturating_add(1);
         self.time_spent.push(result.processing_time_ms as usize);
     }
 
@@ -394,19 +394,28 @@ impl SearchAggregator {
             self.user_agents.insert(user_agent);
         }
         // request
-        self.total_received += other.total_received;
-        self.total_succeeded += other.total_succeeded;
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
         self.time_spent.append(&mut other.time_spent);
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
-        self.sort_sum_of_criteria_terms += other.sort_sum_of_criteria_terms;
-        self.sort_total_number_of_criteria += other.sort_total_number_of_criteria;
+        self.sort_sum_of_criteria_terms = self
+            .sort_sum_of_criteria_terms
+            .saturating_add(other.sort_sum_of_criteria_terms);
+        self.sort_total_number_of_criteria = self
+            .sort_total_number_of_criteria
+            .saturating_add(other.sort_total_number_of_criteria);
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
-        self.filter_sum_of_criteria_terms += other.filter_sum_of_criteria_terms;
-        self.filter_total_number_of_criteria += other.filter_total_number_of_criteria;
+        self.filter_sum_of_criteria_terms = self
+            .filter_sum_of_criteria_terms
+            .saturating_add(other.filter_sum_of_criteria_terms);
+        self.filter_total_number_of_criteria = self
+            .filter_total_number_of_criteria
+            .saturating_add(other.filter_total_number_of_criteria);
         for (key, value) in other.used_syntax.into_iter() {
-            *self.used_syntax.entry(key).or_insert(0) += value;
+            let used_syntax = self.used_syntax.entry(key).or_insert(0);
+            *used_syntax = used_syntax.saturating_add(value);
         }
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
@@ -424,12 +433,12 @@ impl SearchAggregator {
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
             // We are only intersted by the slowest value of the 99th fastest results
-            let time_spent = time_spent[percentile_99th as usize];
+            let time_spent = time_spent.get(percentile_99th as usize);
 
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  format!("{:.2}", time_spent),
+                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,
