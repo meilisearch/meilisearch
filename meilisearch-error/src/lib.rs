@@ -23,6 +23,18 @@ pub struct ResponseError {
     error_link: String,
 }
 
+impl ResponseError {
+    pub fn from_msg(message: String, code: Code) -> Self {
+        Self {
+            code: code.http(),
+            message,
+            error_code: code.err_code().error_name.to_string(),
+            error_type: code.type_(),
+            error_link: code.url(),
+        }
+    }
+}
+
 impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.message.fmt(f)

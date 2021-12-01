@@ -35,6 +35,7 @@ internal_error!(
     tokio::sync::oneshot::error::RecvError,
     serde_json::error::Error,
     tempfile::PersistError,
+    fs_extra::error::Error,
     TaskError
 );
 

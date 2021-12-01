@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::bail;
+use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace};
 use tokio::time::sleep;
 use walkdir::WalkDir;
@@ -138,9 +139,11 @@ impl SnapshotJob {
         // FIXME(marin): We may copy more files than necessary, if new files are added while we are
         // performing the snapshop. We need a way to filter them out.
 
-        crate::copy_dir(
-            &self.src_path.join("updates/updates_files/"),
-            &path.join("updates/updates_files/"),
+        let options = CopyOptions::default();
+        dir::copy(
+            self.src_path.join("updates/updates_files/"),
+            path.join("updates/updates_files/"),
+            &options,
         )?;
 
         Ok(())

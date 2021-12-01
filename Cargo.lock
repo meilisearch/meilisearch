@@ -1707,6 +1707,7 @@ dependencies = [
  "derivative",
  "either",
  "flate2",
+ "fs_extra",
  "fst",
  "futures",
  "futures-util",
