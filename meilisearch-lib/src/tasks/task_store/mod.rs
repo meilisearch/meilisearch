@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
+use heed::{Env, RwTxn};
 use log::debug;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -154,6 +155,11 @@ impl TaskStore {
         Ok(task)
     }
 
+    pub fn register_raw_update(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+        self.store.put(wtxn, task)?;
+        Ok(())
+    }
+
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
     pub async fn register_job(&self, content: Job) {
@@ -287,6 +293,25 @@ impl TaskStore {
 
         Ok(())
     }
+
+    pub fn load_dump(src: impl AsRef<Path>, env: Env) -> anyhow::Result<()> {
+        // create a dummy update fiel store, since it is not needed right now.
+        let store = Self::new(env.clone())?;
+
+        let src_update_path = src.as_ref().join("updates");
+        let update_data = std::fs::File::open(&src_update_path.join("data.jsonl"))?;
+        let update_data = std::io::BufReader::new(update_data);
+
+        let stream = serde_json::Deserializer::from_reader(update_data).into_iter::<Task>();
+
+        let mut wtxn = env.write_txn()?;
+        for entry in stream {
+            store.register_raw_update(&mut wtxn, &entry?)?;
+        }
+        wtxn.commit()?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -390,6 +415,13 @@ pub mod test {
         pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub fn register_raw_update(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+            match self {
+                Self::Real(s) => s.register_raw_update(wtxn, task),
                 Self::Mock(_m) => todo!(),
             }
         }

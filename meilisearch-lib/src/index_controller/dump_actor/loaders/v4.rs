@@ -5,9 +5,9 @@ use log::info;
 
 use crate::analytics;
 use crate::index_controller::dump_actor::Metadata;
-// use crate::index_controller::index_resolver::IndexResolver;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
+use crate::tasks::TaskStore;
 use crate::update_file_store::UpdateFileStore;
 
 pub fn load_dump(
@@ -36,7 +36,7 @@ pub fn load_dump(
         indexing_options,
     )?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
-    // TaskStore::load_dump(&src, &dst, update_db_size)?;
+    TaskStore::load_dump(&src, env)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
     info!("Loading indexes.");

@@ -99,7 +99,6 @@ mod store {
                     .ok_or_else(|| anyhow::anyhow!("invalid update file name"))?;
                 let dst_path = dst_update_files_path.join(file_uuid);
                 let dst_file = BufWriter::new(File::create(dst_path)?);
-                println!("Reading: {}, {}", entry.path().display(), file_uuid);
                 read_ndjson(update_file, dst_file)?;
             }
 
