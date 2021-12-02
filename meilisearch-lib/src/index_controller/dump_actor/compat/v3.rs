@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::index::{Settings, Unchecked};
 use crate::index_resolver::IndexUid;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
 
 #[derive(Serialize, Deserialize)]
 pub struct DumpEntry {
@@ -120,7 +120,7 @@ pub struct Enqueued {
 
 impl Enqueued {
     fn update_task(self, task: &mut Task) {
-        task.id = self.update_id;
+        // we do not erase the `TaskId` that was given to us.
         task.content = self.meta.into();
         task.events.push(TaskEvent::Created(self.enqueued_at));
     }
@@ -186,11 +186,11 @@ impl Failed {
     }
 }
 
-impl From<(UpdateStatus, String)> for Task {
-    fn from((update, uid): (UpdateStatus, String)) -> Self {
+impl From<(UpdateStatus, String, TaskId)> for Task {
+    fn from((update, uid, task_id): (UpdateStatus, String, TaskId)) -> Self {
         // Dummy task
         let mut task = Task {
-            id: 0,
+            id: task_id,
             index_uid: IndexUid::new(uid).unwrap(),
             content: TaskContent::IndexDeletion,
             events: Vec::new(),

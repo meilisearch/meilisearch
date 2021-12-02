@@ -4,7 +4,6 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::Context;
-use chrono::Utc;
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
 use tempfile::tempdir;
@@ -14,7 +13,7 @@ use crate::index_controller::dump_actor::compat::v3;
 use crate::index_controller::dump_actor::Metadata;
 use crate::index_resolver::meta_store::{DumpEntry, IndexMeta};
 use crate::options::IndexerOpts;
-use crate::tasks::task::Task;
+use crate::tasks::task::{Task, TaskId};
 
 /// dump structure for V3:
 /// .
@@ -116,13 +115,17 @@ fn patch_updates(
 
     serde_json::Deserializer::from_reader(src_file)
         .into_iter::<v3::UpdateEntry>()
-        .try_for_each(|entry| -> anyhow::Result<()> {
+        .enumerate()
+        .try_for_each(|(task_id, entry)| -> anyhow::Result<()> {
             let entry = entry?;
             let name = uuid_map
                 .get(&entry.uuid)
                 .with_context(|| format!("Unknown index uuid: {}", entry.uuid))?
                 .clone();
-            serde_json::to_writer(&mut dst_file, &Task::from((entry.update, name)))?;
+            serde_json::to_writer(
+                &mut dst_file,
+                &Task::from((entry.update, name, task_id as TaskId)),
+            )?;
             dst_file.write_all(b"\n")?;
             Ok(())
         })?;
