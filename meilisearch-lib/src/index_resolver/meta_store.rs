@@ -13,9 +13,9 @@ use crate::tasks::task::TaskId;
 use crate::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
-struct DumpEntry {
-    uid: String,
-    index_meta: IndexMeta,
+pub struct DumpEntry {
+    pub uid: String,
+    pub index_meta: IndexMeta,
 }
 
 const UUIDS_DB_PATH: &str = "index_uuids";
@@ -157,6 +157,7 @@ impl HeedMetaStore {
             match indexes.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
+                    dbg!(&line);
                     let DumpEntry { uid, index_meta } = serde_json::from_str(&line)?;
                     db.db.put(&mut txn, &uid, &index_meta)?;
                 }

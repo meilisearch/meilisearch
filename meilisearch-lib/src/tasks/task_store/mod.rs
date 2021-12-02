@@ -278,7 +278,7 @@ impl TaskStore {
 
             for task in tasks {
                 serde_json::to_writer(&mut updates_file, &task)?;
-                writeln!(&mut updates_file)?;
+                updates_file.write_all(b"\n")?;
 
                 if !task.is_finished() {
                     if let Some(content_uuid) = task.get_content_uuid() {

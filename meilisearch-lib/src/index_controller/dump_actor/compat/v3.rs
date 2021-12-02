@@ -8,6 +8,18 @@ use crate::index::{Settings, Unchecked};
 use crate::index_resolver::IndexUid;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
 
+#[derive(Serialize, Deserialize)]
+pub struct DumpEntry {
+    pub uuid: Uuid,
+    pub uid: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UpdateEntry {
+    pub uuid: Uuid,
+    pub update: UpdateStatus,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus {

@@ -156,7 +156,9 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         env: Env,
         indexer_opts: &IndexerOpts,
     ) -> anyhow::Result<()> {
+        dbg!();
         HeedMetaStore::load_dump(&src, env.clone())?;
+        dbg!();
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
         let update_handler = UpdateHandler::new(indexer_opts)?;

@@ -28,7 +28,6 @@ pub fn load_dump(
     options.max_dbs(100);
     let env = options.open(&dst)?;
 
-    dbg!();
     IndexResolver::load_dump(
         src.as_ref(),
         &dst,

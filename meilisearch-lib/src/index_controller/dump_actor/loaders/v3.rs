@@ -4,14 +4,15 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::Context;
+use chrono::Utc;
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
-use serde::{Deserialize, Serialize};
 use tempfile::tempdir;
 use uuid::Uuid;
 
-use crate::index_controller::dump_actor::compat::v3::UpdateStatus;
+use crate::index_controller::dump_actor::compat::v3;
 use crate::index_controller::dump_actor::Metadata;
+use crate::index_resolver::meta_store::{DumpEntry, IndexMeta};
 use crate::options::IndexerOpts;
 use crate::tasks::task::Task;
 
@@ -47,7 +48,10 @@ pub fn load_dump(
         &options,
     )?;
 
-    let uuid_map = read_uuid_map(src.as_ref().join("index_uuids/data.jsonl"))?;
+    let uuid_map = patch_index_meta(
+        src.as_ref().join("index_uuids/data.jsonl"),
+        patched_dir.path(),
+    )?;
 
     fs::copy(
         src.as_ref().join("metadata.json"),
@@ -66,22 +70,37 @@ pub fn load_dump(
     )
 }
 
-fn read_uuid_map(path: impl AsRef<Path>) -> anyhow::Result<HashMap<Uuid, String>> {
-    let file = File::open(path)?;
+fn patch_index_meta(
+    path: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+) -> anyhow::Result<HashMap<Uuid, String>> {
+    let file = BufReader::new(File::open(path)?);
+    let dst = dst.as_ref().join("index_uuids");
+    fs::create_dir_all(&dst)?;
+    let mut dst_file = File::create(dst.join("data.jsonl"))?;
 
-    #[derive(Serialize, Deserialize)]
-    struct DumpEntry {
-        uuid: Uuid,
-        uid: String,
-    }
-
-    serde_json::Deserializer::from_reader(file)
-        .into_iter::<DumpEntry>()
-        .try_fold(HashMap::new(), |mut map, entry| {
+    let map = serde_json::Deserializer::from_reader(file)
+        .into_iter::<v3::DumpEntry>()
+        .try_fold(HashMap::new(), |mut map, entry| -> anyhow::Result<_> {
             let entry = entry?;
-            map.insert(entry.uuid, entry.uid);
+            map.insert(entry.uuid, entry.uid.clone());
+            let meta = IndexMeta {
+                uuid: entry.uuid,
+                // This is lost information, we patch it to 0;
+                creation_task_id: 0,
+            };
+            let entry = DumpEntry {
+                uid: entry.uid,
+                index_meta: meta,
+            };
+            serde_json::to_writer(&mut dst_file, &entry)?;
+            dst_file.write_all(b"\n")?;
             Ok(map)
-        })
+        })?;
+
+    dst_file.flush()?;
+
+    Ok(map)
 }
 
 fn patch_updates(
@@ -95,13 +114,8 @@ fn patch_updates(
     let mut dst_file = BufWriter::new(File::create(dst.join("data.jsonl"))?);
     let src_file = BufReader::new(File::open(src.as_ref().join("updates/data.jsonl"))?);
 
-    #[derive(Serialize, Deserialize)]
-    pub struct UpdateEntry {
-        pub uuid: Uuid,
-        pub update: UpdateStatus,
-    }
     serde_json::Deserializer::from_reader(src_file)
-        .into_iter::<UpdateEntry>()
+        .into_iter::<v3::UpdateEntry>()
         .try_for_each(|entry| -> anyhow::Result<()> {
             let entry = entry?;
             let name = uuid_map
