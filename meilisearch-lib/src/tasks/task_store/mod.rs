@@ -432,6 +432,10 @@ pub mod test {
                 Self::Mock(_m) => todo!(),
             }
         }
+
+        pub fn load_dump(path: impl AsRef<Path>, env: Env) -> anyhow::Result<()> {
+            TaskStore::load_dump(path, env)
+        }
     }
 
     #[test]

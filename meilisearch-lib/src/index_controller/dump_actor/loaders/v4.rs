@@ -28,6 +28,7 @@ pub fn load_dump(
     options.max_dbs(100);
     let env = options.open(&dst)?;
 
+    dbg!();
     IndexResolver::load_dump(
         src.as_ref(),
         &dst,
@@ -35,8 +36,11 @@ pub fn load_dump(
         env.clone(),
         indexing_options,
     )?;
+    dbg!();
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
+    dbg!();
     TaskStore::load_dump(&src, env)?;
+    dbg!();
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
     info!("Loading indexes.");

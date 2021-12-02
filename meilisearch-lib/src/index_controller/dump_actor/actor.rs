@@ -10,17 +10,13 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpJob, DumpMsg, DumpStatus};
-use crate::index_resolver::index_store::IndexStore;
-use crate::index_resolver::meta_store::IndexMetaStore;
-use crate::index_resolver::IndexResolver;
 use crate::tasks::TaskStore;
 use crate::update_file_store::UpdateFileStore;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
 
-pub struct DumpActor<U, I> {
+pub struct DumpActor {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
-    index_resolver: Arc<IndexResolver<U, I>>,
     update_file_store: UpdateFileStore,
     task_store: TaskStore,
     dump_path: PathBuf,
@@ -36,14 +32,9 @@ fn generate_uid() -> String {
     Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
 }
 
-impl<U, I> DumpActor<U, I>
-where
-    U: IndexMetaStore + Sync + Send + 'static,
-    I: IndexStore + Sync + Send + 'static,
-{
+impl DumpActor {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
-        index_resolver: Arc<IndexResolver<U, I>>,
         update_file_store: UpdateFileStore,
         task_store: TaskStore,
         dump_path: impl AsRef<Path>,
@@ -55,7 +46,6 @@ where
         let lock = Arc::new(Mutex::new(()));
         Self {
             inbox: Some(inbox),
-            index_resolver,
             task_store,
             update_file_store,
             dump_path: dump_path.as_ref().into(),
@@ -127,7 +117,6 @@ where
         let task = DumpJob {
             dump_path: self.dump_path.clone(),
             db_path: self.analytics_path.clone(),
-            index_resolver: self.index_resolver.clone(),
             update_file_store: self.update_file_store.clone(),
             task_store: self.task_store.clone(),
             uid: uid.clone(),
