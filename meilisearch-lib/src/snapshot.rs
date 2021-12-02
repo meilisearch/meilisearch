@@ -117,7 +117,15 @@ impl SnapshotJob {
         let temp_snapshot_file = tempfile::NamedTempFile::new_in(&snapshot_dir)?;
         let temp_snapshot_file_path = temp_snapshot_file.path().to_owned();
         crate::compression::to_tar_gz(temp_snapshot_path, temp_snapshot_file_path)?;
-        temp_snapshot_file.persist(&snapshot_path)?;
+        let _file = temp_snapshot_file.persist(&snapshot_path)?;
+
+        if cfg!(unix) {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let perm = Permissions::from_mode(0o644);
+            _file.set_permissions(perm)?;
+        }
 
         trace!("Created snapshot in {:?}.", snapshot_path);
 
