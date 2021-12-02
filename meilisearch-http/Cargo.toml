@@ -25,10 +25,13 @@ zip = { version = "0.5.13", optional = true }
 actix-cors = { git = "https://github.com/MarinPostma/actix-extras.git", rev = "963ac94d" }
 actix-web = { version = "4.0.0-beta.9", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/MarinPostma/actix-web-static-files.git", rev = "39d8006", optional = true }
+# TODO: specifying this dependency so semver doesn't bump to next beta
+actix-tls = "=3.0.0-beta.5"
 anyhow = { version = "1.0.43", features = ["backtrace"] }
+arc-swap = "1.3.2"
 async-stream = "0.3.2"
 async-trait = "0.1.51"
-arc-swap = "1.3.2"
+bstr = "0.2.17"
 byte-unit = { version = "4.0.12", default-features = false, features = ["std"] }
 bytes = "1.1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
@@ -44,13 +47,15 @@ http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
 log = "0.4.14"
-meilisearch-lib = { path = "../meilisearch-lib" }
 meilisearch-error = { path = "../meilisearch-error" }
+meilisearch-lib = { path = "../meilisearch-lib" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 mime = "0.3.16"
 num_cpus = "1.13.0"
+obkv = "0.2.0"
 once_cell = "1.8.0"
 parking_lot = "0.11.2"
+pin-project = "1.0.8"
 platform-dirs = "0.3.0"
 rand = "0.8.4"
 rayon = "1.5.1"
@@ -63,16 +68,14 @@ sha2 = "0.9.6"
 siphasher = "0.3.7"
 slice-group-by = "0.2.6"
 structopt = "0.3.23"
+sysinfo = "0.20.2"
 tar = "0.4.37"
 tempfile = "3.2.0"
 thiserror = "1.0.28"
 tokio = { version = "1.11.0", features = ["full"] }
+tokio-stream = "0.1.7"
 uuid = { version = "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
-obkv = "0.2.0"
-pin-project = "1.0.8"
-sysinfo = "0.20.2"
-tokio-stream = "0.1.7"
 
 [dev-dependencies]
 actix-rt = "2.2.0"

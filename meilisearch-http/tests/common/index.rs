@@ -49,8 +49,8 @@ impl Index<'_> {
             .post_str(url, include_str!("../assets/test_set.json"))
             .await;
         assert_eq!(code, 202);
-        let update_id = response["updateId"].as_i64().unwrap();
-        self.wait_update_id(update_id as u64).await;
+        let update_id = response["uid"].as_i64().unwrap();
+        self.wait_task(update_id as u64).await;
         update_id as u64
     }
 
@@ -114,18 +114,14 @@ impl Index<'_> {
         self.service.put(url, documents).await
     }
 
-    pub async fn wait_update_id(&self, update_id: u64) -> Value {
+    pub async fn wait_task(&self, update_id: u64) -> Value {
         // try 10 times to get status, or panic to not wait forever
-        let url = format!(
-            "/indexes/{}/updates/{}",
-            encode(self.uid.as_ref()).to_string(),
-            update_id
-        );
+        let url = format!("/tasks/{}", update_id);
         for _ in 0..10 {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(status_code, 200, "response: {}", response);
 
-            if response["status"] == "processed" || response["status"] == "failed" {
+            if response["status"] == "succeeded" || response["status"] == "failed" {
                 return response;
             }
 
@@ -134,17 +130,13 @@ impl Index<'_> {
         panic!("Timeout waiting for update id");
     }
 
-    pub async fn get_update(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/updates/{}",
-            encode(self.uid.as_ref()).to_string(),
-            update_id
-        );
+    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/tasks/{}", self.uid, update_id);
         self.service.get(url).await
     }
 
-    pub async fn list_updates(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/updates", encode(self.uid.as_ref()).to_string());
+    pub async fn list_tasks(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/tasks", self.uid);
         self.service.get(url).await
     }
 

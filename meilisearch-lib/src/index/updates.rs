@@ -4,15 +4,15 @@ use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
-use milli::update::{IndexDocumentsMethod, Setting, UpdateBuilder};
+use milli::update::{
+    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod, Setting,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::index_controller::updates::status::{Failed, Processed, Processing, UpdateResult};
-use crate::Update;
-
 use super::error::Result;
 use super::index::{Index, IndexMeta};
+use crate::update_file_store::UpdateFileStore;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -30,25 +30,27 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, Serialize)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq)]
 pub struct Checked;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Unchecked;
 
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Settings<T> {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -56,19 +58,26 @@ pub struct Settings<T> {
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub ranking_rules: Setting<Vec<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub distinct_attribute: Setting<String>,
 
     #[serde(skip)]
@@ -164,126 +173,107 @@ pub struct Facets {
 }
 
 impl Index {
-    pub fn handle_update(&self, update: Processing) -> std::result::Result<Processed, Failed> {
-        let update_id = update.id();
-        let update_builder = self.update_handler.update_builder(update_id);
-        let result = (|| {
-            let mut txn = self.write_txn()?;
-            let result = match update.meta() {
-                Update::DocumentAddition {
-                    primary_key,
-                    content_uuid,
-                    method,
-                } => self.update_documents(
-                    &mut txn,
-                    *method,
-                    *content_uuid,
-                    update_builder,
-                    primary_key.as_deref(),
-                ),
-                Update::Settings(settings) => {
-                    let settings = settings.clone().check();
-                    self.update_settings(&mut txn, &settings, update_builder)
-                }
-                Update::ClearDocuments => {
-                    let builder = update_builder.clear_documents(&mut txn, self);
-                    let _count = builder.execute()?;
-                    Ok(UpdateResult::Other)
-                }
-                Update::DeleteDocuments(ids) => {
-                    let mut builder = update_builder.delete_documents(&mut txn, self)?;
-
-                    // We ignore unexisting document ids
-                    ids.iter().for_each(|id| {
-                        builder.delete_external_id(id);
-                    });
-
-                    let deleted = builder.execute()?;
-                    Ok(UpdateResult::DocumentDeletion { deleted })
-                }
-            };
-            if result.is_ok() {
-                txn.commit()?;
-            }
-            result
-        })();
-
-        if let Update::DocumentAddition { content_uuid, .. } = update.from.meta() {
-            let _ = self.update_file_store.delete(*content_uuid);
-        }
-
-        match result {
-            Ok(result) => Ok(update.process(result)),
-            Err(e) => Err(update.fail(e)),
-        }
-    }
-
-    pub fn update_primary_key(&self, primary_key: Option<String>) -> Result<IndexMeta> {
-        match primary_key {
-            Some(primary_key) => {
-                let mut txn = self.write_txn()?;
-                let mut builder = UpdateBuilder::new(0).settings(&mut txn, self);
-                builder.set_primary_key(primary_key);
-                builder.execute(|_, _| ())?;
-                let meta = IndexMeta::new_txn(self, &txn)?;
-                txn.commit()?;
-                Ok(meta)
-            }
-            None => {
-                let meta = IndexMeta::new(self)?;
-                Ok(meta)
-            }
-        }
-    }
-
-    fn update_documents<'a, 'b>(
+    fn update_primary_key_txn<'a, 'b>(
         &'a self,
         txn: &mut heed::RwTxn<'a, 'b>,
+        primary_key: String,
+    ) -> Result<IndexMeta> {
+        let mut builder = self.update_handler.update_builder().settings(txn, self);
+        builder.set_primary_key(primary_key);
+        builder.execute(|_| ())?;
+        let meta = IndexMeta::new_txn(self, txn)?;
+
+        Ok(meta)
+    }
+
+    pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
+        let mut txn = self.write_txn()?;
+        let res = self.update_primary_key_txn(&mut txn, primary_key)?;
+        txn.commit()?;
+
+        Ok(res)
+    }
+
+    /// Deletes `ids` from the index, and returns how many documents were deleted.
+    pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
+        let mut txn = self.write_txn()?;
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .delete_documents(&mut txn, self)?;
+
+        // We ignore unexisting document ids
+        ids.iter().for_each(|id| {
+            builder.delete_external_id(id);
+        });
+
+        let deleted = builder.execute()?;
+
+        txn.commit()?;
+
+        Ok(deleted)
+    }
+
+    pub fn clear_documents(&self) -> Result<()> {
+        let mut txn = self.write_txn()?;
+        self.update_handler
+            .update_builder()
+            .clear_documents(&mut txn, self)
+            .execute()?;
+
+        txn.commit()?;
+
+        Ok(())
+    }
+
+    pub fn update_documents(
+        &self,
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
-        update_builder: UpdateBuilder,
-        primary_key: Option<&str>,
-    ) -> Result<UpdateResult> {
+        primary_key: Option<String>,
+        file_store: UpdateFileStore,
+    ) -> Result<DocumentAdditionResult> {
         trace!("performing document addition");
+        let mut txn = self.write_txn()?;
 
-        // Set the primary key if not set already, ignore if already set.
-        if let (None, Some(primary_key)) = (self.primary_key(txn)?, primary_key) {
-            let mut builder = UpdateBuilder::new(0).settings(txn, self);
-            builder.set_primary_key(primary_key.to_string());
-            builder.execute(|_, _| ())?;
+        if let Some(primary_key) = primary_key {
+            self.update_primary_key_txn(&mut txn, primary_key)?;
         }
 
-        let indexing_callback =
-            |indexing_step, update_id| debug!("update {}: {:?}", update_id, indexing_step);
+        let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
 
-        let content_file = self.update_file_store.get_update(content_uuid).unwrap();
+        let content_file = file_store.get_update(content_uuid).unwrap();
         let reader = DocumentBatchReader::from_reader(content_file).unwrap();
 
-        let mut builder = update_builder.index_documents(txn, self);
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .index_documents(&mut txn, self);
         builder.index_documents_method(method);
         let addition = builder.execute(reader, indexing_callback)?;
 
+        txn.commit()?;
+
         info!("document addition done: {:?}", addition);
 
-        Ok(UpdateResult::DocumentsAddition(addition))
+        Ok(addition)
     }
 
-    fn update_settings<'a, 'b>(
-        &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
-        settings: &Settings<Checked>,
-        update_builder: UpdateBuilder,
-    ) -> Result<UpdateResult> {
+    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
         // We must use the write transaction of the update here.
-        let mut builder = update_builder.settings(txn, self);
+        let mut txn = self.write_txn()?;
+        let mut builder = self
+            .update_handler
+            .update_builder()
+            .settings(&mut txn, self);
 
         apply_settings_to_builder(settings, &mut builder);
 
-        builder.execute(|indexing_step, update_id| {
-            debug!("update {}: {:?}", update_id, indexing_step)
-        })?;
+        builder.execute(|indexing_step| debug!("update: {:?}", indexing_step))?;
 
-        Ok(UpdateResult::Other)
+        txn.commit()?;
+
+        Ok(())
     }
 }
 
@@ -343,8 +333,18 @@ pub fn apply_settings_to_builder(
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
+    use proptest::prelude::*;
+
     use super::*;
+
+    pub(super) fn setting_strategy<T: Arbitrary + Clone>() -> impl Strategy<Value = Setting<T>> {
+        prop_oneof![
+            Just(Setting::NotSet),
+            Just(Setting::Reset),
+            any::<T>().prop_map(Setting::Set)
+        ]
+    }
 
     #[test]
     fn test_setting_check() {

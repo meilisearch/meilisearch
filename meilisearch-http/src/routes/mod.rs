@@ -1,23 +1,22 @@
-use std::time::Duration;
-
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::debug;
-use meilisearch_lib::index_controller::updates::status::{UpdateResult, UpdateStatus};
 use serde::{Deserialize, Serialize};
 
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
-use meilisearch_lib::{MeiliSearch, Update};
+use meilisearch_lib::MeiliSearch;
 
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::ApiKeys;
 
 mod dump;
 pub mod indexes;
+mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("/health").route(web::get().to(get_health)))
+    cfg.service(web::scope("/tasks").configure(tasks::configure))
+        .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/keys").route(web::get().to(list_keys)))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
@@ -46,38 +45,6 @@ pub enum UpdateType {
     Settings {
         settings: Settings<Unchecked>,
     },
-}
-
-impl From<&UpdateStatus> for UpdateType {
-    fn from(other: &UpdateStatus) -> Self {
-        use meilisearch_lib::milli::update::IndexDocumentsMethod::*;
-        match other.meta() {
-            Update::DocumentAddition { method, .. } => {
-                let number = match other {
-                    UpdateStatus::Processed(processed) => match processed.success {
-                        UpdateResult::DocumentsAddition(ref addition) => {
-                            Some(addition.nb_documents)
-                        }
-                        _ => None,
-                    },
-                    _ => None,
-                };
-
-                match method {
-                    ReplaceDocuments => UpdateType::DocumentsAddition { number },
-                    UpdateDocuments => UpdateType::DocumentsPartial { number },
-                    _ => unreachable!(),
-                }
-            }
-            Update::Settings(settings) => UpdateType::Settings {
-                settings: settings.clone(),
-            },
-            Update::ClearDocuments => UpdateType::ClearAll,
-            Update::DeleteDocuments(ids) => UpdateType::DocumentsDeletion {
-                number: Some(ids.len()),
-            },
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,81 +100,6 @@ pub enum UpdateStatusResponse {
         #[serde(flatten)]
         content: ProcessedUpdateResult,
     },
-}
-
-impl From<UpdateStatus> for UpdateStatusResponse {
-    fn from(other: UpdateStatus) -> Self {
-        let update_type = UpdateType::from(&other);
-
-        match other {
-            UpdateStatus::Processing(processing) => {
-                let content = EnqueuedUpdateResult {
-                    update_id: processing.id(),
-                    update_type,
-                    enqueued_at: processing.from.enqueued_at,
-                    started_processing_at: Some(processing.started_processing_at),
-                };
-                UpdateStatusResponse::Processing { content }
-            }
-            UpdateStatus::Enqueued(enqueued) => {
-                let content = EnqueuedUpdateResult {
-                    update_id: enqueued.id(),
-                    update_type,
-                    enqueued_at: enqueued.enqueued_at,
-                    started_processing_at: None,
-                };
-                UpdateStatusResponse::Enqueued { content }
-            }
-            UpdateStatus::Processed(processed) => {
-                let duration = processed
-                    .processed_at
-                    .signed_duration_since(processed.from.started_processing_at)
-                    .num_milliseconds();
-
-                // necessary since chrono::duration don't expose a f64 secs method.
-                let duration = Duration::from_millis(duration as u64).as_secs_f64();
-
-                let content = ProcessedUpdateResult {
-                    update_id: processed.id(),
-                    update_type,
-                    duration,
-                    enqueued_at: processed.from.from.enqueued_at,
-                    processed_at: processed.processed_at,
-                };
-                UpdateStatusResponse::Processed { content }
-            }
-            UpdateStatus::Aborted(_) => unreachable!(),
-            UpdateStatus::Failed(failed) => {
-                let duration = failed
-                    .failed_at
-                    .signed_duration_since(failed.from.started_processing_at)
-                    .num_milliseconds();
-
-                // necessary since chrono::duration don't expose a f64 secs method.
-                let duration = Duration::from_millis(duration as u64).as_secs_f64();
-
-                let update_id = failed.id();
-                let processed_at = failed.failed_at;
-                let enqueued_at = failed.from.from.enqueued_at;
-                let error = failed.into();
-
-                let content = FailedUpdateResult {
-                    update_id,
-                    update_type,
-                    error,
-                    duration,
-                    enqueued_at,
-                    processed_at,
-                };
-                UpdateStatusResponse::Failed { content }
-            }
-        }
-    }
-}
-
-#[derive(Deserialize)]
-pub struct IndexParam {
-    index_uid: String,
 }
 
 #[derive(Serialize)]
@@ -365,8 +257,8 @@ mod test {
             indexes::documents::add_documents,
             indexes::documents::delete_document,
 
-            indexes::updates::get_all_updates_status,
-            indexes::updates::get_update_status,
+            indexes::tasks::get_all_tasks_status,
+            indexes::tasks::get_task_status,
         }
         Admin => { list_keys, }
     }

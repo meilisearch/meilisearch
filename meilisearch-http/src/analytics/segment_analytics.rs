@@ -75,7 +75,30 @@ impl SegmentAnalytics {
 
         let client = HttpClient::default();
         let user = User::UserId { user_id };
-        let batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
+        let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
+
+        // If Meilisearch is Launched for the first time:
+        // 1. Send an event Launched associated to the user `total_launch`.
+        // 2. Batch an event Launched with the real instance-id and send it in one hour.
+        if first_time_run {
+            let _ = batcher
+                .push(Track {
+                    user: User::UserId {
+                        user_id: "total_launch".to_string(),
+                    },
+                    event: "Launched".to_string(),
+                    ..Default::default()
+                })
+                .await;
+            let _ = batcher.flush().await;
+            let _ = batcher
+                .push(Track {
+                    user: user.clone(),
+                    event: "Launched".to_string(),
+                    ..Default::default()
+                })
+                .await;
+        }
 
         let (sender, inbox) = mpsc::channel(100); // How many analytics can we bufferize
 
@@ -95,10 +118,6 @@ impl SegmentAnalytics {
             sender,
             user: user.clone(),
         };
-        // batch the launched for the first time track event
-        if first_time_run {
-            this.publish("Launched".to_string(), json!({}), None);
-        }
 
         (Arc::new(this), user.to_string())
     }
@@ -216,7 +235,9 @@ impl Segment {
 
     async fn run(mut self, meilisearch: MeiliSearch) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
-        let mut interval = tokio::time::interval(INTERVAL);
+                                                                 // The first batch must be sent after one hour.
+        let mut interval =
+            tokio::time::interval_at(tokio::time::Instant::now() + INTERVAL, INTERVAL);
 
         loop {
             select! {
@@ -304,10 +325,8 @@ pub struct SearchAggregator {
     used_syntax: HashMap<String, usize>,
 
     // q
-    // everytime a request has a q field, this field must be incremented by the number of terms
-    sum_of_terms_count: usize,
-    // everytime a request has a q field, this field must be incremented by one
-    total_number_of_q: usize,
+    // The maximum number of terms in a q request
+    max_terms_number: usize,
 
     // pagination
     max_limit: usize,
@@ -354,8 +373,7 @@ impl SearchAggregator {
         }
 
         if let Some(ref q) = query.q {
-            ret.total_number_of_q = 1;
-            ret.sum_of_terms_count = q.split_whitespace().count();
+            ret.max_terms_number = q.split_whitespace().count();
         }
 
         ret.max_limit = query.limit;
@@ -365,7 +383,7 @@ impl SearchAggregator {
     }
 
     pub fn succeed(&mut self, result: &SearchResult) {
-        self.total_succeeded += 1;
+        self.total_succeeded = self.total_succeeded.saturating_add(1);
         self.time_spent.push(result.processing_time_ms as usize);
     }
 
@@ -376,23 +394,31 @@ impl SearchAggregator {
             self.user_agents.insert(user_agent);
         }
         // request
-        self.total_received += other.total_received;
-        self.total_succeeded += other.total_succeeded;
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
         self.time_spent.append(&mut other.time_spent);
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
-        self.sort_sum_of_criteria_terms += other.sort_sum_of_criteria_terms;
-        self.sort_total_number_of_criteria += other.sort_total_number_of_criteria;
+        self.sort_sum_of_criteria_terms = self
+            .sort_sum_of_criteria_terms
+            .saturating_add(other.sort_sum_of_criteria_terms);
+        self.sort_total_number_of_criteria = self
+            .sort_total_number_of_criteria
+            .saturating_add(other.sort_total_number_of_criteria);
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
-        self.filter_sum_of_criteria_terms += other.filter_sum_of_criteria_terms;
-        self.filter_total_number_of_criteria += other.filter_total_number_of_criteria;
+        self.filter_sum_of_criteria_terms = self
+            .filter_sum_of_criteria_terms
+            .saturating_add(other.filter_sum_of_criteria_terms);
+        self.filter_total_number_of_criteria = self
+            .filter_total_number_of_criteria
+            .saturating_add(other.filter_total_number_of_criteria);
         for (key, value) in other.used_syntax.into_iter() {
-            *self.used_syntax.entry(key).or_insert(0) += value;
+            let used_syntax = self.used_syntax.entry(key).or_insert(0);
+            *used_syntax = used_syntax.saturating_add(value);
         }
         // q
-        self.sum_of_terms_count += other.sum_of_terms_count;
-        self.total_number_of_q += other.total_number_of_q;
+        self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
@@ -407,12 +433,12 @@ impl SearchAggregator {
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
             // We are only intersted by the slowest value of the 99th fastest results
-            let time_spent = time_spent[percentile_99th as usize];
+            let time_spent = time_spent.get(percentile_99th as usize);
 
             let properties = json!({
                 "user-agent": self.user_agents,
                 "requests": {
-                    "99th_response_time":  format!("{:.2}", time_spent),
+                    "99th_response_time":  time_spent.map(|t| format!("{:.2}", t)),
                     "total_succeeded": self.total_succeeded,
                     "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
                     "total_received": self.total_received,
@@ -427,7 +453,7 @@ impl SearchAggregator {
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "q": {
-                   "avg_terms_number": format!("{:.2}", self.sum_of_terms_count as f64 / self.total_number_of_q as f64),
+                   "max_terms_number": self.max_terms_number,
                 },
                 "pagination": {
                    "max_limit": self.max_limit,

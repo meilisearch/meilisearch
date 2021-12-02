@@ -1,12 +1,14 @@
 #![allow(rustdoc::private_intra_doc_links)]
 #[macro_use]
 pub mod error;
+pub mod analytics;
+mod task;
 #[macro_use]
 pub mod extractors;
-pub mod analytics;
 pub mod helpers;
 pub mod option;
 pub mod routes;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -53,7 +55,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
     meilisearch
         .set_max_index_size(opt.max_index_size.get_bytes() as usize)
-        .set_max_update_store_size(opt.max_udb_size.get_bytes() as usize)
+        .set_max_task_store_size(opt.max_task_db_size.get_bytes() as usize)
         .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
         .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
         .set_dump_dst(opt.dumps_dir.clone())
@@ -180,7 +182,8 @@ macro_rules! create_app {
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
-        use meilisearch_http::error::{MeilisearchHttpError, ResponseError};
+        use meilisearch_error::ResponseError;
+        use meilisearch_http::error::MeilisearchHttpError;
         use meilisearch_http::routes;
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 

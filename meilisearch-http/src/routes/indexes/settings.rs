@@ -1,28 +1,30 @@
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use serde_json::json;
 
 use crate::analytics::Analytics;
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::task::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
+            use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
-            use actix_web::{web, HttpResponse, HttpRequest, Resource};
 
             use meilisearch_lib::milli::update::Setting;
-            use meilisearch_lib::{MeiliSearch, index::Settings, index_controller::Update};
+            use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
             use crate::analytics::Analytics;
-            use crate::error::ResponseError;
-            use crate::extractors::authentication::{GuardedData, policies::*};
+            use crate::extractors::authentication::{policies::*, GuardedData};
+            use crate::task::SummarizedTaskView;
+            use meilisearch_error::ResponseError;
 
             pub async fn delete(
                 meilisearch: GuardedData<Private, MeiliSearch>,
@@ -32,10 +34,17 @@ macro_rules! make_setting_route {
                     $attr: Setting::Reset,
                     ..Default::default()
                 };
-                let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update, false).await?;
-                debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                let update = Update::Settings {
+                    settings,
+                    is_deletion: true,
+                };
+                let task: SummarizedTaskView = meilisearch
+                    .register_update(index_uid.into_inner(), update)
+                    .await?
+                    .into();
+
+                debug!("returns: {:?}", task);
+                Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn update(
@@ -43,7 +52,7 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
-                $analytics_var: web::Data< dyn Analytics>,
+                $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let body = body.into_inner();
 
@@ -52,15 +61,22 @@ macro_rules! make_setting_route {
                 let settings = Settings {
                     $attr: match body {
                         Some(inner_body) => Setting::Set(inner_body),
-                        None => Setting::Reset
+                        None => Setting::Reset,
                     },
                     ..Default::default()
                 };
 
-                let update = Update::Settings(settings);
-                let update_status = meilisearch.register_update(index_uid.into_inner(), update, true).await?;
-                debug!("returns: {:?}", update_status);
-                Ok(HttpResponse::Accepted().json(serde_json::json!({ "updateId": update_status.id() })))
+                let update = Update::Settings {
+                    settings,
+                    is_deletion: false,
+                };
+                let task: SummarizedTaskView = meilisearch
+                    .register_update(index_uid.into_inner(), update)
+                    .await?
+                    .into();
+
+                debug!("returns: {:?}", task);
+                Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn get(
@@ -71,6 +87,7 @@ macro_rules! make_setting_route {
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
+
                 Ok(HttpResponse::Ok().json(val))
             }
 
@@ -151,7 +168,7 @@ make_setting_route!(
             "SearchableAttributes Updated".to_string(),
             json!({
                 "searchable_attributes": {
-                    "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
+                    "total": setting.as_ref().map(|searchable| searchable.len()).unwrap_or(0),
                 },
             }),
             Some(req),
@@ -240,6 +257,9 @@ pub async fn update_all(
            "ranking_rules": {
                 "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
             },
+            "searchable_attributes": {
+                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()).unwrap_or(0),
+            },
            "sortable_attributes": {
                 "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()).unwrap_or(0),
                 "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")).unwrap_or(false),
@@ -252,13 +272,17 @@ pub async fn update_all(
         Some(&req),
     );
 
-    let update = Update::Settings(settings);
-    let update_result = meilisearch
-        .register_update(index_uid.into_inner(), update, true)
-        .await?;
-    let json = serde_json::json!({ "updateId": update_result.id() });
-    debug!("returns: {:?}", json);
-    Ok(HttpResponse::Accepted().json(json))
+    let update = Update::Settings {
+        settings,
+        is_deletion: false,
+    };
+    let task: SummarizedTaskView = meilisearch
+        .register_update(index_uid.into_inner(), update)
+        .await?
+        .into();
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_all(
@@ -274,13 +298,17 @@ pub async fn delete_all(
     data: GuardedData<Private, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = Settings::cleared();
+    let settings = Settings::cleared().into_unchecked();
 
-    let update = Update::Settings(settings.into_unchecked());
-    let update_result = data
-        .register_update(index_uid.into_inner(), update, false)
-        .await?;
-    let json = serde_json::json!({ "updateId": update_result.id() });
-    debug!("returns: {:?}", json);
-    Ok(HttpResponse::Accepted().json(json))
+    let update = Update::Settings {
+        settings,
+        is_deletion: true,
+    };
+    let task: SummarizedTaskView = data
+        .register_update(index_uid.into_inner(), update)
+        .await?
+        .into();
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
 }
