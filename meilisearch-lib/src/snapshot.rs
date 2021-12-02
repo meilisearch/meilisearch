@@ -123,7 +123,6 @@ impl SnapshotJob {
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            dbg!();
             let perm = Permissions::from_mode(0o644);
             _file.set_permissions(perm)?;
         }
