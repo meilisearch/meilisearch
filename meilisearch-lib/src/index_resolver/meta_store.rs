@@ -13,9 +13,9 @@ use crate::tasks::task::TaskId;
 use crate::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
-struct DumpEntry {
-    uid: String,
-    index_meta: IndexMeta,
+pub struct DumpEntry {
+    pub uid: String,
+    pub index_meta: IndexMeta,
 }
 
 const UUIDS_DB_PATH: &str = "index_uuids";

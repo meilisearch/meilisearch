@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use log::{info, trace, warn};
@@ -19,9 +18,6 @@ use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::index_controller::dump_actor::loaders::{v3, v4};
-use crate::index_resolver::index_store::IndexStore;
-use crate::index_resolver::meta_store::IndexMetaStore;
-use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
 use crate::tasks::task::Job;
 use crate::tasks::TaskStore;
@@ -239,10 +235,9 @@ pub fn load_dump(
     Ok(())
 }
 
-struct DumpJob<U, I> {
+struct DumpJob {
     dump_path: PathBuf,
     db_path: PathBuf,
-    index_resolver: Arc<IndexResolver<U, I>>,
     update_file_store: UpdateFileStore,
     task_store: TaskStore,
     uid: String,
@@ -250,11 +245,7 @@ struct DumpJob<U, I> {
     index_db_size: usize,
 }
 
-impl<U, I> DumpJob<U, I>
-where
-    U: IndexMetaStore + Sync + Send + 'static,
-    I: IndexStore + Sync + Send + 'static,
-{
+impl DumpJob {
     async fn run(self) -> Result<()> {
         trace!("Performing dump.");
 
@@ -369,11 +360,6 @@ mod test {
 
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
-        let index_resolver = Arc::new(IndexResolver::new(
-            uuid_store,
-            index_store,
-            update_file_store.clone(),
-        ));
 
         //let update_sender =
         //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
@@ -387,7 +373,6 @@ mod test {
             // this should do nothing
             update_file_store,
             db_path: tmp.path().into(),
-            index_resolver,
             task_store,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
@@ -408,15 +393,8 @@ mod test {
             .once()
             .returning(move |_| Box::pin(err(IndexResolverError::ExistingPrimaryKey)));
 
-        let index_store = MockIndexStore::new();
         let mocker = Mocker::default();
         let file_store = UpdateFileStore::mock(mocker);
-        let index_resolver = Arc::new(IndexResolver::new(
-            uuid_store,
-            index_store,
-            file_store.clone(),
-        ));
-
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
 
@@ -428,7 +406,6 @@ mod test {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
-            index_resolver,
             update_file_store: file_store,
             task_store,
             uid: String::from("test"),

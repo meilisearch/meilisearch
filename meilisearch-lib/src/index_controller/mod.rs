@@ -209,7 +209,6 @@ impl IndexControllerBuilder {
             let (sender, receiver) = mpsc::channel(10);
             let actor = DumpActor::new(
                 receiver,
-                index_resolver.clone(),
                 update_file_store.clone(),
                 task_store.clone(),
                 dump_path,
