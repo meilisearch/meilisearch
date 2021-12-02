@@ -194,8 +194,9 @@ pub fn load_dump(
     );
 
     match meta {
-        MetadataVersion::V1(meta) => {
-            meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
+        MetadataVersion::V1(_meta) => {
+            anyhow::bail!("This version (v1) of the dump is too old to be imported.")
+            // meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer _opts)?
         }
         MetadataVersion::V2(meta) => v2::load_dump(
             meta,

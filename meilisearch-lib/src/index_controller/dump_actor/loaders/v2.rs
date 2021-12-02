@@ -19,7 +19,7 @@ pub fn load_dump(
     update_db_size: usize,
     indexing_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
-    info!("Patching dump V2 to dump V3...");
+    log::info!("Patching dump V2 to dump V3...");
     let indexes_path = src.as_ref().join("indexes");
 
     let dir_entries = std::fs::read_dir(indexes_path)?;
