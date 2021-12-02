@@ -157,7 +157,6 @@ impl HeedMetaStore {
             match indexes.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    dbg!(&line);
                     let DumpEntry { uid, index_meta } = serde_json::from_str(&line)?;
                     db.db.put(&mut txn, &uid, &index_meta)?;
                 }
