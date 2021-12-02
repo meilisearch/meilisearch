@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 // use tokio::fs::create_dir_all;
@@ -26,6 +25,7 @@ use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
 use crate::tasks::task::Job;
 use crate::tasks::TaskStore;
+use crate::update_file_store::UpdateFileStore;
 use error::Result;
 
 mod actor;
@@ -243,6 +243,7 @@ struct DumpJob<U, I> {
     dump_path: PathBuf,
     db_path: PathBuf,
     index_resolver: Arc<IndexResolver<U, I>>,
+    update_file_store: UpdateFileStore,
     task_store: TaskStore,
     uid: String,
     update_db_size: usize,
@@ -269,8 +270,6 @@ where
         analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
-        // dump all indexes in the tmp directory.
-        self.index_resolver.dump(temp_dump_path.clone()).await?;
 
         let (sender, receiver) = oneshot::channel();
 
@@ -281,19 +280,14 @@ where
             })
             .await;
         receiver.await??;
-        self.task_store.dump(&temp_dump_path).await?;
+        self.task_store
+            .dump(&temp_dump_path, self.update_file_store.clone())
+            .await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             // for now we simply copy the updates/updates_files
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
-
-            let options = CopyOptions::default();
-            dir::copy(
-                self.db_path.join("updates/updates_files"),
-                temp_dump_path.join("updates/updates_files"),
-                &options,
-            )?;
 
             let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
             to_tar_gz(temp_dump_path, temp_dump_file.path())
@@ -378,7 +372,7 @@ mod test {
         let index_resolver = Arc::new(IndexResolver::new(
             uuid_store,
             index_store,
-            update_file_store,
+            update_file_store.clone(),
         ));
 
         //let update_sender =
@@ -391,6 +385,7 @@ mod test {
         let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
+            update_file_store,
             db_path: tmp.path().into(),
             index_resolver,
             task_store,
@@ -416,7 +411,11 @@ mod test {
         let index_store = MockIndexStore::new();
         let mocker = Mocker::default();
         let file_store = UpdateFileStore::mock(mocker);
-        let index_resolver = Arc::new(IndexResolver::new(uuid_store, index_store, file_store));
+        let index_resolver = Arc::new(IndexResolver::new(
+            uuid_store,
+            index_store,
+            file_store.clone(),
+        ));
 
         // let update_sender =
         //     create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
@@ -430,6 +429,7 @@ mod test {
             // this should do nothing
             db_path: tmp.path().into(),
             index_resolver,
+            update_file_store: file_store,
             task_store,
             uid: String::from("test"),
             update_db_size: 4096 * 10,

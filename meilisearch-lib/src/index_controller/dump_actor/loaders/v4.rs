@@ -1,12 +1,13 @@
 use std::path::Path;
 
+use heed::EnvOpenOptions;
 use log::info;
 
 use crate::analytics;
 use crate::index_controller::dump_actor::Metadata;
-// use crate::index_controller::index_resolver::IndexResolver;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
+use crate::tasks::TaskStore;
 use crate::update_file_store::UpdateFileStore;
 
 pub fn load_dump(
@@ -18,19 +19,24 @@ pub fn load_dump(
     indexing_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
     info!(
-        "Loading dump from {}, dump database version: {}, dump version: V3",
+        "Loading dump from {}, dump database version: {}, dump version: V4",
         meta.dump_date, meta.db_version
     );
+
+    let mut options = EnvOpenOptions::new();
+    options.map_size(meta_env_size);
+    options.max_dbs(100);
+    let env = options.open(&dst)?;
 
     IndexResolver::load_dump(
         src.as_ref(),
         &dst,
         index_db_size,
-        meta_env_size,
+        env.clone(),
         indexing_options,
     )?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
-    // TaskStore::load_dump(&src, &dst, update_db_size)?;
+    TaskStore::load_dump(&src, env)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
     info!("Loading indexes.");

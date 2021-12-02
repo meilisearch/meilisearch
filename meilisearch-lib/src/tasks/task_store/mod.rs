@@ -7,11 +7,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
+use heed::{Env, RwTxn};
 use log::debug;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
+use crate::update_file_store::UpdateFileStore;
 
 use super::error::TaskError;
 use super::task::{Job, Task, TaskContent, TaskId};
@@ -61,7 +64,7 @@ impl Pending<TaskId> {
     pub(crate) fn take(&mut self) -> Self {
         match self {
             Self::Task(id) => Self::Task(*id),
-            Self::Job(ghost) => Self::Job(ghost.take()),
+            Self::Job(job) => Self::Job(job.take()),
         }
     }
 }
@@ -78,6 +81,15 @@ impl PartialOrd for Pending<TaskId> {
             (Pending::Job(_), Pending::Task(_)) => Some(Ordering::Greater),
             // When there is two jobs we consider them equals.
             (Pending::Job(_), Pending::Job(_)) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Pending<Task> {
+    pub fn get_content_uuid(&self) -> Option<Uuid> {
+        match self {
+            Pending::Task(task) => task.get_content_uuid(),
+            _ => None,
         }
     }
 }
@@ -143,21 +155,27 @@ impl TaskStore {
         Ok(task)
     }
 
+    pub fn register_raw_update(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+        self.store.put(wtxn, task)?;
+        Ok(())
+    }
+
     /// Register an update that applies on multiple indexes.
     /// Currently the update is considered as a priority.
     pub async fn register_job(&self, content: Job) {
-        debug!("registering a ghost task: {:?}", content);
+        debug!("registering a job: {:?}", content);
         self.pending_queue.write().await.push(Pending::Job(content));
     }
 
     /// Returns the next task to process.
     pub async fn peek_pending_task(&self) -> Option<Pending<TaskId>> {
-        self.pending_queue
-            .write()
-            .await
-            .peek_mut()
-            // we don't want to keep the mutex thus we clone the data.
-            .map(|mut pending_task| pending_task.take())
+        let mut pending_queue = self.pending_queue.write().await;
+        loop {
+            match pending_queue.peek()? {
+                Pending::Job(Job::Empty) => drop(pending_queue.pop()),
+                _ => return Some(pending_queue.peek_mut()?.take()),
+            }
+        }
     }
 
     /// Returns the next task to process if there is one.
@@ -212,10 +230,19 @@ impl TaskStore {
         Ok(tasks)
     }
 
-    /// Since we only handle dump of ONE task. Currently this function take
-    /// no parameters and pop the current task out of the pending_queue.
-    pub async fn pop_pending(&self) {
-        let _ = self.pending_queue.write().await.pop();
+    /// Delete one task from the queue and remove all `Empty` job.
+    pub async fn delete_pending(&self, to_delete: &Pending<Task>) {
+        if let Pending::Task(Task { id: pending_id, .. }) = to_delete {
+            let mut pending_queue = self.pending_queue.write().await;
+            *pending_queue = std::mem::take(&mut *pending_queue)
+                .into_iter()
+                .filter(|pending| match pending {
+                    Pending::Job(Job::Empty) => false,
+                    Pending::Task(id) => pending_id != id,
+                    _ => true,
+                })
+                .collect::<BinaryHeap<Pending<TaskId>>>();
+        }
     }
 
     pub async fn list_tasks(
@@ -234,11 +261,16 @@ impl TaskStore {
         .await?
     }
 
-    pub async fn dump(&self, dir_path: &Path) -> Result<()> {
-        let update_dir = dir_path.join("updates");
+    pub async fn dump(
+        &self,
+        dir_path: impl AsRef<Path>,
+        update_file_store: UpdateFileStore,
+    ) -> Result<()> {
+        let update_dir = dir_path.as_ref().join("updates");
         let updates_file = update_dir.join("data.jsonl");
         let tasks = self.list_tasks(None, None, None).await?;
 
+        let dir_path = dir_path.as_ref().to_path_buf();
         tokio::task::spawn_blocking(move || -> Result<()> {
             std::fs::create_dir(&update_dir)?;
             let updates_file = std::fs::File::create(updates_file)?;
@@ -247,11 +279,36 @@ impl TaskStore {
             for task in tasks {
                 serde_json::to_writer(&mut updates_file, &task)?;
                 writeln!(&mut updates_file)?;
+
+                if !task.is_finished() {
+                    if let Some(content_uuid) = task.get_content_uuid() {
+                        update_file_store.dump(content_uuid, &dir_path)?;
+                    }
+                }
             }
             updates_file.flush()?;
             Ok(())
         })
         .await??;
+
+        Ok(())
+    }
+
+    pub fn load_dump(src: impl AsRef<Path>, env: Env) -> anyhow::Result<()> {
+        // create a dummy update fiel store, since it is not needed right now.
+        let store = Self::new(env.clone())?;
+
+        let src_update_path = src.as_ref().join("updates");
+        let update_data = std::fs::File::open(&src_update_path.join("data.jsonl"))?;
+        let update_data = std::io::BufReader::new(update_data);
+
+        let stream = serde_json::Deserializer::from_reader(update_data).into_iter::<Task>();
+
+        let mut wtxn = env.write_txn()?;
+        for entry in stream {
+            store.register_raw_update(&mut wtxn, &entry?)?;
+        }
+        wtxn.commit()?;
 
         Ok(())
     }
@@ -302,10 +359,10 @@ pub mod test {
             }
         }
 
-        pub async fn pop_pending(&self) {
+        pub async fn delete_pending(&self, to_delete: &Pending<Task>) {
             match self {
-                Self::Real(s) => s.pop_pending().await,
-                Self::Mock(m) => unsafe { m.get("pop_pending").call(()) },
+                Self::Real(s) => s.delete_pending(to_delete).await,
+                Self::Mock(m) => unsafe { m.get("delete_pending").call(to_delete) },
             }
         }
 
@@ -348,9 +405,9 @@ pub mod test {
             }
         }
 
-        pub async fn dump(&self, path: &Path) -> Result<()> {
+        pub async fn dump(&self, path: &Path, update_file_store: UpdateFileStore) -> Result<()> {
             match self {
-                Self::Real(s) => s.dump(path).await,
+                Self::Real(s) => s.dump(path, update_file_store).await,
                 Self::Mock(_m) => todo!(),
             }
         }
@@ -358,6 +415,13 @@ pub mod test {
         pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub fn register_raw_update(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+            match self {
+                Self::Real(s) => s.register_raw_update(wtxn, task),
                 Self::Mock(_m) => todo!(),
             }
         }

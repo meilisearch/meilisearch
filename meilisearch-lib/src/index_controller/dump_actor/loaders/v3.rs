@@ -27,7 +27,6 @@ use crate::tasks::task::Task;
 /// └── updates
 ///     └── data.jsonl
 
-#[allow(dead_code)]
 pub fn load_dump(
     meta: Metadata,
     src: impl AsRef<Path>,

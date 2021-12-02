@@ -115,7 +115,7 @@ where
     async fn handle_batch_result(&self, mut batch: Batch) -> Result<()> {
         let tasks = self.store.update_tasks(batch.tasks).await?;
         batch.tasks = tasks;
-        self.store.pop_pending().await;
+        self.store.delete_pending(&batch.tasks[0]).await;
         self.performer.finish(&batch).await;
         Ok(())
     }
@@ -220,7 +220,7 @@ mod test {
                 Ok(tasks)
             });
 
-        mocker.when::<(), ()>("pop_pending").once().then(|_| ());
+        mocker.when::<(), ()>("delete_pending").once().then(|_| ());
 
         let store = TaskStore::mock(mocker);
 

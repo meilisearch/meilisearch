@@ -1,6 +1,8 @@
 use meilisearch_error::{Code, ErrorCode};
 use tokio::task::JoinError;
 
+use crate::update_file_store::UpdateFileStoreError;
+
 use super::task::TaskId;
 
 pub type Result<T> = std::result::Result<T, TaskError>;
@@ -17,7 +19,8 @@ internal_error!(
     TaskError: heed::Error,
     JoinError,
     std::io::Error,
-    serde_json::Error
+    serde_json::Error,
+    UpdateFileStoreError
 );
 
 impl ErrorCode for TaskError {
