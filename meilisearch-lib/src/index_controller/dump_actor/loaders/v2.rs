@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{Deserializer, Value};
 use tempfile::NamedTempFile;
 
-use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
+use crate::index_controller::dump_actor::loaders::v2::{asc_ranking_rule, desc_ranking_rule};
+use crate::index_controller::dump_actor::v2::v2;
 use crate::index_controller::dump_actor::Metadata;
 use crate::options::IndexerOpts;
 
@@ -79,12 +80,12 @@ fn patch_updates(dir: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Resul
     let mut output_update_file = NamedTempFile::new_in(&dir)?;
     let update_file = File::open(&path)?;
 
-    let stream = Deserializer::from_reader(update_file).into_iter::<compat::UpdateEntry>();
+    let stream = Deserializer::from_reader(update_file).into_iter::<v2::UpdateEntry>();
 
     for update in stream {
         let update_entry = update?;
 
-        let update_entry = UpdateEntry::from(update_entry);
+        let update_entry = v3::UpdateEntry::from(update_entry);
 
         serde_json::to_writer(&mut output_update_file, &update_entry)?;
         output_update_file.write_all(b"\n")?;
@@ -118,23 +119,23 @@ fn patch_custom_ranking_rules(ranking_rules: &mut Value) {
     }
 }
 
-impl From<compat::UpdateEntry> for UpdateEntry {
-    fn from(compat::UpdateEntry { uuid, update }: compat::UpdateEntry) -> Self {
+impl From<v2::UpdateEntry> for v3::UpdateEntry {
+    fn from(v2::UpdateEntry { uuid, update }: v2::UpdateEntry) -> Self {
         let update = match update {
-            compat::UpdateStatus::Processing(meta) => UpdateStatus::Processing(meta.into()),
-            compat::UpdateStatus::Enqueued(meta) => UpdateStatus::Enqueued(meta.into()),
-            compat::UpdateStatus::Processed(meta) => UpdateStatus::Processed(meta.into()),
-            compat::UpdateStatus::Aborted(meta) => UpdateStatus::Aborted(meta.into()),
-            compat::UpdateStatus::Failed(meta) => UpdateStatus::Failed(meta.into()),
+            v2::UpdateStatus::Processing(meta) => v3::UpdateStatus::Processing(meta.into()),
+            v2::UpdateStatus::Enqueued(meta) => v3::UpdateStatus::Enqueued(meta.into()),
+            v2::UpdateStatus::Processed(meta) => v3::UpdateStatus::Processed(meta.into()),
+            v2::UpdateStatus::Aborted(meta) => v3::UpdateStatus::Aborted(meta.into()),
+            v2::UpdateStatus::Failed(meta) => v3::UpdateStatus::Failed(meta.into()),
         };
 
         Self { uuid, update }
     }
 }
 
-impl From<compat::Failed> for Failed {
-    fn from(other: compat::Failed) -> Self {
-        let compat::Failed {
+impl From<v2::Failed> for v3::Failed {
+    fn from(other: v2::Failed) -> Self {
+        let v2::Failed {
             from,
             error,
             failed_at,
@@ -143,16 +144,16 @@ impl From<compat::Failed> for Failed {
         Self {
             from: from.into(),
             msg: error.message,
-            code: compat::error_code_from_str(&error.error_code)
+            code: v2::error_code_from_str(&error.error_code)
                 .expect("Invalid update: Invalid error code"),
             failed_at,
         }
     }
 }
 
-impl From<compat::Aborted> for Aborted {
-    fn from(other: compat::Aborted) -> Self {
-        let compat::Aborted { from, aborted_at } = other;
+impl From<v2::Aborted> for v3::Aborted {
+    fn from(other: v2::Aborted) -> Self {
+        let v2::Aborted { from, aborted_at } = other;
 
         Self {
             from: from.into(),
@@ -161,9 +162,9 @@ impl From<compat::Aborted> for Aborted {
     }
 }
 
-impl From<compat::Processing> for Processing {
-    fn from(other: compat::Processing) -> Self {
-        let compat::Processing {
+impl From<v2::Processing> for v3::Processing {
+    fn from(other: v2::Processing) -> Self {
+        let v2::Processing {
             from,
             started_processing_at,
         } = other;
@@ -175,9 +176,9 @@ impl From<compat::Processing> for Processing {
     }
 }
 
-impl From<compat::Enqueued> for Enqueued {
-    fn from(other: compat::Enqueued) -> Self {
-        let compat::Enqueued {
+impl From<v2::Enqueued> for v3::Enqueued {
+    fn from(other: v2::Enqueued) -> Self {
+        let v2::Enqueued {
             update_id,
             meta,
             enqueued_at,
@@ -185,12 +186,12 @@ impl From<compat::Enqueued> for Enqueued {
         } = other;
 
         let meta = match meta {
-            compat::UpdateMeta::DocumentsAddition {
+            v2::UpdateMeta::DocumentsAddition {
                 method,
                 primary_key,
                 ..
             } => {
-                Update::DocumentAddition {
+                v3::Update::DocumentAddition {
                     primary_key,
                     method,
                     // Just ignore if the uuid is no present. If it is needed later, an error will
@@ -198,9 +199,9 @@ impl From<compat::Enqueued> for Enqueued {
                     content_uuid: content.unwrap_or_default(),
                 }
             }
-            compat::UpdateMeta::ClearDocuments => Update::ClearDocuments,
-            compat::UpdateMeta::DeleteDocuments { ids } => Update::DeleteDocuments(ids),
-            compat::UpdateMeta::Settings(settings) => Update::Settings(settings),
+            v2::UpdateMeta::ClearDocuments => Update::ClearDocuments,
+            v2::UpdateMeta::DeleteDocuments { ids } => Update::DeleteDocuments(ids),
+            v2::UpdateMeta::Settings(settings) => Update::Settings(settings),
         };
 
         Self {
@@ -211,9 +212,9 @@ impl From<compat::Enqueued> for Enqueued {
     }
 }
 
-impl From<compat::Processed> for Processed {
-    fn from(other: compat::Processed) -> Self {
-        let compat::Processed {
+impl From<v2::Processed> for v3::Processed {
+    fn from(other: v2::Processed) -> Self {
+        let v2::Processed {
             from,
             success,
             processed_at,
@@ -227,160 +228,12 @@ impl From<compat::Processed> for Processed {
     }
 }
 
-impl From<compat::UpdateResult> for UpdateResult {
-    fn from(other: compat::UpdateResult) -> Self {
+impl From<v2::UpdateResult> for v3::UpdateResult {
+    fn from(other: v2::UpdateResult) -> Self {
         match other {
-            compat::UpdateResult::DocumentsAddition(r) => Self::DocumentsAddition(r),
-            compat::UpdateResult::DocumentDeletion { deleted } => {
-                Self::DocumentDeletion { deleted }
-            }
-            compat::UpdateResult::Other => Self::Other,
+            v2::UpdateResult::DocumentsAddition(r) => Self::DocumentsAddition(r),
+            v2::UpdateResult::DocumentDeletion { deleted } => Self::DocumentDeletion { deleted },
+            v2::UpdateResult::Other => Self::Other,
         }
-    }
-}
-
-/// compat structure from pre-dumpv3 meilisearch
-mod compat {
-    use anyhow::bail;
-    use chrono::{DateTime, Utc};
-    use meilisearch_error::Code;
-    use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
-    use serde::{Deserialize, Serialize};
-    use uuid::Uuid;
-
-    use crate::index::{Settings, Unchecked};
-
-    #[derive(Serialize, Deserialize)]
-    pub struct UpdateEntry {
-        pub uuid: Uuid,
-        pub update: UpdateStatus,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub enum UpdateFormat {
-        Json,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub enum UpdateResult {
-        DocumentsAddition(DocumentAdditionResult),
-        DocumentDeletion { deleted: u64 },
-        Other,
-    }
-
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(tag = "type")]
-    pub enum UpdateMeta {
-        DocumentsAddition {
-            method: IndexDocumentsMethod,
-            format: UpdateFormat,
-            primary_key: Option<String>,
-        },
-        ClearDocuments,
-        DeleteDocuments {
-            ids: Vec<String>,
-        },
-        Settings(Settings<Unchecked>),
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Enqueued {
-        pub update_id: u64,
-        pub meta: UpdateMeta,
-        pub enqueued_at: DateTime<Utc>,
-        pub content: Option<Uuid>,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Processed {
-        pub success: UpdateResult,
-        pub processed_at: DateTime<Utc>,
-        #[serde(flatten)]
-        pub from: Processing,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Processing {
-        #[serde(flatten)]
-        pub from: Enqueued,
-        pub started_processing_at: DateTime<Utc>,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Aborted {
-        #[serde(flatten)]
-        pub from: Enqueued,
-        pub aborted_at: DateTime<Utc>,
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Failed {
-        #[serde(flatten)]
-        pub from: Processing,
-        pub error: ResponseError,
-        pub failed_at: DateTime<Utc>,
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    #[serde(tag = "status", rename_all = "camelCase")]
-    pub enum UpdateStatus {
-        Processing(Processing),
-        Enqueued(Enqueued),
-        Processed(Processed),
-        Aborted(Aborted),
-        Failed(Failed),
-    }
-
-    type StatusCode = ();
-
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ResponseError {
-        #[serde(skip)]
-        pub code: StatusCode,
-        pub message: String,
-        pub error_code: String,
-        pub error_type: String,
-        pub error_link: String,
-    }
-
-    pub fn error_code_from_str(s: &str) -> anyhow::Result<Code> {
-        let code = match s {
-            "index_creation_failed" => Code::CreateIndex,
-            "index_already_exists" => Code::IndexAlreadyExists,
-            "index_not_found" => Code::IndexNotFound,
-            "invalid_index_uid" => Code::InvalidIndexUid,
-            "invalid_state" => Code::InvalidState,
-            "missing_primary_key" => Code::MissingPrimaryKey,
-            "primary_key_already_present" => Code::PrimaryKeyAlreadyPresent,
-            "invalid_request" => Code::InvalidRankingRule,
-            "max_fields_limit_exceeded" => Code::MaxFieldsLimitExceeded,
-            "missing_document_id" => Code::MissingDocumentId,
-            "invalid_facet" => Code::Filter,
-            "invalid_filter" => Code::Filter,
-            "invalid_sort" => Code::Sort,
-            "bad_parameter" => Code::BadParameter,
-            "bad_request" => Code::BadRequest,
-            "document_not_found" => Code::DocumentNotFound,
-            "internal" => Code::Internal,
-            "invalid_geo_field" => Code::InvalidGeoField,
-            "invalid_token" => Code::InvalidToken,
-            "missing_authorization_header" => Code::MissingAuthorizationHeader,
-            "payload_too_large" => Code::PayloadTooLarge,
-            "unretrievable_document" => Code::RetrieveDocument,
-            "search_error" => Code::SearchDocuments,
-            "unsupported_media_type" => Code::UnsupportedMediaType,
-            "dump_already_in_progress" => Code::DumpAlreadyInProgress,
-            "dump_process_failed" => Code::DumpProcessFailed,
-            _ => bail!("unknow error code."),
-        };
-
-        Ok(code)
     }
 }
