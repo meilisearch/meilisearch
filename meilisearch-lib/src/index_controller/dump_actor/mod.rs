@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::{v3, v4};
+use crate::index_controller::dump_actor::loaders::{v2, v3, v4};
 use crate::options::IndexerOpts;
 use crate::tasks::task::Job;
 use crate::tasks::TaskStore;
@@ -197,15 +197,14 @@ pub fn load_dump(
         MetadataVersion::V1(meta) => {
             meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer_opts)?
         }
-        MetadataVersion::V2(_meta) => todo!(),
-        //     v2::load_dump(
-        //     meta,
-        //     &tmp_src_path,
-        //     tmp_dst.path(),
-        //     index_db_size,
-        //     update_db_size,
-        //     indexer_opts,
-        // )?,
+        MetadataVersion::V2(meta) => v2::load_dump(
+            meta,
+            &tmp_src_path,
+            tmp_dst.path(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?,
         MetadataVersion::V3(meta) => v3::load_dump(
             meta,
             &tmp_src_path,

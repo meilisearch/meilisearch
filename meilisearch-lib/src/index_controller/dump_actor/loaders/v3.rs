@@ -4,7 +4,6 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::Context;
-use chrono::Utc;
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
 use tempfile::tempdir;

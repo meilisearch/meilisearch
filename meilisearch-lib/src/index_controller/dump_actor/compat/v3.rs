@@ -8,6 +8,8 @@ use crate::index::{Settings, Unchecked};
 use crate::index_resolver::IndexUid;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskResult};
 
+use super::v2;
+
 #[derive(Serialize, Deserialize)]
 pub struct DumpEntry {
     pub uuid: Uuid,
@@ -29,28 +31,16 @@ pub enum UpdateStatus {
     Failed(Failed),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DocumentAdditionResult {
-    pub nb_documents: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: u64 },
-    Other,
-}
-
-impl From<UpdateResult> for TaskResult {
-    fn from(other: UpdateResult) -> Self {
+impl From<v2::UpdateResult> for TaskResult {
+    fn from(other: v2::UpdateResult) -> Self {
         match other {
-            UpdateResult::DocumentsAddition(result) => TaskResult::DocumentAddition {
+            v2::UpdateResult::DocumentsAddition(result) => TaskResult::DocumentAddition {
                 indexed_documents: result.nb_documents as u64,
             },
-            UpdateResult::DocumentDeletion { deleted } => TaskResult::DocumentDeletion {
+            v2::UpdateResult::DocumentDeletion { deleted } => TaskResult::DocumentDeletion {
                 deleted_documents: deleted,
             },
-            UpdateResult::Other => TaskResult::Other,
+            v2::UpdateResult::Other => TaskResult::Other,
         }
     }
 }
@@ -129,7 +119,7 @@ impl Enqueued {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Processed {
-    pub success: UpdateResult,
+    pub success: v2::UpdateResult,
     pub processed_at: DateTime<Utc>,
     #[serde(flatten)]
     pub from: Processing,

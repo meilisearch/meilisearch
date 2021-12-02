@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
-use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
+use crate::index_controller::dump_actor::compat;
 use crate::index_controller::{self, IndexMetadata};
 use crate::index_resolver::meta_store::IndexMeta;
 use crate::{index::Unchecked, options::IndexerOpts};
@@ -35,6 +35,7 @@ impl MetadataV1 {
         size: usize,
         indexer_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
+        log::info!("Patching dump V2 to dump V3...");
         let uuid_store = todo!(); // HeedMetaStore::new(&dst)?;
         for index in self.indexes {
             let uuid = Uuid::new_v4();
@@ -180,8 +181,8 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter_map(|criterion| {
                     match criterion.as_str() {
                         "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
-                        s if s.starts_with("asc") => asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
-                        s if s.starts_with("desc") => desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
+                        s if s.starts_with("asc") => compat::asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
+                        s if s.starts_with("desc") => compat::desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
                         "wordsPosition" => {
                             warn!("The criteria `attribute` and `wordsPosition` have been merged \
                                 into a single criterion `attribute` so `wordsPositon` will be \

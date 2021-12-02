@@ -5,12 +5,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{Deserializer, Value};
 use tempfile::NamedTempFile;
 
-use crate::index_controller::dump_actor::loaders::v2::{asc_ranking_rule, desc_ranking_rule};
-use crate::index_controller::dump_actor::v2::v2;
+use crate::index_controller::dump_actor::compat::{self, v2, v3};
 use crate::index_controller::dump_actor::Metadata;
 use crate::options::IndexerOpts;
-
-use super::v3;
 
 /// The dump v2 reads the dump folder and patches all the needed file to make it compatible with a
 /// dump v3, then calls the dump v3 to actually handle the dump.
@@ -22,6 +19,7 @@ pub fn load_dump(
     update_db_size: usize,
     indexing_options: &IndexerOpts,
 ) -> anyhow::Result<()> {
+    info!("Patching dump V2 to dump V3...");
     let indexes_path = src.as_ref().join("indexes");
 
     let dir_entries = std::fs::read_dir(indexes_path)?;
@@ -43,7 +41,7 @@ pub fn load_dump(
     let update_path = update_dir.join("data.jsonl");
     patch_updates(update_dir, update_path)?;
 
-    v3::load_dump(
+    super::v3::load_dump(
         meta,
         src,
         dst,
@@ -106,10 +104,10 @@ fn patch_custom_ranking_rules(ranking_rules: &mut Value) {
         Value::Array(values) => values
             .into_iter()
             .filter_map(|value| match value {
-                Value::String(s) if s.starts_with("asc") => asc_ranking_rule(&s)
+                Value::String(s) if s.starts_with("asc") => compat::asc_ranking_rule(&s)
                     .map(|f| format!("{}:asc", f))
                     .map(Value::String),
-                Value::String(s) if s.starts_with("desc") => desc_ranking_rule(&s)
+                Value::String(s) if s.starts_with("desc") => compat::desc_ranking_rule(&s)
                     .map(|f| format!("{}:desc", f))
                     .map(Value::String),
                 otherwise => Some(otherwise),
@@ -125,7 +123,7 @@ impl From<v2::UpdateEntry> for v3::UpdateEntry {
             v2::UpdateStatus::Processing(meta) => v3::UpdateStatus::Processing(meta.into()),
             v2::UpdateStatus::Enqueued(meta) => v3::UpdateStatus::Enqueued(meta.into()),
             v2::UpdateStatus::Processed(meta) => v3::UpdateStatus::Processed(meta.into()),
-            v2::UpdateStatus::Aborted(meta) => v3::UpdateStatus::Aborted(meta.into()),
+            v2::UpdateStatus::Aborted(_) => unreachable!("Updates could never be aborted."),
             v2::UpdateStatus::Failed(meta) => v3::UpdateStatus::Failed(meta.into()),
         };
 
@@ -147,17 +145,6 @@ impl From<v2::Failed> for v3::Failed {
             code: v2::error_code_from_str(&error.error_code)
                 .expect("Invalid update: Invalid error code"),
             failed_at,
-        }
-    }
-}
-
-impl From<v2::Aborted> for v3::Aborted {
-    fn from(other: v2::Aborted) -> Self {
-        let v2::Aborted { from, aborted_at } = other;
-
-        Self {
-            from: from.into(),
-            aborted_at,
         }
     }
 }
@@ -199,9 +186,9 @@ impl From<v2::Enqueued> for v3::Enqueued {
                     content_uuid: content.unwrap_or_default(),
                 }
             }
-            v2::UpdateMeta::ClearDocuments => Update::ClearDocuments,
-            v2::UpdateMeta::DeleteDocuments { ids } => Update::DeleteDocuments(ids),
-            v2::UpdateMeta::Settings(settings) => Update::Settings(settings),
+            v2::UpdateMeta::ClearDocuments => v3::Update::ClearDocuments,
+            v2::UpdateMeta::DeleteDocuments { ids } => v3::Update::DeleteDocuments(ids),
+            v2::UpdateMeta::Settings(settings) => v3::Update::Settings(settings),
         };
 
         Self {
@@ -224,16 +211,6 @@ impl From<v2::Processed> for v3::Processed {
             success: success.into(),
             processed_at,
             from: from.into(),
-        }
-    }
-}
-
-impl From<v2::UpdateResult> for v3::UpdateResult {
-    fn from(other: v2::UpdateResult) -> Self {
-        match other {
-            v2::UpdateResult::DocumentsAddition(r) => Self::DocumentsAddition(r),
-            v2::UpdateResult::DocumentDeletion { deleted } => Self::DocumentDeletion { deleted },
-            v2::UpdateResult::Other => Self::Other,
         }
     }
 }
