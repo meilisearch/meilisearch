@@ -1,7 +1,75 @@
 use std::fmt;
 
-use actix_http::http::StatusCode;
+use actix_http::{body::Body, http::StatusCode};
+use actix_web::{self as aweb, HttpResponseBuilder};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
+pub struct ResponseError {
+    #[serde(skip)]
+    #[cfg_attr(
+        feature = "test-traits",
+        proptest(strategy = "strategy::status_code_strategy()")
+    )]
+    code: StatusCode,
+    message: String,
+    #[serde(rename = "code")]
+    error_code: String,
+    #[serde(rename = "type")]
+    error_type: String,
+    #[serde(rename = "link")]
+    error_link: String,
+}
+
+impl ResponseError {
+    pub fn from_msg(message: String, code: Code) -> Self {
+        Self {
+            code: code.http(),
+            message,
+            error_code: code.err_code().error_name.to_string(),
+            error_type: code.type_(),
+            error_link: code.url(),
+        }
+    }
+}
+
+impl fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.message.fmt(f)
+    }
+}
+
+impl std::error::Error for ResponseError {}
+
+impl<T> From<T> for ResponseError
+where
+    T: ErrorCode,
+{
+    fn from(other: T) -> Self {
+        Self {
+            code: other.http_status(),
+            message: other.to_string(),
+            error_code: other.error_name(),
+            error_type: other.error_type(),
+            error_link: other.error_url(),
+        }
+    }
+}
+
+impl aweb::error::ResponseError for ResponseError {
+    fn error_response(&self) -> aweb::HttpResponse<Body> {
+        let json = serde_json::to_vec(self).unwrap();
+        HttpResponseBuilder::new(self.status_code())
+            .content_type("application/json")
+            .body(json)
+    }
+
+    fn status_code(&self) -> StatusCode {
+        self.code
+    }
+}
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
@@ -235,5 +303,16 @@ impl ErrCode {
             error_name,
             error_type: ErrorType::InvalidRequestError,
         }
+    }
+}
+
+#[cfg(feature = "test-traits")]
+mod strategy {
+    use proptest::strategy::Strategy;
+
+    use super::*;
+
+    pub(super) fn status_code_strategy() -> impl Strategy<Value = StatusCode> {
+        (100..999u16).prop_map(|i| StatusCode::from_u16(i).unwrap())
     }
 }

@@ -8,7 +8,9 @@ async fn create_and_get_index() {
     let index = server.index("test");
     let (_, code) = index.create(None).await;
 
-    assert_eq!(code, 201);
+    assert_eq!(code, 202);
+
+    index.wait_task(0).await;
 
     let (response, code) = index.get().await;
 
@@ -55,6 +57,8 @@ async fn list_multiple_indexes() {
     server.index("test").create(None).await;
     server.index("test1").create(Some("key")).await;
 
+    server.index("test").wait_task(1).await;
+
     let (response, code) = server.list_indexes().await;
     assert_eq!(code, 200);
     assert!(response.is_array());
@@ -66,4 +70,23 @@ async fn list_multiple_indexes() {
     assert!(arr
         .iter()
         .any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
+}
+
+#[actix_rt::test]
+async fn get_invalid_index_uid() {
+    let server = Server::new().await;
+    let index = server.index("this is not a valid index name");
+    let (response, code) = index.get().await;
+
+    assert_eq!(code, 404);
+    assert_eq!(
+        response,
+        json!(
+        {
+        "message": "Index `this is not a valid index name` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+            })
+    );
 }

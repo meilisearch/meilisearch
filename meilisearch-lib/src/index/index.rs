@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::index_controller::update_file_store::UpdateFileStore;
 use crate::EnvSizer;
 
 use super::error::IndexError;
@@ -26,7 +25,7 @@ pub type Document = Map<String, Value>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMeta {
-    created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub primary_key: Option<String>,
 }
@@ -69,8 +68,6 @@ pub struct Index {
     #[derivative(Debug = "ignore")]
     pub inner: Arc<milli::Index>,
     #[derivative(Debug = "ignore")]
-    pub update_file_store: Arc<UpdateFileStore>,
-    #[derivative(Debug = "ignore")]
     pub update_handler: Arc<UpdateHandler>,
 }
 
@@ -86,24 +83,24 @@ impl Index {
     pub fn open(
         path: impl AsRef<Path>,
         size: usize,
-        update_file_store: Arc<UpdateFileStore>,
         uuid: Uuid,
         update_handler: Arc<UpdateHandler>,
     ) -> Result<Self> {
+        log::debug!("opening index in {}", path.as_ref().display());
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
         let inner = Arc::new(milli::Index::new(options, &path)?);
         Ok(Index {
             inner,
-            update_file_store,
             uuid,
             update_handler,
         })
     }
 
-    pub fn inner(&self) -> &milli::Index {
-        &self.inner
+    /// Asynchronously close the underlying index
+    pub fn close(self) {
+        self.inner.as_ref().clone().prepare_for_closing();
     }
 
     pub fn stats(&self) -> Result<IndexStats> {
@@ -282,5 +279,19 @@ impl Index {
             .env
             .copy_to_path(dst, heed::CompactionOption::Enabled)?;
         Ok(())
+    }
+}
+
+/// When running tests, when a server instance is dropped, the environment is not actually closed,
+/// leaving a lot of open file descriptors.
+impl Drop for Index {
+    fn drop(&mut self) {
+        // When dropping the last instance of an index, we want to close the index
+        // Note that the close is actually performed only if all the instances a effectively
+        // dropped
+
+        if Arc::strong_count(&self.inner) == 1 {
+            self.inner.as_ref().clone().prepare_for_closing();
+        }
     }
 }

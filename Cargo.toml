@@ -4,7 +4,5 @@ members = [
     "meilisearch-error",
     "meilisearch-lib",
 ]
-resolver = "2"
 
-[patch.crates-io]
-pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
+resolver = "2"

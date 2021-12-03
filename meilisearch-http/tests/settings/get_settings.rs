@@ -39,6 +39,7 @@ async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
+    index.wait_task(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
@@ -77,7 +78,7 @@ async fn test_partial_update() {
     let (_response, _code) = index
         .update_settings(json!({"displayedAttributes": ["foo"]}))
         .await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
@@ -86,7 +87,7 @@ async fn test_partial_update() {
     let (_response, _) = index
         .update_settings(json!({"searchableAttributes": ["bar"]}))
         .await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -98,17 +99,12 @@ async fn test_partial_update() {
 async fn error_delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (response, code) = index.delete_settings().await;
+    let (_response, code) = index.delete_settings().await;
+    assert_eq!(code, 202);
 
-    let expected_response = json!({
-        "message": "Index `test` not found.",
-        "code": "index_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
-    });
+    let response = index.wait_task(0).await;
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 404);
+    assert_eq!(response["status"], "failed");
 }
 
 #[actix_rt::test]
@@ -126,13 +122,13 @@ async fn reset_all_settings() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["updateId"], 0);
-    index.wait_update_id(0).await;
+    assert_eq!(response["uid"], 0);
+    index.wait_task(0).await;
 
     index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -145,7 +141,7 @@ async fn reset_all_settings() {
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     index.delete_settings().await;
-    index.wait_update_id(2).await;
+    index.wait_task(2).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -166,10 +162,13 @@ async fn update_setting_unexisting_index() {
     let index = server.index("test");
     let (_response, code) = index.update_settings(json!({})).await;
     assert_eq!(code, 202);
+    let response = index.wait_task(0).await;
+    assert_eq!(response["status"], "succeeded");
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
-    let (_response, code) = index.delete_settings().await;
-    assert_eq!(code, 202);
+    index.delete_settings().await;
+    let response = index.wait_task(1).await;
+    assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]
@@ -177,16 +176,15 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
     let (response, code) = index.update_settings(json!({})).await;
+    assert_eq!(code, 400);
 
-    let expected_response = json!({
+    let expected = json!({
         "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
         "code": "invalid_index_uid",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
-    });
+        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"});
 
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    assert_eq!(response, expected);
 }
 
 macro_rules! test_setting_routes {
@@ -218,6 +216,7 @@ macro_rules! test_setting_routes {
                         .collect::<String>());
                     let (response, code) = server.service.post(url, serde_json::Value::Null).await;
                     assert_eq!(code, 202, "{}", response);
+                    server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;
                     assert_eq!(code, 200, "{}", response);
                 }
@@ -230,8 +229,10 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.delete(url).await;
-                    assert_eq!(code, 404, "{}", response);
+                    let (_, code) = server.service.delete(url).await;
+                    assert_eq!(code, 202);
+                    let response = server.index("").wait_task(0).await;
+                    assert_eq!(response["status"], "failed");
                 }
 
                 #[actix_rt::test]
@@ -239,7 +240,8 @@ macro_rules! test_setting_routes {
                     let server = Server::new().await;
                     let index = server.index("test");
                     let (response, code) = index.create(None).await;
-                    assert_eq!(code, 201, "{}", response);
+                    assert_eq!(code, 202, "{}", response);
+                    index.wait_task(0).await;
                     let url = format!("/indexes/test/settings/{}",
                         stringify!($setting)
                         .chars()
@@ -274,8 +276,8 @@ async fn error_set_invalid_ranking_rules() {
     let (_response, _code) = index
         .update_settings(json!({ "rankingRules": [ "manyTheFish"]}))
         .await;
-    index.wait_update_id(0).await;
-    let (response, code) = index.get_update(0).await;
+    index.wait_task(1).await;
+    let (response, code) = index.get_task(1).await;
 
     assert_eq!(code, 200);
     assert_eq!(response["status"], "failed");
@@ -296,7 +298,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let index = server.index("test");
 
     let (_response, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let (response, _) = index.get_distinct_attribute().await;
 
@@ -304,7 +306,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, _) = index.get_distinct_attribute().await;
 

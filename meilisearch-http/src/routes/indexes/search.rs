@@ -1,14 +1,13 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::routes::IndexParam;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -108,7 +107,7 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 
 pub async fn search_with_url_query(
     meilisearch: GuardedData<Public, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     params: web::Query<SearchQueryGet>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -118,7 +117,7 @@ pub async fn search_with_url_query(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(path.into_inner().index_uid, query).await;
+    let search_result = meilisearch.search(path.into_inner(), query).await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -136,7 +135,7 @@ pub async fn search_with_url_query(
 
 pub async fn search_with_post(
     meilisearch: GuardedData<Public, MeiliSearch>,
-    path: web::Path<IndexParam>,
+    path: web::Path<String>,
     params: web::Json<SearchQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -146,7 +145,7 @@ pub async fn search_with_post(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(path.into_inner().index_uid, query).await;
+    let search_result = meilisearch.search(path.into_inner(), query).await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }

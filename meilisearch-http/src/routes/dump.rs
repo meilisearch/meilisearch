@@ -1,11 +1,11 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
+use meilisearch_error::ResponseError;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::analytics::Analytics;
-use crate::error::ResponseError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

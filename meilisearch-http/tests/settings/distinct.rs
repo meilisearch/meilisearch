@@ -9,7 +9,7 @@ async fn set_and_reset_distinct_attribute() {
     let (_response, _code) = index
         .update_settings(json!({ "distinctAttribute": "test"}))
         .await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let (response, _) = index.settings().await;
 
@@ -19,7 +19,7 @@ async fn set_and_reset_distinct_attribute() {
         .update_settings(json!({ "distinctAttribute": null }))
         .await;
 
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, _) = index.settings().await;
 
@@ -32,7 +32,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let index = server.index("test");
 
     let (_response, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     let (response, _) = index.get_distinct_attribute().await;
 
@@ -40,7 +40,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, _) = index.get_distinct_attribute().await;
 

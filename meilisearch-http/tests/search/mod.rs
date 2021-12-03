@@ -37,7 +37,7 @@ async fn simple_placeholder_search() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     index
         .search(json!({}), |response, code| {
@@ -54,7 +54,7 @@ async fn simple_search() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     index
         .search(json!({"q": "glass"}), |response, code| {
@@ -71,7 +71,7 @@ async fn search_multiple_params() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(0).await;
+    index.wait_task(0).await;
 
     index
         .search(
@@ -101,7 +101,7 @@ async fn search_with_filter_string_notation() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     index
         .search(
@@ -127,7 +127,7 @@ async fn search_with_filter_array_notation() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, code) = index
         .search_post(json!({
@@ -157,7 +157,7 @@ async fn search_with_sort_on_numbers() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     index
         .search(
@@ -183,7 +183,7 @@ async fn search_with_sort_on_strings() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     index
         .search(
@@ -209,7 +209,7 @@ async fn search_with_multiple_sort() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, code) = index
         .search_post(json!({
@@ -231,7 +231,7 @@ async fn search_facet_distribution() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     index
         .search(
@@ -259,7 +259,7 @@ async fn displayed_attributes() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
-    index.wait_update_id(1).await;
+    index.wait_task(1).await;
 
     let (response, code) = index
         .search_post(json!({ "attributesToRetrieve": ["title", "id"] }))

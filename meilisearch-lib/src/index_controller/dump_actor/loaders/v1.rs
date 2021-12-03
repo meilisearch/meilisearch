@@ -14,8 +14,7 @@ use uuid::Uuid;
 use crate::document_formats::read_ndjson;
 use crate::index::apply_settings_to_builder;
 use crate::index::update_handler::UpdateHandler;
-use crate::index_controller::dump_actor::loaders::compat::{asc_ranking_rule, desc_ranking_rule};
-use crate::index_controller::index_resolver::uuid_store::HeedUuidStore;
+use crate::index_controller::dump_actor::compat;
 use crate::index_controller::{self, IndexMetadata};
 use crate::{index::Unchecked, options::IndexerOpts};
 
@@ -27,6 +26,7 @@ pub struct MetadataV1 {
 }
 
 impl MetadataV1 {
+    #[allow(dead_code, unreachable_code, unused_variables)]
     pub fn load_dump(
         self,
         src: impl AsRef<Path>,
@@ -34,22 +34,29 @@ impl MetadataV1 {
         size: usize,
         indexer_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        let uuid_store = HeedUuidStore::new(&dst)?;
-        for index in self.indexes {
-            let uuid = Uuid::new_v4();
-            uuid_store.insert(index.uid.clone(), uuid)?;
-            let src = src.as_ref().join(index.uid);
-            load_index(
-                &src,
-                &dst,
-                uuid,
-                index.meta.primary_key.as_deref(),
-                size,
-                indexer_options,
-            )?;
-        }
+        unreachable!("dump v1 not implemented");
+        // log::info!("Patching dump V2 to dump V3...");
+        // let uuid_store = todo!(); // HeedMetaStore::new(&dst)?;
+        // for index in self.indexes {
+        //     let uuid = Uuid::new_v4();
+        //     // Since we don't know when the index was created, we assume it's from 0
+        //     let meta = IndexMeta {
+        //         uuid,
+        //         creation_task_id: 0,
+        //     };
+        //     // uuid_store.insert(index.uid.clone(), meta)?;
+        //     let src = src.as_ref().join(index.uid);
+        //     load_index(
+        //         &src,
+        //         &dst,
+        //         uuid,
+        //         index.meta.primary_key.as_deref(),
+        //         size,
+        //         indexer_options,
+        //     )?;
+        // }
 
-        Ok(())
+        // Ok(())
     }
 }
 
@@ -81,6 +88,7 @@ struct Settings {
     pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
+#[allow(dead_code)]
 fn load_index(
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
@@ -105,7 +113,7 @@ fn load_index(
 
     let handler = UpdateHandler::new(indexer_options)?;
 
-    let mut builder = handler.update_builder(0).settings(&mut txn, &index);
+    let mut builder = handler.update_builder().settings(&mut txn, &index);
 
     if let Some(primary_key) = primary_key {
         builder.set_primary_key(primary_key.to_string());
@@ -113,7 +121,7 @@ fn load_index(
 
     apply_settings_to_builder(&settings.check(), &mut builder);
 
-    builder.execute(|_, _| ())?;
+    builder.execute(|_| ())?;
 
     let reader = BufReader::new(File::open(&src.as_ref().join("documents.jsonl"))?);
 
@@ -129,9 +137,9 @@ fn load_index(
     //a primary key error to be thrown.
     if !documents_reader.is_empty() {
         let builder = update_handler
-            .update_builder(0)
+            .update_builder()
             .index_documents(&mut txn, &index);
-        builder.execute(documents_reader, |_, _| ())?;
+        builder.execute(documents_reader, |_| ())?;
     }
 
     txn.commit()?;
@@ -174,8 +182,8 @@ impl From<Settings> for index_controller::Settings<Unchecked> {
                 Some(Some(ranking_rules)) => Setting::Set(ranking_rules.into_iter().filter_map(|criterion| {
                     match criterion.as_str() {
                         "words" | "typo" | "proximity" | "attribute" | "exactness" => Some(criterion),
-                        s if s.starts_with("asc") => asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
-                        s if s.starts_with("desc") => desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
+                        s if s.starts_with("asc") => compat::asc_ranking_rule(s).map(|f| format!("{}:asc", f)),
+                        s if s.starts_with("desc") => compat::desc_ranking_rule(s).map(|f| format!("{}:desc", f)),
                         "wordsPosition" => {
                             warn!("The criteria `attribute` and `wordsPosition` have been merged \
                                 into a single criterion `attribute` so `wordsPositon` will be \

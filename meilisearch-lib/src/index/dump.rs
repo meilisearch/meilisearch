@@ -112,7 +112,7 @@ impl Index {
         let mut txn = index.write_txn()?;
 
         // Apply settings first
-        let builder = update_handler.update_builder(0);
+        let builder = update_handler.update_builder();
         let mut builder = builder.settings(&mut txn, &index);
 
         if let Some(primary_key) = primary_key {
@@ -121,7 +121,7 @@ impl Index {
 
         apply_settings_to_builder(&settings, &mut builder);
 
-        builder.execute(|_, _| ())?;
+        builder.execute(|_| ())?;
 
         let document_file_path = src.as_ref().join(DATA_FILE_NAME);
         let reader = BufReader::new(File::open(&document_file_path)?);
@@ -138,9 +138,9 @@ impl Index {
         //a primary key error to be thrown.
         if !documents_reader.is_empty() {
             let builder = update_handler
-                .update_builder(0)
+                .update_builder()
                 .index_documents(&mut txn, &index);
-            builder.execute(documents_reader, |_, _| ())?;
+            builder.execute(documents_reader, |_| ())?;
         }
 
         txn.commit()?;

@@ -2,12 +2,14 @@
 pub mod error;
 pub mod options;
 
+mod analytics;
 pub mod index;
 pub mod index_controller;
+mod index_resolver;
+mod snapshot;
+pub mod tasks;
+mod update_file_store;
 
-mod analytics;
-
-pub use index_controller::updates::store::Update;
 pub use index_controller::MeiliSearch;
 
 pub use milli;
