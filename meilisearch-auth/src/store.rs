@@ -1,5 +1,6 @@
 use enum_iterator::IntoEnumIterator;
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fs::create_dir_all;
@@ -121,6 +122,7 @@ impl HeedAuthStore {
             let (_, content) = result?;
             list.push(content);
         }
+        list.sort_unstable_by_key(|k| Reverse(k.created_at));
         Ok(list)
     }
 

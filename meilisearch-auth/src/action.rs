@@ -14,8 +14,8 @@ pub enum Action {
     DocumentsGet = actions::DOCUMENTS_GET,
     #[serde(rename = "documents.delete")]
     DocumentsDelete = actions::DOCUMENTS_DELETE,
-    #[serde(rename = "indexes.add")]
-    IndexesAdd = actions::INDEXES_ADD,
+    #[serde(rename = "indexes.create")]
+    IndexesAdd = actions::INDEXES_CREATE,
     #[serde(rename = "indexes.get")]
     IndexesGet = actions::INDEXES_GET,
     #[serde(rename = "indexes.update")]
@@ -47,7 +47,7 @@ impl Action {
             DOCUMENTS_ADD => Some(Self::DocumentsAdd),
             DOCUMENTS_GET => Some(Self::DocumentsGet),
             DOCUMENTS_DELETE => Some(Self::DocumentsDelete),
-            INDEXES_ADD => Some(Self::IndexesAdd),
+            INDEXES_CREATE => Some(Self::IndexesAdd),
             INDEXES_GET => Some(Self::IndexesGet),
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
@@ -70,7 +70,7 @@ impl Action {
             Self::DocumentsAdd => DOCUMENTS_ADD,
             Self::DocumentsGet => DOCUMENTS_GET,
             Self::DocumentsDelete => DOCUMENTS_DELETE,
-            Self::IndexesAdd => INDEXES_ADD,
+            Self::IndexesAdd => INDEXES_CREATE,
             Self::IndexesGet => INDEXES_GET,
             Self::IndexesUpdate => INDEXES_UPDATE,
             Self::IndexesDelete => INDEXES_DELETE,
@@ -90,7 +90,7 @@ pub mod actions {
     pub const DOCUMENTS_ADD: u8 = 2;
     pub const DOCUMENTS_GET: u8 = 3;
     pub const DOCUMENTS_DELETE: u8 = 4;
-    pub const INDEXES_ADD: u8 = 5;
+    pub const INDEXES_CREATE: u8 = 5;
     pub const INDEXES_GET: u8 = 6;
     pub const INDEXES_UPDATE: u8 = 7;
     pub const INDEXES_DELETE: u8 = 8;

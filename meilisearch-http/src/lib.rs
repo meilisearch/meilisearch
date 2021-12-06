@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
-use crate::extractors::authentication::AuthConfig;
 use actix_web::error::JsonPayloadError;
 use analytics::Analytics;
 use error::PayloadError;
@@ -25,31 +24,6 @@ use actix_web::{web, HttpRequest};
 use extractors::payload::PayloadConfig;
 use meilisearch_auth::AuthController;
 use meilisearch_lib::MeiliSearch;
-use sha2::Digest;
-
-#[derive(Clone)]
-pub struct ApiKeys {
-    pub public: Option<String>,
-    pub private: Option<String>,
-    pub master: Option<String>,
-}
-
-impl ApiKeys {
-    pub fn generate_missing_api_keys(&mut self) {
-        if let Some(master_key) = &self.master {
-            if self.private.is_none() {
-                let key = format!("{}-private", master_key);
-                let sha = sha2::Sha256::digest(key.as_bytes());
-                self.private = Some(format!("{:x}", sha));
-            }
-            if self.public.is_none() {
-                let key = format!("{}-public", master_key);
-                let sha = sha2::Sha256::digest(key.as_bytes());
-                self.public = Some(format!("{:x}", sha));
-            }
-        }
-    }
-}
 
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
@@ -113,16 +87,6 @@ pub fn configure_data(
         );
 }
 
-pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
-    let auth_config = if opts.master_key.is_some() {
-        AuthConfig::Auth
-    } else {
-        AuthConfig::NoAuth
-    };
-
-    config.app_data(auth_config);
-}
-
 #[cfg(feature = "mini-dashboard")]
 pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
     use actix_web::HttpResponse;
@@ -170,17 +134,15 @@ macro_rules! create_app {
         use meilisearch_error::ResponseError;
         use meilisearch_http::error::MeilisearchHttpError;
         use meilisearch_http::routes;
-        use meilisearch_http::{configure_auth, configure_data, dashboard};
+        use meilisearch_http::{configure_data, dashboard};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))
-            .configure(|s| configure_auth(s, &$opt))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
             .wrap(
                 Cors::default()
                     .send_wildcard()
-                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
                     .allow_any_origin()
                     .allow_any_method()
                     .max_age(86_400), // 24h

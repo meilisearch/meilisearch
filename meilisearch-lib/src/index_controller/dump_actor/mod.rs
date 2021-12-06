@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
+use meilisearch_auth::AuthController;
 pub use message::DumpMsg;
 use tokio::fs::create_dir_all;
 use tokio::sync::oneshot;
@@ -276,6 +277,8 @@ impl DumpJob {
         self.task_store
             .dump(&temp_dump_path, self.update_file_store.clone())
             .await?;
+
+        AuthController::dump(&self.db_path, &temp_dump_path)?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             // for now we simply copy the updates/updates_files

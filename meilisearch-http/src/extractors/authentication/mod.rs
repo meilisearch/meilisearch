@@ -32,7 +32,7 @@ impl<T, D> Deref for GuardedData<T, D> {
 }
 
 impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> {
-    type Config = AuthConfig;
+    type Config = ();
 
     type Error = ResponseError;
 
@@ -42,49 +42,44 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
         req: &actix_web::HttpRequest,
         _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
-        match req.app_data::<Self::Config>() {
-            Some(config) => match config {
-                AuthConfig::NoAuth => match req.app_data::<D>().cloned() {
-                    Some(data) => ok(Self {
-                        data,
-                        filters: AuthFilter::default(),
-                        _marker: PhantomData,
-                    }),
-                    None => err(AuthenticationError::IrretrievableState.into()),
+        match req.app_data::<AuthController>().cloned() {
+            Some(auth) => match req
+                .headers()
+                .get("Authorization")
+                .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
+            {
+                Some(mut type_token) => match type_token.next() {
+                    Some("Bearer") => {
+                        // TODO: find a less hardcoded way?
+                        let index = req.match_info().get("index_uid");
+                        let token = type_token.next().unwrap_or("unknown");
+                        match P::authenticate(auth, token, index) {
+                            Some(filters) => match req.app_data::<D>().cloned() {
+                                Some(data) => ok(Self {
+                                    data,
+                                    filters,
+                                    _marker: PhantomData,
+                                }),
+                                None => err(AuthenticationError::IrretrievableState.into()),
+                            },
+                            None => {
+                                let token = token.to_string();
+                                err(AuthenticationError::InvalidToken(token).into())
+                            }
+                        }
+                    }
+                    _otherwise => err(AuthenticationError::MissingAuthorizationHeader.into()),
                 },
-                AuthConfig::Auth => match req.app_data::<AuthController>().cloned() {
-                    Some(auth) => match req
-                        .headers()
-                        .get("Authorization")
-                        .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
-                    {
-                        Some(mut type_token) => match type_token.next() {
-                            Some("Bearer") => {
-                                // TODO: find a less hardcoded way?
-                                let index = req.match_info().get("index_uid");
-                                let token = type_token.next().unwrap_or("unknown");
-                                match P::authenticate(auth, token, index) {
-                                    Some(filters) => match req.app_data::<D>().cloned() {
-                                        Some(data) => ok(Self {
-                                            data,
-                                            filters,
-                                            _marker: PhantomData,
-                                        }),
-                                        None => err(AuthenticationError::IrretrievableState.into()),
-                                    },
-                                    None => {
-                                        let token = token.to_string();
-                                        err(AuthenticationError::InvalidToken(token).into())
-                                    }
-                                }
-                            }
-                            _otherwise => {
-                                err(AuthenticationError::MissingAuthorizationHeader.into())
-                            }
-                        },
-                        None => err(AuthenticationError::MissingAuthorizationHeader.into()),
+                None => match P::authenticate(auth, "", None) {
+                    Some(filters) => match req.app_data::<D>().cloned() {
+                        Some(data) => ok(Self {
+                            data,
+                            filters,
+                            _marker: PhantomData,
+                        }),
+                        None => err(AuthenticationError::IrretrievableState.into()),
                     },
-                    None => err(AuthenticationError::IrretrievableState.into()),
+                    None => err(AuthenticationError::MissingAuthorizationHeader.into()),
                 },
             },
             None => err(AuthenticationError::IrretrievableState.into()),
@@ -129,10 +124,8 @@ pub mod policies {
             index: Option<&str>,
         ) -> Option<AuthFilter> {
             // authenticate if token is the master key.
-            if let Some(master_key) = auth.get_master_key() {
-                if master_key == token {
-                    return Some(AuthFilter::default());
-                }
+            if auth.get_master_key().map_or(true, |mk| mk == token) {
+                return Some(AuthFilter::default());
             }
 
             // authenticate if token is allowed.
@@ -145,15 +138,5 @@ pub mod policies {
 
             None
         }
-    }
-}
-pub enum AuthConfig {
-    NoAuth,
-    Auth,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self::NoAuth
     }
 }

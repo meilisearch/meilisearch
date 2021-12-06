@@ -1,3 +1,4 @@
+use meilisearch_auth::error::AuthControllerError;
 use meilisearch_error::{internal_error, Code, ErrorCode};
 
 use crate::{index_resolver::error::IndexResolverError, tasks::error::TaskError};
@@ -24,6 +25,7 @@ internal_error!(
     serde_json::error::Error,
     tempfile::PersistError,
     fs_extra::error::Error,
+    AuthControllerError,
     TaskError
 );
 

@@ -24,7 +24,12 @@ pub enum AuthControllerError {
     Internal(Box<dyn Error + Send + Sync + 'static>),
 }
 
-internal_error!(AuthControllerError: heed::Error, std::io::Error);
+internal_error!(
+    AuthControllerError: heed::Error,
+    std::io::Error,
+    serde_json::Error,
+    std::str::Utf8Error
+);
 
 impl ErrorCode for AuthControllerError {
     fn error_code(&self) -> Code {

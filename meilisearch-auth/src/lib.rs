@@ -1,4 +1,5 @@
 mod action;
+mod dump;
 pub mod error;
 mod key;
 mod store;
@@ -104,7 +105,7 @@ impl AuthController {
                     None => self.store.prefix_first_expiration_date(token, action)?,
                 })
             {
-                let id = from_utf8(&id).map_err(|e| AuthControllerError::Internal(Box::new(e)))?;
+                let id = from_utf8(&id)?;
                 if exp.map_or(true, |exp| Utc::now() < exp)
                     && generate_key(master_key.as_bytes(), id).as_bytes() == token
                 {

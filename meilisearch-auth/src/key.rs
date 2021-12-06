@@ -1,7 +1,7 @@
 use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
 use crate::store::{KeyId, KEY_ID_LENGTH};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
@@ -48,11 +48,8 @@ impl Key {
 
         let expires_at = value
             .get("expiresAt")
-            .map(|exp| {
-                from_value(exp.clone())
-                    .map_err(|_| AuthControllerError::InvalidApiKeyExpiresAt(exp.clone()))
-            })
-            .transpose()?;
+            .map(parse_expiration_date)
+            .ok_or(AuthControllerError::MissingParameter("expiresAt"))??;
 
         let created_at = Utc::now();
         let updated_at = Utc::now();
@@ -88,9 +85,7 @@ impl Key {
         }
 
         if let Some(exp) = value.get("expiresAt") {
-            let exp = from_value(exp.clone())
-                .map_err(|_| AuthControllerError::InvalidApiKeyExpiresAt(exp.clone()));
-            self.expires_at = exp?;
+            self.expires_at = parse_expiration_date(exp)?;
         }
 
         self.updated_at = Utc::now();
@@ -136,4 +131,31 @@ fn generate_id() -> [u8; KEY_ID_LENGTH] {
     }
 
     bytes
+}
+
+fn parse_expiration_date(value: &Value) -> Result<Option<DateTime<Utc>>> {
+    match value {
+        Value::String(string) => DateTime::parse_from_rfc3339(string)
+            .map(|d| d.into())
+            .or_else(|_| {
+                NaiveDateTime::parse_from_str(string, "%Y-%m-%dT%H:%M:%S")
+                    .map(|naive| DateTime::from_utc(naive, Utc))
+            })
+            .or_else(|_| {
+                NaiveDateTime::parse_from_str(string, "%Y-%m-%d")
+                    .map(|naive| DateTime::from_utc(naive, Utc))
+            })
+            .map_err(|_| AuthControllerError::InvalidApiKeyExpiresAt(value.clone()))
+            // check if the key is already expired.
+            .and_then(|d| {
+                if d > Utc::now() {
+                    Ok(d)
+                } else {
+                    Err(AuthControllerError::InvalidApiKeyExpiresAt(value.clone()))
+                }
+            })
+            .map(Option::Some),
+        Value::Null => Ok(None),
+        _otherwise => Err(AuthControllerError::InvalidApiKeyExpiresAt(value.clone())),
+    }
 }
