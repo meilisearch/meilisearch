@@ -9,6 +9,7 @@ use tokio::time::sleep;
 use walkdir::WalkDir;
 
 use crate::compression::from_tar_gz;
+use crate::index_controller::versioning::VERSION_FILE_NAME;
 use crate::tasks::task::Job;
 use crate::tasks::TaskStore;
 
@@ -102,6 +103,7 @@ impl SnapshotJob {
         let temp_snapshot_dir = tempfile::tempdir()?;
         let temp_snapshot_path = temp_snapshot_dir.path();
 
+        self.snapshot_version_file(temp_snapshot_path)?;
         self.snapshot_meta_env(temp_snapshot_path)?;
         self.snapshot_file_store(temp_snapshot_path)?;
         self.snapshot_indexes(temp_snapshot_path)?;
@@ -129,6 +131,15 @@ impl SnapshotJob {
         }
 
         trace!("Created snapshot in {:?}.", snapshot_path);
+
+        Ok(())
+    }
+
+    fn snapshot_version_file(&self, path: &Path) -> anyhow::Result<()> {
+        let dst = path.join(VERSION_FILE_NAME);
+        let src = self.src_path.join(VERSION_FILE_NAME);
+
+        fs::copy(src, dst)?;
 
         Ok(())
     }
