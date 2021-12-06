@@ -8,8 +8,8 @@ use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::MeiliSearch;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::ApiKeys;
 
+mod api_key;
 mod dump;
 pub mod indexes;
 mod tasks;
@@ -17,8 +17,8 @@ mod tasks;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
-        .service(web::resource("/keys").route(web::get().to(list_keys)))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure));
@@ -125,9 +125,11 @@ pub async fn running() -> HttpResponse {
 }
 
 async fn get_stats(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = meilisearch.get_all_stats().await?;
+    let filters = meilisearch.filters();
+
+    let response = meilisearch.get_all_stats(&filters.indexes).await?;
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
@@ -141,7 +143,9 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-async fn get_version(_meilisearch: GuardedData<Private, MeiliSearch>) -> HttpResponse {
+async fn get_version(
+    _meilisearch: GuardedData<ActionPolicy<{ actions::VERSION }>, MeiliSearch>,
+) -> HttpResponse {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -158,108 +162,6 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-pub async fn list_keys(meilisearch: GuardedData<Admin, ApiKeys>) -> HttpResponse {
-    let api_keys = (*meilisearch).clone();
-    HttpResponse::Ok().json(&KeysResponse {
-        private: api_keys.private,
-        public: api_keys.public,
-    })
-}
-
 pub async fn get_health() -> Result<HttpResponse, ResponseError> {
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::extractors::authentication::GuardedData;
-
-    /// A type implemented for a route that uses a authentication policy `Policy`.
-    ///
-    /// This trait is used for regression testing of route authenticaton policies.
-    trait Is<Policy, Data, T> {}
-
-    macro_rules! impl_is_policy {
-        ($($param:ident)*) => {
-            impl<Policy, Func, Data, $($param,)* Res> Is<Policy, Data, (($($param,)*), Res)> for Func
-                where Func: Fn(GuardedData<Policy, Data>, $($param,)*) -> Res {}
-
-        };
-    }
-
-    impl_is_policy! {}
-    impl_is_policy! {A}
-    impl_is_policy! {A B}
-    impl_is_policy! {A B C}
-    impl_is_policy! {A B C D}
-    impl_is_policy! {A B C D E}
-
-    /// Emits a compile error if a route doesn't have the correct authentication policy.
-    ///
-    /// This works by trying to cast the route function into a Is<Policy, _> type, where Policy it
-    /// the authentication policy defined for the route.
-    macro_rules! test_auth_routes {
-        ($($policy:ident => { $($route:expr,)*})*) => {
-            #[test]
-            fn test_auth() {
-                $($(let _: &dyn Is<$policy, _, _> = &$route;)*)*
-            }
-        };
-    }
-
-    test_auth_routes! {
-        Public => {
-            indexes::search::search_with_url_query,
-            indexes::search::search_with_post,
-
-            indexes::documents::get_document,
-            indexes::documents::get_all_documents,
-        }
-        Private => {
-            get_stats,
-            get_version,
-
-            indexes::create_index,
-            indexes::list_indexes,
-            indexes::get_index_stats,
-            indexes::delete_index,
-            indexes::update_index,
-            indexes::get_index,
-
-            dump::create_dump,
-
-            indexes::settings::filterable_attributes::get,
-            indexes::settings::displayed_attributes::get,
-            indexes::settings::searchable_attributes::get,
-            indexes::settings::stop_words::get,
-            indexes::settings::synonyms::get,
-            indexes::settings::distinct_attribute::get,
-            indexes::settings::filterable_attributes::update,
-            indexes::settings::displayed_attributes::update,
-            indexes::settings::searchable_attributes::update,
-            indexes::settings::stop_words::update,
-            indexes::settings::synonyms::update,
-            indexes::settings::distinct_attribute::update,
-            indexes::settings::filterable_attributes::delete,
-            indexes::settings::displayed_attributes::delete,
-            indexes::settings::searchable_attributes::delete,
-            indexes::settings::stop_words::delete,
-            indexes::settings::synonyms::delete,
-            indexes::settings::distinct_attribute::delete,
-            indexes::settings::delete_all,
-            indexes::settings::get_all,
-            indexes::settings::update_all,
-
-            indexes::documents::clear_all_documents,
-            indexes::documents::delete_documents,
-            indexes::documents::update_documents,
-            indexes::documents::add_documents,
-            indexes::documents::delete_document,
-
-            indexes::tasks::get_all_tasks_status,
-            indexes::tasks::get_task_status,
-        }
-        Admin => { list_keys, }
-    }
 }

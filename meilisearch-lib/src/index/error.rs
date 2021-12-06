@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_error::{internal_error, Code, ErrorCode};
 use serde_json::Value;
 
 use crate::error::MilliError;

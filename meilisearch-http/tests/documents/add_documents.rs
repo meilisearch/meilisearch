@@ -18,6 +18,7 @@ async fn add_documents_test_json_content_types() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -63,6 +64,7 @@ async fn error_add_documents_test_bad_content_types() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -130,6 +132,7 @@ async fn error_add_documents_test_no_content_type() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -189,6 +192,7 @@ async fn error_add_malformed_csv_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -250,6 +254,7 @@ async fn error_add_malformed_json_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -311,6 +316,7 @@ async fn error_add_malformed_ndjson_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -372,6 +378,7 @@ async fn error_add_missing_payload_csv_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -423,6 +430,7 @@ async fn error_add_missing_payload_json_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
@@ -474,6 +482,7 @@ async fn error_add_missing_payload_ndjson_documents() {
     let server = Server::new().await;
     let app = test::init_service(create_app!(
         &server.service.meilisearch,
+        &server.service.auth,
         true,
         &server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0

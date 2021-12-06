@@ -1,6 +1,6 @@
 use std::fmt;
 
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_error::{internal_error, Code, ErrorCode};
 use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
 use uuid::Uuid;

@@ -1,6 +1,3 @@
-use std::error::Error;
-use std::fmt;
-
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_error::{Code, ErrorCode, ResponseError};
@@ -32,22 +29,17 @@ impl From<MeilisearchHttpError> for aweb::Error {
     }
 }
 
-impl fmt::Display for PayloadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PayloadError::Json(e) => e.fmt(f),
-            PayloadError::Query(e) => e.fmt(f),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum PayloadError {
+    #[error("{0}")]
     Json(JsonPayloadError),
+    #[error("{0}")]
     Query(QueryPayloadError),
+    #[error("The json payload provided is malformed. `{0}`.")]
+    MalformedPayload(serde_json::error::Error),
+    #[error("A json payload is missing.")]
+    MissingPayload,
 }
-
-impl Error for PayloadError {}
 
 impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
@@ -58,7 +50,8 @@ impl ErrorCode for PayloadError {
                 JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => {
                     Code::PayloadTooLarge
                 }
-                JsonPayloadError::Deserialize(_) | JsonPayloadError::Payload(_) => Code::BadRequest,
+                JsonPayloadError::Payload(_) => Code::BadRequest,
+                JsonPayloadError::Deserialize(_) => Code::BadRequest,
                 JsonPayloadError::Serialize(_) => Code::Internal,
                 _ => Code::Internal,
             },
@@ -66,13 +59,29 @@ impl ErrorCode for PayloadError {
                 QueryPayloadError::Deserialize(_) => Code::BadRequest,
                 _ => Code::Internal,
             },
+            PayloadError::MissingPayload => Code::MissingPayload,
+            PayloadError::MalformedPayload(_) => Code::MalformedPayload,
         }
     }
 }
 
 impl From<JsonPayloadError> for PayloadError {
     fn from(other: JsonPayloadError) -> Self {
-        Self::Json(other)
+        match other {
+            JsonPayloadError::Deserialize(e)
+                if e.classify() == serde_json::error::Category::Eof
+                    && e.line() == 1
+                    && e.column() == 0 =>
+            {
+                Self::MissingPayload
+            }
+            JsonPayloadError::Deserialize(e)
+                if e.classify() != serde_json::error::Category::Data =>
+            {
+                Self::MalformedPayload(e)
+            }
+            _ => Self::Json(other),
+        }
     }
 }
 

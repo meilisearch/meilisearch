@@ -47,6 +47,7 @@ http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
 log = "0.4.14"
+meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-lib = { path = "../meilisearch-lib" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
@@ -79,6 +80,8 @@ walkdir = "2.3.2"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
+assert-json-diff = "2.0.1"
+maplit = "1.0.2"
 paste = "1.0.5"
 serde_url_params = "0.2.1"
 urlencoding = "2.1.0"

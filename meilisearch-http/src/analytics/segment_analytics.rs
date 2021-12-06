@@ -259,7 +259,7 @@ impl Segment {
     }
 
     async fn tick(&mut self, meilisearch: MeiliSearch) {
-        if let Ok(stats) = meilisearch.get_all_stats().await {
+        if let Ok(stats) = meilisearch.get_all_stats(&None).await {
             let _ = self
                 .batcher
                 .push(Identify {

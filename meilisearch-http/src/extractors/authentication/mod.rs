@@ -1,7 +1,5 @@
 mod error;
 
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -11,71 +9,18 @@ use futures::future::{ok, Ready};
 use meilisearch_error::ResponseError;
 
 use error::AuthenticationError;
-
-macro_rules! create_policies {
-    ($($name:ident), *) => {
-        pub mod policies {
-            use std::collections::HashSet;
-            use crate::extractors::authentication::Policy;
-
-            $(
-                #[derive(Debug, Default)]
-                pub struct $name {
-                    inner: HashSet<Vec<u8>>
-                }
-
-                impl $name {
-                    pub fn new() -> Self {
-                        Self { inner: HashSet::new() }
-                    }
-
-                    pub fn add(&mut self, token: Vec<u8>) {
-                        self.inner.insert(token);
-                    }
-                }
-
-                impl Policy for $name {
-                    fn authenticate(&self, token: &[u8]) -> bool {
-                        self.inner.contains(token)
-                    }
-                }
-            )*
-        }
-    };
-}
-
-create_policies!(Public, Private, Admin);
-
-/// Instanciate a `Policies`, filled with the given policies.
-macro_rules! init_policies {
-    ($($name:ident), *) => {
-        {
-            let mut policies = crate::extractors::authentication::Policies::new();
-            $(
-                let policy = $name::new();
-                policies.insert(policy);
-            )*
-            policies
-        }
-    };
-}
-
-/// Adds user to all specified policies.
-macro_rules! create_users {
-    ($policies:ident, $($user:expr => { $($policy:ty), * }), *) => {
-        {
-            $(
-                $(
-                    $policies.get_mut::<$policy>().map(|p| p.add($user.to_owned()));
-                )*
-            )*
-        }
-    };
-}
+use meilisearch_auth::{AuthController, AuthFilter};
 
 pub struct GuardedData<T, D> {
     data: D,
+    filters: AuthFilter,
     _marker: PhantomData<T>,
+}
+
+impl<T, D> GuardedData<T, D> {
+    pub fn filters(&self) -> &AuthFilter {
+        &self.filters
+    }
 }
 
 impl<T, D> Deref for GuardedData<T, D> {
@@ -83,56 +28,6 @@ impl<T, D> Deref for GuardedData<T, D> {
 
     fn deref(&self) -> &Self::Target {
         &self.data
-    }
-}
-
-pub trait Policy {
-    fn authenticate(&self, token: &[u8]) -> bool;
-}
-
-#[derive(Debug)]
-pub struct Policies {
-    inner: HashMap<TypeId, Box<dyn Any>>,
-}
-
-impl Policies {
-    pub fn new() -> Self {
-        Self {
-            inner: HashMap::new(),
-        }
-    }
-
-    pub fn insert<S: Policy + 'static>(&mut self, policy: S) {
-        self.inner.insert(TypeId::of::<S>(), Box::new(policy));
-    }
-
-    pub fn get<S: Policy + 'static>(&self) -> Option<&S> {
-        self.inner
-            .get(&TypeId::of::<S>())
-            .and_then(|p| p.downcast_ref::<S>())
-    }
-
-    pub fn get_mut<S: Policy + 'static>(&mut self) -> Option<&mut S> {
-        self.inner
-            .get_mut(&TypeId::of::<S>())
-            .and_then(|p| p.downcast_mut::<S>())
-    }
-}
-
-impl Default for Policies {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub enum AuthConfig {
-    NoAuth,
-    Auth(Policies),
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self::NoAuth
     }
 }
 
@@ -152,32 +47,113 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                 AuthConfig::NoAuth => match req.app_data::<D>().cloned() {
                     Some(data) => ok(Self {
                         data,
+                        filters: AuthFilter::default(),
                         _marker: PhantomData,
                     }),
                     None => err(AuthenticationError::IrretrievableState.into()),
                 },
-                AuthConfig::Auth(policies) => match policies.get::<P>() {
-                    Some(policy) => match req.headers().get("x-meili-api-key") {
-                        Some(token) => {
-                            if policy.authenticate(token.as_bytes()) {
-                                match req.app_data::<D>().cloned() {
-                                    Some(data) => ok(Self {
-                                        data,
-                                        _marker: PhantomData,
-                                    }),
-                                    None => err(AuthenticationError::IrretrievableState.into()),
+                AuthConfig::Auth => match req.app_data::<AuthController>().cloned() {
+                    Some(auth) => match req
+                        .headers()
+                        .get("Authorization")
+                        .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
+                    {
+                        Some(mut type_token) => match type_token.next() {
+                            Some("Bearer") => {
+                                // TODO: find a less hardcoded way?
+                                let index = req.match_info().get("index_uid");
+                                let token = type_token.next().unwrap_or("unknown");
+                                match P::authenticate(auth, token, index) {
+                                    Some(filters) => match req.app_data::<D>().cloned() {
+                                        Some(data) => ok(Self {
+                                            data,
+                                            filters,
+                                            _marker: PhantomData,
+                                        }),
+                                        None => err(AuthenticationError::IrretrievableState.into()),
+                                    },
+                                    None => {
+                                        let token = token.to_string();
+                                        err(AuthenticationError::InvalidToken(token).into())
+                                    }
                                 }
-                            } else {
-                                let token = token.to_str().unwrap_or("unknown").to_string();
-                                err(AuthenticationError::InvalidToken(token).into())
                             }
-                        }
+                            _otherwise => {
+                                err(AuthenticationError::MissingAuthorizationHeader.into())
+                            }
+                        },
                         None => err(AuthenticationError::MissingAuthorizationHeader.into()),
                     },
-                    None => err(AuthenticationError::UnknownPolicy.into()),
+                    None => err(AuthenticationError::IrretrievableState.into()),
                 },
             },
             None => err(AuthenticationError::IrretrievableState.into()),
         }
+    }
+}
+
+pub trait Policy {
+    fn authenticate(auth: AuthController, token: &str, index: Option<&str>) -> Option<AuthFilter>;
+}
+
+pub mod policies {
+    use crate::extractors::authentication::Policy;
+    use meilisearch_auth::{Action, AuthController, AuthFilter};
+    // reexport actions in policies in order to be used in routes configuration.
+    pub use meilisearch_auth::actions;
+
+    pub struct MasterPolicy;
+
+    impl Policy for MasterPolicy {
+        fn authenticate(
+            auth: AuthController,
+            token: &str,
+            _index: Option<&str>,
+        ) -> Option<AuthFilter> {
+            if let Some(master_key) = auth.get_master_key() {
+                if master_key == token {
+                    return Some(AuthFilter::default());
+                }
+            }
+
+            None
+        }
+    }
+
+    pub struct ActionPolicy<const A: u8>;
+
+    impl<const A: u8> Policy for ActionPolicy<A> {
+        fn authenticate(
+            auth: AuthController,
+            token: &str,
+            index: Option<&str>,
+        ) -> Option<AuthFilter> {
+            // authenticate if token is the master key.
+            if let Some(master_key) = auth.get_master_key() {
+                if master_key == token {
+                    return Some(AuthFilter::default());
+                }
+            }
+
+            // authenticate if token is allowed.
+            if let Some(action) = Action::from_repr(A) {
+                let index = index.map(|i| i.as_bytes());
+                if let Ok(true) = auth.authenticate(token.as_bytes(), action, index) {
+                    return auth.get_key_filters(token).ok();
+                }
+            }
+
+            None
+        }
+    }
+}
+pub enum AuthConfig {
+    NoAuth,
+    Auth,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self::NoAuth
     }
 }

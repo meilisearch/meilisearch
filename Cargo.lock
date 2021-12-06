@@ -315,6 +315,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert-json-diff"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50f1c3703dd33532d7f0ca049168930e9099ecac238e23cf932f3a69c42f06da"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1601,10 +1611,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "maplit"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
+
+[[package]]
 name = "matches"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
+
+[[package]]
+name = "meilisearch-auth"
+version = "0.24.0"
+dependencies = [
+ "chrono",
+ "enum-iterator",
+ "heed",
+ "meilisearch-error",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
 
 [[package]]
 name = "meilisearch-error"
@@ -1629,6 +1660,7 @@ dependencies = [
  "actix-web-static-files",
  "anyhow",
  "arc-swap",
+ "assert-json-diff",
  "async-stream",
  "async-trait",
  "bstr",
@@ -1649,6 +1681,8 @@ dependencies = [
  "indexmap",
  "itertools",
  "log",
+ "maplit",
+ "meilisearch-auth",
  "meilisearch-error",
  "meilisearch-lib",
  "meilisearch-tokenizer 0.2.5",

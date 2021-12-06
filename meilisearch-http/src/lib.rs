@@ -22,8 +22,8 @@ pub use option::Opt;
 
 use actix_web::{web, HttpRequest};
 
-use extractors::authentication::policies::*;
 use extractors::payload::PayloadConfig;
+use meilisearch_auth::AuthController;
 use meilisearch_lib::MeiliSearch;
 use sha2::Digest;
 
@@ -80,12 +80,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
 pub fn configure_data(
     config: &mut web::ServiceConfig,
     data: MeiliSearch,
+    auth: AuthController,
     opt: &Opt,
     analytics: Arc<dyn Analytics>,
 ) {
     let http_payload_size_limit = opt.http_payload_size_limit.get_bytes() as usize;
     config
         .app_data(data)
+        .app_data(auth)
         .app_data(web::Data::from(analytics))
         .app_data(
             web::JsonConfig::default()
@@ -112,30 +114,13 @@ pub fn configure_data(
 }
 
 pub fn configure_auth(config: &mut web::ServiceConfig, opts: &Opt) {
-    let mut keys = ApiKeys {
-        master: opts.master_key.clone(),
-        private: None,
-        public: None,
-    };
-
-    keys.generate_missing_api_keys();
-
-    let auth_config = if let Some(ref master_key) = keys.master {
-        let private_key = keys.private.as_ref().unwrap();
-        let public_key = keys.public.as_ref().unwrap();
-        let mut policies = init_policies!(Public, Private, Admin);
-        create_users!(
-            policies,
-            master_key.as_bytes() => { Admin, Private, Public },
-            private_key.as_bytes() => { Private, Public },
-            public_key.as_bytes() => { Public }
-        );
-        AuthConfig::Auth(policies)
+    let auth_config = if opts.master_key.is_some() {
+        AuthConfig::Auth
     } else {
         AuthConfig::NoAuth
     };
 
-    config.app_data(auth_config).app_data(keys);
+    config.app_data(auth_config);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -177,7 +162,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 
 #[macro_export]
 macro_rules! create_app {
-    ($data:expr, $enable_frontend:expr, $opt:expr, $analytics:expr) => {{
+    ($data:expr, $auth:expr, $enable_frontend:expr, $opt:expr, $analytics:expr) => {{
         use actix_cors::Cors;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
@@ -188,7 +173,7 @@ macro_rules! create_app {
         use meilisearch_http::{configure_auth, configure_data, dashboard};
 
         App::new()
-            .configure(|s| configure_data(s, $data.clone(), &$opt, $analytics))
+            .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))
             .configure(|s| configure_auth(s, &$opt))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))

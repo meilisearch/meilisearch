@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use meilisearch_error::Code;
-use meilisearch_error::ErrorCode;
+use meilisearch_error::{internal_error, ErrorCode};
 use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;

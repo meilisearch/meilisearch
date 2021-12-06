@@ -39,9 +39,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn list_indexes(
-    data: GuardedData<Private, MeiliSearch>,
+    data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let indexes = data.list_indexes().await?;
+    let filters = data.filters();
+    let mut indexes = data.list_indexes().await?;
+    if let Some(indexes_filter) = filters.indexes.as_ref() {
+        indexes = indexes
+            .into_iter()
+            .filter(|i| indexes_filter.contains(&i.uid))
+            .collect();
+    }
+
     debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))
 }
@@ -54,7 +62,7 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_ADD }>, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -94,7 +102,7 @@ pub struct UpdateIndexResponse {
 }
 
 pub async fn get_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let meta = meilisearch.get_index(path.into_inner()).await?;
@@ -103,7 +111,7 @@ pub async fn get_index(
 }
 
 pub async fn update_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, MeiliSearch>,
     path: web::Path<String>,
     body: web::Json<UpdateIndexRequest>,
     req: HttpRequest,
@@ -131,7 +139,7 @@ pub async fn update_index(
 }
 
 pub async fn delete_index(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let uid = path.into_inner();
@@ -142,7 +150,7 @@ pub async fn delete_index(
 }
 
 pub async fn get_index_stats(
-    meilisearch: GuardedData<Private, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let response = meilisearch.get_index_stats(path.into_inner()).await?;
