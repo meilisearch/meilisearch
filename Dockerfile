@@ -11,6 +11,7 @@ WORKDIR /meilisearch
 COPY    Cargo.lock .
 COPY    Cargo.toml .
 
+COPY    meilisearch-auth/Cargo.toml meilisearch-auth/
 COPY    meilisearch-error/Cargo.toml meilisearch-error/
 COPY    meilisearch-http/Cargo.toml meilisearch-http/
 COPY    meilisearch-lib/Cargo.toml meilisearch-lib/

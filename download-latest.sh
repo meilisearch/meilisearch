@@ -80,7 +80,7 @@ get_latest() {
     fi
 
     releases=$(cat "$temp_file" | \
-        grep -E "tag_name|draft|prerelease" \
+        grep -E '"tag_name":|"draft":|"prerelease":' \
         | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')
         # Returns a list of [tag_name draft_boolean prerelease_boolean ...]
         # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
