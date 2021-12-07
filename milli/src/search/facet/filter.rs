@@ -16,7 +16,7 @@ use crate::heed_codec::facet::{
 use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
 
 /// The maximum number of filters the filter AST can process.
-const MAX_FILTER_DEPTH: usize = 1000;
+const MAX_FILTER_DEPTH: usize = 2000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {
