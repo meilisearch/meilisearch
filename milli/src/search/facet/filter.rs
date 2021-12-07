@@ -15,6 +15,9 @@ use crate::heed_codec::facet::{
 };
 use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
 
+/// The maximum number of filters the filter AST can process.
+const MAX_FILTER_DEPTH: usize = 1000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {
     condition: FilterCondition<'a>,
@@ -27,6 +30,7 @@ enum FilterError<'a> {
     BadGeoLat(f64),
     BadGeoLng(f64),
     Reserved(&'a str),
+    TooDeep,
     InternalError,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
@@ -39,6 +43,10 @@ impl<'a> Display for FilterError<'a> {
                 "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
                 attribute,
                 filterable,
+            ),
+            Self::TooDeep => write!(f,
+                "Too many filter conditions, can't process more than {} filters.",
+                MAX_FILTER_DEPTH
             ),
             Self::Reserved(keyword) => write!(
                 f,
@@ -106,6 +114,10 @@ impl<'a> Filter<'a> {
                     };
                 }
             }
+        }
+
+        if let Some(token) = ands.as_ref().and_then(|fc| fc.token_at_depth(MAX_FILTER_DEPTH)) {
+            return Err(token.as_external_error(FilterError::TooDeep).into());
         }
 
         Ok(ands.map(|ands| Self { condition: ands }))
