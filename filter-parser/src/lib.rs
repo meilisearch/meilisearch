@@ -113,14 +113,19 @@ pub enum FilterCondition<'a> {
 }
 
 impl<'a> FilterCondition<'a> {
-    pub fn depth(&self) -> usize {
+    /// Returns the first token found at the specified depth, `None` if no token at this depth.
+    pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
         match self {
-            FilterCondition::Condition { .. } => 1,
-            FilterCondition::Or(left, right) => 1 + left.depth().max(right.depth()),
-            FilterCondition::And(left, right) => 1 + left.depth().max(right.depth()),
-            FilterCondition::GeoLowerThan { .. } => 1,
-            FilterCondition::GeoGreaterThan { .. } => 1,
-            FilterCondition::Empty => 0,
+            FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
+            FilterCondition::Or(left, right) => {
+                left.token_at_depth(depth - 1).or_else(|| right.token_at_depth(depth - 1))
+            }
+            FilterCondition::And(left, right) => {
+                left.token_at_depth(depth - 1).or_else(|| right.token_at_depth(depth - 1))
+            }
+            FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
+            FilterCondition::GeoGreaterThan { point: [point, _], .. } if depth == 0 => Some(point),
+            _ => None,
         }
     }
 
@@ -599,6 +604,6 @@ pub mod tests {
     #[test]
     fn depth() {
         let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 OR account_ids=3 OR account_ids=4 OR account_ids=5 OR account_ids=6").unwrap();
-        assert_eq!(filter.depth(), 6);
+        assert!(filter.token_at_depth(5).is_some());
     }
 }
