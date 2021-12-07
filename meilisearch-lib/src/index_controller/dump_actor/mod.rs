@@ -5,8 +5,6 @@ use chrono::{DateTime, Utc};
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 
-use loaders::v1::MetadataV1;
-
 pub use actor::DumpActor;
 pub use handle_impl::*;
 pub use message::DumpMsg;
@@ -62,6 +60,12 @@ pub trait DumpActorHandle {
     /// Return the status of an already created dump
     /// Implementation: [handle_impl::DumpActorHandleImpl::dump_info]
     async fn dump_info(&self, uid: String) -> Result<DumpInfo>;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataV1 {
+    pub db_version: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -194,8 +198,7 @@ pub fn load_dump(
 
     match meta {
         MetadataVersion::V1(_meta) => {
-            anyhow::bail!("This version (v1) of the dump is too old to be imported.")
-            // meta.load_dump(&tmp_src_path, tmp_dst.path(), index_db_size, indexer _opts)?
+            anyhow::bail!("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")
         }
         MetadataVersion::V2(meta) => v2::load_dump(
             meta,
