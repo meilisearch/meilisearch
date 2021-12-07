@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use either::Either;
 use indexmap::IndexMap;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
+use milli::tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{AscDesc, FieldId, FieldsIdsMap, Filter, MatchingWords, SortError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};

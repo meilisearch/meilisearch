@@ -29,7 +29,6 @@ itertools = "0.10.1"
 lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-error = { path = "../meilisearch-error" }
-meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.5" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.21.0" }
 mime = "0.3.16"
 num_cpus = "1.13.0"
