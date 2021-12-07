@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-auth"
-version = "0.24.0"
+version = "0.25.0"
 edition = "2018"
 
 [dependencies]
