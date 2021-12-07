@@ -118,10 +118,12 @@ impl<'a> FilterCondition<'a> {
         match self {
             FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
             FilterCondition::Or(left, right) => {
-                left.token_at_depth(depth - 1).or_else(|| right.token_at_depth(depth - 1))
+                let depth = depth.saturating_sub(1);
+                right.token_at_depth(depth).or_else(|| left.token_at_depth(depth))
             }
             FilterCondition::And(left, right) => {
-                left.token_at_depth(depth - 1).or_else(|| right.token_at_depth(depth - 1))
+                let depth = depth.saturating_sub(1);
+                right.token_at_depth(depth).or_else(|| left.token_at_depth(depth))
             }
             FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
             FilterCondition::GeoGreaterThan { point: [point, _], .. } if depth == 0 => Some(point),

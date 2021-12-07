@@ -128,6 +128,11 @@ impl<'a> Filter<'a> {
             Ok(fc) => Ok(fc),
             Err(e) => Err(Error::UserError(UserError::InvalidFilter(e.to_string()))),
         }?;
+
+        if let Some(token) = condition.token_at_depth(MAX_FILTER_DEPTH) {
+            return Err(token.as_external_error(FilterError::TooDeep).into());
+        }
+
         Ok(Self { condition })
     }
 }
@@ -431,6 +436,8 @@ impl<'a> From<FilterCondition<'a>> for Filter<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write;
+
     use big_s::S;
     use either::Either;
     use heed::EnvOpenOptions;
@@ -597,5 +604,38 @@ mod tests {
         assert!(error.to_string().contains(
             "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
         ));
+    }
+
+    #[test]
+    fn filter_depth() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_searchable_fields(vec![S("account_ids")]);
+        builder.set_filterable_fields(hashset! { S("account_ids") });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // generates a big (2 MiB) filter with too much of ORs.
+        let tipic_filter = "account_ids=14361 OR ";
+        let mut filter_string = String::with_capacity(tipic_filter.len() * 14360);
+        for i in 1..=14361 {
+            let _ = write!(&mut filter_string, "account_ids={}", i);
+            if i != 14361 {
+                let _ = write!(&mut filter_string, " OR ");
+            }
+        }
+
+        let error = Filter::from_str(&filter_string).unwrap_err();
+        assert!(
+            error.to_string().starts_with("Too many filter conditions"),
+            "{}",
+            error.to_string()
+        );
     }
 }
