@@ -38,7 +38,7 @@ pub struct Opt {
     /// Do not send analytics to Meili.
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]
-    pub no_analytics: bool,
+    pub no_analytics: Option<Option<bool>>,
 
     /// The maximum size, in bytes, of the main lmdb database directory
     #[structopt(long, env = "MEILI_MAX_INDEX_SIZE", default_value = "100 GiB")]
@@ -129,6 +129,16 @@ pub struct Opt {
 }
 
 impl Opt {
+    /// Wether analytics should be enabled or not.
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    pub fn analytics(&self) -> bool {
+        match self.no_analytics {
+            None => true,
+            Some(None) => false,
+            Some(Some(disabled)) => !disabled,
+        }
+    }
+
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
             let client_auth = match &self.ssl_auth_path {
