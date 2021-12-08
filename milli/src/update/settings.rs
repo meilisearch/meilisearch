@@ -2,15 +2,15 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
 use chrono::Utc;
-use grenad::CompressionType;
 use itertools::Itertools;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use rayon::ThreadPool;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use super::index_documents::{IndexDocumentsConfig, Transform};
+use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
-use crate::update::index_documents::{IndexDocumentsMethod, Transform};
+use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
@@ -77,14 +77,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
 pub struct Settings<'a, 't, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    pub(crate) log_every_n: Option<usize>,
-    pub(crate) max_nb_chunks: Option<usize>,
-    pub(crate) max_memory: Option<usize>,
-    pub(crate) documents_chunk_size: Option<usize>,
-    pub(crate) chunk_compression_type: CompressionType,
-    pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) thread_pool: Option<&'a ThreadPool>,
-    pub(crate) max_positions_per_attributes: Option<u32>,
+
+    indexer_config: &'a IndexerConfig,
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
@@ -98,17 +92,14 @@ pub struct Settings<'a, 't, 'u, 'i> {
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Settings<'a, 't, 'u, 'i> {
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        indexer_config: &'a IndexerConfig,
+    ) -> Settings<'a, 't, 'u, 'i> {
         Settings {
             wtxn,
             index,
-            log_every_n: None,
-            max_nb_chunks: None,
-            max_memory: None,
-            documents_chunk_size: None,
-            chunk_compression_type: CompressionType::None,
-            chunk_compression_level: None,
-            thread_pool: None,
             searchable_fields: Setting::NotSet,
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
@@ -118,12 +109,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
-            max_positions_per_attributes: None,
+            indexer_config,
         }
-    }
-
-    pub fn log_every_n(&mut self, n: usize) {
-        self.log_every_n = Some(n);
     }
 
     pub fn reset_searchable_fields(&mut self) {
@@ -210,25 +197,16 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             return Ok(());
         }
 
-        let transform = Transform {
-            rtxn: &self.wtxn,
-            index: self.index,
-            log_every_n: self.log_every_n,
-            chunk_compression_type: self.chunk_compression_type,
-            chunk_compression_level: self.chunk_compression_level,
-            max_nb_chunks: self.max_nb_chunks,
-            max_memory: self.max_memory,
-            index_documents_method: IndexDocumentsMethod::ReplaceDocuments,
-            autogenerate_docids: false,
-        };
-
-        // There already has been a document addition, the primary key should be set by now.
-        let primary_key =
-            self.index.primary_key(&self.wtxn)?.ok_or(UserError::MissingPrimaryKey)?;
+        let transform = Transform::new(
+            &self.index,
+            &self.indexer_config,
+            IndexDocumentsMethod::ReplaceDocuments,
+            false,
+        );
 
         // We remap the documents fields based on the new `FieldsIdsMap`.
         let output = transform.remap_index_documents(
-            primary_key.to_string(),
+            self.wtxn,
             old_fields_ids_map,
             fields_ids_map.clone(),
         )?;
@@ -238,16 +216,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
-        let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index);
-        indexing_builder.log_every_n = self.log_every_n;
-        indexing_builder.max_nb_chunks = self.max_nb_chunks;
-        indexing_builder.max_memory = self.max_memory;
-        indexing_builder.documents_chunk_size = self.documents_chunk_size;
-        indexing_builder.chunk_compression_type = self.chunk_compression_type;
-        indexing_builder.chunk_compression_level = self.chunk_compression_level;
-        indexing_builder.thread_pool = self.thread_pool;
-        indexing_builder.max_positions_per_attributes = self.max_positions_per_attributes;
-        indexing_builder.execute_raw(output, &cb)?;
+        let indexing_builder = IndexDocuments::new(
+            self.wtxn,
+            self.index,
+            &self.indexer_config,
+            IndexDocumentsConfig::default(),
+            &cb,
+        );
+        indexing_builder.execute_raw(output)?;
 
         Ok(())
     }
@@ -535,13 +511,17 @@ mod tests {
             { "id": 2, "name": "kevina", "age": 21},
             { "id": 3, "name": "benoit", "age": 34 }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_searchable_fields(vec!["name".into()]);
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -563,7 +543,7 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_searchable_fields();
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -592,15 +572,19 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // In the same transaction we change the displayed fields to be only the "age".
         // We also change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_displayed_fields(vec!["age".into()]);
         builder.set_searchable_fields(vec!["name".into()]);
         builder.execute(|_| ()).unwrap();
@@ -614,7 +598,7 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_searchable_fields();
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -639,9 +623,13 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -664,12 +652,16 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_displayed_fields(vec!["age".into()]);
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -682,7 +674,7 @@ mod tests {
 
         // We reset the fields ids to become `None`, the default value.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_displayed_fields();
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -700,9 +692,11 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
+        let config = IndexerConfig::default();
+
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_filterable_fields(hashset! { S("age") });
         builder.execute(|_| ()).unwrap();
 
@@ -712,9 +706,12 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set.
@@ -749,9 +746,12 @@ mod tests {
             { "name": "benoit", "age": 35 }
         ]);
 
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -771,10 +771,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name")]);
         builder.set_criteria(vec![S("age:asc")]);
@@ -786,9 +787,12 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // Run an empty query just to ensure that the search results are ordered.
@@ -813,10 +817,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set the filterable fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         // Don't display the generated `id` field.
         builder.set_displayed_fields(vec![S("name"), S("age")]);
         builder.set_distinct_field(S("age"));
@@ -832,9 +837,12 @@ mod tests {
             { "name": "bernie", "age": 34 },
             { "name": "ben", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // Run an empty query just to ensure that the search results are ordered.
@@ -859,9 +867,13 @@ mod tests {
             { "name": "kevina", "age": 21 },
             { "name": "benoit", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // Ensure there is no stop_words by default
@@ -884,12 +896,16 @@ mod tests {
             { "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
             { "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // In the same transaction we provide some stop_words
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
         builder.set_stop_words(set.clone());
         builder.execute(|_| ()).unwrap();
@@ -920,7 +936,7 @@ mod tests {
 
         // now we'll reset the stop_words and ensure it's None
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_stop_words();
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -958,12 +974,16 @@ mod tests {
             { "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
             { "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.enable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // In the same transaction provide some synonyms
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_synonyms(hashmap! {
             "blini".to_string() => vec!["crepes".to_string()],
             "super like".to_string() => vec!["love".to_string()],
@@ -987,7 +1007,7 @@ mod tests {
 
         // Reset the synonyms
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_synonyms();
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1012,10 +1032,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set all the settings except searchable
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         builder.set_filterable_fields(hashset! { S("age"), S("toto") });
         builder.set_criteria(vec!["toto:asc".to_string()]);
@@ -1032,7 +1053,7 @@ mod tests {
 
         // We set toto and age as searchable to force reordering of the fields
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_searchable_fields(vec!["toto".to_string(), "age".to_string()]);
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1049,10 +1070,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set all the settings except searchable
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
         builder.set_criteria(vec!["toto:asc".to_string()]);
@@ -1070,10 +1092,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set the primary key settings
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_primary_key(S("mykey"));
 
         builder.execute(|_| ()).unwrap();
@@ -1089,14 +1112,17 @@ mod tests {
             { "mykey": 6, "name": "bernie", "age": 34 },
             { "mykey": 7, "name": "ben", "age": 34 }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.disable_autogenerate_docids();
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // We now try to reset the primary key
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.reset_primary_key();
 
         let err = builder.execute(|_| ()).unwrap_err();
@@ -1109,7 +1135,7 @@ mod tests {
         builder.execute().unwrap();
 
         // ...we can change the primary key
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_primary_key(S("myid"));
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -1121,10 +1147,11 @@ mod tests {
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
 
         // Set the genres setting
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_filterable_fields(hashset! { S("genres") });
         builder.execute(|_| ()).unwrap();
 
@@ -1147,8 +1174,12 @@ mod tests {
             "release_date": 819676800
           }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         // We now try to reset the primary key

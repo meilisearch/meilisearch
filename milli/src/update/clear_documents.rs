@@ -77,7 +77,7 @@ mod tests {
     use heed::EnvOpenOptions;
 
     use super::*;
-    use crate::update::IndexDocuments;
+    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
 
     #[test]
     fn clear_documents() {
@@ -92,7 +92,11 @@ mod tests {
             { "id": 1, "name": "kevina" },
             { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
         ]);
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_| ()).unwrap();
+        let indexing_config = IndexDocumentsConfig::default();
+        let config = IndexerConfig::default();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // Clear all documents from the database.
         let builder = ClearDocuments::new(&mut wtxn, &index);

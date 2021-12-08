@@ -867,7 +867,7 @@ pub(crate) mod tests {
     use maplit::btreemap;
     use tempfile::TempDir;
 
-    use crate::update::IndexDocuments;
+    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
     use crate::Index;
 
     pub(crate) struct TempIndex {
@@ -908,8 +908,13 @@ pub(crate) mod tests {
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -927,13 +932,15 @@ pub(crate) mod tests {
         // we add all the documents a second time. we are supposed to get the same
         // field_distribution in the end
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
         let content = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 }
         ]);
-        builder.execute(content, |_| ()).unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -955,8 +962,10 @@ pub(crate) mod tests {
         ]);
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

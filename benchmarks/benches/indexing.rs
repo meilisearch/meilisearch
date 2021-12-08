@@ -6,7 +6,7 @@ use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use heed::EnvOpenOptions;
-use milli::update::UpdateBuilder;
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::Index;
 
 #[cfg(target_os = "linux")]
@@ -39,9 +39,9 @@ fn indexing_songs_default(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("id".to_owned());
                 let displayed_fields =
@@ -66,12 +66,15 @@ fn indexing_songs_default(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_| ()).unwrap();
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -88,9 +91,9 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("id".to_owned());
                 let displayed_fields =
@@ -112,12 +115,16 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_| ()).unwrap();
+
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -134,9 +141,9 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("id".to_owned());
                 let displayed_fields =
@@ -154,12 +161,15 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.execute(documents, |_| ()).unwrap();
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -176,9 +186,9 @@ fn indexing_wiki(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("id".to_owned());
                 let displayed_fields =
@@ -195,13 +205,16 @@ fn indexing_wiki(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.index_documents(&mut wtxn, &index);
-                builder.enable_autogenerate_docids();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                builder.execute(documents, |_| ()).unwrap();
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -218,9 +231,9 @@ fn indexing_movies_default(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("id".to_owned());
                 let displayed_fields = ["title", "poster", "overview", "release_date", "genres"]
@@ -242,12 +255,15 @@ fn indexing_movies_default(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                builder.execute(documents, |_| ()).unwrap();
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
                 index.prepare_for_closing().wait();
@@ -264,9 +280,9 @@ fn indexing_geo(c: &mut Criterion) {
             move || {
                 let index = setup_index();
 
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder = update_builder.settings(&mut wtxn, &index);
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
 
                 builder.set_primary_key("geonameid".to_owned());
                 let displayed_fields =
@@ -293,12 +309,15 @@ fn indexing_geo(c: &mut Criterion) {
                 index
             },
             move |index| {
-                let update_builder = UpdateBuilder::new();
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let builder = update_builder.index_documents(&mut wtxn, &index);
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                builder.execute(documents, |_| ()).unwrap();
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
 
