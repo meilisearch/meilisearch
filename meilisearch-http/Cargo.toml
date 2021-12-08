@@ -67,7 +67,7 @@ serde_json = { version = "1.0.67", features = ["preserve_order"] }
 sha2 = "0.9.6"
 siphasher = "0.3.7"
 slice-group-by = "0.2.6"
-structopt = "0.3.23"
+structopt = "0.3.25"
 sysinfo = "0.20.2"
 tar = "0.4.37"
 tempfile = "3.2.0"
