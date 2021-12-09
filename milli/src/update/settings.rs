@@ -1060,7 +1060,7 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let filter = Filter::from_str("toto = 32").unwrap();
+        let filter = Filter::from_str("toto = 32").unwrap().unwrap();
         let _ = filter.evaluate(&rtxn, &index).unwrap_err();
     }
 

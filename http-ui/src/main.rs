@@ -738,7 +738,7 @@ async fn main() -> anyhow::Result<()> {
 
             let filters = match query.filters.as_ref() {
                 Some(condition) if !condition.trim().is_empty() => {
-                    Some(MilliFilter::from_str(condition).unwrap())
+                    MilliFilter::from_str(condition).unwrap()
                 }
                 _otherwise => None,
             };

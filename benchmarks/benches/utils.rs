@@ -117,7 +117,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     let mut search = index.search(&rtxn);
                     search.query(query).optional_words(conf.optional_words);
                     if let Some(filter) = conf.filter {
-                        let filter = Filter::from_str(filter).unwrap();
+                        let filter = Filter::from_str(filter).unwrap().unwrap();
                         search.filter(filter);
                     }
                     if let Some(sort) = &conf.sort {
