@@ -250,8 +250,9 @@ impl Search {
         }
 
         if let Some(ref filter) = self.filter {
-            let condition = milli::Filter::from_str(filter)?;
-            search.filter(condition);
+            if let Some(condition) = milli::Filter::from_str(filter)? {
+                search.filter(condition);
+            }
         }
 
         if let Some(offset) = self.offset {
