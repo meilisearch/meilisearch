@@ -681,7 +681,7 @@ mod tests {
         builder.delete_external_id("1_4");
         builder.execute().unwrap();
 
-        let filter = Filter::from_str("label = sign").unwrap();
+        let filter = Filter::from_str("label = sign").unwrap().unwrap();
         let results = index.search(&wtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
 

@@ -109,7 +109,6 @@ pub enum FilterCondition<'a> {
     And(Box<Self>, Box<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
     GeoGreaterThan { point: [Token<'a>; 2], radius: Token<'a> },
-    Empty,
 }
 
 impl<'a> FilterCondition<'a> {
@@ -144,18 +143,17 @@ impl<'a> FilterCondition<'a> {
             },
             Or(a, b) => And(a.negate().into(), b.negate().into()),
             And(a, b) => Or(a.negate().into(), b.negate().into()),
-            Empty => Empty,
             GeoLowerThan { point, radius } => GeoGreaterThan { point, radius },
             GeoGreaterThan { point, radius } => GeoLowerThan { point, radius },
         }
     }
 
-    pub fn parse(input: &'a str) -> Result<Self, Error> {
+    pub fn parse(input: &'a str) -> Result<Option<Self>, Error> {
         if input.trim().is_empty() {
-            return Ok(Self::Empty);
+            return Ok(None);
         }
         let span = Span::new_extra(input, input);
-        parse_filter(span).finish().map(|(_rem, output)| output)
+        parse_filter(span).finish().map(|(_rem, output)| Some(output))
     }
 }
 
@@ -560,7 +558,7 @@ pub mod tests {
                 result.unwrap_err()
             );
             let filter = result.unwrap();
-            assert_eq!(filter, expected, "Filter `{}` failed.", input);
+            assert_eq!(filter, Some(expected), "Filter `{}` failed.", input);
         }
     }
 
@@ -605,7 +603,7 @@ pub mod tests {
 
     #[test]
     fn depth() {
-        let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 OR account_ids=3 OR account_ids=4 OR account_ids=5 OR account_ids=6").unwrap();
+        let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 OR account_ids=3 OR account_ids=4 OR account_ids=5 OR account_ids=6").unwrap().unwrap();
         assert!(filter.token_at_depth(5).is_some());
     }
 }

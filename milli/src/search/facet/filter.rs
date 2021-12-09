@@ -86,13 +86,15 @@ impl<'a> Filter<'a> {
                 Either::Left(array) => {
                     let mut ors = None;
                     for rule in array {
-                        let condition = Self::from_str(rule.as_ref())?.condition;
-                        ors = match ors.take() {
-                            Some(ors) => {
-                                Some(FilterCondition::Or(Box::new(ors), Box::new(condition)))
-                            }
-                            None => Some(condition),
-                        };
+                        if let Some(filter) = Self::from_str(rule.as_ref())? {
+                            let condition = filter.condition;
+                            ors = match ors.take() {
+                                Some(ors) => {
+                                    Some(FilterCondition::Or(Box::new(ors), Box::new(condition)))
+                                }
+                                None => Some(condition),
+                            };
+                        }
                     }
 
                     if let Some(rule) = ors {
@@ -105,13 +107,15 @@ impl<'a> Filter<'a> {
                     }
                 }
                 Either::Right(rule) => {
-                    let condition = Self::from_str(rule.as_ref())?.condition;
-                    ands = match ands.take() {
-                        Some(ands) => {
-                            Some(FilterCondition::And(Box::new(ands), Box::new(condition)))
-                        }
-                        None => Some(condition),
-                    };
+                    if let Some(filter) = Self::from_str(rule.as_ref())? {
+                        let condition = filter.condition;
+                        ands = match ands.take() {
+                            Some(ands) => {
+                                Some(FilterCondition::And(Box::new(ands), Box::new(condition)))
+                            }
+                            None => Some(condition),
+                        };
+                    }
                 }
             }
         }
@@ -123,9 +127,10 @@ impl<'a> Filter<'a> {
         Ok(ands.map(|ands| Self { condition: ands }))
     }
 
-    pub fn from_str(expression: &'a str) -> Result<Self> {
+    pub fn from_str(expression: &'a str) -> Result<Option<Self>> {
         let condition = match FilterCondition::parse(expression) {
-            Ok(fc) => Ok(fc),
+            Ok(Some(fc)) => Ok(fc),
+            Ok(None) => return Ok(None),
             Err(e) => Err(Error::UserError(UserError::InvalidFilter(e.to_string()))),
         }?;
 
@@ -133,7 +138,7 @@ impl<'a> Filter<'a> {
             return Err(token.as_external_error(FilterError::TooDeep).into());
         }
 
-        Ok(Self { condition })
+        Ok(Some(Self { condition }))
     }
 }
 
@@ -377,7 +382,6 @@ impl<'a> Filter<'a> {
                 let rhs = Self::evaluate(&(rhs.as_ref().clone()).into(), rtxn, index)?;
                 Ok(lhs & rhs)
             }
-            FilterCondition::Empty => Ok(RoaringBitmap::new()),
             FilterCondition::GeoLowerThan { point, radius } => {
                 let filterable_fields = index.filterable_fields(rtxn)?;
                 if filterable_fields.contains("_geo") {
@@ -451,20 +455,20 @@ mod tests {
     fn from_array() {
         // Simple array with Left
         let condition = Filter::from_array(vec![Either::Left(["channel = mv"])]).unwrap().unwrap();
-        let expected = Filter::from_str("channel = mv").unwrap();
+        let expected = Filter::from_str("channel = mv").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Simple array with Right
         let condition = Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = mv")])
             .unwrap()
             .unwrap();
-        let expected = Filter::from_str("channel = mv").unwrap();
+        let expected = Filter::from_str("channel = mv").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Array with Left and escaped quote
         let condition =
             Filter::from_array(vec![Either::Left(["channel = \"Mister Mv\""])]).unwrap().unwrap();
-        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap();
+        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Array with Right and escaped quote
@@ -472,13 +476,13 @@ mod tests {
             Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = \"Mister Mv\"")])
                 .unwrap()
                 .unwrap();
-        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap();
+        let expected = Filter::from_str("channel = \"Mister Mv\"").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Array with Left and escaped simple quote
         let condition =
             Filter::from_array(vec![Either::Left(["channel = 'Mister Mv'"])]).unwrap().unwrap();
-        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap();
+        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Array with Right and escaped simple quote
@@ -486,13 +490,13 @@ mod tests {
             Filter::from_array::<_, Option<&str>>(vec![Either::Right("channel = 'Mister Mv'")])
                 .unwrap()
                 .unwrap();
-        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap();
+        let expected = Filter::from_str("channel = 'Mister Mv'").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Simple with parenthesis
         let condition =
             Filter::from_array(vec![Either::Left(["(channel = mv)"])]).unwrap().unwrap();
-        let expected = Filter::from_str("(channel = mv)").unwrap();
+        let expected = Filter::from_str("(channel = mv)").unwrap().unwrap();
         assert_eq!(condition, expected);
 
         // Test that the facet condition is correctly generated.
@@ -503,7 +507,9 @@ mod tests {
         .unwrap()
         .unwrap();
         let expected =
-            Filter::from_str("channel = gotaga AND (timestamp = 44 OR channel != ponce)").unwrap();
+            Filter::from_str("channel = gotaga AND (timestamp = 44 OR channel != ponce)")
+                .unwrap()
+                .unwrap();
         println!("\nExpecting: {:#?}\nGot: {:#?}\n", expected, condition);
         assert_eq!(condition, expected);
     }
@@ -516,13 +522,13 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `_geo` is not filterable. Available filterable attributes are: ``."
         ));
 
-        let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap();
+        let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `dog` is not filterable. Available filterable attributes are: ``."
@@ -539,13 +545,13 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
         ));
 
-        let filter = Filter::from_str("name = 12").unwrap();
+        let filter = Filter::from_str("name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `name` is not filterable. Available filterable attributes are: `title`."
@@ -570,7 +576,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // georadius have a bad latitude
-        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(
             error.to_string().starts_with(
@@ -581,14 +587,14 @@ mod tests {
         );
 
         // georadius have a bad latitude
-        let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
         ));
 
         // georadius have a bad longitude
-        let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(
             error.to_string().contains(
@@ -599,7 +605,7 @@ mod tests {
         );
 
         // georadius have a bad longitude
-        let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap();
+        let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
