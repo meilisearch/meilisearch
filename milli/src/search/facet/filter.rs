@@ -644,4 +644,10 @@ mod tests {
             error.to_string()
         );
     }
+
+    #[test]
+    fn empty_filter() {
+        let option = Filter::from_str("     ").unwrap();
+        assert_eq!(option, None);
+    }
 }
