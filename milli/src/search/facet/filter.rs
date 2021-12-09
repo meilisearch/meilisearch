@@ -614,19 +614,6 @@ mod tests {
 
     #[test]
     fn filter_depth() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
-        builder.set_searchable_fields(vec![S("account_ids")]);
-        builder.set_filterable_fields(hashset! { S("account_ids") });
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
-
         // generates a big (2 MiB) filter with too much of ORs.
         let tipic_filter = "account_ids=14361 OR ";
         let mut filter_string = String::with_capacity(tipic_filter.len() * 14360);
