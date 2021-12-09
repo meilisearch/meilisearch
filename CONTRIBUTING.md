@@ -2,6 +2,9 @@
 
 First, thank you for contributing to MeiliSearch! The goal of this document is to provide everything you need to start contributing to MeiliSearch.
 
+Remember that there are many ways to contribute other than writing code: writing [tutorials or blog posts](https://github.com/meilisearch/awesome-meilisearch), improving [the documentation](https://github.com/meilisearch/documentation), submitting [bug reports](https://github.com/meilisearch/MeiliSearch/issues/new?assignees=&labels=&template=bug_report.md&title=) and [feature requests](https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal)...
+
+## Table of Contents
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
