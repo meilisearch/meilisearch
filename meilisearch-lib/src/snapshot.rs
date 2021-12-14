@@ -107,6 +107,7 @@ impl SnapshotJob {
         self.snapshot_meta_env(temp_snapshot_path)?;
         self.snapshot_file_store(temp_snapshot_path)?;
         self.snapshot_indexes(temp_snapshot_path)?;
+        self.snapshot_auth(temp_snapshot_path)?;
 
         let db_name = self
             .src_path
@@ -187,6 +188,20 @@ impl SnapshotJob {
 
             env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
         }
+
+        Ok(())
+    }
+
+    fn snapshot_auth(&self, path: &Path) -> anyhow::Result<()> {
+        let auth_path = self.src_path.join("auth");
+        let dst = path.join("auth");
+        std::fs::create_dir_all(&dst)?;
+        let dst = dst.join("data.mdb");
+
+        let mut options = heed::EnvOpenOptions::new();
+        options.map_size(1_073_741_824);
+        let env = options.open(auth_path)?;
+        env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
 
         Ok(())
     }

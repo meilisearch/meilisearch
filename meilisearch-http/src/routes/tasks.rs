@@ -1,6 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_error::ResponseError;
 use meilisearch_lib::tasks::task::TaskId;
+use meilisearch_lib::tasks::TaskFilter;
 use meilisearch_lib::MeiliSearch;
 use serde_json::json;
 
@@ -24,8 +25,16 @@ async fn get_tasks(
         Some(&req),
     );
 
+    let filters = meilisearch.filters().indexes.as_ref().map(|indexes| {
+        let mut filters = TaskFilter::default();
+        for index in indexes {
+            filters.filter_index(index.to_string());
+        }
+        filters
+    });
+
     let tasks: TaskListView = meilisearch
-        .list_tasks(None, None, None)
+        .list_tasks(filters, None, None)
         .await?
         .into_iter()
         .map(TaskView::from)
@@ -47,8 +56,16 @@ async fn get_task(
         Some(&req),
     );
 
+    let filters = meilisearch.filters().indexes.as_ref().map(|indexes| {
+        let mut filters = TaskFilter::default();
+        for index in indexes {
+            filters.filter_index(index.to_string());
+        }
+        filters
+    });
+
     let task: TaskView = meilisearch
-        .get_task(task_id.into_inner(), None)
+        .get_task(task_id.into_inner(), filters)
         .await?
         .into();
 

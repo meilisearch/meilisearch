@@ -62,7 +62,7 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_ADD }>, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, MeiliSearch>,
     body: web::Json<IndexCreateRequest>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,

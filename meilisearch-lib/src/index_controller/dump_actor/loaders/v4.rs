@@ -2,6 +2,7 @@ use std::path::Path;
 
 use heed::EnvOpenOptions;
 use log::info;
+use meilisearch_auth::AuthController;
 
 use crate::analytics;
 use crate::index_controller::dump_actor::Metadata;
@@ -37,6 +38,7 @@ pub fn load_dump(
     )?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
     TaskStore::load_dump(&src, env)?;
+    AuthController::load_dump(&src, &dst)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
     info!("Loading indexes.");
