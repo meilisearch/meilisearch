@@ -12,7 +12,10 @@ use super::helpers::{
 };
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
 use crate::update::index_documents::helpers::into_clonable_grenad;
-use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result};
+use crate::{
+    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
+    Result,
+};
 
 pub(crate) enum TypedChunk {
     DocidWordPositions(grenad::Reader<CursorClonableMmap>),
@@ -192,7 +195,9 @@ pub(crate) fn write_typed_chunk_into_index(
                 let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
                 let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
                 let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
-                rtree.insert(GeoPoint::new(point, docid));
+                let xyz_point = lat_lng_to_xyz(&point);
+
+                rtree.insert(GeoPoint::new(xyz_point, (docid, point)));
                 geo_faceted_docids.insert(docid);
             }
             index.put_geo_rtree(wtxn, &rtree)?;

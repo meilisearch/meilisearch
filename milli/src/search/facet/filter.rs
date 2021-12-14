@@ -13,7 +13,9 @@ use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
 };
-use crate::{distance_between_two_points, CboRoaringBitmapCodec, FieldId, Index, Result};
+use crate::{
+    distance_between_two_points, lat_lng_to_xyz, CboRoaringBitmapCodec, FieldId, Index, Result,
+};
 
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;
@@ -402,12 +404,14 @@ impl<'a> Filter<'a> {
                         None => return Ok(RoaringBitmap::new()),
                     };
 
+                    let xyz_base_point = lat_lng_to_xyz(&base_point);
+
                     let result = rtree
-                        .nearest_neighbor_iter(&base_point)
+                        .nearest_neighbor_iter(&xyz_base_point)
                         .take_while(|point| {
-                            distance_between_two_points(&base_point, point.geom()) < radius
+                            distance_between_two_points(&base_point, &point.data.1) < radius
                         })
-                        .map(|point| point.data)
+                        .map(|point| point.data.0)
                         .collect();
 
                     Ok(result)
