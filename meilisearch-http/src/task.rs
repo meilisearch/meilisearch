@@ -13,9 +13,9 @@ enum TaskType {
     IndexCreation,
     IndexUpdate,
     IndexDeletion,
-    DocumentsAddition,
-    DocumentsPartial,
-    DocumentsDeletion,
+    DocumentAddition,
+    DocumentPartial,
+    DocumentDeletion,
     SettingsUpdate,
     ClearAll,
 }
@@ -26,13 +26,13 @@ impl From<TaskContent> for TaskType {
             TaskContent::DocumentAddition {
                 merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
                 ..
-            } => TaskType::DocumentsAddition,
+            } => TaskType::DocumentAddition,
             TaskContent::DocumentAddition {
                 merge_strategy: IndexDocumentsMethod::UpdateDocuments,
                 ..
-            } => TaskType::DocumentsPartial,
+            } => TaskType::DocumentPartial,
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => TaskType::ClearAll,
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)) => TaskType::DocumentsDeletion,
+            TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)) => TaskType::DocumentDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
@@ -56,7 +56,7 @@ enum TaskStatus {
 #[allow(clippy::large_enum_variant)]
 enum TaskDetails {
     #[serde(rename_all = "camelCase")]
-    DocumentsAddition {
+    DocumentAddition {
         received_documents: usize,
         indexed_documents: Option<u64>,
     },
@@ -123,21 +123,21 @@ impl From<Task> for TaskView {
                 documents_count,
                 ..
             } => {
-                let details = TaskDetails::DocumentsAddition {
+                let details = TaskDetails::DocumentAddition {
                     received_documents: documents_count,
                     indexed_documents: None,
                 };
 
                 let task_type = match merge_strategy {
-                    IndexDocumentsMethod::UpdateDocuments => TaskType::DocumentsPartial,
-                    IndexDocumentsMethod::ReplaceDocuments => TaskType::DocumentsAddition,
+                    IndexDocumentsMethod::UpdateDocuments => TaskType::DocumentPartial,
+                    IndexDocumentsMethod::ReplaceDocuments => TaskType::DocumentAddition,
                     _ => unreachable!("Unexpected document merge strategy."),
                 };
 
                 (task_type, Some(details))
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => (
-                TaskType::DocumentsDeletion,
+                TaskType::DocumentDeletion,
                 Some(TaskDetails::DocumentDeletion {
                     received_document_ids: ids.len(),
                     deleted_documents: None,
@@ -181,7 +181,7 @@ impl From<Task> for TaskView {
                             indexed_documents: num,
                             ..
                         },
-                        Some(TaskDetails::DocumentsAddition {
+                        Some(TaskDetails::DocumentAddition {
                             ref mut indexed_documents,
                             ..
                         }),

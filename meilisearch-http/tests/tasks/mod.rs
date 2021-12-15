@@ -117,13 +117,13 @@ async fn test_summarized_task_view() {
     assert_valid_summarized_task!(response, "settingsUpdate", "test");
 
     let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentsPartial", "test");
+    assert_valid_summarized_task!(response, "documentPartial", "test");
 
     let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentsAddition", "test");
+    assert_valid_summarized_task!(response, "documentAddition", "test");
 
     let (response, _) = index.delete_document(1).await;
-    assert_valid_summarized_task!(response, "documentsDeletion", "test");
+    assert_valid_summarized_task!(response, "documentDeletion", "test");
 
     let (response, _) = index.clear_all_documents().await;
     assert_valid_summarized_task!(response, "clearAll", "test");
