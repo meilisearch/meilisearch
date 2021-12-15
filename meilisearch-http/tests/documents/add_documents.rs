@@ -563,7 +563,7 @@ async fn add_documents_no_index_creation() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["type"], "documentAddition");
     assert_eq!(response["details"]["receivedDocuments"], 1);
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
@@ -633,7 +633,7 @@ async fn document_addition_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["type"], "documentAddition");
     assert_eq!(response["details"]["receivedDocuments"], 1);
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
@@ -662,7 +662,7 @@ async fn document_update_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentsPartial");
+    assert_eq!(response["type"], "documentPartial");
     assert_eq!(response["details"]["indexedDocuments"], 1);
     assert_eq!(response["details"]["receivedDocuments"], 1);
 
@@ -775,7 +775,7 @@ async fn add_larger_dataset() {
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
-    assert_eq!(response["type"], "documentsAddition");
+    assert_eq!(response["type"], "documentAddition");
     assert_eq!(response["details"]["indexedDocuments"], 77);
     assert_eq!(response["details"]["receivedDocuments"], 77);
     let (response, code) = index
@@ -797,7 +797,7 @@ async fn update_larger_dataset() {
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["type"], "documentsPartial");
+    assert_eq!(response["type"], "documentPartial");
     assert_eq!(response["details"]["indexedDocuments"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
