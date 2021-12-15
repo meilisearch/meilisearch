@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use heed::types::{SerdeBincode, Str};
 use heed::{CompactionOption, Database, Env};
@@ -42,12 +43,20 @@ pub struct IndexMeta {
 
 #[derive(Clone)]
 pub struct HeedMetaStore {
-    env: Env,
+    env: Arc<Env>,
     db: Database<Str, SerdeBincode<IndexMeta>>,
 }
 
+impl Drop for HeedMetaStore {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.env) == 1 {
+            self.env.as_ref().clone().prepare_for_closing();
+        }
+    }
+}
+
 impl HeedMetaStore {
-    pub fn new(env: heed::Env) -> Result<Self> {
+    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
         let db = env.create_database(Some("uuids"))?;
         Ok(Self { env, db })
     }
@@ -144,7 +153,7 @@ impl HeedMetaStore {
         Ok(())
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, env: heed::Env) -> Result<()> {
+    pub fn load_dump(src: impl AsRef<Path>, env: Arc<heed::Env>) -> Result<()> {
         let src_indexes = src.as_ref().join(UUIDS_DB_PATH).join("data.jsonl");
         let indexes = File::open(&src_indexes)?;
         let mut indexes = BufReader::new(indexes);

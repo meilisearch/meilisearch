@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::fs::create_dir_all;
 use std::path::Path;
 use std::str;
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
@@ -23,9 +24,17 @@ pub type KeyId = [u8; KEY_ID_LENGTH];
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
-    env: Env,
+    env: Arc<Env>,
     keys: Database<ByteSlice, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<DateTime<Utc>>>>,
+}
+
+impl Drop for HeedAuthStore {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.env) == 1 {
+            self.env.as_ref().clone().prepare_for_closing();
+        }
+    }
 }
 
 impl HeedAuthStore {
@@ -35,7 +44,7 @@ impl HeedAuthStore {
         let mut options = EnvOpenOptions::new();
         options.map_size(AUTH_STORE_SIZE); // 1GB
         options.max_dbs(2);
-        let env = options.open(path)?;
+        let env = Arc::new(options.open(path)?);
         let keys = env.create_database(Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;

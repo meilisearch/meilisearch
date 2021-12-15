@@ -32,7 +32,7 @@ pub trait TaskPerformer: Sync + Send + 'static {
     async fn finish(&self, batch: &Batch);
 }
 
-pub fn create_task_store<P>(env: heed::Env, performer: Arc<P>) -> Result<TaskStore>
+pub fn create_task_store<P>(env: Arc<heed::Env>, performer: Arc<P>) -> Result<TaskStore>
 where
     P: TaskPerformer,
 {
