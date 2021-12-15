@@ -34,9 +34,12 @@ macro_rules! make_setting_route {
                     $attr: Setting::Reset,
                     ..Default::default()
                 };
+
+                let allow_index_creation = meilisearch.filters().allow_index_creation;
                 let update = Update::Settings {
                     settings,
                     is_deletion: true,
+                    allow_index_creation,
                 };
                 let task: SummarizedTaskView = meilisearch
                     .register_update(index_uid.into_inner(), update)
@@ -66,9 +69,11 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
+                let allow_index_creation = meilisearch.filters().allow_index_creation;
                 let update = Update::Settings {
                     settings,
                     is_deletion: false,
+                    allow_index_creation,
                 };
                 let task: SummarizedTaskView = meilisearch
                     .register_update(index_uid.into_inner(), update)
@@ -272,9 +277,11 @@ pub async fn update_all(
         Some(&req),
     );
 
+    let allow_index_creation = meilisearch.filters().allow_index_creation;
     let update = Update::Settings {
         settings,
         is_deletion: false,
+        allow_index_creation,
     };
     let task: SummarizedTaskView = meilisearch
         .register_update(index_uid.into_inner(), update)
@@ -300,9 +307,11 @@ pub async fn delete_all(
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared().into_unchecked();
 
+    let allow_index_creation = data.filters().allow_index_creation;
     let update = Update::Settings {
         settings,
         is_deletion: true,
+        allow_index_creation,
     };
     let task: SummarizedTaskView = data
         .register_update(index_uid.into_inner(), update)

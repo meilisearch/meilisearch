@@ -173,6 +173,7 @@ pub async fn add_documents(
         &req,
     );
 
+    let allow_index_creation = meilisearch.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
         meilisearch,
@@ -180,6 +181,7 @@ pub async fn add_documents(
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
+        allow_index_creation,
     )
     .await?;
 
@@ -203,6 +205,7 @@ pub async fn update_documents(
         &req,
     );
 
+    let allow_index_creation = meilisearch.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
         meilisearch,
@@ -210,6 +213,7 @@ pub async fn update_documents(
         params.into_inner().primary_key,
         body,
         IndexDocumentsMethod::UpdateDocuments,
+        allow_index_creation,
     )
     .await?;
 
@@ -223,6 +227,7 @@ async fn document_addition(
     primary_key: Option<String>,
     body: Payload,
     method: IndexDocumentsMethod,
+    allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, ResponseError> {
     let format = match mime_type
         .as_ref()
@@ -250,6 +255,7 @@ async fn document_addition(
         primary_key,
         method,
         format,
+        allow_index_creation,
     };
 
     let task = meilisearch.register_update(index_uid, update).await?.into();

@@ -134,12 +134,14 @@ pub enum TaskContent {
         merge_strategy: IndexDocumentsMethod,
         primary_key: Option<String>,
         documents_count: usize,
+        allow_index_creation: bool,
     },
     DocumentDeletion(DocumentDeletion),
     SettingsUpdate {
         settings: Settings<Unchecked>,
         /// Indicates whether the task was a deletion
         is_deletion: bool,
+        allow_index_creation: bool,
     },
     IndexDeletion,
     IndexCreation {
