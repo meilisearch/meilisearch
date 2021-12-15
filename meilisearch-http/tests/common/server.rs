@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::path::Path;
 
 use actix_web::http::StatusCode;
@@ -87,6 +88,10 @@ impl Server {
 
     pub async fn tasks(&self) -> (Value, StatusCode) {
         self.service.get("/tasks").await
+    }
+
+    pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/dumps/{}/status", uid)).await
     }
 }
 
