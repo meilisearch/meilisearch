@@ -237,7 +237,9 @@ impl Index {
         let mut txn = self.write_txn()?;
 
         if let Some(primary_key) = primary_key {
-            self.update_primary_key_txn(&mut txn, primary_key)?;
+            if self.primary_key(&txn)?.is_none() {
+                self.update_primary_key_txn(&mut txn, primary_key)?;
+            }
         }
 
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);

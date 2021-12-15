@@ -1032,3 +1032,26 @@ async fn error_primary_key_inference() {
 
     assert_eq!(response["error"], expected_error);
 }
+
+#[actix_rt::test]
+async fn add_documents_with_primary_key_twice() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = json!([
+        {
+            "title": "11",
+            "desc": "foobar"
+        }
+    ]);
+
+    index.add_documents(documents.clone(), Some("title")).await;
+    index.wait_task(0).await;
+    let (response, _code) = index.get_task(0).await;
+    assert_eq!(response["status"], "succeeded");
+
+    index.add_documents(documents, Some("title")).await;
+    index.wait_task(1).await;
+    let (response, _code) = index.get_task(1).await;
+    assert_eq!(response["status"], "succeeded");
+}
