@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use levenshtein_automata::{Distance, DFA};
+use meilisearch_tokenizer::Token;
 
 use super::build_dfa;
 use crate::search::query_tree::{Operation, Query};
@@ -33,15 +34,18 @@ impl MatchingWords {
     }
 
     /// Returns the number of matching bytes if the word matches one of the query words.
-    pub fn matching_bytes(&self, word_to_highlight: &str) -> Option<usize> {
+    pub fn matching_bytes(&self, word_to_highlight: &Token) -> Option<usize> {
         self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| {
-            match dfa.eval(word_to_highlight) {
+            match dfa.eval(word_to_highlight.text()) {
                 Distance::Exact(t) if t <= *typo => {
                     if *is_prefix {
-                        let len = bytes_to_highlight(word_to_highlight, query_word);
-                        Some(len)
+                        let len = bytes_to_highlight(word_to_highlight.text(), query_word);
+                        Some(word_to_highlight.num_graphemes_from_bytes(len))
                     } else {
-                        Some(word_to_highlight.len())
+                        Some(
+                            word_to_highlight
+                                .num_graphemes_from_bytes(word_to_highlight.text().len()),
+                        )
                     }
                 }
                 _otherwise => None,

@@ -17,6 +17,7 @@ once_cell = "1.5.2"
 rayon = "1.5.0"
 structopt = { version = "0.3.21", default-features = false, features = ["wrap_help"] }
 tempfile = "3.2.0"
+unicode-segmentation = "1.6.0"
 
 # http server
 askama = "0.10.5"
