@@ -182,7 +182,10 @@ fn bytes_to_highlight(source: &str, target: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::str::from_utf8;
+
+    use meilisearch_tokenizer::TokenKind;
 
     use super::*;
     use crate::search::query_tree::{Operation, Query, QueryKind};
@@ -273,12 +276,61 @@ mod tests {
 
         let matching_words = MatchingWords::from_query_tree(&query_tree);
 
-        assert_eq!(matching_words.matching_bytes("word"), Some(3));
-        assert_eq!(matching_words.matching_bytes("nyc"), None);
-        assert_eq!(matching_words.matching_bytes("world"), Some(5));
-        assert_eq!(matching_words.matching_bytes("splitted"), Some(5));
-        assert_eq!(matching_words.matching_bytes("thisnew"), None);
-        assert_eq!(matching_words.matching_bytes("borld"), Some(5));
-        assert_eq!(matching_words.matching_bytes("wordsplit"), Some(4));
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("word"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "word".len(),
+            char_map: None,
+        }), Some(3));
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("nyc"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "nyc".len(),
+            char_map: None,
+        }), None);
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("world"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "world".len(),
+            char_map: None,
+        }), Some(5));
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("splitted"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "splitted".len(),
+            char_map: None,
+        }), Some(5));
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("thisnew"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "thisnew".len(),
+            char_map: None,
+        }), None);
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("borld"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "borld".len(),
+            char_map: None,
+        }), Some(5));
+        assert_eq!(matching_words.matching_bytes(&Token{
+            kind: TokenKind::Word,
+            word: Cow::Borrowed("wordsplit"),
+            byte_start: 0,
+            char_index: 0,
+            byte_end: "wordsplit".len(),
+            char_map: None,
+        }), Some(4));
     }
 }
