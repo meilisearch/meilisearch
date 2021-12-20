@@ -62,29 +62,39 @@ pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
 #[derive(Debug, Clone, Eq)]
-pub struct Token<'a>(Span<'a>);
+pub struct Token<'a> {
+    /// The token in the original input, it should be used when possible.
+    span: Span<'a>,
+    /// If you need to modify the original input you can use the `value` field
+    /// to store your modified input.
+    value: Option<String>,
+}
 
 impl<'a> Deref for Token<'a> {
     type Target = &'a str;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.span
     }
 }
 
 impl<'a> PartialEq for Token<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.fragment() == other.0.fragment()
+        self.span.fragment() == other.span.fragment()
     }
 }
 
 impl<'a> Token<'a> {
-    pub fn new(position: Span<'a>) -> Self {
-        Self(position)
+    pub fn new(span: Span<'a>, value: Option<String>) -> Self {
+        Self { span, value }
+    }
+
+    pub fn value(&self) -> &str {
+        self.value.as_ref().map_or(&self.span, |value| value)
     }
 
     pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
-        Error::new_from_external(self.0, error)
+        Error::new_from_external(self.span, error)
     }
 
     pub fn parse<T>(&self) -> Result<T, Error>
@@ -92,13 +102,13 @@ impl<'a> Token<'a> {
         T: FromStr,
         T::Err: std::error::Error,
     {
-        self.0.parse().map_err(|e| self.as_external_error(e))
+        self.span.parse().map_err(|e| self.as_external_error(e))
     }
 }
 
 impl<'a> From<Span<'a>> for Token<'a> {
     fn from(span: Span<'a>) -> Self {
-        Self(span)
+        Self { span, value: None }
     }
 }
 

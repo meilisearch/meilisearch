@@ -56,6 +56,7 @@ pub enum ErrorKind<'a> {
     InvalidPrimary,
     ExpectedEof,
     ExpectedValue,
+    MalformedValue,
     MissingClosingDelimiter(char),
     Char(char),
     InternalError(error::ErrorKind),
@@ -82,7 +83,7 @@ impl<'a> Error<'a> {
     pub fn char(self) -> char {
         match self.kind {
             ErrorKind::Char(c) => c,
-            _ => panic!("Internal filter parser error"),
+            error => panic!("Internal filter parser error: {:?}", error),
         }
     }
 }
@@ -116,6 +117,9 @@ impl<'a> Display for Error<'a> {
         match self.kind {
             ErrorKind::ExpectedValue if input.trim().is_empty() => {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
+            }
+            ErrorKind::MalformedValue => {
+                writeln!(f, "Malformed value: `{}`.", escaped_input)?
             }
             ErrorKind::MissingClosingDelimiter(c) => {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
