@@ -188,13 +188,18 @@ where
                 content_uuid,
                 merge_strategy,
                 primary_key,
+                allow_index_creation,
                 ..
             } => {
                 let primary_key = primary_key.clone();
                 let content_uuid = *content_uuid;
                 let method = *merge_strategy;
 
-                let index = self.get_or_create_index(index_uid, task.id).await?;
+                let index = if *allow_index_creation {
+                    self.get_or_create_index(index_uid, task.id).await?
+                } else {
+                    self.get_index(index_uid.into_inner()).await?
+                };
                 let file_store = self.file_store.clone();
                 let result = spawn_blocking(move || {
                     index.update_documents(method, content_uuid, primary_key, file_store)
@@ -227,8 +232,9 @@ where
             TaskContent::SettingsUpdate {
                 settings,
                 is_deletion,
+                allow_index_creation,
             } => {
-                let index = if *is_deletion {
+                let index = if *is_deletion || !*allow_index_creation {
                     self.get_index(index_uid.into_inner()).await?
                 } else {
                     self.get_or_create_index(index_uid, task.id).await?
@@ -503,8 +509,8 @@ mod test {
 
                 match &task.content {
                     // an unexisting index should trigger an index creation in the folllowing cases:
-                    TaskContent::DocumentAddition { .. }
-                    | TaskContent::SettingsUpdate { is_deletion: false, .. }
+                    TaskContent::DocumentAddition { allow_index_creation: true, .. }
+                    | TaskContent::SettingsUpdate { allow_index_creation: true, is_deletion: false, .. }
                     | TaskContent::IndexCreation { .. } if !index_exists => {
                         index_store
                             .expect_create()
@@ -566,6 +572,8 @@ mod test {
                     || (!index_exists && matches!(task.content, TaskContent::IndexDeletion
                                                                 | TaskContent::DocumentDeletion(_)
                                                                 | TaskContent::SettingsUpdate { is_deletion: true, ..}
+                                                                | TaskContent::SettingsUpdate { allow_index_creation: false, ..}
+                                                                | TaskContent::DocumentAddition { allow_index_creation: false, ..}
                                                                 | TaskContent::IndexUpdate { .. } ))
                 {
                     assert!(result.is_err(), "{:?}", result);

@@ -69,6 +69,11 @@ impl AuthController {
             if !key.indexes.iter().any(|i| i.as_str() == "*") {
                 filters.indexes = Some(key.indexes);
             }
+
+            filters.allow_index_creation = key
+                .actions
+                .iter()
+                .any(|&action| action == Action::IndexesAdd || action == Action::All);
         }
 
         Ok(filters)
@@ -118,9 +123,18 @@ impl AuthController {
     }
 }
 
-#[derive(Default)]
 pub struct AuthFilter {
     pub indexes: Option<Vec<String>>,
+    pub allow_index_creation: bool,
+}
+
+impl Default for AuthFilter {
+    fn default() -> Self {
+        Self {
+            indexes: None,
+            allow_index_creation: true,
+        }
+    }
 }
 
 pub fn generate_key(master_key: &[u8], uid: &str) -> String {

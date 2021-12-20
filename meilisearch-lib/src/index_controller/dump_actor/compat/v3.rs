@@ -74,11 +74,13 @@ impl From<Update> for TaskContent {
                 primary_key,
                 // document count is unknown for legacy updates
                 documents_count: 0,
+                allow_index_creation: true,
             },
             Update::Settings(settings) => TaskContent::SettingsUpdate {
                 settings,
                 // There is no way to know now, so we assume it isn't
                 is_deletion: false,
+                allow_index_creation: true,
             },
             Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
         }
