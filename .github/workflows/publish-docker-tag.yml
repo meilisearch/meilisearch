@@ -8,7 +8,7 @@ name: Publish tagged image to Docker Hub
 
 jobs:
   docker-tag:
-    runs-on: self-hosted
+    runs-on: docker
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
