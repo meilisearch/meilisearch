@@ -167,7 +167,10 @@ impl IndexControllerBuilder {
 
         let db_exists = db_path.as_ref().exists();
         if db_exists {
-            versioning::check_version_file(db_path.as_ref())?;
+            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
+            if !db_is_empty {
+                versioning::check_version_file(db_path.as_ref())?;
+            }
         }
 
         if let Some(ref path) = self.import_snapshot {
