@@ -4,7 +4,7 @@ FROM    alpine:3.14 AS compiler
 RUN     apk update --quiet \
         && apk add -q --no-cache libgcc tini curl
 
-RUN useradd -m testuser
+RUN adduser -D testuser
 
 RUN mkdir /mnt/test_volume && \
     chown testuser /mnt/test_volume
