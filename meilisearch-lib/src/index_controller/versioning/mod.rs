@@ -23,7 +23,7 @@ pub fn create_version_file(db_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
+// Ensures MeiliSearch version is compatible with the database, returns an error versions mismatch.
 pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
 

@@ -55,7 +55,7 @@ pub enum TaskEvent {
     },
 }
 
-/// A task represents an operation that Meilisearch must do.
+/// A task represents an operation that MeiliSearch must do.
 /// It's stored on disk and executed from the lowest to highest Task id.
 /// Everytime a new task is created it has a higher Task id than the previous one.
 /// See also `Job`.
@@ -91,7 +91,7 @@ impl Task {
 
 /// A job is like a volatile priority `Task`.
 /// It should be processed as fast as possible and is not stored on disk.
-/// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
+/// This means, when MeiliSearch is closed all your unprocessed jobs will disappear.
 #[derive(Debug, derivative::Derivative)]
 #[derivative(PartialEq)]
 pub enum Job {
