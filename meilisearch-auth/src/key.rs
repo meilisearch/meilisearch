@@ -1,7 +1,7 @@
 use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
 use crate::store::{KeyId, KEY_ID_LENGTH};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
@@ -142,8 +142,8 @@ fn parse_expiration_date(value: &Value) -> Result<Option<DateTime<Utc>>> {
                     .map(|naive| DateTime::from_utc(naive, Utc))
             })
             .or_else(|_| {
-                NaiveDateTime::parse_from_str(string, "%Y-%m-%d")
-                    .map(|naive| DateTime::from_utc(naive, Utc))
+                NaiveDate::parse_from_str(string, "%Y-%m-%d")
+                    .map(|naive| DateTime::from_utc(naive.and_hms(0, 0, 0), Utc))
             })
             .map_err(|_| AuthControllerError::InvalidApiKeyExpiresAt(value.clone()))
             // check if the key is already expired.

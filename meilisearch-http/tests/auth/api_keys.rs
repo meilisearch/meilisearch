@@ -63,6 +63,65 @@ async fn add_valid_api_key() {
 }
 
 #[actix_rt::test]
+async fn add_valid_api_key_expired_at() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": [
+            "search",
+            "documents.add",
+            "documents.get",
+            "documents.delete",
+            "indexes.create",
+            "indexes.get",
+            "indexes.update",
+            "indexes.delete",
+            "tasks.get",
+            "settings.get",
+            "settings.update",
+            "stats.get",
+            "dumps.create",
+            "dumps.get"
+        ],
+        "expiresAt": "2050-11-13"
+    });
+
+    let (response, code) = server.add_api_key(content).await;
+    assert!(response["key"].is_string(), "{:?}", response);
+    assert!(response["expiresAt"].is_string());
+    assert!(response["createdAt"].is_string());
+    assert!(response["updatedAt"].is_string());
+
+    let expected_response = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": [
+            "search",
+            "documents.add",
+            "documents.get",
+            "documents.delete",
+            "indexes.create",
+            "indexes.get",
+            "indexes.update",
+            "indexes.delete",
+            "tasks.get",
+            "settings.get",
+            "settings.update",
+            "stats.get",
+            "dumps.create",
+            "dumps.get"
+        ],
+        "expiresAt": "2050-11-13T00:00:00Z"
+    });
+
+    assert_json_include!(actual: response, expected: expected_response);
+    assert_eq!(code, 201);
+}
+
+#[actix_rt::test]
 async fn add_valid_api_key_no_description() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
