@@ -43,9 +43,11 @@ ENV     MEILI_SERVER_PROVIDER docker
 RUN     apk update --quiet \
         && apk add -q --no-cache libgcc tini curl
 
+RUN     adduser -D ${USER}
+
 WORKDIR ${HOME}
 
-COPY --from=compiler --chown=${USER}:${USER} /meilisearch/target/release/meilisearch .
+COPY --from=compiler --chown=${USER} /meilisearch/target/release/meilisearch .
 
 RUN mkdir -p ./data.ms
 RUN chown ${USER} ./data.ms
