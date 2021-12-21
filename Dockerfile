@@ -48,7 +48,7 @@ RUN     apk update --quiet \
         && mkdir -p ${HOME} \
         && chown ${USER} ${HOME} \
         && mkdir -p ${HOME}/data.ms \
-        && chown ${USER} ${HOME}/data.ms \
+        && chown ${USER} ${HOME}/data.ms
 
 COPY    --from=compiler --chown=${USER}:${USER} /meilisearch/target/release/meilisearch ${HOME}
 
