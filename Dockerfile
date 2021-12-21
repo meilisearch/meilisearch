@@ -45,16 +45,14 @@ RUN     apk update --quiet \
 
 RUN     adduser -D ${USER}
 
-WORKDIR ${HOME}
-
 COPY --from=compiler --chown=${USER} /meilisearch/target/release/meilisearch .
 
-RUN mkdir -p ./data.ms
-RUN chown ${USER} ./data.ms
+RUN mkdir -p /data.ms
+RUN chown ${USER} /data.ms
 
 EXPOSE  7700/tcp
 
 USER    ${USER}
 
 ENTRYPOINT ["tini", "--"]
-CMD     ["./meilisearch", "--db-path", "/meilisearch-data/data.ms"]
+CMD     ["${HOME}/meilisearch"]
