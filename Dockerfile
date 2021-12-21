@@ -43,19 +43,13 @@ ENV     MEILI_SERVER_PROVIDER docker
 # download runtime deps as root and create ${USER}
 RUN     apk update --quiet \
         && apk add -q --no-cache libgcc tini curl \
-        && addgroup -g 1000 ${USER} \
-        && adduser -DH -u 1000 -G ${USER} ${USER} \
-        && mkdir -p ${HOME} \
-        && chown ${USER} ${HOME} \
-        && mkdir -p ${HOME}/data.ms \
-        && chown ${USER} ${HOME}/data.ms
-
-COPY    --from=compiler --chown=${USER}:${USER} /meilisearch/target/release/meilisearch ${HOME}
+        && adduser -D ${USER}
+WORKDIR ${HOME}
+USER    ${USER}
+# copy file as ${USER} to ${HOME}
+COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
 EXPOSE  7700/tcp
 
-USER    ${USER}
-WORKDIR ${HOME}
-
-ENTRYPOINT ["tini", "--"]
+ENTRYPOINT ["chown -R meili ${HOME}", "&&", "tini", "--"]
 CMD     ./meilisearch
