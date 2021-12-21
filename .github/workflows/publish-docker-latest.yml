@@ -7,7 +7,7 @@ name: Publish latest image to Docker Hub
 
 jobs:
   docker-latest:
-    runs-on: self-hosted
+    runs-on: docker
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
