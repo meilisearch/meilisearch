@@ -44,6 +44,10 @@ ENV     MEILI_SERVER_PROVIDER docker
 RUN     apk update --quiet \
         && apk add -q --no-cache libgcc tini curl \
         && adduser -D ${USER}
+
+RUN mkdir -p /meilisearch-data/data.ms
+RUN chown -R ${USER} /meilisearch-data
+
 WORKDIR ${HOME}
 USER    ${USER}
 # copy file as ${USER} to ${HOME}
@@ -51,5 +55,5 @@ COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
 EXPOSE  7700/tcp
 
-ENTRYPOINT ["chown -R meili ${HOME}", "&&", "tini", "--"]
-CMD     ./meilisearch
+ENTRYPOINT ["tini", "--"]
+CMD     ["./meilisearch", "--db-path /meilisearch-data/data.ms"]
