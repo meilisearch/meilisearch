@@ -46,7 +46,8 @@ RUN     apk update --quiet \
         && adduser -D ${USER}
 
 RUN mkdir -p /meilisearch-data/data.ms
-RUN chown -R ${USER} /meilisearch-data
+RUN chown -R ${USER}.${USER} /meilisearch-data
+VOLUME /meilisearch-data
 
 WORKDIR ${HOME}
 USER    ${USER}
