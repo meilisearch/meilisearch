@@ -56,4 +56,4 @@ COPY    --from=compiler /meilisearch/target/release/meilisearch .
 EXPOSE  7700/tcp
 
 ENTRYPOINT ["tini", "--"]
-CMD     ["./meilisearch", "--db-path /meilisearch-data/data.ms"]
+CMD     ["./meilisearch", "--db-path", "/meilisearch-data/data.ms"]
