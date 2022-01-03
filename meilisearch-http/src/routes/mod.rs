@@ -117,7 +117,7 @@ impl IndexUpdateResponse {
 /// Always return a 200 with:
 /// ```json
 /// {
-///     "status": "Meilisearch is running"
+///     "status": "MeiliSearch is running"
 /// }
 /// ```
 pub async fn running() -> HttpResponse {

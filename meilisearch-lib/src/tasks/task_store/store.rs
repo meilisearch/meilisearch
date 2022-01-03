@@ -78,7 +78,7 @@ impl Store {
     /// This function should be called *right after* creating the store.
     /// It put back all unfinished update in the `Created` state. This
     /// allow us to re-enqueue an update that didn't had the time to finish
-    /// when Meilisearch closed.
+    /// when MeiliSearch closed.
     pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
         let mut unfinished_tasks: BinaryHeap<Pending<TaskId>> = BinaryHeap::new();
 
