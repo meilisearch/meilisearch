@@ -2,7 +2,7 @@ use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::SecondsFormat;
-use log::debug;
+
 use meilisearch_auth::{generate_key, Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,7 +32,6 @@ pub async fn create_api_key(
     let key = auth_controller.create_key(body.into_inner()).await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Created().json(res))
 }
 
@@ -46,8 +45,7 @@ pub async fn list_api_keys(
         .map(|k| KeyView::from_key(k, auth_controller.get_master_key()))
         .collect();
 
-    debug!("returns: {:?}", res);
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(KeyListView::from(res)))
 }
 
 pub async fn get_api_key(
@@ -58,7 +56,6 @@ pub async fn get_api_key(
     let key = auth_controller.get_key(&path.api_key).await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -73,7 +70,6 @@ pub async fn patch_api_key(
         .await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -123,5 +119,16 @@ impl KeyView {
             created_at: key.created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
             updated_at: key.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct KeyListView {
+    results: Vec<KeyView>,
+}
+
+impl From<Vec<KeyView>> for KeyListView {
+    fn from(results: Vec<KeyView>) -> Self {
+        Self { results }
     }
 }

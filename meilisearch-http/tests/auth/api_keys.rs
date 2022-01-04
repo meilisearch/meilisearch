@@ -571,40 +571,42 @@ async fn list_api_keys() {
 
     let (response, code) = server.list_api_keys().await;
 
-    let expected_response = json!([
-    {
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "tasks.get",
-            "settings.get",
-            "settings.update",
-            "stats.get",
-            "dumps.create",
-            "dumps.get"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    },
-    {
-        "description": "Default Search API Key (Use it to search from the frontend)",
-        "indexes": ["*"],
-        "actions": ["search"],
-        "expiresAt": serde_json::Value::Null,
-    },
-    {
-        "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
-        "indexes": ["*"],
-        "actions": ["*"],
-        "expiresAt": serde_json::Value::Null,
-    }]);
+    let expected_response = json!({ "results":
+    [
+        {
+            "description": "Indexing API key",
+            "indexes": ["products"],
+            "actions": [
+                "search",
+                "documents.add",
+                "documents.get",
+                "documents.delete",
+                "indexes.create",
+                "indexes.get",
+                "indexes.update",
+                "indexes.delete",
+                "tasks.get",
+                "settings.get",
+                "settings.update",
+                "stats.get",
+                "dumps.create",
+                "dumps.get"
+            ],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        },
+        {
+            "description": "Default Search API Key (Use it to search from the frontend)",
+            "indexes": ["*"],
+            "actions": ["search"],
+            "expiresAt": serde_json::Value::Null,
+        },
+        {
+            "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
+            "indexes": ["*"],
+            "actions": ["*"],
+            "expiresAt": serde_json::Value::Null,
+        }
+    ]});
 
     assert_json_include!(actual: response, expected: expected_response);
     assert_eq!(code, 200);
