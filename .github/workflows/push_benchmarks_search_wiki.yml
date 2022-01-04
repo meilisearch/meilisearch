@@ -1,11 +1,13 @@
-name: Benchmarks search songs (cron)
+name: Benchmarks search wikipedia articles (push)
 
 on:
-  schedule:
-    - cron: "30 08 * * FRI" # every friday at 08:30
+  push:
+    branches:
+      - main
 
 env:
-  BENCH_NAME: "search_songs"
+  BENCH_NAME: "search_wiki"
+  INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
 
 jobs:
   benchmarks:
@@ -60,6 +62,10 @@ jobs:
           space_region: ${{ secrets.DO_SPACES_SPACE_REGION }}
           source: ${{ steps.file.outputs.basename }}.json
           out_dir: critcmp_results
+
+      # Upload benchmarks to influxdb
+      - name: Upload ${{ steps.file.outputs.basename }}.json to influxDB
+        run: telegraf --config https://eu-central-1-1.aws.cloud2.influxdata.com/api/v2/telegrafs/08b52e34a370b000 --once --debug
 
       # Helper
       - name: 'README: compare with another benchmark'
