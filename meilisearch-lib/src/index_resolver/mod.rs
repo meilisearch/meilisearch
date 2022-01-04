@@ -4,6 +4,7 @@ pub mod meta_store;
 
 use std::convert::TryInto;
 use std::path::Path;
+use std::sync::Arc;
 
 use chrono::Utc;
 use error::{IndexResolverError, Result};
@@ -16,13 +17,11 @@ use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::index::update_handler::UpdateHandler;
-use crate::index::{error::Result as IndexResult, Index};
+use crate::index::{error::Result as IndexResult, update_handler::UpdateHandler, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
-use crate::tasks::Pending;
-use crate::tasks::TaskPerformer;
+use crate::tasks::{Pending, TaskPerformer};
 use crate::update_file_store::UpdateFileStore;
 
 use self::meta_store::IndexMeta;
@@ -39,7 +38,7 @@ pub fn create_index_resolver(
     path: impl AsRef<Path>,
     index_size: usize,
     indexer_opts: &IndexerOpts,
-    meta_env: heed::Env,
+    meta_env: Arc<heed::Env>,
     file_store: UpdateFileStore,
 ) -> anyhow::Result<HardStateIndexResolver> {
     let uuid_store = HeedMetaStore::new(meta_env)?;
@@ -153,7 +152,7 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         index_db_size: usize,
-        env: Env,
+        env: Arc<Env>,
         indexer_opts: &IndexerOpts,
     ) -> anyhow::Result<()> {
         HeedMetaStore::load_dump(&src, env)?;

@@ -192,7 +192,7 @@ impl IndexControllerBuilder {
         options.map_size(task_store_size);
         options.max_dbs(20);
 
-        let meta_env = options.open(&db_path)?;
+        let meta_env = Arc::new(options.open(&db_path)?);
 
         let update_file_store = UpdateFileStore::new(&db_path)?;
         // Create or overwrite the version file for this DB

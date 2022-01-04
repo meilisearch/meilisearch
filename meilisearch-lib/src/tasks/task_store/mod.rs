@@ -114,7 +114,7 @@ impl Clone for TaskStore {
 }
 
 impl TaskStore {
-    pub fn new(env: heed::Env) -> Result<Self> {
+    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
         let mut store = Store::new(env)?;
         let unfinished_tasks = store.reset_and_return_unfinished_tasks()?;
         let store = Arc::new(store);
@@ -293,7 +293,7 @@ impl TaskStore {
         Ok(())
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, env: Env) -> anyhow::Result<()> {
+    pub fn load_dump(src: impl AsRef<Path>, env: Arc<Env>) -> anyhow::Result<()> {
         // create a dummy update field store, since it is not needed right now.
         let store = Self::new(env.clone())?;
 
@@ -340,7 +340,7 @@ pub mod test {
     }
 
     impl MockTaskStore {
-        pub fn new(env: heed::Env) -> Result<Self> {
+        pub fn new(env: Arc<heed::Env>) -> Result<Self> {
             Ok(Self::Real(TaskStore::new(env)?))
         }
 
@@ -432,7 +432,7 @@ pub mod test {
             }
         }
 
-        pub fn load_dump(path: impl AsRef<Path>, env: Env) -> anyhow::Result<()> {
+        pub fn load_dump(path: impl AsRef<Path>, env: Arc<Env>) -> anyhow::Result<()> {
             TaskStore::load_dump(path, env)
         }
     }

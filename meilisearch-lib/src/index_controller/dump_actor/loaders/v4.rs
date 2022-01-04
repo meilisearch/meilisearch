@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use heed::EnvOpenOptions;
 use log::info;
@@ -26,7 +27,7 @@ pub fn load_dump(
     let mut options = EnvOpenOptions::new();
     options.map_size(meta_env_size);
     options.max_dbs(100);
-    let env = options.open(&dst)?;
+    let env = Arc::new(options.open(&dst)?);
 
     IndexResolver::load_dump(
         src.as_ref(),
