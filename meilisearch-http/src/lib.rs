@@ -143,7 +143,7 @@ macro_rules! create_app {
             .wrap(
                 Cors::default()
                     .send_wildcard()
-                    .allowed_headers(vec!["content-type", "Authorization"])
+                    .allow_any_header()
                     .allow_any_origin()
                     .allow_any_method()
                     .max_age(86_400), // 24h
