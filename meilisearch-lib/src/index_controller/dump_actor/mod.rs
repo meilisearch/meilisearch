@@ -185,7 +185,7 @@ pub fn load_dump(
     let mut meta_file = File::open(&meta_path)?;
     let meta: MetadataVersion = serde_json::from_reader(&mut meta_file)?;
 
-    let tmp_dst = tempfile::tempdir()?;
+    let tmp_dst = tempfile::tempdir_in(dst_path.as_ref())?;
 
     info!(
         "Loading dump {}, dump database version: {}, dump version: {}",
@@ -225,14 +225,34 @@ pub fn load_dump(
             indexer_opts,
         )?,
     }
-    // Persist and atomically rename the db
     let persisted_dump = tmp_dst.into_path();
+
+    // Delete everything in the `data.ms` except the tempdir.
     if dst_path.as_ref().exists() {
         warn!("Overwriting database at {}", dst_path.as_ref().display());
-        std::fs::remove_dir_all(&dst_path)?;
+        for file in dst_path.as_ref().read_dir().unwrap() {
+            let file = file.unwrap().path();
+            if file.file_name() == persisted_dump.file_name() {
+                continue;
+            }
+
+            if file.is_file() {
+                std::fs::remove_file(&file)?;
+            } else {
+                std::fs::remove_dir_all(&file)?;
+            }
+        }
     }
 
-    std::fs::rename(&persisted_dump, &dst_path)?;
+    // Move the whole content of the tempdir into the `data.ms`.
+    for file in persisted_dump.read_dir().unwrap() {
+        let file = file.unwrap().path();
+
+        std::fs::rename(&file, &dst_path.as_ref().join(file.file_name().unwrap()))?;
+    }
+
+    // Delete the empty tempdir.
+    std::fs::remove_dir_all(&persisted_dump)?;
 
     Ok(())
 }
