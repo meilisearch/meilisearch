@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use milli::documents::DocumentBatchReader;
 use serde::{Deserialize, Serialize};
 
-use crate::document_formats::read_ndjson;
+use crate::document_formats::{read_ndjson, DocumentFormatError};
 use crate::index::update_handler::UpdateHandler;
 use crate::index::updates::apply_settings_to_builder;
 
@@ -128,23 +128,29 @@ impl Index {
 
         let mut tmp_doc_file = tempfile::tempfile()?;
 
-        read_ndjson(reader, &mut tmp_doc_file)?;
+        let empty = match read_ndjson(reader, &mut tmp_doc_file) {
+            // if there was no document in the file it's because the index was empty
+            Ok(_) => false,
+            Err(DocumentFormatError::EmptyPayload(_)) => true,
+            Err(e) => return Err(e.into()),
+        };
 
-        tmp_doc_file.seek(SeekFrom::Start(0))?;
+        if !empty {
+            tmp_doc_file.seek(SeekFrom::Start(0))?;
 
-        let documents_reader = DocumentBatchReader::from_reader(tmp_doc_file)?;
+            let documents_reader = DocumentBatchReader::from_reader(tmp_doc_file)?;
 
-        //If the document file is empty, we don't perform the document addition, to prevent
-        //a primary key error to be thrown.
-        if !documents_reader.is_empty() {
-            let builder = update_handler
-                .update_builder()
-                .index_documents(&mut txn, &index);
-            builder.execute(documents_reader, |_| ())?;
+            //If the document file is empty, we don't perform the document addition, to prevent
+            //a primary key error to be thrown.
+            if !documents_reader.is_empty() {
+                let builder = update_handler
+                    .update_builder()
+                    .index_documents(&mut txn, &index);
+                builder.execute(documents_reader, |_| ())?;
+            }
         }
 
         txn.commit()?;
-
         index.prepare_for_closing().wait();
 
         Ok(())
