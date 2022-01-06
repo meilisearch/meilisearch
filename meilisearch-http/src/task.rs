@@ -215,6 +215,27 @@ impl From<Task> for TaskView {
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
             TaskEvent::Failed { timestamp, error } => {
+                match details {
+                    Some(TaskDetails::DocumentDeletion {
+                        ref mut deleted_documents,
+                        ..
+                    }) => {
+                        deleted_documents.replace(0);
+                    }
+                    Some(TaskDetails::ClearAll {
+                        ref mut deleted_documents,
+                        ..
+                    }) => {
+                        deleted_documents.replace(0);
+                    }
+                    Some(TaskDetails::DocumentAddition {
+                        ref mut indexed_documents,
+                        ..
+                    }) => {
+                        indexed_documents.replace(0);
+                    }
+                    _ => (),
+                }
                 (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
             }
         };
