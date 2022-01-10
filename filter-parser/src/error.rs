@@ -19,14 +19,14 @@ impl<E> NomErrorExt<E> for nom::Err<E> {
     fn map_err<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E> {
         match self {
             e @ Self::Failure(_) => e,
-            e => e.map(|e| op(e)),
+            e => e.map(op),
         }
     }
 
     fn map_fail<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E> {
         match self {
             e @ Self::Error(_) => e,
-            e => e.map(|e| op(e)),
+            e => e.map(op),
         }
     }
 }

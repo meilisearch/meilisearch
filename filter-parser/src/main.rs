@@ -10,7 +10,7 @@ fn main() {
         }
         Err(e) => {
             println!("❎ Invalid filter");
-            println!("{}", e.to_string());
+            println!("{}", e);
         }
     }
 }

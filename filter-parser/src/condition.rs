@@ -63,11 +63,5 @@ pub fn parse_to(input: Span) -> IResult<FilterCondition> {
     let (input, (key, from, _, to)) =
         tuple((parse_value, parse_value, tag("TO"), cut(parse_value)))(input)?;
 
-    Ok((
-        input,
-        FilterCondition::Condition {
-            fid: key.into(),
-            op: Between { from: from.into(), to: to.into() },
-        },
-    ))
+    Ok((input, FilterCondition::Condition { fid: key, op: Between { from, to } }))
 }

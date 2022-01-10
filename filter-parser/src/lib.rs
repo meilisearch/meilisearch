@@ -233,7 +233,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         multispace0,
         tag("_geoPoint"),
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
-        cut(delimited(char('('), separated_list1(tag(","), ws(|c| recognize_float(c))), char(')'))),
+        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
