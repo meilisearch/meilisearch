@@ -5,5 +5,4 @@ members = [
     "meilisearch-lib",
     "meilisearch-auth",
 ]
-
-resolver = "2"
+edition = "2021"
