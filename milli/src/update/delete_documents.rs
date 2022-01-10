@@ -395,9 +395,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
             let (points_to_remove, docids_to_remove): (Vec<_>, RoaringBitmap) = rtree
                 .iter()
-                .filter(|&point| self.documents_ids.contains(point.data))
+                .filter(|&point| self.documents_ids.contains(point.data.0))
                 .cloned()
-                .map(|point| (point, point.data))
+                .map(|point| (point, point.data.0))
                 .unzip();
             points_to_remove.iter().for_each(|point| {
                 rtree.remove(&point);
@@ -747,7 +747,7 @@ mod tests {
 
         let all_geo_ids = rtree.iter().map(|point| point.data).collect::<Vec<_>>();
         let all_geo_documents = index
-            .documents(&rtxn, all_geo_ids.iter().copied())
+            .documents(&rtxn, all_geo_ids.iter().map(|(id, _)| id).copied())
             .unwrap()
             .iter()
             .map(|(id, _)| *id)

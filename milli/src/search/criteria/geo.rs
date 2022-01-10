@@ -5,7 +5,7 @@ use rstar::RTree;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
-use crate::{GeoPoint, Index, Result};
+use crate::{lat_lng_to_xyz, GeoPoint, Index, Result};
 
 pub struct Geo<'t> {
     index: &'t Index,
@@ -132,10 +132,12 @@ fn geo_point(
     point: [f64; 2],
     ascending: bool,
 ) -> Box<dyn Iterator<Item = RoaringBitmap>> {
+    let point = lat_lng_to_xyz(&point);
+
     let mut results = Vec::new();
     for point in rtree.nearest_neighbor_iter(&point) {
-        if candidates.remove(point.data) {
-            results.push(std::iter::once(point.data).collect());
+        if candidates.remove(point.data.0) {
+            results.push(std::iter::once(point.data.0).collect());
             if candidates.is_empty() {
                 break;
             }

@@ -54,7 +54,11 @@ pub type FieldId = u16;
 pub type Position = u32;
 pub type RelativePosition = u16;
 pub type FieldDistribution = BTreeMap<String, u64>;
-pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 2], DocumentId>;
+
+/// A GeoPoint is a point in cartesian plan, called xyz_point in the code. Its metadata
+/// is a tuple composed of 1. the DocumentId of the associated document and 2. the original point
+/// expressed in term of latitude and longitude.
+pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 3], (DocumentId, [f64; 2])>;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
 
@@ -166,6 +170,17 @@ pub fn distance_between_two_points(a: &[f64; 2], b: &[f64; 2]) -> f64 {
     let b = geoutils::Location::new(b[0], b[1]);
 
     a.haversine_distance_to(&b).meters()
+}
+
+/// Convert a point expressed in terms of latitude and longitude to a point in the
+/// cartesian coordinate expressed in terms of x, y and z.
+pub fn lat_lng_to_xyz(coord: &[f64; 2]) -> [f64; 3] {
+    let [lat, lng] = coord.map(|f| f.to_radians());
+    let x = lat.cos() * lng.cos();
+    let y = lat.cos() * lng.sin();
+    let z = lat.sin();
+
+    [x, y, z]
 }
 
 #[cfg(test)]
