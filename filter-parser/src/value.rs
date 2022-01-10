@@ -26,24 +26,20 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
     let mut i = input.iter_indices();
 
     while let Some((idx, c)) = i.next() {
-        match c {
-            c if c == quote => {
-                let (rem, output) = input.take_split(idx);
-                return Ok((rem, Token::new(output, escaped.then(|| unescape(output, quote)))));
+        if c == quote {
+            let (rem, output) = input.take_split(idx);
+            return Ok((rem, Token::new(output, escaped.then(|| unescape(output, quote)))));
+        } else if c == '\\' {
+            if let Some((_, c)) = i.next() {
+                escaped |= c == quote;
+            } else {
+                return Err(nom::Err::Error(Error::new_from_kind(
+                    input,
+                    ErrorKind::MalformedValue,
+                )));
             }
-            '\\' => {
-                if let Some((_, c)) = i.next() {
-                    escaped |= c == quote;
-                } else {
-                    return Err(nom::Err::Error(Error::new_from_kind(
-                        input,
-                        ErrorKind::MalformedValue,
-                    )));
-                }
-            }
-            // if it was preceeded by a `\` or if it was anything else we can continue to advance
-            _ => (),
         }
+        // if it was preceeded by a `\` or if it was anything else we can continue to advance
     }
 
     Ok((
