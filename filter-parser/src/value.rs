@@ -3,18 +3,17 @@ use nom::bytes::complete::{take_till, take_while, take_while1};
 use nom::character::complete::{char, multispace0};
 use nom::combinator::cut;
 use nom::sequence::{delimited, terminated};
+use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::NomErrorExt;
 use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
 
-/// This function goes through all chacaters in the [Span], if it finds any escaped character (`\`).
-/// It generate a new string with all `\` removed from the [Span].
+/// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
+/// It generates a new string with all `\` removed from the [Span].
 fn unescape(buf: Span, char_to_escape: char) -> String {
     let to_escape = format!("\\{}", char_to_escape);
     buf.replace(&to_escape, &char_to_escape.to_string())
 }
-
-use nom::{InputIter, InputLength, InputTake, Slice};
 
 /// Parse a value in quote. If it encounter an escaped quote it'll unescape it.
 fn quoted_by(quote: char, input: Span) -> IResult<Token> {
@@ -98,7 +97,6 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
         )),
         multispace0,
     )(input)
-    // .map(|(s, t)| (s, t.into()))
     // if we found nothing in the alt it means the user specified something that was not recognized as a value
     .map_err(|e: nom::Err<Error>| {
         e.map_err(|_| Error::new_from_kind(error_word(input).unwrap().1, ErrorKind::ExpectedValue))
