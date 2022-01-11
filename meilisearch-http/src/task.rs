@@ -245,12 +245,12 @@ impl From<Task> for TaskView {
             _ => unreachable!("A task must always have a creation event."),
         };
 
-        let duration = finished_at.map(|ts| (ts - enqueued_at));
-
         let started_at = events.iter().find_map(|e| match e {
             TaskEvent::Processing(ts) => Some(*ts),
             _ => None,
         });
+
+        let duration = finished_at.zip(started_at).map(|(tf, ts)| (tf - ts));
 
         Self {
             uid: id,
