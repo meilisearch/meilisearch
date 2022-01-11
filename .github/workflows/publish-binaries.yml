@@ -9,6 +9,7 @@ jobs:
     name: Publish for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
         include:

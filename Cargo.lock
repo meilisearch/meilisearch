@@ -1749,6 +1749,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "log",
+ "meilisearch-auth",
  "meilisearch-error",
  "milli",
  "mime",

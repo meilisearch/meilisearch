@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::path::Path;
 
 use actix_web::http::StatusCode;
@@ -33,6 +34,33 @@ impl Server {
         }
 
         let options = default_settings(dir.path());
+
+        let meilisearch = setup_meilisearch(&options).unwrap();
+        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
+        let service = Service {
+            meilisearch,
+            auth,
+            options,
+            api_key: None,
+        };
+
+        Server {
+            service,
+            _dir: Some(dir),
+        }
+    }
+
+    pub async fn new_auth() -> Self {
+        let dir = TempDir::new().unwrap();
+
+        if cfg!(windows) {
+            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+        } else {
+            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+        }
+
+        let mut options = default_settings(dir.path());
+        options.master_key = Some("MASTER_KEY".to_string());
 
         let meilisearch = setup_meilisearch(&options).unwrap();
         let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
@@ -88,6 +116,10 @@ impl Server {
     pub async fn tasks(&self) -> (Value, StatusCode) {
         self.service.get("/tasks").await
     }
+
+    pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/dumps/{}/status", uid)).await
+    }
 }
 
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
@@ -98,7 +130,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         master_key: None,
         env: "development".to_owned(),
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
-        no_analytics: true,
+        no_analytics: Some(Some(true)),
         max_index_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),

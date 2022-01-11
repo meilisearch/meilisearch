@@ -1,8 +1,8 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use chrono::{DateTime, Utc};
-use log::debug;
+use chrono::SecondsFormat;
+
 use meilisearch_auth::{generate_key, Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,7 +32,6 @@ pub async fn create_api_key(
     let key = auth_controller.create_key(body.into_inner()).await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Created().json(res))
 }
 
@@ -46,8 +45,7 @@ pub async fn list_api_keys(
         .map(|k| KeyView::from_key(k, auth_controller.get_master_key()))
         .collect();
 
-    debug!("returns: {:?}", res);
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(KeyListView::from(res)))
 }
 
 pub async fn get_api_key(
@@ -58,7 +56,6 @@ pub async fn get_api_key(
     let key = auth_controller.get_key(&path.api_key).await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -73,7 +70,6 @@ pub async fn patch_api_key(
         .await?;
     let res = KeyView::from_key(key, auth_controller.get_master_key());
 
-    debug!("returns: {:?}", res);
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -84,7 +80,7 @@ pub async fn delete_api_key(
     // keep 8 first characters that are the ID of the API key.
     auth_controller.delete_key(&path.api_key).await?;
 
-    Ok(HttpResponse::NoContent().json(()))
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[derive(Deserialize)]
@@ -95,14 +91,13 @@ pub struct AuthParam {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct KeyView {
-    #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
     key: String,
     actions: Vec<Action>,
     indexes: Vec<String>,
-    expires_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    expires_at: Option<String>,
+    created_at: String,
+    updated_at: String,
 }
 
 impl KeyView {
@@ -118,9 +113,22 @@ impl KeyView {
             key: generated_key,
             actions: key.actions,
             indexes: key.indexes,
-            expires_at: key.expires_at,
-            created_at: key.created_at,
-            updated_at: key.updated_at,
+            expires_at: key
+                .expires_at
+                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Secs, true)),
+            created_at: key.created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+            updated_at: key.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct KeyListView {
+    results: Vec<KeyView>,
+}
+
+impl From<Vec<KeyView>> for KeyListView {
+    fn from(results: Vec<KeyView>) -> Self {
+        Self { results }
     }
 }

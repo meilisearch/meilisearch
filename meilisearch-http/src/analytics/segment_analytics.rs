@@ -77,7 +77,7 @@ impl SegmentAnalytics {
         let user = User::UserId { user_id };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
-        // If Meilisearch is Launched for the first time:
+        // If MeiliSearch is Launched for the first time:
         // 1. Send an event Launched associated to the user `total_launch`.
         // 2. Batch an event Launched with the real instance-id and send it in one hour.
         if first_time_run {

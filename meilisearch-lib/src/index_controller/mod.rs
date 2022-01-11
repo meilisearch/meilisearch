@@ -119,6 +119,7 @@ pub enum Update {
         settings: Settings<Unchecked>,
         /// Indicates whether the update was a deletion
         is_deletion: bool,
+        allow_index_creation: bool,
     },
     DocumentAddition {
         #[derivative(Debug = "ignore")]
@@ -126,6 +127,7 @@ pub enum Update {
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
         format: DocumentAdditionFormat,
+        allow_index_creation: bool,
     },
     DeleteIndex,
     CreateIndex {
@@ -165,7 +167,11 @@ impl IndexControllerBuilder {
 
         let db_exists = db_path.as_ref().exists();
         if db_exists {
-            versioning::check_version_file(db_path.as_ref())?;
+            // Directory could be pre-created without any database in.
+            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
+            if !db_is_empty {
+                versioning::check_version_file(db_path.as_ref())?;
+            }
         }
 
         if let Some(ref path) = self.import_snapshot {
@@ -340,15 +346,18 @@ where
             Update::Settings {
                 settings,
                 is_deletion,
+                allow_index_creation,
             } => TaskContent::SettingsUpdate {
                 settings,
                 is_deletion,
+                allow_index_creation,
             },
             Update::DocumentAddition {
                 mut payload,
                 primary_key,
                 format,
                 method,
+                allow_index_creation,
             } => {
                 let mut buffer = Vec::new();
                 while let Some(bytes) = payload.next().await {
@@ -380,6 +389,7 @@ where
                     merge_strategy: method,
                     primary_key,
                     documents_count,
+                    allow_index_creation,
                 }
             }
             Update::DeleteIndex => TaskContent::IndexDeletion,

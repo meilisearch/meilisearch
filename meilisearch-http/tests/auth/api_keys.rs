@@ -1,6 +1,7 @@
 use crate::common::Server;
 use assert_json_diff::assert_json_include;
 use serde_json::json;
+use std::{thread, time};
 
 #[actix_rt::test]
 async fn add_valid_api_key() {
@@ -15,7 +16,7 @@ async fn add_valid_api_key() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -43,7 +44,66 @@ async fn add_valid_api_key() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
+            "indexes.get",
+            "indexes.update",
+            "indexes.delete",
+            "tasks.get",
+            "settings.get",
+            "settings.update",
+            "stats.get",
+            "dumps.create",
+            "dumps.get"
+        ],
+        "expiresAt": "2050-11-13T00:00:00Z"
+    });
+
+    assert_json_include!(actual: response, expected: expected_response);
+    assert_eq!(code, 201);
+}
+
+#[actix_rt::test]
+async fn add_valid_api_key_expired_at() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": [
+            "search",
+            "documents.add",
+            "documents.get",
+            "documents.delete",
+            "indexes.create",
+            "indexes.get",
+            "indexes.update",
+            "indexes.delete",
+            "tasks.get",
+            "settings.get",
+            "settings.update",
+            "stats.get",
+            "dumps.create",
+            "dumps.get"
+        ],
+        "expiresAt": "2050-11-13"
+    });
+
+    let (response, code) = server.add_api_key(content).await;
+    assert!(response["key"].is_string(), "{:?}", response);
+    assert!(response["expiresAt"].is_string());
+    assert!(response["createdAt"].is_string());
+    assert!(response["updatedAt"].is_string());
+
+    let expected_response = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": [
+            "search",
+            "documents.add",
+            "documents.get",
+            "documents.delete",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -71,7 +131,7 @@ async fn add_valid_api_key_no_description() {
         "actions": [
             "documents.add"
         ],
-        "expiresAt": "2050-11-13T00:00:00Z"
+        "expiresAt": "2050-11-13T00:00:00"
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -153,9 +213,7 @@ async fn error_add_api_key_missing_parameter() {
     // missing indexes
     let content = json!({
         "description": "Indexing API key",
-        "actions": [
-            "documents.add"
-        ],
+        "actions": ["documents.add"],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
@@ -180,6 +238,24 @@ async fn error_add_api_key_missing_parameter() {
 
     let expected_response = json!({
         "message": "`actions` field is mandatory.",
+        "code": "missing_parameter",
+        "type": "invalid_request",
+        "link":"https://docs.meilisearch.com/errors#missing_parameter"
+    });
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    // missing expiration date
+    let content = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": ["documents.add"],
+    });
+    let (response, code) = server.add_api_key(content).await;
+
+    let expected_response = json!({
+        "message": "`expiresAt` field is mandatory.",
         "code": "missing_parameter",
         "type": "invalid_request",
         "link":"https://docs.meilisearch.com/errors#missing_parameter"
@@ -312,6 +388,32 @@ async fn error_add_api_key_invalid_parameters_expires_at() {
 }
 
 #[actix_rt::test]
+async fn error_add_api_key_invalid_parameters_expires_at_in_the_past() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": "Indexing API key",
+        "indexes": ["products"],
+        "actions": [
+            "documents.add"
+        ],
+        "expiresAt": "2010-11-13T00:00:00Z"
+    });
+    let (response, code) = server.add_api_key(content).await;
+
+    let expected_response = json!({
+        "message": r#"expiresAt field value `"2010-11-13T00:00:00Z"` is invalid. It should be in ISO-8601 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'."#,
+        "code": "invalid_api_key_expires_at",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"
+    });
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
 async fn get_api_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -324,7 +426,7 @@ async fn get_api_key() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -359,7 +461,7 @@ async fn get_api_key() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -449,7 +551,7 @@ async fn list_api_keys() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -468,81 +570,45 @@ async fn list_api_keys() {
     assert_eq!(code, 201);
 
     let (response, code) = server.list_api_keys().await;
-    assert!(response.is_array());
-    let response = &response.as_array().unwrap();
 
-    let created_key = response
-        .iter()
-        .find(|x| x["description"] == "Indexing API key")
-        .unwrap();
-    assert!(created_key["key"].is_string());
-    assert!(created_key["expiresAt"].is_string());
-    assert!(created_key["createdAt"].is_string());
-    assert!(created_key["updatedAt"].is_string());
+    let expected_response = json!({ "results":
+    [
+        {
+            "description": "Indexing API key",
+            "indexes": ["products"],
+            "actions": [
+                "search",
+                "documents.add",
+                "documents.get",
+                "documents.delete",
+                "indexes.create",
+                "indexes.get",
+                "indexes.update",
+                "indexes.delete",
+                "tasks.get",
+                "settings.get",
+                "settings.update",
+                "stats.get",
+                "dumps.create",
+                "dumps.get"
+            ],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        },
+        {
+            "description": "Default Search API Key (Use it to search from the frontend)",
+            "indexes": ["*"],
+            "actions": ["search"],
+            "expiresAt": serde_json::Value::Null,
+        },
+        {
+            "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
+            "indexes": ["*"],
+            "actions": ["*"],
+            "expiresAt": serde_json::Value::Null,
+        }
+    ]});
 
-    let expected_response = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.add",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "tasks.get",
-            "settings.get",
-            "settings.update",
-            "stats.get",
-            "dumps.create",
-            "dumps.get"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: created_key, expected: expected_response);
-    assert_eq!(code, 200);
-
-    // check if default admin key is present.
-    let admin_key = response
-        .iter()
-        .find(|x| x["description"] == "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)")
-        .unwrap();
-    assert!(created_key["key"].is_string());
-    assert!(created_key["expiresAt"].is_string());
-    assert!(created_key["createdAt"].is_string());
-    assert!(created_key["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
-        "indexes": ["*"],
-        "actions": ["*"],
-        "expiresAt": serde_json::Value::Null,
-    });
-
-    assert_json_include!(actual: admin_key, expected: expected_response);
-    assert_eq!(code, 200);
-
-    // check if default search key is present.
-    let admin_key = response
-        .iter()
-        .find(|x| x["description"] == "Default Search API Key (Use it to search from the frontend)")
-        .unwrap();
-    assert!(created_key["key"].is_string());
-    assert!(created_key["expiresAt"].is_string());
-    assert!(created_key["createdAt"].is_string());
-    assert!(created_key["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "description": "Default Search API Key (Use it to search from the frontend)",
-        "indexes": ["*"],
-        "actions": ["search"],
-        "expiresAt": serde_json::Value::Null,
-    });
-
-    assert_json_include!(actual: admin_key, expected: expected_response);
+    assert_json_include!(actual: response, expected: expected_response);
     assert_eq!(code, 200);
 }
 
@@ -594,7 +660,7 @@ async fn delete_api_key() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -694,7 +760,7 @@ async fn patch_api_key_description() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -719,6 +785,7 @@ async fn patch_api_key_description() {
     // Add a description
     let content = json!({ "description": "Indexing API key" });
 
+    thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&key, content).await;
     assert!(response["key"].is_string());
     assert!(response["expiresAt"].is_string());
@@ -734,7 +801,7 @@ async fn patch_api_key_description() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -764,7 +831,7 @@ async fn patch_api_key_description() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -793,7 +860,7 @@ async fn patch_api_key_description() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -821,7 +888,7 @@ async fn patch_api_key_indexes() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -845,6 +912,7 @@ async fn patch_api_key_indexes() {
 
     let content = json!({ "indexes": ["products", "prices"] });
 
+    thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&key, content).await;
     assert!(response["key"].is_string());
     assert!(response["expiresAt"].is_string());
@@ -860,7 +928,7 @@ async fn patch_api_key_indexes() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -888,7 +956,7 @@ async fn patch_api_key_actions() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -920,6 +988,7 @@ async fn patch_api_key_actions() {
         ],
     });
 
+    thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&key, content).await;
     assert!(response["key"].is_string());
     assert!(response["expiresAt"].is_string());
@@ -957,7 +1026,7 @@ async fn patch_api_key_expiration_date() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -965,7 +1034,7 @@ async fn patch_api_key_expiration_date() {
             "dumps.create",
             "dumps.get"
         ],
-        "expiresAt": "205-11-13T00:00:00Z"
+        "expiresAt": "2050-11-13T00:00:00Z"
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -981,6 +1050,7 @@ async fn patch_api_key_expiration_date() {
 
     let content = json!({ "expiresAt": "2055-11-13T00:00:00Z" });
 
+    thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&key, content).await;
     assert!(response["key"].is_string());
     assert!(response["expiresAt"].is_string());
@@ -996,7 +1066,7 @@ async fn patch_api_key_expiration_date() {
             "documents.add",
             "documents.get",
             "documents.delete",
-            "indexes.add",
+            "indexes.create",
             "indexes.get",
             "indexes.update",
             "indexes.delete",
@@ -1165,4 +1235,66 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
 
     assert_eq!(response, expected_response);
     assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
+async fn error_access_api_key_routes_no_master_key_set() {
+    let mut server = Server::new().await;
+
+    let expected_response = json!({
+        "message": "The Authorization header is missing. It must use the bearer authorization method.",
+        "code": "missing_authorization_header",
+        "type": "auth",
+        "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+    });
+    let expected_code = 401;
+
+    let (response, code) = server.add_api_key(json!({})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.patch_api_key("content", json!({})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.get_api_key("content").await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.list_api_keys().await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    server.use_api_key("MASTER_KEY");
+
+    let expected_response = json!({"message": "The provided API key is invalid.",
+        "code": "invalid_api_key",
+        "type": "auth",
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    });
+    let expected_code = 403;
+
+    let (response, code) = server.add_api_key(json!({})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.patch_api_key("content", json!({})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.get_api_key("content").await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
+
+    let (response, code) = server.list_api_keys().await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, expected_code);
 }

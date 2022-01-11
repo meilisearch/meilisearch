@@ -2,29 +2,12 @@ mod api_keys;
 mod authorization;
 mod payload;
 
-use crate::common::server::default_settings;
-use crate::common::server::TEST_TEMP_DIR;
 use crate::common::Server;
 use actix_web::http::StatusCode;
+
 use serde_json::{json, Value};
-use tempfile::TempDir;
 
 impl Server {
-    pub async fn new_auth() -> Self {
-        let dir = TempDir::new().unwrap();
-
-        if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
-        } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
-        }
-
-        let mut options = default_settings(dir.path());
-        options.master_key = Some("MASTER_KEY".to_string());
-
-        Self::new_with_options(options).await
-    }
-
     pub fn use_api_key(&mut self, api_key: impl AsRef<str>) {
         self.service.api_key = Some(api_key.as_ref().to_string());
     }
