@@ -5,12 +5,12 @@
 Currently you can only fuzz the indexation.
 To execute the fuzzer run:
 ```
-cargo fuzz run indexing
+cargo +nightly fuzz run indexing
 ```
 
 To execute the fuzzer on multiple thread you can also run:
 ```
-cargo fuzz run -j4 indexing
+cargo +nightly fuzz run -j4 indexing
 ```
 
 Since the fuzzer is going to create a lot of temporary file to let milli index its documents
