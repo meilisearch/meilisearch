@@ -298,6 +298,7 @@ impl DumpJob {
             .await?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+            let _ = &self;
             // for now we simply copy the updates/updates_files
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
