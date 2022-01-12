@@ -18,7 +18,6 @@ pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
-    threshold: u32,
 }
 
 impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
@@ -33,19 +32,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             chunk_compression_level: None,
             max_nb_chunks: None,
             max_memory: None,
-            threshold: 100,
         }
-    }
-
-    /// Set the number of words required to make a prefix be part of the words prefixes
-    /// database. If a word prefix is supposed to match more than this number of words in the
-    /// dictionnary, therefore this prefix is added to the words prefixes datastructures.
-    ///
-    /// Default value is 100. This value must be higher than 50 and will be clamped
-    /// to these bound otherwise.
-    pub fn threshold(&mut self, value: u32) -> &mut Self {
-        self.threshold = value.max(50);
-        self
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
@@ -81,7 +68,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                     write_prefixes_in_sorter(
                         &mut prefixes_cache,
                         &mut word_prefix_pair_proximity_docids_sorter,
-                        self.threshold,
                     )?;
                     prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
                 }
@@ -109,7 +95,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         write_prefixes_in_sorter(
             &mut prefixes_cache,
             &mut word_prefix_pair_proximity_docids_sorter,
-            self.threshold,
         )?;
 
         drop(prefix_fst);
@@ -131,15 +116,10 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<&[u8]>>,
     sorter: &mut grenad::Sorter<MergeFn>,
-    min_word_per_prefix: u32,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
-        // if the number of words prefixed by the prefix is higher than the threshold,
-        // we insert it in the sorter.
-        if data_slices.len() > min_word_per_prefix as usize {
-            for data in data_slices {
-                sorter.insert(&key, data)?;
-            }
+        for data in data_slices {
+            sorter.insert(&key, data)?;
         }
     }
 
