@@ -103,18 +103,18 @@ impl HeedAuthStore {
 
     pub fn get_api_key(&self, key: impl AsRef<str>) -> Result<Option<Key>> {
         let rtxn = self.env.read_txn()?;
-        match try_split_array_at::<_, KEY_ID_LENGTH>(key.as_ref().as_bytes()) {
-            Some((id, _)) => self.keys.get(&rtxn, id).map_err(|e| e.into()),
+        match self.get_key_id(key.as_ref().as_bytes()) {
+            Some(id) => self.keys.get(&rtxn, &id).map_err(|e| e.into()),
             None => Ok(None),
         }
     }
 
     pub fn delete_api_key(&self, key: impl AsRef<str>) -> Result<bool> {
         let mut wtxn = self.env.write_txn()?;
-        let existing = match try_split_array_at(key.as_ref().as_bytes()) {
-            Some((id, _)) => {
-                let existing = self.keys.delete(&mut wtxn, id)?;
-                self.delete_key_from_inverted_db(&mut wtxn, id)?;
+        let existing = match self.get_key_id(key.as_ref().as_bytes()) {
+            Some(id) => {
+                let existing = self.keys.delete(&mut wtxn, &id)?;
+                self.delete_key_from_inverted_db(&mut wtxn, &id)?;
                 existing
             }
             None => false,
@@ -140,15 +140,12 @@ impl HeedAuthStore {
         key: &[u8],
         action: Action,
         index: Option<&[u8]>,
-    ) -> Result<Option<(KeyId, Option<DateTime<Utc>>)>> {
+    ) -> Result<Option<Option<DateTime<Utc>>>> {
         let rtxn = self.env.read_txn()?;
-        match try_split_array_at::<_, KEY_ID_LENGTH>(key) {
-            Some((id, _)) => {
-                let tuple = (id, &action, index);
-                Ok(self
-                    .action_keyid_index_expiration
-                    .get(&rtxn, &tuple)?
-                    .map(|expiration| (*id, expiration)))
+        match self.get_key_id(key) {
+            Some(id) => {
+                let tuple = (&id, &action, index);
+                Ok(self.action_keyid_index_expiration.get(&rtxn, &tuple)?)
             }
             None => Ok(None),
         }
@@ -158,20 +155,24 @@ impl HeedAuthStore {
         &self,
         key: &[u8],
         action: Action,
-    ) -> Result<Option<(KeyId, Option<DateTime<Utc>>)>> {
+    ) -> Result<Option<Option<DateTime<Utc>>>> {
         let rtxn = self.env.read_txn()?;
-        match try_split_array_at::<_, KEY_ID_LENGTH>(key) {
-            Some((id, _)) => {
-                let tuple = (id, &action, None);
+        match self.get_key_id(key) {
+            Some(id) => {
+                let tuple = (&id, &action, None);
                 Ok(self
                     .action_keyid_index_expiration
                     .prefix_iter(&rtxn, &tuple)?
                     .next()
                     .transpose()?
-                    .map(|(_, expiration)| (*id, expiration)))
+                    .map(|(_, expiration)| expiration))
             }
             None => Ok(None),
         }
+    }
+
+    pub fn get_key_id(&self, key: &[u8]) -> Option<KeyId> {
+        try_split_array_at::<_, KEY_ID_LENGTH>(key).map(|(id, _)| *id)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {

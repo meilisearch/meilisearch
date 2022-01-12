@@ -25,13 +25,16 @@ async fn get_tasks(
         Some(&req),
     );
 
-    let filters = meilisearch.filters().indexes.as_ref().map(|indexes| {
+    let search_rules = &meilisearch.filters().search_rules;
+    let filters = if search_rules.is_index_authorized("*") {
+        None
+    } else {
         let mut filters = TaskFilter::default();
-        for index in indexes {
-            filters.filter_index(index.to_string());
+        for (index, _policy) in search_rules.clone() {
+            filters.filter_index(index);
         }
-        filters
-    });
+        Some(filters)
+    };
 
     let tasks: TaskListView = meilisearch
         .list_tasks(filters, None, None)
@@ -56,13 +59,16 @@ async fn get_task(
         Some(&req),
     );
 
-    let filters = meilisearch.filters().indexes.as_ref().map(|indexes| {
+    let search_rules = &meilisearch.filters().search_rules;
+    let filters = if search_rules.is_index_authorized("*") {
+        None
+    } else {
         let mut filters = TaskFilter::default();
-        for index in indexes {
-            filters.filter_index(index.to_string());
+        for (index, _policy) in search_rules.clone() {
+            filters.filter_index(index);
         }
-        filters
-    });
+        Some(filters)
+    };
 
     let task: TaskView = meilisearch
         .get_task(task_id.into_inner(), filters)

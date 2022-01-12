@@ -3,7 +3,7 @@ use std::str;
 use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::SecondsFormat;
 
-use meilisearch_auth::{generate_key, Action, AuthController, Key};
+use meilisearch_auth::{Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -30,7 +30,7 @@ pub async fn create_api_key(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let key = auth_controller.create_key(body.into_inner()).await?;
-    let res = KeyView::from_key(key, auth_controller.get_master_key());
+    let res = KeyView::from_key(key, &auth_controller);
 
     Ok(HttpResponse::Created().json(res))
 }
@@ -42,7 +42,7 @@ pub async fn list_api_keys(
     let keys = auth_controller.list_keys().await?;
     let res: Vec<_> = keys
         .into_iter()
-        .map(|k| KeyView::from_key(k, auth_controller.get_master_key()))
+        .map(|k| KeyView::from_key(k, &auth_controller))
         .collect();
 
     Ok(HttpResponse::Ok().json(KeyListView::from(res)))
@@ -52,9 +52,8 @@ pub async fn get_api_key(
     auth_controller: GuardedData<MasterPolicy, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    // keep 8 first characters that are the ID of the API key.
     let key = auth_controller.get_key(&path.api_key).await?;
-    let res = KeyView::from_key(key, auth_controller.get_master_key());
+    let res = KeyView::from_key(key, &auth_controller);
 
     Ok(HttpResponse::Ok().json(res))
 }
@@ -65,10 +64,9 @@ pub async fn patch_api_key(
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = auth_controller
-        // keep 8 first characters that are the ID of the API key.
         .update_key(&path.api_key, body.into_inner())
         .await?;
-    let res = KeyView::from_key(key, auth_controller.get_master_key());
+    let res = KeyView::from_key(key, &auth_controller);
 
     Ok(HttpResponse::Ok().json(res))
 }
@@ -77,7 +75,6 @@ pub async fn delete_api_key(
     auth_controller: GuardedData<MasterPolicy, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    // keep 8 first characters that are the ID of the API key.
     auth_controller.delete_key(&path.api_key).await?;
 
     Ok(HttpResponse::NoContent().finish())
@@ -101,12 +98,9 @@ struct KeyView {
 }
 
 impl KeyView {
-    fn from_key(key: Key, master_key: Option<&String>) -> Self {
+    fn from_key(key: Key, auth: &AuthController) -> Self {
         let key_id = str::from_utf8(&key.id).unwrap();
-        let generated_key = match master_key {
-            Some(master_key) => generate_key(master_key.as_bytes(), key_id),
-            None => generate_key(&[], key_id),
-        };
+        let generated_key = auth.generate_key(key_id).unwrap_or_default();
 
         KeyView {
             description: key.description,

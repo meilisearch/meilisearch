@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
+pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
         hashmap! {
             ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
@@ -49,7 +49,7 @@ static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'stat
         }
     });
 
-static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     AUTHORIZATIONS
         .values()
         .cloned()

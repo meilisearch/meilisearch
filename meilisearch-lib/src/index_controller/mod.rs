@@ -1,3 +1,4 @@
+use meilisearch_auth::SearchRules;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Cursor;
@@ -543,17 +544,14 @@ where
         Ok(stats)
     }
 
-    pub async fn get_all_stats(&self, index_filter: &Option<Vec<String>>) -> Result<Stats> {
+    pub async fn get_all_stats(&self, search_rules: &SearchRules) -> Result<Stats> {
         let mut last_task: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
         let processing_task = self.task_store.get_processing_task().await?;
 
         for (index_uid, index) in self.index_resolver.list().await? {
-            if index_filter
-                .as_ref()
-                .map_or(false, |filter| !filter.contains(&index_uid))
-            {
+            if !search_rules.is_index_authorized(&index_uid) {
                 continue;
             }
 

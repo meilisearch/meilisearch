@@ -41,14 +41,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub async fn list_indexes(
     data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let filters = data.filters();
-    let mut indexes = data.list_indexes().await?;
-    if let Some(indexes_filter) = filters.indexes.as_ref() {
-        indexes = indexes
-            .into_iter()
-            .filter(|i| indexes_filter.contains(&i.uid))
-            .collect();
-    }
+    let search_rules = &data.filters().search_rules;
+    let indexes: Vec<_> = data
+        .list_indexes()
+        .await?
+        .into_iter()
+        .filter(|i| search_rules.is_index_authorized(&i.uid))
+        .collect();
 
     debug!("returns: {:?}", indexes);
     Ok(HttpResponse::Ok().json(indexes))
