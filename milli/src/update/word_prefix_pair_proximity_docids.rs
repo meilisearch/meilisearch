@@ -18,6 +18,7 @@ pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
+    max_proximity: u8,
 }
 
 impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
@@ -32,7 +33,19 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             chunk_compression_level: None,
             max_nb_chunks: None,
             max_memory: None,
+            max_proximity: 4,
         }
+    }
+
+    /// Set the maximum proximity required to make a prefix be part of the words prefixes
+    /// database. If two words are two far from the threshold the associated documents will
+    /// not be part of the prefix database.
+    ///
+    /// Default value is 4. This value must be lower or equal than 4 and will be clamped
+    /// to this bound otherwise.
+    pub fn max_proximity(&mut self, value: u8) -> &mut Self {
+        self.max_proximity = value.max(7);
+        self
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
@@ -62,6 +75,10 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
         while let Some(((w1, w2, prox), data)) = db.next().transpose()? {
+            if prox > self.max_proximity {
+                continue;
+            }
+
             current_prefixes = match current_prefixes.take() {
                 Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
                 _otherwise => {
