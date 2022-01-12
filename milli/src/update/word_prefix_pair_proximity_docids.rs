@@ -19,6 +19,7 @@ pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
     max_proximity: u8,
+    max_prefix_length: usize,
 }
 
 impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
@@ -34,6 +35,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             max_nb_chunks: None,
             max_memory: None,
             max_proximity: 4,
+            max_prefix_length: 2,
         }
     }
 
@@ -45,6 +47,17 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     /// to this bound otherwise.
     pub fn max_proximity(&mut self, value: u8) -> &mut Self {
         self.max_proximity = value.max(7);
+        self
+    }
+
+    /// Set the maximum length the prefix of a word pair is allowed to have be part of the words
+    /// prefixes database. If two words are two far from the threshold the associated documents
+    /// will not be part of the prefix database.
+    ///
+    /// Default value is 4. This value must be lower or equal than 4 and will be clamped
+    /// to this bound otherwise.
+    pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
+        self.max_prefix_length = value;
         self
     }
 
@@ -94,15 +107,17 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 buffer.clear();
                 buffer.extend_from_slice(w1.as_bytes());
                 buffer.push(0);
-                for prefix in prefixes.iter().filter(|prefix| w2.starts_with(prefix.as_str())) {
-                    buffer.truncate(w1.len() + 1);
-                    buffer.extend_from_slice(prefix.as_bytes());
-                    buffer.push(prox);
+                for prefix in prefixes.iter() {
+                    if prefix.len() <= self.max_prefix_length && w2.starts_with(prefix) {
+                        buffer.truncate(w1.len() + 1);
+                        buffer.extend_from_slice(prefix.as_bytes());
+                        buffer.push(prox);
 
-                    match prefixes_cache.get_mut(&buffer) {
-                        Some(value) => value.push(data),
-                        None => {
-                            prefixes_cache.insert(buffer.clone(), vec![data]);
+                        match prefixes_cache.get_mut(&buffer) {
+                            Some(value) => value.push(data),
+                            None => {
+                                prefixes_cache.insert(buffer.clone(), vec![data]);
+                            }
                         }
                     }
                 }
