@@ -129,16 +129,6 @@ pub struct Opt {
 }
 
 impl Opt {
-    /// Wether analytics should be enabled or not.
-    #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    pub fn analytics(&self) -> bool {
-        match self.no_analytics {
-            None => true,
-            Some(None) => false,
-            Some(Some(disabled)) => !disabled,
-        }
-    }
-
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
             let client_auth = match &self.ssl_auth_path {

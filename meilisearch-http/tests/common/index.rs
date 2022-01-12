@@ -35,15 +35,12 @@ pub struct Index<'a> {
 #[allow(dead_code)]
 impl Index<'_> {
     pub async fn get(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}", encode(self.uid.as_ref()).to_string());
+        let url = format!("/indexes/{}", encode(self.uid.as_ref()));
         self.service.get(url).await
     }
 
     pub async fn load_test_set(&self) -> u64 {
-        let url = format!(
-            "/indexes/{}/documents",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let url = format!("/indexes/{}/documents", encode(self.uid.as_ref()));
         let (response, code) = self
             .service
             .post_str(url, include_str!("../assets/test_set.json"))
@@ -66,13 +63,13 @@ impl Index<'_> {
         let body = json!({
             "primaryKey": primary_key,
         });
-        let url = format!("/indexes/{}", encode(self.uid.as_ref()).to_string());
+        let url = format!("/indexes/{}", encode(self.uid.as_ref()));
 
         self.service.put(url, body).await
     }
 
     pub async fn delete(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}", encode(self.uid.as_ref()).to_string());
+        let url = format!("/indexes/{}", encode(self.uid.as_ref()));
         self.service.delete(url).await
     }
 
@@ -84,13 +81,10 @@ impl Index<'_> {
         let url = match primary_key {
             Some(key) => format!(
                 "/indexes/{}/documents?primaryKey={}",
-                encode(self.uid.as_ref()).to_string(),
+                encode(self.uid.as_ref()),
                 key
             ),
-            None => format!(
-                "/indexes/{}/documents",
-                encode(self.uid.as_ref()).to_string()
-            ),
+            None => format!("/indexes/{}/documents", encode(self.uid.as_ref())),
         };
         self.service.post(url, documents).await
     }
@@ -103,13 +97,10 @@ impl Index<'_> {
         let url = match primary_key {
             Some(key) => format!(
                 "/indexes/{}/documents?primaryKey={}",
-                encode(self.uid.as_ref()).to_string(),
+                encode(self.uid.as_ref()),
                 key
             ),
-            None => format!(
-                "/indexes/{}/documents",
-                encode(self.uid.as_ref()).to_string()
-            ),
+            None => format!("/indexes/{}/documents", encode(self.uid.as_ref())),
         };
         self.service.put(url, documents).await
     }
@@ -145,19 +136,12 @@ impl Index<'_> {
         id: u64,
         _options: Option<GetDocumentOptions>,
     ) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/documents/{}",
-            encode(self.uid.as_ref()).to_string(),
-            id
-        );
+        let url = format!("/indexes/{}/documents/{}", encode(self.uid.as_ref()), id);
         self.service.get(url).await
     }
 
     pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
-        let mut url = format!(
-            "/indexes/{}/documents?",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let mut url = format!("/indexes/{}/documents?", encode(self.uid.as_ref()));
         if let Some(limit) = options.limit {
             url.push_str(&format!("limit={}&", limit));
         }
@@ -177,26 +161,19 @@ impl Index<'_> {
     }
 
     pub async fn delete_document(&self, id: u64) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/documents/{}",
-            encode(self.uid.as_ref()).to_string(),
-            id
-        );
+        let url = format!("/indexes/{}/documents/{}", encode(self.uid.as_ref()), id);
         self.service.delete(url).await
     }
 
     pub async fn clear_all_documents(&self) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/documents",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let url = format!("/indexes/{}/documents", encode(self.uid.as_ref()));
         self.service.delete(url).await
     }
 
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
         let url = format!(
             "/indexes/{}/documents/delete-batch",
-            encode(self.uid.as_ref()).to_string()
+            encode(self.uid.as_ref())
         );
         self.service
             .post(url, serde_json::to_value(&ids).unwrap())
@@ -204,31 +181,22 @@ impl Index<'_> {
     }
 
     pub async fn settings(&self) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/settings",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let url = format!("/indexes/{}/settings", encode(self.uid.as_ref()));
         self.service.get(url).await
     }
 
     pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/settings",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let url = format!("/indexes/{}/settings", encode(self.uid.as_ref()));
         self.service.post(url, settings).await
     }
 
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/settings",
-            encode(self.uid.as_ref()).to_string()
-        );
+        let url = format!("/indexes/{}/settings", encode(self.uid.as_ref()));
         self.service.delete(url).await
     }
 
     pub async fn stats(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/stats", encode(self.uid.as_ref()).to_string());
+        let url = format!("/indexes/{}/stats", encode(self.uid.as_ref()));
         self.service.get(url).await
     }
 
@@ -253,17 +221,13 @@ impl Index<'_> {
     }
 
     pub async fn search_post(&self, query: Value) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/search", encode(self.uid.as_ref()).to_string());
+        let url = format!("/indexes/{}/search", encode(self.uid.as_ref()));
         self.service.post(url, query).await
     }
 
     pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
         let params = serde_url_params::to_string(&query).unwrap();
-        let url = format!(
-            "/indexes/{}/search?{}",
-            encode(self.uid.as_ref()).to_string(),
-            params
-        );
+        let url = format!("/indexes/{}/search?{}", encode(self.uid.as_ref()), params);
         self.service.get(url).await
     }
 

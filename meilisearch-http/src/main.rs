@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let (analytics, user) = if opt.analytics() {
+    let (analytics, user) = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
         analytics::MockAnalytics::new(&opt)
@@ -125,7 +125,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
-        if opt.analytics() {
+        if !opt.no_analytics {
             eprintln!(
                 "
 Thank you for using MeiliSearch!
