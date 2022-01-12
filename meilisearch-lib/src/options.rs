@@ -2,19 +2,19 @@ use core::fmt;
 use std::{ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
+use clap::Parser;
 use milli::CompressionType;
-use structopt::StructOpt;
 use sysinfo::{RefreshKind, System, SystemExt};
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Parser)]
 pub struct IndexerOpts {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[structopt(long, default_value = "100000")] // 100k
+    #[clap(long, default_value = "100000")] // 100k
     pub log_every_n: usize,
 
     /// Grenad max number of chunks in bytes.
-    #[structopt(long)]
+    #[clap(long)]
     pub max_nb_chunks: Option<usize>,
 
     /// The maximum amount of memory the indexer will use. It defaults to 2/3
@@ -24,22 +24,22 @@ pub struct IndexerOpts {
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
-    #[structopt(long, default_value)]
+    #[clap(long, default_value_t)]
     pub max_memory: MaxMemory,
 
     /// The name of the compression algorithm to use when compressing intermediate
     /// Grenad chunks while indexing documents.
     ///
     /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
-    #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
+    #[clap(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
     pub chunk_compression_type: CompressionType,
 
     /// The level of compression of the chosen algorithm.
-    #[structopt(long, requires = "chunk-compression-type")]
+    #[clap(long, requires = "chunk-compression-type")]
     pub chunk_compression_level: Option<u32>,
 
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
-    #[structopt(long)]
+    #[clap(long)]
     pub indexing_jobs: Option<usize>,
 }
 

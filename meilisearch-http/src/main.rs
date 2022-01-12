@@ -2,12 +2,12 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
-use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -29,7 +29,7 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     setup(&opt)?;
 

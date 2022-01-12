@@ -42,7 +42,7 @@ serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version = "1.0.67", features = ["preserve_order"] }
 siphasher = "0.3.7"
 slice-group-by = "0.2.6"
-structopt = "0.3.23"
+clap = { version = "3.0", features = ["derive", "env"] }
 tar = "0.4.37"
 tempfile = "3.2.0"
 thiserror = "1.0.28"
