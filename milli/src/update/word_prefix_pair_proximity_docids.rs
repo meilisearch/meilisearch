@@ -64,28 +64,26 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         );
 
         let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-        let prefix_fst_keys = prefix_fst.into_stream().into_bytes();
-        let prefix_fst_keys: Vec<_> = prefix_fst_keys
-            .as_slice()
-            .linear_group_by_key(|x| std::str::from_utf8(&x).unwrap().chars().nth(0).unwrap())
-            .collect();
+        let prefix_fst_keys = prefix_fst.into_stream().into_strs()?;
+        let prefix_fst_keys: Vec<_> =
+            prefix_fst_keys.as_slice().linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
 
         let mut db =
             self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(self.wtxn)?;
 
         let mut buffer = Vec::new();
-        let mut current_prefixes: Option<&&[Vec<u8>]> = None;
+        let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
         while let Some(((w1, w2, prox), data)) = db.next().transpose()? {
             current_prefixes = match current_prefixes.take() {
-                Some(prefixes) if w2.as_bytes().starts_with(&prefixes[0]) => Some(prefixes),
+                Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
                 _otherwise => {
                     write_prefixes_in_sorter(
                         &mut prefixes_cache,
                         &mut word_prefix_pair_proximity_docids_sorter,
                         self.threshold,
                     )?;
-                    prefix_fst_keys.iter().find(|prefixes| w2.as_bytes().starts_with(&prefixes[0]))
+                    prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
                 }
             };
 
@@ -93,9 +91,9 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 buffer.clear();
                 buffer.extend_from_slice(w1.as_bytes());
                 buffer.push(0);
-                for prefix in prefixes.iter().filter(|prefix| w2.as_bytes().starts_with(prefix)) {
+                for prefix in prefixes.iter().filter(|prefix| w2.starts_with(prefix.as_str())) {
                     buffer.truncate(w1.len() + 1);
-                    buffer.extend_from_slice(prefix);
+                    buffer.extend_from_slice(prefix.as_bytes());
                     buffer.push(prox);
 
                     match prefixes_cache.get_mut(&buffer) {
@@ -135,17 +133,13 @@ fn write_prefixes_in_sorter(
     sorter: &mut grenad::Sorter<MergeFn>,
     min_word_per_prefix: u32,
 ) -> Result<()> {
-    for (i, (key, data_slices)) in prefixes.drain().enumerate() {
+    for (key, data_slices) in prefixes.drain() {
         // if the number of words prefixed by the prefix is higher than the threshold,
         // we insert it in the sorter.
         if data_slices.len() > min_word_per_prefix as usize {
             for data in data_slices {
                 sorter.insert(&key, data)?;
             }
-        // if the first prefix isn't elligible for insertion,
-        // then the other prefixes can't be elligible.
-        } else if i == 0 {
-            break;
         }
     }
 
