@@ -29,6 +29,10 @@ impl AuthController {
 
         let keys_file_path = src.as_ref().join(KEYS_PATH);
 
+        if !keys_file_path.exists() {
+            return Ok(());
+        }
+
         let mut reader = BufReader::new(File::open(&keys_file_path)?).lines();
         while let Some(key) = reader.next().transpose()? {
             let key = serde_json::from_str(&key)?;
