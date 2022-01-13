@@ -186,6 +186,10 @@ pub fn load_dump(
     let mut meta_file = File::open(&meta_path)?;
     let meta: MetadataVersion = serde_json::from_reader(&mut meta_file)?;
 
+    if !dst_path.as_ref().exists() {
+        std::fs::create_dir_all(dst_path.as_ref())?;
+    }
+
     let tmp_dst = tempfile::tempdir_in(dst_path.as_ref())?;
 
     info!(
