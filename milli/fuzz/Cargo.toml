@@ -9,12 +9,13 @@ edition = "2018"
 cargo-fuzz = true
 
 [dependencies]
+arbitrary = "1.0"
 libfuzzer-sys = "0.4"
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 serde_json = { version = "1.0.62", features = ["preserve_order"] }
 anyhow = "1.0"
 tempfile = "3.3"
-arbitrary-json = { git = "https://github.com/irevoire/arbitrary-json" }
+arbitrary-json = "0.1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"

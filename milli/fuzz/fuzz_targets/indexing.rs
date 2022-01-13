@@ -1,5 +1,6 @@
 #![no_main]
 
+use std::collections::HashSet;
 use std::io::{BufWriter, Cursor, Read, Seek, Write};
 
 use anyhow::{bail, Result};
@@ -46,9 +47,38 @@ fn index_documents(
 fn create_index() -> Result<milli::Index> {
     let dir = tempfile::tempdir().unwrap();
     let mut options = EnvOpenOptions::new();
-    options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
+    options.map_size(10 * 1024 * 1024 * 1024); // 10 GB
     options.max_readers(1);
-    Ok(Index::new(options, dir.path())?)
+    let index = Index::new(options, dir.path())?;
+
+    let update_builder = UpdateBuilder::new();
+    let mut wtxn = index.write_txn().unwrap();
+    let mut builder = update_builder.settings(&mut wtxn, &index);
+
+    let displayed_fields =
+        ["id", "title", "album", "artist", "genre", "country", "released", "duration"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    builder.set_displayed_fields(displayed_fields);
+
+    let searchable_fields = ["title", "album", "artist"].iter().map(|s| s.to_string()).collect();
+    builder.set_searchable_fields(searchable_fields);
+
+    let faceted_fields: HashSet<String> =
+        ["released-timestamp", "duration-float", "genre", "country", "artist"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    builder.set_filterable_fields(faceted_fields.clone());
+    builder.set_sortable_fields(faceted_fields);
+
+    builder.set_distinct_field("same".to_string());
+
+    builder.execute(|_| ()).unwrap();
+    wtxn.commit().unwrap();
+
+    Ok(index)
 }
 
 fuzz_target!(|batches: Vec<Vec<ArbitraryValue>>| {
@@ -63,9 +93,9 @@ fuzz_target!(|batches: Vec<Vec<ArbitraryValue>>| {
 
             // We ignore all badly generated documents
             if let Ok(_count) = read_json(json.as_bytes(), &mut documents) {
+                documents.rewind().unwrap();
                 let documents = DocumentBatchReader::from_reader(documents).unwrap();
                 match index_documents(&mut index, documents) {
-                    // Err(e @ InternalError(_) | e @ IoError(_)) => panic!("{:?}", e),
                     _ => (),
                 }
             }
