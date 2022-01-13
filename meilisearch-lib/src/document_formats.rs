@@ -32,8 +32,6 @@ pub enum DocumentFormatError {
         Box<dyn std::error::Error + Send + Sync + 'static>,
         PayloadType,
     ),
-    #[error("The `{0}` payload must contain at least one document.")]
-    EmptyPayload(PayloadType),
 }
 
 impl From<(PayloadType, milli::documents::Error)> for DocumentFormatError {
@@ -50,7 +48,6 @@ impl ErrorCode for DocumentFormatError {
         match self {
             DocumentFormatError::Internal(_) => Code::Internal,
             DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
-            DocumentFormatError::EmptyPayload(_) => Code::MalformedPayload,
         }
     }
 }
@@ -62,10 +59,6 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
     let builder =
         DocumentBatchBuilder::from_csv(input, writer).map_err(|e| (PayloadType::Csv, e))?;
-
-    if builder.len() == 0 {
-        return Err(DocumentFormatError::EmptyPayload(PayloadType::Csv));
-    }
 
     let count = builder.finish().map_err(|e| (PayloadType::Csv, e))?;
 
@@ -81,14 +74,15 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
     let mut buf = String::new();
 
     while reader.read_line(&mut buf)? > 0 {
+        // skip empty lines
+        if buf == "\n" {
+            buf.clear();
+            continue;
+        }
         builder
             .extend_from_json(Cursor::new(&buf.as_bytes()))
             .map_err(|e| (PayloadType::Ndjson, e))?;
         buf.clear();
-    }
-
-    if builder.len() == 0 {
-        return Err(DocumentFormatError::EmptyPayload(PayloadType::Ndjson));
     }
 
     let count = builder.finish().map_err(|e| (PayloadType::Ndjson, e))?;
@@ -103,10 +97,6 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     builder
         .extend_from_json(input)
         .map_err(|e| (PayloadType::Json, e))?;
-
-    if builder.len() == 0 {
-        return Err(DocumentFormatError::EmptyPayload(PayloadType::Json));
-    }
 
     let count = builder.finish().map_err(|e| (PayloadType::Json, e))?;
 

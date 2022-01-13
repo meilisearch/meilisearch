@@ -710,20 +710,11 @@ async fn replace_document() {
 }
 
 #[actix_rt::test]
-async fn error_add_no_documents() {
+async fn add_no_documents() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (response, code) = index.add_documents(json!([]), None).await;
-
-    let expected_response = json!({
-        "message": "The `json` payload must contain at least one document.",
-        "code": "malformed_payload",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#malformed_payload"
-    });
-
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    let (_response, code) = index.add_documents(json!([]), None).await;
+    assert_eq!(code, 202);
 }
 
 #[actix_rt::test]
