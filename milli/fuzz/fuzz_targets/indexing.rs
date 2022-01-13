@@ -91,13 +91,13 @@ fuzz_target!(|batches: Vec<Vec<ArbitraryValue>>| {
 
             let mut documents = Cursor::new(Vec::new());
 
-            // We ignore all badly generated documents
-            if let Ok(_count) = read_json(json.as_bytes(), &mut documents) {
+            // We ignore all malformed documents
+            if let Ok(_) = read_json(json.as_bytes(), &mut documents) {
                 documents.rewind().unwrap();
                 let documents = DocumentBatchReader::from_reader(documents).unwrap();
-                match index_documents(&mut index, documents) {
-                    _ => (),
-                }
+                // A lot of errors can come out of milli and we don't know which ones are normal or not
+                // so we are only going to look for the unexpected panics.
+                let _ = index_documents(&mut index, documents);
             }
         }
 
