@@ -942,7 +942,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.21.0#c83b77304a3062bdbb5b2a3503a710711caebdea"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.21.1#7f50ca9a20090fc4fe2abae0394c1e6fdd351ebd"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1825,8 +1825,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.21.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.21.0#c83b77304a3062bdbb5b2a3503a710711caebdea"
+version = "0.21.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.21.1#7f50ca9a20090fc4fe2abae0394c1e6fdd351ebd"
 dependencies = [
  "bimap",
  "bincode",
