@@ -160,13 +160,19 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed = self.analyzer.analyze(&old_string);
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
-                        let to_highlight = matching_words.matching_bytes(token.text()).is_some();
-                        if to_highlight {
-                            string.push_str("<mark>")
-                        }
-                        string.push_str(word);
-                        if to_highlight {
-                            string.push_str("</mark>")
+                        match matching_words.matching_bytes(&token) {
+                            Some(chars_to_highlight) => {
+                                let mut chars = word.chars();
+
+                                string.push_str("<mark>");
+                                // push the part to highlight
+                                string.extend(chars.by_ref().take(chars_to_highlight));
+                                string.push_str("</mark>");
+                                // push the suffix after highlight
+                                string.extend(chars);
+                            }
+                            // no highlight
+                            None => string.push_str(word),
                         }
                     } else {
                         string.push_str(word);
