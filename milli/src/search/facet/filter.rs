@@ -33,7 +33,6 @@ enum FilterError<'a> {
     BadGeoLng(f64),
     Reserved(&'a str),
     TooDeep,
-    InternalError,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
 
@@ -58,7 +57,6 @@ impl<'a> Display for FilterError<'a> {
             Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
             Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
             Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ", lng),
-            Self::InternalError => write!(f, "Internal error while executing this filter."),
         }
     }
 }
@@ -342,12 +340,12 @@ impl<'a> Filter<'a> {
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
                 let filterable_fields = index.filterable_fields(rtxn)?;
-                if filterable_fields.contains(&fid.to_lowercase()) {
+                if filterable_fields.contains(fid.value()) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
-                    if let Some(fid) = field_ids_map.id(&fid) {
+                    if let Some(fid) = field_ids_map.id(fid.value()) {
                         Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
                     } else {
-                        return Err(fid.as_external_error(FilterError::InternalError))?;
+                        return Ok(RoaringBitmap::new());
                     }
                 } else {
                     match *fid.deref() {
