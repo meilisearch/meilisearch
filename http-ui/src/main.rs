@@ -34,7 +34,6 @@ use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast;
-use unicode_segmentation::UnicodeSegmentation;
 use warp::filters::ws::Message;
 use warp::http::Response;
 use warp::Filter;
@@ -161,21 +160,19 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed = self.analyzer.analyze(&old_string);
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
-                        let chars_to_highlight = matching_words.matching_bytes(&token).unwrap_or(0);
-                        if chars_to_highlight > 0 {
-                            let graphemes = word.graphemes(true);
-                            let chars = graphemes.clone().into_iter();
+                        match matching_words.matching_bytes(&token) {
+                            Some(chars_to_highlight) => {
+                                let mut chars = word.chars();
 
-                            string.push_str("<mark>");
-                            string.push_str(
-                                chars.take(chars_to_highlight).collect::<String>().as_str(),
-                            );
-                            string.push_str("</mark>");
-
-                            let chars = graphemes.into_iter().skip(chars_to_highlight);
-                            string.push_str(chars.collect::<String>().as_str());
-                        } else {
-                            string.push_str(word);
+                                string.push_str("<mark>");
+                                // push the part to highlight
+                                string.extend(chars.by_ref().take(chars_to_highlight));
+                                string.push_str("</mark>");
+                                // push the suffix after highlight
+                                string.extend(chars);
+                            }
+                            // no highlight
+                            None => string.push_str(word),
                         }
                     } else {
                         string.push_str(word);
