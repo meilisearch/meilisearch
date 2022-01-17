@@ -40,11 +40,11 @@ impl MatchingWords {
                 Distance::Exact(t) if t <= *typo => {
                     if *is_prefix {
                         let len = bytes_to_highlight(word_to_highlight.text(), query_word);
-                        Some(word_to_highlight.num_graphemes_from_bytes(len))
+                        Some(word_to_highlight.num_chars_from_bytes(len))
                     } else {
                         Some(
                             word_to_highlight
-                                .num_graphemes_from_bytes(word_to_highlight.text().len()),
+                                .num_chars_from_bytes(word_to_highlight.text().len()),
                         )
                     }
                 }
