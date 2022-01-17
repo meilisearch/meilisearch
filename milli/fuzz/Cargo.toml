@@ -1,0 +1,37 @@
+[package]
+name = "milli-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = "1.0"
+libfuzzer-sys = "0.4"
+heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
+serde_json = { version = "1.0.62", features = ["preserve_order"] }
+anyhow = "1.0"
+tempfile = "3.3"
+arbitrary-json = "0.1.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemallocator = "0.3.2"
+
+[dependencies.milli]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = true
+
+[[bin]]
+name = "indexing"
+path = "fuzz_targets/indexing.rs"
+test = false
+doc = false
