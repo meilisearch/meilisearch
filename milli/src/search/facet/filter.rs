@@ -454,6 +454,32 @@ mod tests {
     use crate::Index;
 
     #[test]
+    fn empty_db() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the filterable fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_searchable_fields(vec![S("PrIcE")]); // to keep the fields order
+        builder.set_filterable_fields(hashset! { S("PrIcE") });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let filter = Filter::from_str("PrIcE < 1000").unwrap().unwrap();
+        let bitmap = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(bitmap.is_empty());
+
+        let filter = Filter::from_str("NOT PrIcE >= 1000").unwrap().unwrap();
+        let bitmap = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(bitmap.is_empty());
+    }
+
+    #[test]
     fn from_array() {
         // Simple array with Left
         let condition = Filter::from_array(vec![Either::Left(["channel = mv"])]).unwrap().unwrap();
