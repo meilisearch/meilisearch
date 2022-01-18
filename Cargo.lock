@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.25.0"
+version = "0.25.2"
 dependencies = [
  "actix-http",
  "actix-web",
@@ -1651,7 +1651,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.25.0"
+version = "0.25.2"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.25.0"
+version = "0.25.2"
 dependencies = [
  "actix-rt",
  "actix-web",
