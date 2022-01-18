@@ -7,7 +7,8 @@ use log::debug;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, MergeFn, WriteMethod,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
+    MergeFn, WriteMethod,
 };
 use crate::{Index, Result};
 
@@ -61,7 +62,11 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
-    pub fn execute<A: AsRef<[u8]>>(self, old_prefix_fst: &fst::Set<A>) -> Result<()> {
+    pub fn execute<A: AsRef<[u8]>>(
+        self,
+        new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        old_prefix_fst: &fst::Set<A>,
+    ) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
         self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;
