@@ -61,7 +61,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
-    pub fn execute(self) -> Result<()> {
+    pub fn execute<A: AsRef<[u8]>>(self, old_prefix_fst: &fst::Set<A>) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
         self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;

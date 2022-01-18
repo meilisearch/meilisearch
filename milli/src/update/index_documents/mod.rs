@@ -353,6 +353,9 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
+        let previous_words_prefixes_fst =
+            self.index.words_prefixes_fst(self.wtxn)?.map_data(|cow| cow.into_owned())?;
+
         // Run the words prefixes update operation.
         let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
         if let Some(value) = self.config.words_prefix_threshold {
@@ -389,7 +392,7 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute()?;
+        builder.execute(&previous_words_prefixes_fst)?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
