@@ -14,10 +14,11 @@ use rustls::{
     RootCertStore,
 };
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+use serde::Serialize;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Debug, Clone, Parser, Serialize)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[clap(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
@@ -28,6 +29,7 @@ pub struct Opt {
     pub http_addr: String,
 
     /// The master key allowing you to do everything on the server.
+    #[serde(skip)]
     #[clap(long, env = "MEILI_MASTER_KEY")]
     pub master_key: Option<String>,
 
@@ -59,33 +61,40 @@ pub struct Opt {
     /// This should contain PEM-format certificates
     /// in the right order (the first certificate should
     /// certify KEYFILE, the last should be a root CA).
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_CERT_PATH", parse(from_os_str))]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Read private key from KEYFILE.  This should be a RSA
     /// private key or PKCS8-encoded private key, in PEM format.
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_KEY_PATH", parse(from_os_str))]
     pub ssl_key_path: Option<PathBuf>,
 
     /// Enable client authentication, and accept certificates
     /// signed by those roots provided in CERTFILE.
     #[clap(long, env = "MEILI_SSL_AUTH_PATH", parse(from_os_str))]
+    #[serde(skip)]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Read DER-encoded OCSP response from OCSPFILE and staple to certificate.
     /// Optional
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_OCSP_PATH", parse(from_os_str))]
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Send a fatal alert if the client does not complete client authentication.
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_REQUIRE_AUTH")]
     pub ssl_require_auth: bool,
 
     /// SSL support session resumption
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_RESUMPTION")]
     pub ssl_resumption: bool,
 
     /// SSL support tickets.
+    #[serde(skip)]
     #[clap(long, env = "MEILI_SSL_TICKETS")]
     pub ssl_tickets: bool,
 
@@ -127,6 +136,7 @@ pub struct Opt {
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
+    #[serde(skip)]
     #[clap(skip)]
     pub indexer_options: IndexerOpts,
 }

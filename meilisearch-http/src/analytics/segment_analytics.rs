@@ -1,6 +1,6 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -211,10 +211,30 @@ impl Segment {
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
-        let infos = json!({
-            "env": opt.env.clone(),
-            "has_snapshot": opt.schedule_snapshot,
-        });
+        // The infos are all cli option except every option containing sensitive information.
+        // We consider an information as sensible if it contains a path, an address or a key.
+        let infos = {
+            // First we see if any sensitive fields were used.
+            let db_path = opt.db_path != PathBuf::from("./data.ms");
+            let import_dump = opt.import_dump.is_some();
+            let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
+            let import_snapshot = opt.import_snapshot.is_some();
+            let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
+            let http_addr = opt.http_addr != "127.0.0.1:7700";
+
+            let mut infos = serde_json::to_value(opt).unwrap();
+
+            // Then we overwrite all sensitive field with a boolean representing if
+            // the feature was used or not.
+            infos["db_path"] = json!(db_path);
+            infos["import_dump"] = json!(import_dump);
+            infos["dumps_dir"] = json!(dumps_dir);
+            infos["import_snapshot"] = json!(import_snapshot);
+            infos["snapshot_dir"] = json!(snapshots_dir);
+            infos["http_addr"] = json!(http_addr);
+
+            infos
+        };
 
         let number_of_documents = stats
             .indexes
