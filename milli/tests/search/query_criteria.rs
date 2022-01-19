@@ -6,7 +6,7 @@ use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
 use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
-use milli::update::{Settings, UpdateBuilder};
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
 use rand::Rng;
 use Criterion::*;
@@ -337,11 +337,12 @@ fn criteria_mixup() {
         ]
     };
 
+    let config = IndexerConfig::default();
     for criteria in criteria_mix {
         eprintln!("Testing with criteria order: {:?}", &criteria);
         //update criteria
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.iter().map(ToString::to_string).collect());
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
@@ -375,8 +376,9 @@ fn criteria_ascdesc() {
     let index = Index::new(options, &path).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
+    let config = IndexerConfig::default();
 
-    let mut builder = Settings::new(&mut wtxn, &index);
+    let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     builder.set_sortable_fields(hashset! {
         S("name"),
@@ -385,10 +387,9 @@ fn criteria_ascdesc() {
     builder.execute(|_| ()).unwrap();
 
     // index documents
-    let mut builder = UpdateBuilder::new();
-    builder.max_memory(10 * 1024 * 1024); // 10MiB
-    let mut builder = builder.index_documents(&mut wtxn, &index);
-    builder.enable_autogenerate_docids();
+    let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
+    let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
 
     let mut cursor = Cursor::new(Vec::new());
     let mut batch_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
@@ -419,7 +420,8 @@ fn criteria_ascdesc() {
 
     let reader = DocumentBatchReader::from_reader(cursor).unwrap();
 
-    builder.execute(reader, |_| ()).unwrap();
+    builder.add_documents(reader).unwrap();
+    builder.execute().unwrap();
 
     wtxn.commit().unwrap();
 
@@ -430,7 +432,7 @@ fn criteria_ascdesc() {
         eprintln!("Testing with criterion: {:?}", &criterion);
 
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.to_string()]);
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();

@@ -9,6 +9,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
+use milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -122,18 +123,18 @@ impl DocumentAddition {
         println!("Adding {} documents to the index.", reader.len());
 
         let mut txn = index.env.write_txn()?;
-        let mut addition = milli::update::IndexDocuments::new(&mut txn, &index);
+        let config = milli::update::IndexerConfig { log_every_n: Some(100), ..Default::default() };
+        let update_method = if self.update_documents {
+            IndexDocumentsMethod::UpdateDocuments
+        } else {
+            IndexDocumentsMethod::ReplaceDocuments
+        };
 
-        if self.update_documents {
-            addition.index_documents_method(milli::update::IndexDocumentsMethod::UpdateDocuments);
-        }
-
-        addition.log_every_n(100);
-
-        if self.autogen_docids {
-            addition.enable_autogenerate_docids()
-        }
-
+        let indexing_config = IndexDocumentsConfig {
+            update_method,
+            autogenerate_docids: self.autogen_docids,
+            ..Default::default()
+        };
         let mut bars = Vec::new();
         let progesses = MultiProgress::new();
         for _ in 0..4 {
@@ -141,12 +142,20 @@ impl DocumentAddition {
             let bar = progesses.add(bar);
             bars.push(bar);
         }
+        let mut addition = milli::update::IndexDocuments::new(
+            &mut txn,
+            &index,
+            &config,
+            indexing_config,
+            |step| indexing_callback(step, &bars),
+        );
+        addition.add_documents(reader)?;
 
         std::thread::spawn(move || {
             progesses.join().unwrap();
         });
 
-        let result = addition.execute(reader, |step| indexing_callback(step, &bars))?;
+        let result = addition.execute()?;
 
         txn.commit()?;
 
@@ -293,8 +302,9 @@ impl SettingsUpdate {
     fn perform(&self, index: milli::Index) -> Result<()> {
         let mut txn = index.env.write_txn()?;
 
-        let mut update = milli::update::Settings::new(&mut txn, &index);
-        update.log_every_n(100);
+        let config = IndexerConfig { log_every_n: Some(100), ..Default::default() };
+
+        let mut update = milli::update::Settings::new(&mut txn, &index, &config);
 
         if let Some(ref filterable_attributes) = self.filterable_attributes {
             if !filterable_attributes.is_empty() {

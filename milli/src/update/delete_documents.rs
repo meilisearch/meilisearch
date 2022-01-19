@@ -580,7 +580,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::update::{IndexDocuments, Settings};
+    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::Filter;
 
     #[test]
@@ -596,8 +596,11 @@ mod tests {
             { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
             { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // delete those documents, ids are synchronous therefore 0, 1, and 2.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -626,8 +629,12 @@ mod tests {
             { "mysuperid": 1, "name": "kevina" },
             { "mysuperid": 2, "name": "benoit" }
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -646,7 +653,8 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_primary_key(S("docid"));
         builder.set_filterable_fields(hashset! { S("label") });
         builder.execute(|_| ()).unwrap();
@@ -673,8 +681,12 @@ mod tests {
             {"docid":"1_68","label":"design"},
             {"docid":"1_69","label":"geometry"}
         ]);
-        let builder = IndexDocuments::new(&mut wtxn, &index);
-        builder.execute(content, |_| ()).unwrap();
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -696,7 +708,8 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_primary_key(S("id"));
         builder.set_filterable_fields(hashset!(S("_geo")));
         builder.set_sortable_fields(hashset!(S("_geo")));
@@ -726,7 +739,11 @@ mod tests {
         ]);
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
 
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_| ()).unwrap();
+        let indexing_config = IndexDocumentsConfig::default();
+
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
 
         let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids_to_delete

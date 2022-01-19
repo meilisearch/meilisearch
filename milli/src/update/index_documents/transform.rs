@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::time::Instant;
 
-use grenad::CompressionType;
 use itertools::Itertools;
 use log::info;
 use roaring::RoaringBitmap;
@@ -14,7 +13,7 @@ use serde_json::{Map, Value};
 use super::helpers::{
     create_sorter, create_writer, keep_latest_obkv, merge_obkvs, merge_two_obkvs, MergeFn,
 };
-use super::IndexDocumentsMethod;
+use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentBatchReader, DocumentsBatchIndex};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
@@ -40,16 +39,14 @@ pub struct TransformOutput {
 /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
 /// the replaced documents ids, the number of documents in this update and the file
 /// containing all those documents.
-pub struct Transform<'t, 'i> {
-    pub rtxn: &'t heed::RoTxn<'i>,
+pub struct Transform<'a, 'i> {
     pub index: &'i Index,
-    pub log_every_n: Option<usize>,
-    pub chunk_compression_type: CompressionType,
-    pub chunk_compression_level: Option<u32>,
-    pub max_nb_chunks: Option<usize>,
-    pub max_memory: Option<usize>,
-    pub index_documents_method: IndexDocumentsMethod,
+    indexer_settings: &'a IndexerConfig,
     pub autogenerate_docids: bool,
+    pub index_documents_method: IndexDocumentsMethod,
+
+    sorter: grenad::Sorter<MergeFn>,
+    documents_count: usize,
 }
 
 /// Create a mapping between the field ids found in the document batch and the one that were
@@ -84,48 +81,65 @@ fn find_primary_key(index: &DocumentsBatchIndex) -> Option<&str> {
         .map(String::as_str)
 }
 
-impl Transform<'_, '_> {
-    pub fn read_documents<R, F>(
-        self,
-        mut reader: DocumentBatchReader<R>,
-        progress_callback: F,
-    ) -> Result<TransformOutput>
-    where
-        R: Read + Seek,
-        F: Fn(UpdateIndexingStep) + Sync,
-    {
-        let fields_index = reader.index();
-        let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let mapping = create_fields_mapping(&mut fields_ids_map, fields_index)?;
-
-        let alternative_name = self
-            .index
-            .primary_key(self.rtxn)?
-            .or_else(|| find_primary_key(fields_index))
-            .map(String::from);
-
-        let (primary_key_id, primary_key_name) = compute_primary_key_pair(
-            self.index.primary_key(self.rtxn)?,
-            &mut fields_ids_map,
-            alternative_name,
-            self.autogenerate_docids,
-        )?;
-
+impl<'a, 'i> Transform<'a, 'i> {
+    pub fn new(
+        index: &'i Index,
+        indexer_settings: &'a IndexerConfig,
+        index_documents_method: IndexDocumentsMethod,
+        autogenerate_docids: bool,
+    ) -> Self {
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
-        let merge_function = match self.index_documents_method {
+        let merge_function = match index_documents_method {
             IndexDocumentsMethod::ReplaceDocuments => keep_latest_obkv,
             IndexDocumentsMethod::UpdateDocuments => merge_obkvs,
         };
 
         // We initialize the sorter with the user indexing settings.
-        let mut sorter = create_sorter(
+        let sorter = create_sorter(
             merge_function,
-            self.chunk_compression_type,
-            self.chunk_compression_level,
-            self.max_nb_chunks,
-            self.max_memory,
+            indexer_settings.chunk_compression_type,
+            indexer_settings.chunk_compression_level,
+            indexer_settings.max_nb_chunks,
+            indexer_settings.max_memory,
         );
+
+        Transform {
+            index,
+            indexer_settings,
+            autogenerate_docids,
+            sorter,
+            documents_count: 0,
+            index_documents_method,
+        }
+    }
+
+    pub fn read_documents<R, F>(
+        &mut self,
+        mut reader: DocumentBatchReader<R>,
+        wtxn: &mut heed::RwTxn,
+        progress_callback: F,
+    ) -> Result<usize>
+    where
+        R: Read + Seek,
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
+        let fields_index = reader.index();
+        let mut fields_ids_map = self.index.fields_ids_map(wtxn)?;
+        let mapping = create_fields_mapping(&mut fields_ids_map, fields_index)?;
+
+        let alternative_name = self
+            .index
+            .primary_key(wtxn)?
+            .or_else(|| find_primary_key(fields_index))
+            .map(String::from);
+
+        let (primary_key_id, primary_key_name) = compute_primary_key_pair(
+            self.index.primary_key(wtxn)?,
+            &mut fields_ids_map,
+            alternative_name,
+            self.autogenerate_docids,
+        )?;
 
         let mut obkv_buffer = Vec::new();
         let mut documents_count = 0;
@@ -133,7 +147,7 @@ impl Transform<'_, '_> {
         let mut field_buffer: Vec<(u16, &[u8])> = Vec::new();
         while let Some((addition_index, document)) = reader.next_document_with_index()? {
             let mut field_buffer_cache = drop_and_reuse(field_buffer);
-            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
+            if self.indexer_settings.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::RemapDocumentAddition {
                     documents_seen: documents_count,
                 });
@@ -214,7 +228,7 @@ impl Transform<'_, '_> {
             }
 
             // We use the extracted/generated user id as the key for this document.
-            sorter.insert(&external_id.as_ref().as_bytes(), &obkv_buffer)?;
+            self.sorter.insert(&external_id.as_ref().as_bytes(), &obkv_buffer)?;
             documents_count += 1;
 
             progress_callback(UpdateIndexingStep::RemapDocumentAddition {
@@ -230,38 +244,40 @@ impl Transform<'_, '_> {
             documents_seen: documents_count,
         });
 
+        self.index.put_fields_ids_map(wtxn, &fields_ids_map)?;
+        self.index.put_primary_key(wtxn, &primary_key_name)?;
+        self.documents_count += documents_count;
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        self.output_from_sorter(
-            sorter,
-            primary_key_name,
-            fields_ids_map,
-            documents_count,
-            progress_callback,
-        )
+        Ok(documents_count)
     }
 
     /// Generate the `TransformOutput` based on the given sorter that can be generated from any
     /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
-    fn output_from_sorter<F>(
+    pub(crate) fn output_from_sorter<F>(
         self,
-        sorter: grenad::Sorter<MergeFn>,
-        primary_key: String,
-        fields_ids_map: FieldsIdsMap,
-        approximate_number_of_documents: usize,
+        wtxn: &mut heed::RwTxn,
         progress_callback: F,
     ) -> Result<TransformOutput>
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        let mut external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
-        let documents_ids = self.index.documents_ids(self.rtxn)?;
-        let mut field_distribution = self.index.field_distribution(self.rtxn)?;
+        let primary_key = self
+            .index
+            .primary_key(&wtxn)?
+            .ok_or(Error::UserError(UserError::MissingPrimaryKey))?
+            .to_string();
+        let fields_ids_map = self.index.fields_ids_map(wtxn)?;
+        let approximate_number_of_documents = self.documents_count;
+
+        let mut external_documents_ids = self.index.external_documents_ids(wtxn).unwrap();
+        let documents_ids = self.index.documents_ids(wtxn)?;
+        let mut field_distribution = self.index.field_distribution(wtxn)?;
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
 
         // consume sorter, in order to free the internal allocation, before creating a new one.
-        let mut iter = sorter.into_merger_iter()?;
+        let mut iter = self.sorter.into_merger_iter()?;
 
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
@@ -272,10 +288,10 @@ impl Transform<'_, '_> {
                     Err(InternalError::IndexingMergingKeys { process: "documents" }.into())
                 }
             },
-            self.chunk_compression_type,
-            self.chunk_compression_level,
-            self.max_nb_chunks,
-            self.max_memory,
+            self.indexer_settings.chunk_compression_type,
+            self.indexer_settings.chunk_compression_level,
+            self.indexer_settings.max_nb_chunks,
+            self.indexer_settings.max_memory,
         );
         let mut new_external_documents_ids_builder = fst::MapBuilder::memory();
         let mut replaced_documents_ids = RoaringBitmap::new();
@@ -285,7 +301,7 @@ impl Transform<'_, '_> {
         // While we write into final file we get or generate the internal documents ids.
         let mut documents_count = 0;
         while let Some((external_id, update_obkv)) = iter.next()? {
-            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
+            if self.indexer_settings.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
                     documents_seen: documents_count,
                     total_documents: approximate_number_of_documents,
@@ -299,7 +315,7 @@ impl Transform<'_, '_> {
                     replaced_documents_ids.insert(docid);
 
                     let key = BEU32::new(docid);
-                    let base_obkv = self.index.documents.get(&self.rtxn, &key)?.ok_or(
+                    let base_obkv = self.index.documents.get(wtxn, &key)?.ok_or(
                         InternalError::DatabaseMissingEntry {
                             db_name: db_name::DOCUMENTS,
                             key: None,
@@ -359,8 +375,11 @@ impl Transform<'_, '_> {
 
         // We create a final writer to write the new documents in order from the sorter.
         let file = tempfile::tempfile()?;
-        let mut writer =
-            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+        let mut writer = create_writer(
+            self.indexer_settings.chunk_compression_type,
+            self.indexer_settings.chunk_compression_level,
+            file,
+        )?;
 
         // Once we have written all the documents into the final sorter, we write the documents
         // into this writer, extract the file and reset the seek to be able to read it again.
@@ -392,22 +411,28 @@ impl Transform<'_, '_> {
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
     pub fn remap_index_documents(
         self,
-        primary_key: String,
+        wtxn: &mut heed::RwTxn,
         old_fields_ids_map: FieldsIdsMap,
         new_fields_ids_map: FieldsIdsMap,
     ) -> Result<TransformOutput> {
-        let field_distribution = self.index.field_distribution(self.rtxn)?;
-        let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
-        let documents_ids = self.index.documents_ids(self.rtxn)?;
+        // There already has been a document addition, the primary key should be set by now.
+        let primary_key =
+            self.index.primary_key(wtxn)?.ok_or(UserError::MissingPrimaryKey)?.to_string();
+        let field_distribution = self.index.field_distribution(wtxn)?;
+        let external_documents_ids = self.index.external_documents_ids(wtxn)?;
+        let documents_ids = self.index.documents_ids(wtxn)?;
         let documents_count = documents_ids.len() as usize;
 
         // We create a final writer to write the new documents in order from the sorter.
         let file = tempfile::tempfile()?;
-        let mut writer =
-            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+        let mut writer = create_writer(
+            self.indexer_settings.chunk_compression_type,
+            self.indexer_settings.chunk_compression_level,
+            file,
+        )?;
 
         let mut obkv_buffer = Vec::new();
-        for result in self.index.documents.iter(self.rtxn)? {
+        for result in self.index.documents.iter(wtxn)? {
             let (docid, obkv) = result?;
             let docid = docid.get();
 

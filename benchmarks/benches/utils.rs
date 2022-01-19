@@ -8,7 +8,9 @@ use std::path::Path;
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
 use milli::documents::DocumentBatchReader;
-use milli::update::{IndexDocumentsMethod, Settings, UpdateBuilder};
+use milli::update::{
+    IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
+};
 use milli::{Filter, Index};
 use serde_json::{Map, Value};
 
@@ -65,9 +67,9 @@ pub fn base_setup(conf: &Conf) -> Index {
     options.max_readers(10);
     let index = Index::new(options, conf.database_name).unwrap();
 
-    let update_builder = UpdateBuilder::new();
+    let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
+    let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     if let Some(primary_key) = conf.primary_key {
         builder.set_primary_key(primary_key.to_string());
@@ -87,16 +89,19 @@ pub fn base_setup(conf: &Conf) -> Index {
     builder.execute(|_| ()).unwrap();
     wtxn.commit().unwrap();
 
-    let update_builder = UpdateBuilder::new();
+    let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.index_documents(&mut wtxn, &index);
-    if let None = conf.primary_key {
-        builder.enable_autogenerate_docids();
-    }
+    let indexing_config = IndexDocumentsConfig {
+        autogenerate_docids: conf.primary_key.is_none(),
+        update_method: IndexDocumentsMethod::ReplaceDocuments,
+        ..Default::default()
+    };
+    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
     let documents = documents_from(conf.dataset, conf.dataset_format);
 
-    builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
-    builder.execute(documents, |_| ()).unwrap();
+    builder.add_documents(documents).unwrap();
+
+    builder.execute().unwrap();
     wtxn.commit().unwrap();
 
     index

@@ -16,7 +16,8 @@ macro_rules! test_distinct {
 
             // update distinct attribute
             let mut wtxn = index.write_txn().unwrap();
-            let mut builder = Settings::new(&mut wtxn, &index);
+            let config = milli::update::IndexerConfig::default();
+            let mut builder = Settings::new(&mut wtxn, &index, &config);
             builder.set_distinct_field(S(stringify!($distinct)));
             builder.execute(|_| ()).unwrap();
             wtxn.commit().unwrap();

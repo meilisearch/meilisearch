@@ -38,7 +38,9 @@ mod test {
     use crate::documents::{DocumentBatchBuilder, DocumentBatchReader};
     use crate::index::tests::TempIndex;
     use crate::index::Index;
-    use crate::update::{IndexDocumentsMethod, UpdateBuilder};
+    use crate::update::{
+        IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
+    };
     use crate::{DocumentId, FieldId, BEU32};
 
     static JSON: Lazy<Vec<u8>> = Lazy::new(generate_documents);
@@ -84,19 +86,24 @@ mod test {
         let mut txn = index.write_txn().unwrap();
 
         // set distinct and faceted attributes for the index.
-        let builder = UpdateBuilder::new();
-        let mut update = builder.settings(&mut txn, &index);
+        let config = IndexerConfig::default();
+        let mut update = Settings::new(&mut txn, &index, &config);
         update.set_distinct_field(distinct.to_string());
         update.execute(|_| ()).unwrap();
 
         // add documents to the index
-        let builder = UpdateBuilder::new();
-        let mut addition = builder.index_documents(&mut txn, &index);
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig {
+            update_method: IndexDocumentsMethod::ReplaceDocuments,
+            ..Default::default()
+        };
+        let mut addition = IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ());
 
-        addition.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
         let reader =
             crate::documents::DocumentBatchReader::from_reader(Cursor::new(&*JSON)).unwrap();
-        addition.execute(reader, |_| ()).unwrap();
+
+        addition.add_documents(reader).unwrap();
+        addition.execute().unwrap();
 
         let fields_map = index.fields_ids_map(&txn).unwrap();
         let fid = fields_map.id(&distinct).unwrap();

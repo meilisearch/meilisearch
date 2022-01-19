@@ -450,7 +450,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::update::Settings;
+    use crate::update::{IndexerConfig, Settings};
     use crate::Index;
 
     #[test]
@@ -461,8 +461,9 @@ mod tests {
         let index = Index::new(options, &path).unwrap();
 
         // Set the filterable fields to be the channel.
+        let config = IndexerConfig::default();
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_searchable_fields(vec![S("PrIcE")]); // to keep the fields order
         builder.set_filterable_fields(hashset! { S("PrIcE") });
         builder.execute(|_| ()).unwrap();
@@ -563,9 +564,10 @@ mod tests {
         ));
         drop(rtxn);
 
+        let config = IndexerConfig::default();
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_searchable_fields(vec![S("title")]);
         builder.set_filterable_fields(hashset! { S("title") });
         builder.execute(|_| ()).unwrap();
@@ -593,9 +595,10 @@ mod tests {
         options.map_size(10 * 1024 * 1024); // 10 MB
         let index = Index::new(options, &path).unwrap();
 
+        let config = IndexerConfig::default();
         // Set the filterable fields to be the channel.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
         builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
         builder.execute(|_| ()).unwrap();

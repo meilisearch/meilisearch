@@ -7,7 +7,7 @@ use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
-use milli::update::{Settings, UpdateBuilder};
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::{AscDesc, Criterion, DocumentId, Index, Member};
 use serde::Deserialize;
 use slice_group_by::GroupBy;
@@ -31,8 +31,9 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let index = Index::new(options, &path).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
+    let config = IndexerConfig::default();
 
-    let mut builder = Settings::new(&mut wtxn, &index);
+    let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     let criteria = criteria.iter().map(|c| c.to_string()).collect();
     builder.set_criteria(criteria);
@@ -54,10 +55,10 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.execute(|_| ()).unwrap();
 
     // index documents
-    let mut builder = UpdateBuilder::new();
-    builder.max_memory(10 * 1024 * 1024); // 10MiB
-    let mut builder = builder.index_documents(&mut wtxn, &index);
-    builder.enable_autogenerate_docids();
+    let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
+    let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+
+    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
     let mut cursor = Cursor::new(Vec::new());
     let mut documents_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
     let reader = Cursor::new(CONTENT.as_bytes());
@@ -73,7 +74,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     // index documents
     let content = DocumentBatchReader::from_reader(cursor).unwrap();
-    builder.execute(content, |_| ()).unwrap();
+    builder.add_documents(content).unwrap();
+    builder.execute().unwrap();
 
     wtxn.commit().unwrap();
 
