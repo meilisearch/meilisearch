@@ -3,7 +3,7 @@ use std::error::Error;
 use meilisearch_error::{internal_error, Code, ErrorCode};
 use serde_json::Value;
 
-use crate::error::MilliError;
+use crate::{error::MilliError, update_file_store};
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 
@@ -23,7 +23,9 @@ internal_error!(
     IndexError: std::io::Error,
     heed::Error,
     fst::Error,
-    serde_json::Error
+    serde_json::Error,
+    update_file_store::UpdateFileStoreError,
+    milli::documents::Error
 );
 
 impl ErrorCode for IndexError {

@@ -6,10 +6,10 @@ use anyhow::Context;
 use heed::{EnvOpenOptions, RoTxn};
 use indexmap::IndexMap;
 use milli::documents::DocumentBatchReader;
+use milli::update::{IndexDocumentsConfig, IndexerConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::document_formats::read_ndjson;
-use crate::index::update_handler::UpdateHandler;
 use crate::index::updates::apply_settings_to_builder;
 
 use super::error::Result;
@@ -85,7 +85,7 @@ impl Index {
         src: impl AsRef<Path>,
         dst: impl AsRef<Path>,
         size: usize,
-        update_handler: &UpdateHandler,
+        indexer_config: &IndexerConfig,
     ) -> anyhow::Result<()> {
         let dir_name = src
             .as_ref()
@@ -110,8 +110,7 @@ impl Index {
         let mut txn = index.write_txn()?;
 
         // Apply settings first
-        let builder = update_handler.update_builder();
-        let mut builder = builder.settings(&mut txn, &index);
+        let mut builder = milli::update::Settings::new(&mut txn, &index, indexer_config);
 
         if let Some(primary_key) = primary_key {
             builder.set_primary_key(primary_key);
@@ -140,12 +139,16 @@ impl Index {
 
             //If the document file is empty, we don't perform the document addition, to prevent
             //a primary key error to be thrown.
-            if !documents_reader.is_empty() {
-                let builder = update_handler
-                    .update_builder()
-                    .index_documents(&mut txn, &index);
-                builder.execute(documents_reader, |_| ())?;
-            }
+            let config = IndexDocumentsConfig::default();
+            let mut builder = milli::update::IndexDocuments::new(
+                &mut txn,
+                &index,
+                indexer_config,
+                config,
+                |_| (),
+            );
+            builder.add_documents(documents_reader)?;
+            builder.execute()?;
         }
 
         txn.commit()?;

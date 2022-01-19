@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
 use super::{DumpInfo, DumpJob, DumpMsg, DumpStatus};
-use crate::tasks::TaskStore;
+use crate::tasks::Scheduler;
 use crate::update_file_store::UpdateFileStore;
 
 pub const CONCURRENT_DUMP_MSG: usize = 10;
@@ -18,7 +18,7 @@ pub const CONCURRENT_DUMP_MSG: usize = 10;
 pub struct DumpActor {
     inbox: Option<mpsc::Receiver<DumpMsg>>,
     update_file_store: UpdateFileStore,
-    task_store: TaskStore,
+    scheduler: Arc<RwLock<Scheduler>>,
     dump_path: PathBuf,
     analytics_path: PathBuf,
     lock: Arc<Mutex<()>>,
@@ -36,7 +36,7 @@ impl DumpActor {
     pub fn new(
         inbox: mpsc::Receiver<DumpMsg>,
         update_file_store: UpdateFileStore,
-        task_store: TaskStore,
+        scheduler: Arc<RwLock<Scheduler>>,
         dump_path: impl AsRef<Path>,
         analytics_path: impl AsRef<Path>,
         index_db_size: usize,
@@ -46,7 +46,7 @@ impl DumpActor {
         let lock = Arc::new(Mutex::new(()));
         Self {
             inbox: Some(inbox),
-            task_store,
+            scheduler,
             update_file_store,
             dump_path: dump_path.as_ref().into(),
             analytics_path: analytics_path.as_ref().into(),
@@ -118,13 +118,13 @@ impl DumpActor {
             dump_path: self.dump_path.clone(),
             db_path: self.analytics_path.clone(),
             update_file_store: self.update_file_store.clone(),
-            task_store: self.task_store.clone(),
+            scheduler: self.scheduler.clone(),
             uid: uid.clone(),
             update_db_size: self.update_db_size,
             index_db_size: self.index_db_size,
         };
 
-        let task_result = tokio::task::spawn(task.run()).await;
+        let task_result = tokio::task::spawn_local(task.run()).await;
 
         let mut dump_infos = self.dump_infos.write().await;
         let dump_infos = dump_infos

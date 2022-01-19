@@ -1,17 +1,19 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
 use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use walkdir::WalkDir;
 
 use crate::compression::from_tar_gz;
 use crate::index_controller::versioning::VERSION_FILE_NAME;
 use crate::tasks::task::Job;
-use crate::tasks::TaskStore;
+use crate::tasks::Scheduler;
 
 pub struct SnapshotService {
     pub(crate) db_path: PathBuf,
@@ -19,7 +21,7 @@ pub struct SnapshotService {
     pub(crate) snapshot_path: PathBuf,
     pub(crate) index_size: usize,
     pub(crate) meta_env_size: usize,
-    pub(crate) task_store: TaskStore,
+    pub(crate) scheduler: Arc<RwLock<Scheduler>>,
 }
 
 impl SnapshotService {
@@ -36,7 +38,7 @@ impl SnapshotService {
                 index_size: self.index_size,
             };
             let job = Job::Snapshot(snapshot_job);
-            self.task_store.register_job(job).await;
+            self.scheduler.write().await.schedule_job(job).await;
 
             sleep(self.snapshot_period).await;
         }

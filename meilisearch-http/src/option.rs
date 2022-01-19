@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use byte_unit::Byte;
 use clap::Parser;
-use meilisearch_lib::options::IndexerOpts;
+use meilisearch_lib::options::{IndexerOpts, SchedulerConfig};
 use rustls::{
     server::{
         AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient,
@@ -147,9 +147,18 @@ pub struct Opt {
     #[serde(skip)]
     #[clap(skip)]
     pub indexer_options: IndexerOpts,
+
+    #[clap(flatten)]
+    pub scheduler_options: SchedulerConfig,
 }
 
 impl Opt {
+    /// Wether analytics should be enabled or not.
+    #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    pub fn analytics(&self) -> bool {
+        !self.no_analytics
+    }
+
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
             let config = rustls::ServerConfig::builder().with_safe_defaults();

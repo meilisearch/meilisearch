@@ -156,5 +156,6 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             ..Default::default()
         },
         log_level: "off".into(),
+        scheduler_options: meilisearch_lib::options::SchedulerConfig::default(),
     }
 }

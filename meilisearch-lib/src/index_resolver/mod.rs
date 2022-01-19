@@ -2,7 +2,7 @@ pub mod error;
 pub mod index_store;
 pub mod meta_store;
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,16 +12,17 @@ use heed::Env;
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
-use milli::update::DocumentDeletionResult;
+use milli::update::{DocumentDeletionResult, IndexerConfig};
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::index::{error::Result as IndexResult, update_handler::UpdateHandler, Index};
+use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
 use crate::tasks::batch::Batch;
 use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
-use crate::tasks::{Pending, TaskPerformer};
+use crate::tasks::TaskPerformer;
 use crate::update_file_store::UpdateFileStore;
 
 use self::meta_store::IndexMeta;
@@ -96,14 +97,24 @@ where
     U: IndexMetaStore + Send + Sync + 'static,
     I: IndexStore + Send + Sync + 'static,
 {
-    type Error = ResponseError;
+    async fn process_batch(&self, mut batch: Batch) -> Batch {
+        // If a batch contains multiple tasks, then it must be a document addition batch
+        if let Some(Task {
+            content: TaskContent::DocumentAddition { .. },
+            ..
+        }) = batch.tasks.first()
+        {
+            debug_assert!(batch.tasks.iter().all(|t| matches!(
+                t,
+                Task {
+                    content: TaskContent::DocumentAddition { .. },
+                    ..
+                }
+            )));
 
-    async fn process(&self, mut batch: Batch) -> Batch {
-        // Until batching is implemented, all batch should contain only one update.
-        debug_assert_eq!(batch.len(), 1);
-
-        match batch.tasks.first_mut() {
-            Some(Pending::Task(task)) => {
+            self.process_document_addition_batch(batch).await
+        } else {
+            if let Some(task) = batch.tasks.first_mut() {
                 task.events.push(TaskEvent::Processing(Utc::now()));
 
                 match self.process_task(task).await {
@@ -119,15 +130,12 @@ where
                     }),
                 }
             }
-            Some(Pending::Job(job)) => {
-                let job = std::mem::take(job);
-                self.process_job(job).await;
-            }
-
-            None => (),
+            batch
         }
+    }
 
-        batch
+    async fn process_job(&self, job: Job) {
+        self.process_job(job).await;
     }
 
     async fn finish(&self, batch: &Batch) {
@@ -158,9 +166,9 @@ impl IndexResolver<HeedMetaStore, MapIndexStore> {
         HeedMetaStore::load_dump(&src, env)?;
         let indexes_path = src.as_ref().join("indexes");
         let indexes = indexes_path.read_dir()?;
-        let update_handler = UpdateHandler::new(indexer_opts)?;
+        let indexer_config = IndexerConfig::try_from(indexer_opts)?;
         for index in indexes {
-            Index::load_dump(&index?.path(), &dst, index_db_size, &update_handler)?;
+            Index::load_dump(&index?.path(), &dst, index_db_size, &indexer_config)?;
         }
 
         Ok(())
@@ -180,33 +188,100 @@ where
         }
     }
 
-    async fn process_task(&self, task: &Task) -> Result<TaskResult> {
-        let index_uid = task.index_uid.clone();
-        match &task.content {
-            TaskContent::DocumentAddition {
-                content_uuid,
-                merge_strategy,
-                primary_key,
-                allow_index_creation,
+    async fn process_document_addition_batch(&self, mut batch: Batch) -> Batch {
+        fn get_content_uuid(task: &Task) -> Uuid {
+            match task {
+                Task {
+                    content: TaskContent::DocumentAddition { content_uuid, .. },
+                    ..
+                } => *content_uuid,
+                _ => panic!("unexpected task in the document addition batch"),
+            }
+        }
+
+        let content_uuids = batch.tasks.iter().map(get_content_uuid).collect::<Vec<_>>();
+
+        match batch.tasks.first() {
+            Some(Task {
+                index_uid,
+                id,
+                content:
+                    TaskContent::DocumentAddition {
+                        merge_strategy,
+                        primary_key,
+                        allow_index_creation,
+                        ..
+                    },
                 ..
-            } => {
+            }) => {
                 let primary_key = primary_key.clone();
-                let content_uuid = *content_uuid;
                 let method = *merge_strategy;
 
                 let index = if *allow_index_creation {
-                    self.get_or_create_index(index_uid, task.id).await?
+                    self.get_or_create_index(index_uid.clone(), *id).await
                 } else {
-                    self.get_index(index_uid.into_inner()).await?
+                    self.get_index(index_uid.as_str().to_string()).await
                 };
+
+                // If the index doesn't exist and we are not allowed to create it with the first
+                // task, we must fails the whole batch.
+                let now = Utc::now();
+                let index = match index {
+                    Ok(index) => index,
+                    Err(e) => {
+                        let error = ResponseError::from(e);
+                        for task in batch.tasks.iter_mut() {
+                            task.events.push(TaskEvent::Failed {
+                                error: error.clone(),
+                                timestamp: now,
+                            });
+                        }
+                        return batch;
+                    }
+                };
+
                 let file_store = self.file_store.clone();
                 let result = spawn_blocking(move || {
-                    index.update_documents(method, content_uuid, primary_key, file_store)
+                    index.update_documents(
+                        method,
+                        primary_key,
+                        file_store,
+                        content_uuids.into_iter(),
+                    )
                 })
-                .await??;
+                .await;
 
-                Ok(result.into())
+                let event = match result {
+                    Ok(Ok(result)) => TaskEvent::Succeded {
+                        timestamp: Utc::now(),
+                        result: TaskResult::DocumentAddition {
+                            indexed_documents: result.indexed_documents,
+                        },
+                    },
+                    Ok(Err(e)) => TaskEvent::Failed {
+                        timestamp: Utc::now(),
+                        error: e.into(),
+                    },
+                    Err(e) => TaskEvent::Failed {
+                        timestamp: Utc::now(),
+                        error: IndexResolverError::from(e).into(),
+                    },
+                };
+
+                for task in batch.tasks.iter_mut() {
+                    task.events.push(event.clone());
+                }
+
+                batch
             }
+            _ => panic!("invalid batch!"),
+        }
+    }
+
+    async fn process_task(&self, task: &Task) -> Result<TaskResult> {
+        let index_uid = task.index_uid.clone();
+        match &task.content {
+            TaskContent::DocumentAddition { .. } => panic!("updates should be handled by batch"),
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
                 let index = self.get_index(index_uid.into_inner()).await?;
@@ -282,9 +357,13 @@ where
             Job::Dump { ret, path } => {
                 log::trace!("The Dump task is getting executed");
 
-                if ret.send(self.dump(path).await).is_err() {
+                let (sender, receiver) = oneshot::channel();
+                if ret.send(self.dump(path).await.map(|_| sender)).is_err() {
                     log::error!("The dump actor died.");
                 }
+
+                // wait until the dump has finished performing.
+                let _ = receiver.await;
             }
             Job::Empty => log::error!("Tried to process an empty task."),
             Job::Snapshot(job) => {
@@ -404,7 +483,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, vec::IntoIter};
 
     use super::*;
 
@@ -447,7 +526,7 @@ mod test {
                             mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
                                 .then(move |_| Ok(IndexMeta{ created_at: Utc::now(), updated_at: Utc::now(), primary_key: None }));
                         }
-                        mocker.when::<(IndexDocumentsMethod, Uuid, Option<String>, UpdateFileStore), IndexResult<DocumentAdditionResult>>("update_documents")
+                        mocker.when::<(IndexDocumentsMethod, Option<String>, UpdateFileStore, IntoIter<Uuid>), IndexResult<DocumentAdditionResult>>("update_documents")
                                 .then(move |(_, _, _, _)| result());
                     }
                     TaskContent::SettingsUpdate{..} => {
@@ -462,13 +541,13 @@ mod test {
                     }
                     TaskContent::DocumentDeletion(DocumentDeletion::Ids(_ids)) => {
                         let result = move || if !index_op_fails {
-                            Ok(any_int as u64)
+                            Ok(DocumentDeletionResult { deleted_documents: any_int as u64, remaining_documents: any_int as u64 })
                         } else {
                             // return this error because it's easy to generate...
                             Err(IndexError::DocumentNotFound("a doc".into()))
                         };
 
-                        mocker.when::<&[String], IndexResult<u64>>("delete_documents")
+                        mocker.when::<&[String], IndexResult<DocumentDeletionResult>>("delete_documents")
                                 .then(move |_| result());
                     },
                     TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
@@ -561,7 +640,8 @@ mod test {
                 let update_file_store = UpdateFileStore::mock(mocker);
                 let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store);
 
-                let result = index_resolver.process_task(&task).await;
+                let batch = Batch { id: 1, created_at: Utc::now(), tasks: vec![task.clone()] };
+                let result = index_resolver.process_batch(batch).await;
 
                 // Test for some expected output scenarios:
                 // Index creation and deletion cannot fail because of a failed index op, since they
@@ -575,9 +655,9 @@ mod test {
                                                                 | TaskContent::DocumentAddition { allow_index_creation: false, ..}
                                                                 | TaskContent::IndexUpdate { .. } ))
                 {
-                    assert!(result.is_err(), "{:?}", result);
+                    assert!(matches!(result.tasks[0].events.last().unwrap(), TaskEvent::Failed { .. }), "{:?}", result);
                 } else {
-                    assert!(result.is_ok(), "{:?}", result);
+                    assert!(matches!(result.tasks[0].events.last().unwrap(), TaskEvent::Succeded { .. }), "{:?}", result);
                 }
             });
         }

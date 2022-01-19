@@ -19,7 +19,7 @@ use crate::tasks::task::{Task, TaskId};
 
 use super::super::Result;
 
-use super::{Pending, TaskFilter};
+use super::TaskFilter;
 
 enum IndexUidTaskIdCodec {}
 
@@ -84,41 +84,6 @@ impl Store {
         })
     }
 
-    /// This function should be called *right after* creating the store.
-    /// It put back all unfinished update in the `Created` state. This
-    /// allow us to re-enqueue an update that didn't had the time to finish
-    /// when Meilisearch closed.
-    pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
-        let mut unfinished_tasks: BinaryHeap<Pending<TaskId>> = BinaryHeap::new();
-
-        let mut wtxn = self.wtxn()?;
-        let mut iter = self.tasks.rev_iter_mut(&mut wtxn)?;
-
-        while let Some(entry) = iter.next() {
-            let entry = entry?;
-            let (id, mut task): (BEU64, Task) = entry;
-
-            // Since all tasks are ordered, we can stop iterating when we encounter our first non-finished task.
-            if task.is_finished() {
-                break;
-            }
-
-            // we only keep the first state. It’s supposed to be a `Created` state.
-            task.events.drain(1..);
-            unfinished_tasks.push(Pending::Task(id.get()));
-
-            // Since we own the id and the task this is a safe operation.
-            unsafe {
-                iter.put_current(&id, &task)?;
-            }
-        }
-
-        drop(iter);
-        wtxn.commit()?;
-
-        Ok(unfinished_tasks)
-    }
-
     pub fn wtxn(&self) -> Result<RwTxn> {
         Ok(self.env.write_txn()?)
     }
@@ -166,7 +131,11 @@ impl Store {
             .map(|limit| (limit as u64).saturating_add(from))
             .unwrap_or(u64::MAX);
         let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
-            Some(filter) => {
+            Some(
+                ref filter @ TaskFilter {
+                    indexes: Some(_), ..
+                },
+            ) => {
                 let iter = self
                     .compute_candidates(txn, filter, range)?
                     .into_iter()
@@ -174,15 +143,24 @@ impl Store {
 
                 Box::new(iter)
             }
-            None => Box::new(
+            _ => Box::new(
                 self.tasks
                     .rev_range(txn, &(BEU64::new(range.start)..BEU64::new(range.end)))?
                     .map(|r| r.map(|(_, t)| t)),
             ),
         };
 
+        let apply_fitler = |task: &StdResult<_, heed::Error>| match task {
+            Ok(ref t) => filter
+                .as_ref()
+                .and_then(|filter| filter.filter_fn.as_ref())
+                .map(|f| f(t))
+                .unwrap_or(true),
+            Err(_) => true,
+        };
         // Collect 'limit' task if it exists or all of them.
         let tasks = iter
+            .filter(apply_fitler)
             .take(limit.unwrap_or(usize::MAX))
             .try_fold::<_, _, StdResult<_, heed::Error>>(Vec::new(), |mut v, task| {
                 v.push(task?);
@@ -195,11 +173,11 @@ impl Store {
     fn compute_candidates(
         &self,
         txn: &heed::RoTxn,
-        filter: TaskFilter,
+        filter: &TaskFilter,
         range: Range<TaskId>,
     ) -> Result<BinaryHeap<TaskId>> {
         let mut candidates = BinaryHeap::new();
-        if let Some(indexes) = filter.indexes {
+        if let Some(ref indexes) = filter.indexes {
             for index in indexes {
                 // We need to prefix search the null terminated string to make sure that we only
                 // get exact matches for the index, and not other uids that would share the same
@@ -288,13 +266,6 @@ pub mod test {
     impl MockStore {
         pub fn new(env: Arc<heed::Env>) -> Result<Self> {
             Ok(Self::Real(Store::new(env)?))
-        }
-
-        pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
-            match self {
-                MockStore::Real(index) => index.reset_and_return_unfinished_tasks(),
-                MockStore::Fake(_) => todo!(),
-            }
         }
 
         pub fn wtxn(&self) -> Result<RwTxn> {

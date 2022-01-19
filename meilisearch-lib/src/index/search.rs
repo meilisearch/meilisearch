@@ -295,7 +295,7 @@ fn compute_value_matches<'a, A: AsRef<[u8]>>(
             let mut start = 0;
             for (word, token) in analyzed.reconstruct() {
                 if token.is_word() {
-                    if let Some(length) = matcher.matches(token.text()) {
+                    if let Some(length) = matcher.matches(&token) {
                         infos.push(MatchInfo { start, length });
                     }
                 }
@@ -486,18 +486,18 @@ fn format_fields<A: AsRef<[u8]>>(
 
 /// trait to allow unit testing of `format_fields`
 trait Matcher {
-    fn matches(&self, w: &str) -> Option<usize>;
+    fn matches(&self, w: &Token) -> Option<usize>;
 }
 
 #[cfg(test)]
 impl Matcher for BTreeMap<&str, Option<usize>> {
-    fn matches(&self, w: &str) -> Option<usize> {
-        self.get(w).cloned().flatten()
+    fn matches(&self, w: &Token) -> Option<usize> {
+        self.get(w.text()).cloned().flatten()
     }
 }
 
 impl Matcher for MatchingWords {
-    fn matches(&self, w: &str) -> Option<usize> {
+    fn matches(&self, w: &Token) -> Option<usize> {
         self.matching_bytes(w)
     }
 }
@@ -579,7 +579,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                 let mut tokens = analyzed.reconstruct().peekable();
 
                 while let Some((word, token)) =
-                    tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none())
+                    tokens.next_if(|(_, token)| matcher.matches(token).is_none())
                 {
                     buffer.push((word, token));
                 }
@@ -623,7 +623,7 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             // Check if we need to do highlighting or computed matches before calling
             // Matcher::match since the call is expensive.
             if format_options.highlight && token.is_word() {
-                if let Some(length) = matcher.matches(token.text()) {
+                if let Some(length) = matcher.matches(&token) {
                     match word.get(..length).zip(word.get(length..)) {
                         Some((head, tail)) => {
                             out.push_str(&self.marks.0);
@@ -653,7 +653,7 @@ fn parse_filter(facets: &Value) -> Result<Option<Filter>> {
     match facets {
         Value::String(expr) => {
             let condition = Filter::from_str(expr)?;
-            Ok(Some(condition))
+            Ok(condition)
         }
         Value::Array(arr) => parse_filter_array(arr),
         v => Err(FacetError::InvalidExpression(&["Array"], v.clone()).into()),

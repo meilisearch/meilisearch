@@ -97,7 +97,7 @@ impl Task {
 pub enum Job {
     Dump {
         #[derivative(PartialEq = "ignore")]
-        ret: oneshot::Sender<Result<(), IndexResolverError>>,
+        ret: oneshot::Sender<Result<oneshot::Sender<()>, IndexResolverError>>,
         path: PathBuf,
     },
     Snapshot(#[derivative(PartialEq = "ignore")] SnapshotJob),

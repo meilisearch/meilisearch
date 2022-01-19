@@ -9,7 +9,7 @@ pub mod helpers;
 pub mod option;
 pub mod routes;
 
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
@@ -25,8 +25,17 @@ use extractors::payload::PayloadConfig;
 use meilisearch_auth::AuthController;
 use meilisearch_lib::MeiliSearch;
 
+pub static AUTOBATCHING_ENABLED: AtomicBool = AtomicBool::new(false);
+
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
+
+    // enable autobatching?
+    let _ = AUTOBATCHING_ENABLED.store(
+        opt.scheduler_options.enable_autobatching,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+
     meilisearch
         .set_max_index_size(opt.max_index_size.get_bytes() as usize)
         .set_max_task_store_size(opt.max_task_db_size.get_bytes() as usize)
@@ -52,7 +61,11 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
         meilisearch.set_schedule_snapshot();
     }
 
-    meilisearch.build(opt.db_path.clone(), opt.indexer_options.clone())
+    meilisearch.build(
+        opt.db_path.clone(),
+        opt.indexer_options.clone(),
+        opt.scheduler_options.clone(),
+    )
 }
 
 pub fn configure_data(
