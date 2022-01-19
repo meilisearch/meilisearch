@@ -285,6 +285,7 @@ where
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
         let mut word_pair_proximity_docids = Vec::new();
+        let mut word_docids = Vec::new();
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -294,6 +295,19 @@ where
 
         for result in lmdb_writer_rx {
             let typed_chunk = match result? {
+                TypedChunk::WordDocids(chunk) => {
+                    // We extract and mmap our chunk file to be able to get it for next processes.
+                    let mut file = chunk.into_inner();
+                    let mmap = unsafe { memmap2::Mmap::map(&file)? };
+                    let cursor_mmap = CursorClonableMmap::new(ClonableMmap::from(mmap));
+                    let chunk = grenad::Reader::new(cursor_mmap)?;
+                    word_docids.push(chunk);
+
+                    // We reconstruct our typed-chunk back.
+                    file.rewind()?;
+                    let chunk = grenad::Reader::new(file)?;
+                    TypedChunk::WordDocids(chunk)
+                }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     // We extract and mmap our chunk file to be able to get it for next processes.
                     let mut file = chunk.into_inner();
@@ -345,7 +359,7 @@ where
         let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        self.execute_prefix_databases(word_pair_proximity_docids)?;
+        self.execute_prefix_databases(word_docids, word_pair_proximity_docids)?;
 
         Ok(all_documents_ids.len())
     }
@@ -353,6 +367,7 @@ where
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_prefix_databases(
         self,
+        word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
     where
@@ -404,7 +419,7 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute()?;
+        builder.execute(word_docids, &previous_words_prefixes_fst)?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
