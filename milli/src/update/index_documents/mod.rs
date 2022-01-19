@@ -15,8 +15,9 @@ use serde::{Deserialize, Serialize};
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 pub use self::helpers::{
-    create_sorter, create_writer, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, ClonableMmap, MergeFn,
+    create_sorter, create_writer, fst_stream_into_hashset, merge_cbo_roaring_bitmaps,
+    merge_roaring_bitmaps, sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader,
+    ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};

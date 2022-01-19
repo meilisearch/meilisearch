@@ -1,14 +1,14 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use fst::{IntoStreamer, Streamer};
+use fst::IntoStreamer;
 use grenad::{CompressionType, MergerBuilder};
 use heed::BytesDecode;
 use log::debug;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
-    MergeFn, WriteMethod,
+    create_sorter, fst_stream_into_hashset, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database,
+    CursorClonableMmap, MergeFn, WriteMethod,
 };
 use crate::{Index, Result, StrStrU8Codec};
 
@@ -89,7 +89,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             prefix_fst_keys.as_slice().linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
 
         // We compute the set of prefixes that are no more part of the prefix fst.
-        let suppr_pw = stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
+        let suppr_pw = fst_stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
 
         let mut buffer = Vec::new();
         let mut current_prefixes: Option<&&[String]> = None;
@@ -177,18 +177,4 @@ fn write_prefixes_in_sorter(
     }
 
     Ok(())
-}
-
-/// Converts an fst Stream into an HashSet.
-fn stream_into_hashset<'f, I, S>(stream: I) -> HashSet<Vec<u8>>
-where
-    I: for<'a> IntoStreamer<'a, Into = S, Item = &'a [u8]>,
-    S: 'f + for<'a> Streamer<'a, Item = &'a [u8]>,
-{
-    let mut hashset = HashSet::new();
-    let mut stream = stream.into_stream();
-    while let Some(value) = stream.next() {
-        hashset.insert(value.to_owned());
-    }
-    hashset
 }
