@@ -285,29 +285,49 @@ pub fn word_derivations<'c>(
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
             let mut derived_words = Vec::new();
-            let dfa = build_dfa(word, max_typo, is_prefix);
-            if max_typo == 1 {
-                let starts = Str::new(get_first(word));
-                let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
+            if max_typo == 0 {
+                if is_prefix {
+                    let prefix = Str::new(word).starts_with();
+                    let mut stream = fst.search(prefix).into_stream();
 
-                while let Some((word, state)) = stream.next() {
-                    let word = std::str::from_utf8(word)?;
-                    let distance = dfa.distance(state.1);
-                    derived_words.push((word.to_string(), distance.to_u8()));
+                    while let Some(word) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        derived_words.push((word.to_string(), 0));
+                    }
+                } else {
+                    let automaton = Str::new(word);
+                    let mut stream = fst.search(automaton).into_stream();
+                    while let Some(word) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        derived_words.push((word.to_string(), 0));
+                    }
                 }
-
-                Ok(entry.insert(derived_words))
             } else {
-                let mut stream = fst.search_with_state(&dfa).into_stream();
+                if max_typo == 1 {
+                    let dfa = build_dfa(word, 1, is_prefix);
+                    let starts = Str::new(get_first(word)).starts_with();
+                    let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
 
-                while let Some((word, state)) = stream.next() {
-                    let word = std::str::from_utf8(word)?;
-                    let distance = dfa.distance(state);
-                    derived_words.push((word.to_string(), distance.to_u8()));
+                    while let Some((word, state)) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        let distance = dfa.distance(state.1);
+                        derived_words.push((word.to_string(), distance.to_u8()));
+                    }
+                } else {
+                    let starts = Str::new(get_first(word)).starts_with();
+                    let first = build_dfa(word, 1, is_prefix).intersection((&starts).complement());
+                    let second = build_dfa(word, 2, is_prefix).intersection(&starts);
+                    let automaton = first.union(second);
+
+                    let mut stream = fst.search(automaton).into_stream();
+
+                    while let Some(word) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        derived_words.push((word.to_string(), 2));
+                    }
                 }
-
-                Ok(entry.insert(derived_words))
             }
+            Ok(entry.insert(derived_words))
         }
     }
 }
