@@ -7,7 +7,8 @@ use std::str::Utf8Error;
 use std::time::Instant;
 
 use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
-use fst::{IntoStreamer, Streamer};
+use fst::automaton::Str;
+use fst::{Automaton, IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::debug;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
@@ -285,16 +286,36 @@ pub fn word_derivations<'c>(
         Entry::Vacant(entry) => {
             let mut derived_words = Vec::new();
             let dfa = build_dfa(word, max_typo, is_prefix);
-            let mut stream = fst.search_with_state(&dfa).into_stream();
+            if max_typo == 1 {
+                let starts = Str::new(get_first(word));
+                let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
 
-            while let Some((word, state)) = stream.next() {
-                let word = std::str::from_utf8(word)?;
-                let distance = dfa.distance(state);
-                derived_words.push((word.to_string(), distance.to_u8()));
+                while let Some((word, state)) = stream.next() {
+                    let word = std::str::from_utf8(word)?;
+                    let distance = dfa.distance(state.1);
+                    derived_words.push((word.to_string(), distance.to_u8()));
+                }
+
+                Ok(entry.insert(derived_words))
+            } else {
+                let mut stream = fst.search_with_state(&dfa).into_stream();
+
+                while let Some((word, state)) = stream.next() {
+                    let word = std::str::from_utf8(word)?;
+                    let distance = dfa.distance(state);
+                    derived_words.push((word.to_string(), distance.to_u8()));
+                }
+
+                Ok(entry.insert(derived_words))
             }
-
-            Ok(entry.insert(derived_words))
         }
+    }
+}
+
+fn get_first(s: &str) -> &str {
+    match s.chars().next() {
+        Some(c) => &s[..c.len_utf8()],
+        None => s,
     }
 }
 
