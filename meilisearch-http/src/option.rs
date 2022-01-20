@@ -112,13 +112,21 @@ pub struct Opt {
     #[clap(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC", default_value = "86400")] // 24h
     pub snapshot_interval_sec: u64,
 
-    /// Folder where dumps are created when the dump route is called.
-    #[clap(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]
-    pub dumps_dir: PathBuf,
-
     /// Import a dump from the specified path, must be a `.dump` file.
     #[clap(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
+
+    /// If the dump doesn't exists, load or create the database specified by `db-path` instead.
+    #[clap(long, requires = "import-dump")]
+    pub ignore_missing_dump: bool,
+
+    /// Ignore the dump if a database already exists, and load that database instead.
+    #[clap(long, requires = "import-dump")]
+    pub ignore_dump_if_db_exists: bool,
+
+    /// Folder where dumps are created when the dump route is called.
+    #[clap(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]
+    pub dumps_dir: PathBuf,
 
     /// Set the log level
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
