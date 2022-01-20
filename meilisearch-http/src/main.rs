@@ -2,12 +2,12 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
-use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -29,7 +29,7 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     setup(&opt)?;
 
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let (analytics, user) = if opt.analytics() {
+    let (analytics, user) = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
         analytics::MockAnalytics::new(&opt)
@@ -125,7 +125,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
-        if opt.analytics() {
+        if !opt.no_analytics {
             eprintln!(
                 "
 Thank you for using MeiliSearch!
