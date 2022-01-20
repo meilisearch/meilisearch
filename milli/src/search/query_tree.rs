@@ -260,12 +260,12 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
-fn typos(word: String, authorize_typos: bool) -> QueryKind {
+fn typos(word: String, authorize_typos: bool, max_typos: u8) -> QueryKind {
     if authorize_typos {
         match word.chars().count() {
             0..=4 => QueryKind::exact(word),
-            5..=8 => QueryKind::tolerant(1, word),
-            _ => QueryKind::tolerant(2, word),
+            5..=8 => QueryKind::tolerant(1.min(max_typos), word),
+            _ => QueryKind::tolerant(2.min(max_typos), word),
         }
     } else {
         QueryKind::exact(word)
@@ -316,8 +316,10 @@ fn create_query_tree(
                 if let Some(child) = split_best_frequency(ctx, &word)? {
                     children.push(child);
                 }
-                children
-                    .push(Operation::Query(Query { prefix, kind: typos(word, authorize_typos) }));
+                children.push(Operation::Query(Query {
+                    prefix,
+                    kind: typos(word, authorize_typos, 2),
+                }));
                 Ok(Operation::or(false, children))
             }
             // create a CONSECUTIVE operation wrapping all word in the phrase
@@ -363,8 +365,9 @@ fn create_query_tree(
                                 .collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
-                            let query =
-                                Query { prefix: is_prefix, kind: typos(concat, authorize_typos) };
+                            let query = Query { prefix: is_prefix, kind: typos(concat, true, 1) };
+                            // let query =
+                            //     Query { prefix: is_prefix, kind: typos(concat, authorize_typos) };
                             operations.push(Operation::Query(query));
                             and_op_children.push(Operation::or(false, operations));
                         }
