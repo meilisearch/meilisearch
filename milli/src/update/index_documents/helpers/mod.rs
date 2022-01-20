@@ -46,7 +46,7 @@ pub fn read_u32_ne_bytes(bytes: &[u8]) -> impl Iterator<Item = u32> + '_ {
     bytes.chunks_exact(4).flat_map(TryInto::try_into).map(u32::from_ne_bytes)
 }
 
-/// Converts an fst Stream into an HashSet.
+/// Converts an fst Stream into an HashSet of Strings.
 pub fn fst_stream_into_hashset<'f, I, S>(stream: I) -> HashSet<Vec<u8>>
 where
     I: for<'a> IntoStreamer<'a, Into = S, Item = &'a [u8]>,
@@ -58,4 +58,19 @@ where
         hashset.insert(value.to_owned());
     }
     hashset
+}
+
+// Converts an fst Stream into a Vec of Strings.
+pub fn fst_stream_into_vec<'f, I, S>(stream: I) -> Vec<String>
+where
+    I: for<'a> IntoStreamer<'a, Into = S, Item = &'a [u8]>,
+    S: 'f + for<'a> Streamer<'a, Item = &'a [u8]>,
+{
+    let mut strings = Vec::new();
+    let mut stream = stream.into_stream();
+    while let Some(word) = stream.next() {
+        let s = std::str::from_utf8(word).unwrap();
+        strings.push(s.to_owned());
+    }
+    strings
 }

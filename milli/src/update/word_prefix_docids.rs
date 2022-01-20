@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-use fst::IntoStreamer;
+use fst::Streamer;
 use grenad::{CompressionType, MergerBuilder};
+use heed::types::ByteSlice;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, fst_stream_into_hashset, merge_roaring_bitmaps, sorter_into_lmdb_database,
-    CursorClonableMmap, MergeFn, WriteMethod,
+    create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_roaring_bitmaps,
+    sorter_into_lmdb_database, CursorClonableMmap, MergeFn, WriteMethod,
 };
 use crate::{Index, Result};
 
@@ -41,9 +42,14 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         old_prefix_fst: &fst::Set<A>,
     ) -> Result<()> {
         let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-        let prefix_fst_keys = prefix_fst.into_stream().into_strs()?;
-        let prefix_fst_keys: Vec<_> =
-            prefix_fst_keys.as_slice().linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
+
+        // We retrieve the common words between the previous and new prefix word fst.
+        let common_prefix_fst_keys =
+            fst_stream_into_vec(old_prefix_fst.op().add(&prefix_fst).intersection());
+        let common_prefix_fst_keys: Vec<_> = common_prefix_fst_keys
+            .as_slice()
+            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
+            .collect();
 
         // We compute the set of prefixes that are no more part of the prefix fst.
         let suppr_pw = fst_stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
@@ -69,7 +75,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
                 Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
                 _otherwise => {
                     write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
-                    prefix_fst_keys
+                    common_prefix_fst_keys
                         .iter()
                         .find(|prefixes| word.starts_with(&prefixes[0].as_bytes()))
                 }
