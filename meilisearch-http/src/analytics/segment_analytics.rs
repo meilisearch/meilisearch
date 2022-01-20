@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
+use chrono::{DateTime, Utc};
 use http::header::CONTENT_TYPE;
 use meilisearch_lib::index::{SearchQuery, SearchResult};
 use meilisearch_lib::index_controller::Stats;
@@ -301,6 +302,8 @@ impl Segment {
 
 #[derive(Default)]
 pub struct SearchAggregator {
+    timestamp: Option<DateTime<Utc>>,
+
     // context
     user_agents: HashSet<String>,
 
@@ -336,6 +339,8 @@ pub struct SearchAggregator {
 impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let mut ret = Self::default();
+        ret.timestamp = Some(chrono::offset::Utc::now());
+
         ret.total_received = 1;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
 
@@ -389,6 +394,10 @@ impl SearchAggregator {
 
     /// Aggregate one [SearchAggregator] into another.
     pub fn aggregate(&mut self, mut other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
         // context
         for user_agent in other.user_agents.into_iter() {
             self.user_agents.insert(user_agent);
@@ -462,6 +471,7 @@ impl SearchAggregator {
             });
 
             Some(Track {
+                timestamp: self.timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -473,6 +483,8 @@ impl SearchAggregator {
 
 #[derive(Default)]
 pub struct DocumentsAggregator {
+    timestamp: Option<DateTime<Utc>>,
+
     // set to true when at least one request was received
     updated: bool,
 
@@ -491,6 +503,7 @@ impl DocumentsAggregator {
         request: &HttpRequest,
     ) -> Self {
         let mut ret = Self::default();
+        ret.timestamp = Some(chrono::offset::Utc::now());
 
         ret.updated = true;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
@@ -511,6 +524,10 @@ impl DocumentsAggregator {
 
     /// Aggregate one [DocumentsAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
         self.updated |= other.updated;
         // we can't create a union because there is no `into_union` method
         for user_agent in other.user_agents.into_iter() {
@@ -537,6 +554,7 @@ impl DocumentsAggregator {
             });
 
             Some(Track {
+                timestamp: self.timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
