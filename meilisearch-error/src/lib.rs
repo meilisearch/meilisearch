@@ -1,7 +1,6 @@
 use std::fmt;
 
-use actix_http::{body::Body, http::StatusCode};
-use actix_web::{self as aweb, HttpResponseBuilder};
+use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -59,7 +58,7 @@ where
 }
 
 impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::HttpResponse<Body> {
+    fn error_response(&self) -> aweb::HttpResponse {
         let json = serde_json::to_vec(self).unwrap();
         HttpResponseBuilder::new(self.status_code())
             .content_type("application/json")

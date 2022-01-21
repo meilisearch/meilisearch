@@ -6,11 +6,14 @@ use std::sync::Arc;
 use byte_unit::Byte;
 use clap::Parser;
 use meilisearch_lib::options::IndexerOpts;
-use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+    server::{
+        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient,
+        ServerSessionMemoryCache,
+    },
     RootCertStore,
 };
+use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
@@ -131,7 +134,9 @@ pub struct Opt {
 impl Opt {
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         if let (Some(cert_path), Some(key_path)) = (&self.ssl_cert_path, &self.ssl_key_path) {
-            let client_auth = match &self.ssl_auth_path {
+            let config = rustls::ServerConfig::builder().with_safe_defaults();
+
+            let config = match &self.ssl_auth_path {
                 Some(auth_path) => {
                     let roots = load_certs(auth_path.to_path_buf())?;
                     let mut client_auth_roots = RootCertStore::empty();
@@ -139,30 +144,32 @@ impl Opt {
                         client_auth_roots.add(&root).unwrap();
                     }
                     if self.ssl_require_auth {
-                        AllowAnyAuthenticatedClient::new(client_auth_roots)
+                        let verifier = AllowAnyAuthenticatedClient::new(client_auth_roots);
+                        config.with_client_cert_verifier(verifier)
                     } else {
-                        AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
+                        let verifier =
+                            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
+                        config.with_client_cert_verifier(verifier)
                     }
                 }
-                None => NoClientAuth::new(),
+                None => config.with_no_client_auth(),
             };
-
-            let mut config = rustls::ServerConfig::new(client_auth);
-            config.key_log = Arc::new(rustls::KeyLogFile::new());
 
             let certs = load_certs(cert_path.to_path_buf())?;
             let privkey = load_private_key(key_path.to_path_buf())?;
             let ocsp = load_ocsp(&self.ssl_ocsp_path)?;
-            config
-                .set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+            let mut config = config
+                .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
                 .map_err(|_| anyhow::anyhow!("bad certificates/private key"))?;
 
+            config.key_log = Arc::new(rustls::KeyLogFile::new());
+
             if self.ssl_resumption {
-                config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
+                config.session_storage = ServerSessionMemoryCache::new(256);
             }
 
             if self.ssl_tickets {
-                config.ticketer = rustls::Ticketer::new();
+                config.ticketer = rustls::Ticketer::new().unwrap();
             }
 
             Ok(Some(config))
@@ -176,7 +183,9 @@ fn load_certs(filename: PathBuf) -> anyhow::Result<Vec<rustls::Certificate>> {
     let certfile =
         fs::File::open(filename).map_err(|_| anyhow::anyhow!("cannot open certificate file"))?;
     let mut reader = BufReader::new(certfile);
-    certs(&mut reader).map_err(|_| anyhow::anyhow!("cannot read certificate file"))
+    certs(&mut reader)
+        .map(|certs| certs.into_iter().map(rustls::Certificate).collect())
+        .map_err(|_| anyhow::anyhow!("cannot read certificate file"))
 }
 
 fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
@@ -201,10 +210,10 @@ fn load_private_key(filename: PathBuf) -> anyhow::Result<rustls::PrivateKey> {
 
     // prefer to load pkcs8 keys
     if !pkcs8_keys.is_empty() {
-        Ok(pkcs8_keys[0].clone())
+        Ok(rustls::PrivateKey(pkcs8_keys[0].clone()))
     } else {
         assert!(!rsa_keys.is_empty());
-        Ok(rsa_keys[0].clone())
+        Ok(rustls::PrivateKey(rsa_keys[0].clone()))
     }
 }
 

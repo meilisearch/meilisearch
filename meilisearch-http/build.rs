@@ -16,11 +16,11 @@ mod mini_dashboard {
     use std::io::{Cursor, Read, Write};
     use std::path::PathBuf;
 
-    use actix_web_static_files::resource_dir;
     use anyhow::Context;
     use cargo_toml::Manifest;
     use reqwest::blocking::get;
     use sha1::{Digest, Sha1};
+    use static_files::resource_dir;
 
     pub fn setup_mini_dashboard() -> anyhow::Result<()> {
         let cargo_manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
