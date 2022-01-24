@@ -90,7 +90,7 @@ pub fn configure_data(
 #[cfg(feature = "mini-dashboard")]
 pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
     use actix_web::HttpResponse;
-    use actix_web_static_files::Resource;
+    use static_files::Resource;
 
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/generated.rs"));

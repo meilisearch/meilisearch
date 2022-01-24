@@ -28,8 +28,6 @@ impl Default for PayloadConfig {
 }
 
 impl FromRequest for Payload {
-    type Config = PayloadConfig;
-
     type Error = PayloadError;
 
     type Future = Ready<Result<Payload, Self::Error>>;
@@ -39,7 +37,7 @@ impl FromRequest for Payload {
         let limit = req
             .app_data::<PayloadConfig>()
             .map(|c| c.limit)
-            .unwrap_or(Self::Config::default().limit);
+            .unwrap_or(PayloadConfig::default().limit);
         ready(Ok(Payload {
             payload: payload.take(),
             limit,
