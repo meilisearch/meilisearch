@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use milli::documents::DocumentBatchReader;
 use serde::{Deserialize, Serialize};
 
-use crate::document_formats::{read_ndjson, DocumentFormatError};
+use crate::document_formats::read_ndjson;
 use crate::index::update_handler::UpdateHandler;
 use crate::index::updates::apply_settings_to_builder;
 
@@ -128,8 +128,8 @@ impl Index {
 
         let empty = match read_ndjson(reader, &mut tmp_doc_file) {
             // if there was no document in the file it's because the index was empty
+            Ok(0) => true,
             Ok(_) => false,
-            Err(DocumentFormatError::EmptyPayload(_)) => true,
             Err(e) => return Err(e.into()),
         };
 
