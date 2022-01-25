@@ -59,12 +59,6 @@ impl Default for IndexDocumentsMethod {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum WriteMethod {
-    Append,
-    GetMergePut,
-}
-
 pub struct IndexDocuments<'t, 'u, 'i, 'a, F> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,

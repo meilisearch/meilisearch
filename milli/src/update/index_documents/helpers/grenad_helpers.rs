@@ -9,7 +9,6 @@ use log::debug;
 
 use super::{ClonableMmap, MergeFn};
 use crate::error::InternalError;
-use crate::update::index_documents::WriteMethod;
 use crate::Result;
 
 pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
@@ -169,34 +168,22 @@ pub fn write_into_lmdb_database(
     database: heed::PolyDatabase,
     mut reader: Reader<File>,
     merge: MergeFn,
-    method: WriteMethod,
 ) -> Result<()> {
     debug!("Writing MTBL stores...");
     let before = Instant::now();
 
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = reader.next()? {
+    while let Some((k, v)) = reader.next()? {
+        let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+        match iter.next().transpose()? {
+            Some((key, old_val)) if key == k => {
+                let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
+                let val = merge(k, &vals)?;
                 // safety: we don't keep references from inside the LMDB database.
-                unsafe { out_iter.append(k, v)? };
+                unsafe { iter.put_current(k, &val)? };
             }
-        }
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = reader.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
-                        let val = merge(k, &vals)?;
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.put_current(k, &val)? };
-                    }
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    }
-                }
+            _ => {
+                drop(iter);
+                database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
             }
         }
     }
@@ -210,12 +197,11 @@ pub fn sorter_into_lmdb_database(
     database: heed::PolyDatabase,
     sorter: Sorter<MergeFn>,
     merge: MergeFn,
-    method: WriteMethod,
 ) -> Result<()> {
     debug!("Writing MTBL sorter...");
     let before = Instant::now();
 
-    merger_iter_into_lmdb_database(wtxn, database, sorter.into_merger_iter()?, merge, method)?;
+    merger_iter_into_lmdb_database(wtxn, database, sorter.into_merger_iter()?, merge)?;
 
     debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
@@ -226,34 +212,22 @@ fn merger_iter_into_lmdb_database<R: io::Read>(
     database: heed::PolyDatabase,
     mut sorter: MergerIter<R, MergeFn>,
     merge: MergeFn,
-    method: WriteMethod,
 ) -> Result<()> {
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = sorter.next()? {
+    while let Some((k, v)) = sorter.next()? {
+        let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+        match iter.next().transpose()? {
+            Some((key, old_val)) if key == k => {
+                let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
+                let val = merge(k, &vals).map_err(|_| {
+                    // TODO just wrap this error?
+                    InternalError::IndexingMergingKeys { process: "get-put-merge" }
+                })?;
                 // safety: we don't keep references from inside the LMDB database.
-                unsafe { out_iter.append(k, v)? };
+                unsafe { iter.put_current(k, &val)? };
             }
-        }
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = sorter.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).map_err(|_| {
-                            // TODO just wrap this error?
-                            InternalError::IndexingMergingKeys { process: "get-put-merge" }
-                        })?;
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.put_current(k, &val)? };
-                    }
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    }
-                }
+            _ => {
+                drop(iter);
+                database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
             }
         }
     }

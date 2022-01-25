@@ -8,7 +8,7 @@ use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
     create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_cbo_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn, WriteMethod,
+    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result, StrStrU8Codec};
 
@@ -192,7 +192,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
             word_prefix_pair_proximity_docids_sorter,
             merge_cbo_roaring_bitmaps,
-            WriteMethod::GetMergePut,
         )?;
 
         Ok(())

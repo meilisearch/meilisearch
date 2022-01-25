@@ -15,9 +15,7 @@ use crate::heed_codec::facet::{
     FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
 };
 use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::update::index_documents::{
-    create_writer, write_into_lmdb_database, writer_into_reader, WriteMethod,
-};
+use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
 use crate::{FieldId, Index, Result};
 
 pub struct Facets<'t, 'u, 'i> {
@@ -120,7 +118,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 *self.index.facet_id_f64_docids.as_polymorph(),
                 facet_number_levels,
                 |_, _| Err(InternalError::IndexingMergingKeys { process: "facet number levels" })?,
-                WriteMethod::GetMergePut,
             )?;
 
             write_into_lmdb_database(
@@ -128,7 +125,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 *self.index.facet_id_string_docids.as_polymorph(),
                 facet_string_levels,
                 |_, _| Err(InternalError::IndexingMergingKeys { process: "facet string levels" })?,
-                WriteMethod::GetMergePut,
             )?;
         }
 

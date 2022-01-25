@@ -14,7 +14,7 @@ use crate::heed_codec::StrBEU32Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
     create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_cbo_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn, WriteMethod,
+    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result};
 
@@ -170,7 +170,6 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             *self.index.word_prefix_position_docids.as_polymorph(),
             prefix_position_docids_sorter,
             merge_cbo_roaring_bitmaps,
-            WriteMethod::GetMergePut,
         )?;
 
         Ok(())

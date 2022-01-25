@@ -7,7 +7,7 @@ use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
     create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn, WriteMethod,
+    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result};
 
@@ -126,7 +126,6 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             *self.index.word_prefix_docids.as_polymorph(),
             prefix_docids_sorter,
             merge_roaring_bitmaps,
-            WriteMethod::GetMergePut,
         )?;
 
         Ok(())
