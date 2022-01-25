@@ -8,7 +8,7 @@ use arbitrary_json::ArbitraryValue;
 use heed::EnvOpenOptions;
 use libfuzzer_sys::fuzz_target;
 use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
-use milli::update::UpdateBuilder;
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::Index;
 use serde_json::Value;
 
@@ -35,11 +35,14 @@ fn index_documents(
     index: &mut milli::Index,
     documents: DocumentBatchReader<Cursor<Vec<u8>>>,
 ) -> Result<()> {
-    let update_builder = UpdateBuilder::new();
+    let config = IndexerConfig::default();
     let mut wtxn = index.write_txn()?;
-    let builder = update_builder.index_documents(&mut wtxn, &index);
 
-    builder.execute(documents, |_| ())?;
+    let indexing_config = IndexDocumentsConfig::default();
+    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+    builder.add_documents(documents)?;
+    builder.execute().unwrap();
+
     wtxn.commit()?;
     Ok(())
 }
@@ -51,9 +54,10 @@ fn create_index() -> Result<milli::Index> {
     options.max_readers(1);
     let index = Index::new(options, dir.path())?;
 
-    let update_builder = UpdateBuilder::new();
+    let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
-    let mut builder = update_builder.settings(&mut wtxn, &index);
+
+    let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     let displayed_fields =
         ["id", "title", "album", "artist", "genre", "country", "released", "duration"]
