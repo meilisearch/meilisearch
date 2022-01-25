@@ -115,36 +115,18 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 continue;
             }
 
-            current_prefixes = match current_prefixes.take() {
-                Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
-                _otherwise => {
-                    write_prefixes_in_sorter(
-                        &mut prefixes_cache,
-                        &mut word_prefix_pair_proximity_docids_sorter,
-                    )?;
-                    common_prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
-                }
-            };
-
-            if let Some(prefixes) = current_prefixes {
-                buffer.clear();
-                buffer.extend_from_slice(w1.as_bytes());
-                buffer.push(0);
-                for prefix in prefixes.iter() {
-                    if prefix.len() <= self.max_prefix_length && w2.starts_with(prefix) {
-                        buffer.truncate(w1.len() + 1);
-                        buffer.extend_from_slice(prefix.as_bytes());
-                        buffer.push(prox);
-
-                        match prefixes_cache.get_mut(&buffer) {
-                            Some(value) => value.push(data.to_owned()),
-                            None => {
-                                prefixes_cache.insert(buffer.clone(), vec![data.to_owned()]);
-                            }
-                        }
-                    }
-                }
-            }
+            insert_current_prefix_data_in_sorter(
+                &mut buffer,
+                &mut current_prefixes,
+                &mut prefixes_cache,
+                &mut word_prefix_pair_proximity_docids_sorter,
+                &common_prefix_fst_keys,
+                self.max_prefix_length,
+                w1,
+                w2,
+                prox,
+                data,
+            )?;
         }
 
         write_prefixes_in_sorter(
@@ -165,36 +147,18 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 continue;
             }
 
-            current_prefixes = match current_prefixes.take() {
-                Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
-                _otherwise => {
-                    write_prefixes_in_sorter(
-                        &mut prefixes_cache,
-                        &mut word_prefix_pair_proximity_docids_sorter,
-                    )?;
-                    new_prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
-                }
-            };
-
-            if let Some(prefixes) = current_prefixes {
-                buffer.clear();
-                buffer.extend_from_slice(w1.as_bytes());
-                buffer.push(0);
-                for prefix in prefixes.iter() {
-                    if prefix.len() <= self.max_prefix_length && w2.starts_with(prefix) {
-                        buffer.truncate(w1.len() + 1);
-                        buffer.extend_from_slice(prefix.as_bytes());
-                        buffer.push(prox);
-
-                        match prefixes_cache.get_mut(&buffer) {
-                            Some(value) => value.push(data.to_owned()),
-                            None => {
-                                prefixes_cache.insert(buffer.clone(), vec![data.to_owned()]);
-                            }
-                        }
-                    }
-                }
-            }
+            insert_current_prefix_data_in_sorter(
+                &mut buffer,
+                &mut current_prefixes,
+                &mut prefixes_cache,
+                &mut word_prefix_pair_proximity_docids_sorter,
+                &new_prefix_fst_keys,
+                self.max_prefix_length,
+                w1,
+                w2,
+                prox,
+                data,
+            )?;
         }
 
         write_prefixes_in_sorter(
@@ -242,6 +206,54 @@ fn write_prefixes_in_sorter(
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             sorter.insert(&key, data)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Computes the current prefix based on the previous and the currently iterated value
+/// i.e. w1, w2, prox. It also makes sure to follow the `max_prefix_length` setting.
+///
+/// Uses the current prefixes values to insert the associated data i.e. RoaringBitmap,
+/// into the sorter that will, later, be inserted in the LMDB database.
+fn insert_current_prefix_data_in_sorter<'a>(
+    buffer: &mut Vec<u8>,
+    current_prefixes: &mut Option<&'a &'a [String]>,
+    prefixes_cache: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
+    word_prefix_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    prefix_fst_keys: &'a [&'a [std::string::String]],
+    max_prefix_length: usize,
+    w1: &str,
+    w2: &str,
+    prox: u8,
+    data: &[u8],
+) -> Result<()> {
+    *current_prefixes = match current_prefixes.take() {
+        Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
+        _otherwise => {
+            write_prefixes_in_sorter(prefixes_cache, word_prefix_pair_proximity_docids_sorter)?;
+            prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
+        }
+    };
+
+    if let Some(prefixes) = current_prefixes {
+        buffer.clear();
+        buffer.extend_from_slice(w1.as_bytes());
+        buffer.push(0);
+        for prefix in prefixes.iter() {
+            if prefix.len() <= max_prefix_length && w2.starts_with(prefix) {
+                buffer.truncate(w1.len() + 1);
+                buffer.extend_from_slice(prefix.as_bytes());
+                buffer.push(prox);
+
+                match prefixes_cache.get_mut(buffer.as_slice()) {
+                    Some(value) => value.push(data.to_owned()),
+                    None => {
+                        prefixes_cache.insert(buffer.clone(), vec![data.to_owned()]);
+                    }
+                }
+            }
         }
     }
 
