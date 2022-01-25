@@ -89,6 +89,21 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             }
         }
 
+        write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+
+        // We fetch the docids associated to the newly added word prefix fst only.
+        let db = self.index.word_docids.remap_data_type::<ByteSlice>();
+        let mut new_prefixes_stream = prefix_fst.op().add(old_prefix_fst).difference();
+        while let Some(bytes) = new_prefixes_stream.next() {
+            let prefix = std::str::from_utf8(bytes)?;
+            for result in db.prefix_iter(self.wtxn, prefix)? {
+                let (_word, data) = result?;
+                prefix_docids_sorter.insert(prefix, data)?;
+            }
+        }
+
+        drop(new_prefixes_stream);
+
         // We remove all the entries that are no more required in this word prefix docids database.
         let mut iter = self.index.word_prefix_docids.iter_mut(self.wtxn)?.lazily_decode_data();
         while let Some((prefix, _)) = iter.next().transpose()? {
