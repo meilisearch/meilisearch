@@ -285,6 +285,7 @@ where
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
         let mut word_pair_proximity_docids = Vec::new();
+        let mut word_position_docids = Vec::new();
         let mut word_docids = Vec::new();
 
         let mut databases_seen = 0;
@@ -320,6 +321,19 @@ where
                     file.rewind()?;
                     let chunk = grenad::Reader::new(file)?;
                     TypedChunk::WordPairProximityDocids(chunk)
+                }
+                TypedChunk::WordPositionDocids(chunk) => {
+                    // We extract and mmap our chunk file to be able to get it for next processes.
+                    let mut file = chunk.into_inner();
+                    let mmap = unsafe { memmap2::Mmap::map(&file)? };
+                    let cursor_mmap = CursorClonableMmap::new(ClonableMmap::from(mmap));
+                    let chunk = grenad::Reader::new(cursor_mmap)?;
+                    word_position_docids.push(chunk);
+
+                    // We reconstruct our typed-chunk back.
+                    file.rewind()?;
+                    let chunk = grenad::Reader::new(file)?;
+                    TypedChunk::WordPositionDocids(chunk)
                 }
                 otherwise => otherwise,
             };
@@ -359,7 +373,11 @@ where
         let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        self.execute_prefix_databases(word_docids, word_pair_proximity_docids)?;
+        self.execute_prefix_databases(
+            word_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+        )?;
 
         Ok(all_documents_ids.len())
     }
@@ -369,6 +387,7 @@ where
         self,
         word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -453,7 +472,7 @@ where
         if let Some(value) = self.config.words_positions_min_level_size {
             builder.min_level_size(value);
         }
-        builder.execute()?;
+        builder.execute(word_position_docids, &previous_words_prefixes_fst)?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
