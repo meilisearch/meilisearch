@@ -294,24 +294,18 @@ pub fn word_derivations<'c>(
                         let word = std::str::from_utf8(word)?;
                         derived_words.push((word.to_string(), 0));
                     }
-                } else {
-                    let automaton = Str::new(word);
-                    let mut stream = fst.search(automaton).into_stream();
-                    while let Some(word) = stream.next() {
-                        let word = std::str::from_utf8(word)?;
-                        derived_words.push((word.to_string(), 0));
-                    }
+                } else if fst.contains(word) {
+                    derived_words.push((word.to_string(), 0));
                 }
             } else {
                 if max_typo == 1 {
                     let dfa = build_dfa(word, 1, is_prefix);
                     let starts = Str::new(get_first(word)).starts_with();
-                    let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
+                    let mut stream = fst.search(starts.intersection(&dfa)).into_stream();
 
-                    while let Some((word, state)) = stream.next() {
+                    while let Some(word) = stream.next() {
                         let word = std::str::from_utf8(word)?;
-                        let distance = dfa.distance(state.1);
-                        derived_words.push((word.to_string(), distance.to_u8()));
+                        derived_words.push((word.to_string(), 1));
                     }
                 } else {
                     let starts = Str::new(get_first(word)).starts_with();
@@ -335,7 +329,7 @@ pub fn word_derivations<'c>(
 fn get_first(s: &str) -> &str {
     match s.chars().next() {
         Some(c) => &s[..c.len_utf8()],
-        None => s,
+        None => panic!("unexpected empty query"),
     }
 }
 

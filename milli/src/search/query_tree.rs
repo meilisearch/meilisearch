@@ -366,8 +366,6 @@ fn create_query_tree(
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
                             let query = Query { prefix: is_prefix, kind: typos(concat, true, 1) };
-                            // let query =
-                            //     Query { prefix: is_prefix, kind: typos(concat, authorize_typos) };
                             operations.push(Operation::Query(query));
                             and_op_children.push(Operation::or(false, operations));
                         }

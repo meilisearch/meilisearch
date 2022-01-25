@@ -18,6 +18,3 @@ opt-level = 3
 opt-level = 3
 [profile.test.build-override]
 opt-level = 3
-
-[patch.crates-io]
-fst = { path = "/Users/mpostma/Documents/code/rust/fst/" }
