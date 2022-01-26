@@ -6,9 +6,9 @@
 
 ## Introduction
 
-This repository contains the core engine used in [meilisearch].
+This repository contains the core engine used in [Meilisearch].
 
-It contains a library that can manage one and only one index. meilisearch
+It contains a library that can manage one and only one index. Meilisearch
 manages the multi-index itself. Milli is unable to store updates in a store:
 it is the job of something else above and this is why it is only able
 to process one update at a time.
@@ -65,5 +65,5 @@ To enable the hook, run the following command from the root of the project:
 cp script/pre-commit .git/hooks/pre-commit
 ```
 
-[meilisearch]: https://github.com/meilisearch/meilisearch
+[Meilisearch]: https://github.com/meilisearch/meilisearch
 [flamegraph]: https://github.com/flamegraph-rs/flamegraph
