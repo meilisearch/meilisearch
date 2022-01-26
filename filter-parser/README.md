@@ -1,6 +1,6 @@
 # Filter parser
 
-This workspace is dedicated to the parsing of the MeiliSearch filters.
+This workspace is dedicated to the parsing of the Meilisearch filters.
 
 Most of the code and explanation are in the [`lib.rs`](./src/lib.rs). Especially, the BNF of the filters at the top of this file.
 
