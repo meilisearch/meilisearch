@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="MeiliSearch" width="200" height="200" />
+  <img src="assets/logo.svg" alt="meilisearch" width="200" height="200" />
 </p>
 
-<h1 align="center">MeiliSearch</h1>
+<h1 align="center">meilisearch</h1>
 
 <h4 align="center">
   <a href="https://www.meilisearch.com">Website</a> |
@@ -15,17 +15,17 @@
 </h4>
 
 <p align="center">
-  <a href="https://github.com/meilisearch/MeiliSearch/actions"><img src="https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg" alt="Build Status"></a>
-  <a href="https://deps.rs/repo/github/meilisearch/MeiliSearch"><img src="https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg" alt="Dependency status"></a>
-  <a href="https://github.com/meilisearch/MeiliSearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
-  <a href="https://slack.meilisearch.com"><img src="https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack" alt="Slack"></a>
-  <a href="https://github.com/meilisearch/MeiliSearch/discussions" alt="Discussions"><img src="https://img.shields.io/badge/github-discussions-red" /></a>
+  <a href="https://github.com/meilisearch/meilisearch/actions"><img src="https://github.com/meilisearch/meilisearch/workflows/Cargo%20test/badge.svg" alt="Build Status"></a>
+  <a href="https://deps.rs/repo/github/meilisearch/meilisearch"><img src="https://deps.rs/repo/github/meilisearch/meilisearch/status.svg" alt="Dependency status"></a>
+  <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
+  <a href="https://slack.meilisearch.com"><img src="https://img.shields.io/badge/slack-meilisearch-blue.svg?logo=slack" alt="Slack"></a>
+  <a href="https://github.com/meilisearch/meilisearch/discussions" alt="Discussions"><img src="https://img.shields.io/badge/github-discussions-red" /></a>
   <a href="https://app.bors.tech/repositories/26457"><img src="https://bors.tech/images/badge_small.svg" alt="Bors enabled"></a>
 </p>
 
 <p align="center">⚡ Lightning Fast, Ultra Relevant, and Typo-Tolerant Search Engine 🔍</p>
 
-**MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
+**meilisearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
 <p align="center">
@@ -61,13 +61,13 @@ meilisearch
 docker run -p 7700:7700 -v "$(pwd)/data.ms:/data.ms" getmeili/meilisearch
 ```
 
-#### Announcing a cloud-hosted MeiliSearch
+#### Announcing a cloud-hosted meilisearch
 
 Join the closed beta by filling out this [form](https://meilisearch.typeform.com/to/FtnzvZfh).
 
-#### Try MeiliSearch in our Sandbox
+#### Try meilisearch in our Sandbox
 
-Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisearch.com/). This instance is free, and will be active for 48 hours.
+Create a meilisearch instance in [meilisearch Sandbox](https://sandbox.meilisearch.com/). This instance is free, and will be active for 48 hours.
 
 #### Run on Digital Ocean
 
@@ -99,8 +99,8 @@ curl -L https://install.meilisearch.com | sh
 If you have the latest stable Rust toolchain installed on your local system, clone the repository and change it to your working directory.
 
 ```bash
-git clone https://github.com/meilisearch/MeiliSearch.git
-cd MeiliSearch
+git clone https://github.com/meilisearch/meilisearch.git
+cd meilisearch
 cargo run --release
 ```
 
@@ -161,19 +161,19 @@ curl 'http://127.0.0.1:7700/indexes/movies/search?q=botman+robin&limit=2' | jq
 
 #### Use the Web Interface
 
-We also deliver an **out-of-the-box [web interface](https://github.com/meilisearch/mini-dashboard)** in which you can test MeiliSearch interactively.
+We also deliver an **out-of-the-box [web interface](https://github.com/meilisearch/mini-dashboard)** in which you can test meilisearch interactively.
 
-You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter MeiliSearch’s address to visit it. This will lead you to a web page with a search bar that will allow you to search in the selected index.
+You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter meilisearch’s address to visit it. This will lead you to a web page with a search bar that will allow you to search in the selected index.
 
 | [See the gif above](#demo)
 
 ## Documentation
 
-Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
+Now that your meilisearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
 
 ## Contributing
 
-Hey! We're glad you're thinking about contributing to MeiliSearch! Feel free to pick an [issue labeled as `good first issue`](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), and to ask any question you need. Some points might not be clear and we are available to help you!
+Hey! We're glad you're thinking about contributing to meilisearch! Feel free to pick an [issue labeled as `good first issue`](https://github.com/meilisearch/meilisearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), and to ask any question you need. Some points might not be clear and we are available to help you!
 
 Also, we recommend following the [CONTRIBUTING](./CONTRIBUTING.md) to create your PR.
 
@@ -184,8 +184,8 @@ The code in this repository is only concerned with managing multiple indexes, ha
 Search and indexation are the domain of our core engine, [`milli`](https://github.com/meilisearch/milli), while tokenization is handled by [our `tokenizer` library](https://github.com/meilisearch/tokenizer/).
 ## Telemetry
 
-MeiliSearch collects anonymous data regarding general usage.
-This helps us better understand developers' usage of MeiliSearch features.
+meilisearch collects anonymous data regarding general usage.
+This helps us better understand developers' usage of meilisearch features.
 
 To find out more on what information we're retrieving, please see our documentation on [Telemetry](https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html).
 
@@ -193,7 +193,7 @@ This program is optional, you can disable these analytics by using the `MEILI_NO
 
 ## Feature request
 
-The feature requests are not managed in this repository. Please visit our [dedicated repository](https://github.com/meilisearch/product) to see our work about the MeiliSearch product.
+The feature requests are not managed in this repository. Please visit our [dedicated repository](https://github.com/meilisearch/product) to see our work about the meilisearch product.
 
 If you have a feature request or any feedback about an existing feature, please open [a discussion](https://github.com/meilisearch/product/discussions).
 Also, feel free to participate in the current discussions, we are looking forward to reading your comments.
@@ -202,4 +202,4 @@ Also, feel free to participate in the current discussions, we are looking forwar
 
 Please visit [this page](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html#contact-us).
 
-MeiliSearch is developed by [Meili](https://www.meilisearch.com), a young company. To know more about us, you can [read our blog](https://blog.meilisearch.com). Any suggestion or feedback is highly appreciated. Thank you for your support!
+meilisearch is developed by [Meili](https://www.meilisearch.com), a young company. To know more about us, you can [read our blog](https://blog.meilisearch.com). Any suggestion or feedback is highly appreciated. Thank you for your support!
