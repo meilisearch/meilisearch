@@ -30,11 +30,15 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     meilisearch
         .set_max_index_size(opt.max_index_size.get_bytes() as usize)
         .set_max_task_store_size(opt.max_task_db_size.get_bytes() as usize)
+        // snapshot
         .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
         .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
-        .set_dump_dst(opt.dumps_dir.clone())
         .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
-        .set_snapshot_dir(opt.snapshot_dir.clone());
+        .set_snapshot_dir(opt.snapshot_dir.clone())
+        // dump
+        .set_ignore_missing_dump(opt.ignore_missing_dump)
+        .set_ignore_dump_if_db_exists(opt.ignore_dump_if_db_exists)
+        .set_dump_dst(opt.dumps_dir.clone());
 
     if let Some(ref path) = opt.import_snapshot {
         meilisearch.set_import_snapshot(path.clone());
