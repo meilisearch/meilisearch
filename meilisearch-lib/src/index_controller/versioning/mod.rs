@@ -12,7 +12,7 @@ static VERSION_MAJOR: &str = env!("CARGO_PKG_VERSION_MAJOR");
 static VERSION_MINOR: &str = env!("CARGO_PKG_VERSION_MINOR");
 static VERSION_PATCH: &str = env!("CARGO_PKG_VERSION_PATCH");
 
-// Persists the version of the current MeiliSearch binary to a VERSION file
+// Persists the version of the current Meilisearch binary to a VERSION file
 pub fn create_version_file(db_path: &Path) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
     fs::write(
@@ -23,7 +23,7 @@ pub fn create_version_file(db_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Ensures MeiliSearch version is compatible with the database, returns an error versions mismatch.
+// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
 pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
 

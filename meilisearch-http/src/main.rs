@@ -128,7 +128,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
         if !opt.no_analytics {
             eprintln!(
                 "
-Thank you for using MeiliSearch!
+Thank you for using Meilisearch!
 
 We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
@@ -146,7 +146,7 @@ Anonymous telemetry:\t\"Enabled\""
     eprintln!();
 
     if opt.master_key.is_some() {
-        eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
+        eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \
             If you need some protection in development mode, please export a key: export MEILI_MASTER_KEY=xxx");
