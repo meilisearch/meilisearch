@@ -185,7 +185,7 @@ Search and indexation are the domain of our core engine, [`milli`](https://githu
 ## Telemetry
 
 Meilisearch collects anonymous data regarding general usage.
-This helps us better understand developers' usage of meilisearch features.
+This helps us better understand developers' usage of Meilisearch features.
 
 To find out more on what information we're retrieving, please see our documentation on [Telemetry](https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html).
 
