@@ -40,22 +40,21 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     }
 
     /// Set the maximum proximity required to make a prefix be part of the words prefixes
-    /// database. If two words are two far from the threshold the associated documents will
+    /// database. If two words are too far from the threshold the associated documents will
     /// not be part of the prefix database.
     ///
-    /// Default value is 4. This value must be lower or equal than 4 and will be clamped
+    /// Default value is 4. This value must be lower or equal than 7 and will be clamped
     /// to this bound otherwise.
     pub fn max_proximity(&mut self, value: u8) -> &mut Self {
         self.max_proximity = value.max(7);
         self
     }
 
-    /// Set the maximum length the prefix of a word pair is allowed to have be part of the words
-    /// prefixes database. If two words are two far from the threshold the associated documents
+    /// Set the maximum length the prefix of a word pair is allowed to have to be part of the words
+    /// prefixes database. If the prefix length is higher than the threshold, the associated documents
     /// will not be part of the prefix database.
     ///
-    /// Default value is 4. This value must be lower or equal than 4 and will be clamped
-    /// to this bound otherwise.
+    /// Default value is 2.
     pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
         self.max_prefix_length = value;
         self
