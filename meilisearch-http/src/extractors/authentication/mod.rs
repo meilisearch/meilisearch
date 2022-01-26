@@ -32,8 +32,6 @@ impl<T, D> Deref for GuardedData<T, D> {
 }
 
 impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> {
-    type Config = ();
-
     type Error = ResponseError;
 
     type Future = Ready<Result<Self, Self::Error>>;

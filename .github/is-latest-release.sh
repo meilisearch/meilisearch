@@ -74,7 +74,7 @@ semverLT() {
 # Returns the tag of the latest stable release (in terms of semver and not of release date)
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
-    curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file"
+    curl -s 'https://api.github.com/repos/meilisearch/meiliSearch/releases' > "$temp_file"
     releases=$(cat "$temp_file" | \
         grep -E "tag_name|draft|prerelease" \
         | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')

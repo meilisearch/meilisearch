@@ -1,11 +1,12 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
+use chrono::{DateTime, Utc};
 use http::header::CONTENT_TYPE;
 use meilisearch_lib::index::{SearchQuery, SearchResult};
 use meilisearch_lib::index_controller::Stats;
@@ -77,7 +78,7 @@ impl SegmentAnalytics {
         let user = User::UserId { user_id };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
-        // If MeiliSearch is Launched for the first time:
+        // If Meilisearch is Launched for the first time:
         // 1. Send an event Launched associated to the user `total_launch`.
         // 2. Batch an event Launched with the real instance-id and send it in one hour.
         if first_time_run {
@@ -210,10 +211,30 @@ impl Segment {
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
-        let infos = json!({
-            "env": opt.env.clone(),
-            "has_snapshot": opt.schedule_snapshot,
-        });
+        // The infos are all cli option except every option containing sensitive information.
+        // We consider an information as sensible if it contains a path, an address or a key.
+        let infos = {
+            // First we see if any sensitive fields were used.
+            let db_path = opt.db_path != PathBuf::from("./data.ms");
+            let import_dump = opt.import_dump.is_some();
+            let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
+            let import_snapshot = opt.import_snapshot.is_some();
+            let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
+            let http_addr = opt.http_addr != "127.0.0.1:7700";
+
+            let mut infos = serde_json::to_value(opt).unwrap();
+
+            // Then we overwrite all sensitive field with a boolean representing if
+            // the feature was used or not.
+            infos["db_path"] = json!(db_path);
+            infos["import_dump"] = json!(import_dump);
+            infos["dumps_dir"] = json!(dumps_dir);
+            infos["import_snapshot"] = json!(import_snapshot);
+            infos["snapshot_dir"] = json!(snapshots_dir);
+            infos["http_addr"] = json!(http_addr);
+
+            infos
+        };
 
         let number_of_documents = stats
             .indexes
@@ -301,6 +322,8 @@ impl Segment {
 
 #[derive(Default)]
 pub struct SearchAggregator {
+    timestamp: Option<DateTime<Utc>>,
+
     // context
     user_agents: HashSet<String>,
 
@@ -336,6 +359,8 @@ pub struct SearchAggregator {
 impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let mut ret = Self::default();
+        ret.timestamp = Some(chrono::offset::Utc::now());
+
         ret.total_received = 1;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
 
@@ -389,6 +414,10 @@ impl SearchAggregator {
 
     /// Aggregate one [SearchAggregator] into another.
     pub fn aggregate(&mut self, mut other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
         // context
         for user_agent in other.user_agents.into_iter() {
             self.user_agents.insert(user_agent);
@@ -462,6 +491,7 @@ impl SearchAggregator {
             });
 
             Some(Track {
+                timestamp: self.timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,
@@ -473,6 +503,8 @@ impl SearchAggregator {
 
 #[derive(Default)]
 pub struct DocumentsAggregator {
+    timestamp: Option<DateTime<Utc>>,
+
     // set to true when at least one request was received
     updated: bool,
 
@@ -491,6 +523,7 @@ impl DocumentsAggregator {
         request: &HttpRequest,
     ) -> Self {
         let mut ret = Self::default();
+        ret.timestamp = Some(chrono::offset::Utc::now());
 
         ret.updated = true;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
@@ -511,6 +544,10 @@ impl DocumentsAggregator {
 
     /// Aggregate one [DocumentsAggregator] into another.
     pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
         self.updated |= other.updated;
         // we can't create a union because there is no `into_union` method
         for user_agent in other.user_agents.into_iter() {
@@ -537,6 +574,7 @@ impl DocumentsAggregator {
             });
 
             Some(Track {
+                timestamp: self.timestamp,
                 user: user.clone(),
                 event: event_name.to_string(),
                 properties,

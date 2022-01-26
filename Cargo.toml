@@ -5,5 +5,3 @@ members = [
     "meilisearch-lib",
     "meilisearch-auth",
 ]
-
-resolver = "2"

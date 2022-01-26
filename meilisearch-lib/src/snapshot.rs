@@ -49,7 +49,10 @@ pub fn load_snapshot(
     ignore_snapshot_if_db_exists: bool,
     ignore_missing_snapshot: bool,
 ) -> anyhow::Result<()> {
-    if !db_path.as_ref().exists() && snapshot_path.as_ref().exists() {
+    let empty_db = crate::is_empty_db(&db_path);
+    let snapshot_path_exists = snapshot_path.as_ref().exists();
+
+    if empty_db && snapshot_path_exists {
         match from_tar_gz(snapshot_path, &db_path) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -58,7 +61,7 @@ pub fn load_snapshot(
                 Err(e)
             }
         }
-    } else if db_path.as_ref().exists() && !ignore_snapshot_if_db_exists {
+    } else if !empty_db && !ignore_snapshot_if_db_exists {
         bail!(
             "database already exists at {:?}, try to delete it or rename it",
             db_path
@@ -66,14 +69,8 @@ pub fn load_snapshot(
                 .canonicalize()
                 .unwrap_or_else(|_| db_path.as_ref().to_owned())
         )
-    } else if !snapshot_path.as_ref().exists() && !ignore_missing_snapshot {
-        bail!(
-            "snapshot doesn't exist at {:?}",
-            snapshot_path
-                .as_ref()
-                .canonicalize()
-                .unwrap_or_else(|_| snapshot_path.as_ref().to_owned())
-        )
+    } else if !snapshot_path_exists && !ignore_missing_snapshot {
+        bail!("snapshot doesn't exist at {:?}", snapshot_path.as_ref())
     } else {
         Ok(())
     }

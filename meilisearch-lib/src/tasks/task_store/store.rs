@@ -10,6 +10,7 @@ use std::convert::TryInto;
 use std::mem::size_of;
 use std::ops::Range;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
 use heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
@@ -53,9 +54,17 @@ impl<'a> BytesDecode<'a> for IndexUidTaskIdCodec {
 }
 
 pub struct Store {
-    env: Env,
+    env: Arc<Env>,
     uids_task_ids: Database<IndexUidTaskIdCodec, Unit>,
     tasks: Database<OwnedType<BEU64>, SerdeJson<Task>>,
+}
+
+impl Drop for Store {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.env) == 1 {
+            self.env.as_ref().clone().prepare_for_closing();
+        }
+    }
 }
 
 impl Store {
@@ -64,7 +73,7 @@ impl Store {
     /// be in an invalid state, with dangling processing tasks.
     /// You want to patch  all un-finished tasks and put them in your pending
     /// queue with the `reset_and_return_unfinished_update` method.
-    pub fn new(env: heed::Env) -> Result<Self> {
+    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
@@ -78,7 +87,7 @@ impl Store {
     /// This function should be called *right after* creating the store.
     /// It put back all unfinished update in the `Created` state. This
     /// allow us to re-enqueue an update that didn't had the time to finish
-    /// when MeiliSearch closed.
+    /// when Meilisearch closed.
     pub fn reset_and_return_unfinished_tasks(&mut self) -> Result<BinaryHeap<Pending<TaskId>>> {
         let mut unfinished_tasks: BinaryHeap<Pending<TaskId>> = BinaryHeap::new();
 
@@ -257,10 +266,10 @@ pub mod test {
         Fake(Mocker),
     }
 
-    pub struct TmpEnv(TempDir, heed::Env);
+    pub struct TmpEnv(TempDir, Arc<heed::Env>);
 
     impl TmpEnv {
-        pub fn env(&self) -> heed::Env {
+        pub fn env(&self) -> Arc<heed::Env> {
             self.1.clone()
         }
     }
@@ -271,13 +280,13 @@ pub mod test {
         let mut options = EnvOpenOptions::new();
         options.map_size(4096 * 100000);
         options.max_dbs(1000);
-        let env = options.open(tmp.path()).unwrap();
+        let env = Arc::new(options.open(tmp.path()).unwrap());
 
         TmpEnv(tmp, env)
     }
 
     impl MockStore {
-        pub fn new(env: heed::Env) -> Result<Self> {
+        pub fn new(env: Arc<heed::Env>) -> Result<Self> {
             Ok(Self::Real(Store::new(env)?))
         }
 

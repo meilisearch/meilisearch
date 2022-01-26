@@ -117,11 +117,11 @@ impl IndexUpdateResponse {
 /// Always return a 200 with:
 /// ```json
 /// {
-///     "status": "MeiliSearch is running"
+///     "status": "Meilisearch is running"
 /// }
 /// ```
 pub async fn running() -> HttpResponse {
-    HttpResponse::Ok().json(serde_json::json!({ "status": "MeiliSearch is running" }))
+    HttpResponse::Ok().json(serde_json::json!({ "status": "Meilisearch is running" }))
 }
 
 async fn get_stats(

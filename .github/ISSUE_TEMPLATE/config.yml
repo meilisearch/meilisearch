@@ -6,5 +6,5 @@ contact_links:
     url: https://github.com/meilisearch/documentation/issues/new
     about: For documentation issues, open an issue or a PR in the documentation repository
   - name: Support questions & other
-    url: https://github.com/meilisearch/MeiliSearch/discussions/new
+    url: https://github.com/meilisearch/meilisearch/discussions/new
     about: For any other question, open a discussion in this repository

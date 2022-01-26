@@ -1,14 +1,16 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use anyhow::bail;
 use chrono::{DateTime, Utc};
-use log::{info, trace, warn};
+use log::{info, trace};
 use serde::{Deserialize, Serialize};
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
 use meilisearch_auth::AuthController;
 pub use message::DumpMsg;
+use tempfile::TempDir;
 use tokio::fs::create_dir_all;
 use tokio::sync::oneshot;
 
@@ -79,6 +81,47 @@ pub enum MetadataVersion {
 }
 
 impl MetadataVersion {
+    pub fn load_dump(
+        self,
+        src: impl AsRef<Path>,
+        dst: impl AsRef<Path>,
+        index_db_size: usize,
+        meta_env_size: usize,
+        indexing_options: &IndexerOpts,
+    ) -> anyhow::Result<()> {
+        match self {
+            MetadataVersion::V1(_meta) => {
+                anyhow::bail!("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")
+            }
+            MetadataVersion::V2(meta) => v2::load_dump(
+                meta,
+                src,
+                dst,
+                index_db_size,
+                meta_env_size,
+                indexing_options,
+            )?,
+            MetadataVersion::V3(meta) => v3::load_dump(
+                meta,
+                src,
+                dst,
+                index_db_size,
+                meta_env_size,
+                indexing_options,
+            )?,
+            MetadataVersion::V4(meta) => v4::load_dump(
+                meta,
+                src,
+                dst,
+                index_db_size,
+                meta_env_size,
+                indexing_options,
+            )?,
+        }
+
+        Ok(())
+    }
+
     pub fn new_v4(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = Metadata::new(index_db_size, update_db_size);
         Self::V4(meta)
@@ -160,10 +203,46 @@ impl DumpInfo {
 pub fn load_dump(
     dst_path: impl AsRef<Path>,
     src_path: impl AsRef<Path>,
+    ignore_dump_if_db_exists: bool,
+    ignore_missing_dump: bool,
     index_db_size: usize,
     update_db_size: usize,
     indexer_opts: &IndexerOpts,
 ) -> anyhow::Result<()> {
+    let empty_db = crate::is_empty_db(&dst_path);
+    let src_path_exists = src_path.as_ref().exists();
+
+    if empty_db && src_path_exists {
+        let (tmp_src, tmp_dst, meta) = extract_dump(&dst_path, &src_path)?;
+        meta.load_dump(
+            tmp_src.path(),
+            tmp_dst.path(),
+            index_db_size,
+            update_db_size,
+            indexer_opts,
+        )?;
+        persist_dump(&dst_path, tmp_dst)?;
+        Ok(())
+    } else if !empty_db && !ignore_dump_if_db_exists {
+        bail!(
+            "database already exists at {:?}, try to delete it or rename it",
+            dst_path
+                .as_ref()
+                .canonicalize()
+                .unwrap_or_else(|_| dst_path.as_ref().to_owned())
+        )
+    } else if !src_path_exists && !ignore_missing_dump {
+        bail!("dump doesn't exist at {:?}", src_path.as_ref())
+    } else {
+        // there is nothing to do
+        Ok(())
+    }
+}
+
+fn extract_dump(
+    dst_path: impl AsRef<Path>,
+    src_path: impl AsRef<Path>,
+) -> anyhow::Result<(TempDir, TempDir, MetadataVersion)> {
     // Setup a temp directory path in the same path as the database, to prevent cross devices
     // references.
     let temp_path = dst_path
@@ -186,7 +265,11 @@ pub fn load_dump(
     let mut meta_file = File::open(&meta_path)?;
     let meta: MetadataVersion = serde_json::from_reader(&mut meta_file)?;
 
-    let tmp_dst = tempfile::tempdir()?;
+    if !dst_path.as_ref().exists() {
+        std::fs::create_dir_all(dst_path.as_ref())?;
+    }
+
+    let tmp_dst = tempfile::tempdir_in(dst_path.as_ref())?;
 
     info!(
         "Loading dump {}, dump database version: {}, dump version: {}",
@@ -197,43 +280,37 @@ pub fn load_dump(
         meta.version()
     );
 
-    match meta {
-        MetadataVersion::V1(_meta) => {
-            anyhow::bail!("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")
-        }
-        MetadataVersion::V2(meta) => v2::load_dump(
-            meta,
-            &tmp_src_path,
-            tmp_dst.path(),
-            index_db_size,
-            update_db_size,
-            indexer_opts,
-        )?,
-        MetadataVersion::V3(meta) => v3::load_dump(
-            meta,
-            &tmp_src_path,
-            tmp_dst.path(),
-            index_db_size,
-            update_db_size,
-            indexer_opts,
-        )?,
-        MetadataVersion::V4(meta) => v4::load_dump(
-            meta,
-            &tmp_src_path,
-            tmp_dst.path(),
-            index_db_size,
-            update_db_size,
-            indexer_opts,
-        )?,
-    }
-    // Persist and atomically rename the db
+    Ok((tmp_src, tmp_dst, meta))
+}
+
+fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<()> {
     let persisted_dump = tmp_dst.into_path();
+
+    // Delete everything in the `data.ms` except the tempdir.
     if dst_path.as_ref().exists() {
-        warn!("Overwriting database at {}", dst_path.as_ref().display());
-        std::fs::remove_dir_all(&dst_path)?;
+        for file in dst_path.as_ref().read_dir().unwrap() {
+            let file = file.unwrap().path();
+            if file.file_name() == persisted_dump.file_name() {
+                continue;
+            }
+
+            if file.is_file() {
+                std::fs::remove_file(&file)?;
+            } else {
+                std::fs::remove_dir_all(&file)?;
+            }
+        }
     }
 
-    std::fs::rename(&persisted_dump, &dst_path)?;
+    // Move the whole content of the tempdir into the `data.ms`.
+    for file in persisted_dump.read_dir().unwrap() {
+        let file = file.unwrap().path();
+
+        std::fs::rename(&file, &dst_path.as_ref().join(file.file_name().unwrap()))?;
+    }
+
+    // Delete the empty tempdir.
+    std::fs::remove_dir_all(&persisted_dump)?;
 
     Ok(())
 }
@@ -281,6 +358,7 @@ impl DumpJob {
         AuthController::dump(&self.db_path, &temp_dump_path)?;
 
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+            let _ = &self;
             // for now we simply copy the updates/updates_files
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.

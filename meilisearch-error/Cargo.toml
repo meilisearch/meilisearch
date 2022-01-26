@@ -2,11 +2,10 @@
 name = "meilisearch-error"
 version = "0.25.2"
 authors = ["marin <postma.marin@protonmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-actix-http = "=3.0.0-beta.10"
-actix-web = "4.0.0-beta.9"
+actix-web = { version = "4.0.0-beta.21", default-features = false }
 proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 serde = { version = "1.0.130", features = ["derive"] }

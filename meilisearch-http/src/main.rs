@@ -2,12 +2,12 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
 use meilisearch_http::{create_app, setup_meilisearch, Opt};
 use meilisearch_lib::MeiliSearch;
-use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -29,7 +29,7 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     setup(&opt)?;
 
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let (analytics, user) = if opt.analytics() {
+    let (analytics, user) = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
         analytics::MockAnalytics::new(&opt)
@@ -101,14 +101,14 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
     let ascii_name = r#"
-888b     d888          d8b 888 d8b  .d8888b.                                    888
-8888b   d8888          Y8P 888 Y8P d88P  Y88b                                   888
-88888b.d88888              888     Y88b.                                        888
-888Y88888P888  .d88b.  888 888 888  "Y888b.    .d88b.   8888b.  888d888 .d8888b 88888b.
-888 Y888P 888 d8P  Y8b 888 888 888     "Y88b. d8P  Y8b     "88b 888P"  d88P"    888 "88b
-888  Y8P  888 88888888 888 888 888       "888 88888888 .d888888 888    888      888  888
-888   "   888 Y8b.     888 888 888 Y88b  d88P Y8b.     888  888 888    Y88b.    888  888
-888       888  "Y8888  888 888 888  "Y8888P"   "Y8888  "Y888888 888     "Y8888P 888  888
+888b     d888          d8b 888 d8b                                            888
+8888b   d8888          Y8P 888 Y8P                                            888
+88888b.d88888              888                                                888
+888Y88888P888  .d88b.  888 888 888 .d8888b   .d88b.   8888b.  888d888 .d8888b 88888b.
+888 Y888P 888 d8P  Y8b 888 888 888 88K      d8P  Y8b     "88b 888P"  d88P"    888 "88b
+888  Y8P  888 88888888 888 888 888 "Y8888b. 88888888 .d888888 888    888      888  888
+888   "   888 Y8b.     888 888 888      X88 Y8b.     888  888 888    Y88b.    888  888
+888       888  "Y8888  888 888 888  88888P'  "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
     eprintln!("{}", ascii_name);
@@ -125,10 +125,10 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
-        if opt.analytics() {
+        if !opt.no_analytics {
             eprintln!(
                 "
-Thank you for using MeiliSearch!
+Thank you for using Meilisearch!
 
 We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
@@ -146,7 +146,7 @@ Anonymous telemetry:\t\"Enabled\""
     eprintln!();
 
     if opt.master_key.is_some() {
-        eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
+        eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \
             If you need some protection in development mode, please export a key: export MEILI_MASTER_KEY=xxx");

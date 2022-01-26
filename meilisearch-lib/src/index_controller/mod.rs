@@ -150,6 +150,8 @@ pub struct IndexControllerBuilder {
     schedule_snapshot: bool,
     dump_src: Option<PathBuf>,
     dump_dst: Option<PathBuf>,
+    ignore_dump_if_db_exists: bool,
+    ignore_missing_dump: bool,
 }
 
 impl IndexControllerBuilder {
@@ -186,6 +188,8 @@ impl IndexControllerBuilder {
             load_dump(
                 db_path.as_ref(),
                 src_path,
+                self.ignore_dump_if_db_exists,
+                self.ignore_missing_dump,
                 index_size,
                 task_store_size,
                 &indexer_options,
@@ -198,7 +202,7 @@ impl IndexControllerBuilder {
         options.map_size(task_store_size);
         options.max_dbs(20);
 
-        let meta_env = options.open(&db_path)?;
+        let meta_env = Arc::new(options.open(&db_path)?);
 
         let update_file_store = UpdateFileStore::new(&db_path)?;
         // Create or overwrite the version file for this DB
@@ -296,18 +300,6 @@ impl IndexControllerBuilder {
         self
     }
 
-    /// Set the index controller builder's dump src.
-    pub fn set_dump_src(&mut self, dump_src: PathBuf) -> &mut Self {
-        self.dump_src.replace(dump_src);
-        self
-    }
-
-    /// Set the index controller builder's dump dst.
-    pub fn set_dump_dst(&mut self, dump_dst: PathBuf) -> &mut Self {
-        self.dump_dst.replace(dump_dst);
-        self
-    }
-
     /// Set the index controller builder's import snapshot.
     pub fn set_import_snapshot(&mut self, import_snapshot: PathBuf) -> &mut Self {
         self.import_snapshot.replace(import_snapshot);
@@ -323,6 +315,30 @@ impl IndexControllerBuilder {
     /// Set the index controller builder's schedule snapshot.
     pub fn set_schedule_snapshot(&mut self) -> &mut Self {
         self.schedule_snapshot = true;
+        self
+    }
+
+    /// Set the index controller builder's dump src.
+    pub fn set_dump_src(&mut self, dump_src: PathBuf) -> &mut Self {
+        self.dump_src.replace(dump_src);
+        self
+    }
+
+    /// Set the index controller builder's dump dst.
+    pub fn set_dump_dst(&mut self, dump_dst: PathBuf) -> &mut Self {
+        self.dump_dst.replace(dump_dst);
+        self
+    }
+
+    /// Set the index controller builder's ignore dump if db exists.
+    pub fn set_ignore_dump_if_db_exists(&mut self, ignore_dump_if_db_exists: bool) -> &mut Self {
+        self.ignore_dump_if_db_exists = ignore_dump_if_db_exists;
+        self
+    }
+
+    /// Set the index controller builder's ignore missing dump.
+    pub fn set_ignore_missing_dump(&mut self, ignore_missing_dump: bool) -> &mut Self {
+        self.ignore_missing_dump = ignore_missing_dump;
         self
     }
 }

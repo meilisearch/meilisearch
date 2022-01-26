@@ -130,7 +130,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         master_key: None,
         env: "development".to_owned(),
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
-        no_analytics: Some(Some(true)),
+        no_analytics: true,
         max_index_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
@@ -148,6 +148,8 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         schedule_snapshot: false,
         snapshot_interval_sec: 0,
         import_dump: None,
+        ignore_missing_dump: false,
+        ignore_dump_if_db_exists: false,
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_memory: MaxMemory::unlimited(),
