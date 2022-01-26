@@ -17,6 +17,7 @@ COPY    meilisearch-http/Cargo.toml meilisearch-http/
 COPY    meilisearch-lib/Cargo.toml meilisearch-lib/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
+ENV     JEMALLOC_SYS_WITH_LG_PAGE 16
 
 # Create dummy main.rs files for each workspace member to be able to compile all the dependencies
 RUN     find . -type d -name "meilisearch-*" | xargs -I{} sh -c 'mkdir {}/src; echo "fn main() { }" > {}/src/main.rs;'
