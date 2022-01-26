@@ -74,9 +74,9 @@ get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
 
         if [ -z "$GITHUB_PAT" ]; then
-        curl -s 'https://api.github.com/repos/meilisearch/Meilisearch/releases' > "$temp_file" || return 1
+        curl -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
     else
-        curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/Meilisearch/releases' > "$temp_file" || return 1
+        curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
     fi
 
     releases=$(cat "$temp_file" | \
@@ -208,7 +208,7 @@ case "$os" in
 		binary_name='meilisearch'
 
 esac
-link="https://github.com/meilisearch/Meilisearch/releases/download/$latest/$release_file"
+link="https://github.com/meilisearch/meilisearch/releases/download/$latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$binary_name"
 chmod 744 "$binary_name"
