@@ -494,6 +494,7 @@ version = "4.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "956ffc5b0ec7d7a6949e3f21fd63ba5af4cffdc2ba1e0b7bf62b481458c4ae7f"
 dependencies = [
+ "serde",
  "utf8-width",
 ]
 

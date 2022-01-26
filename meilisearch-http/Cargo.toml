@@ -30,7 +30,7 @@ arc-swap = "1.3.2"
 async-stream = "0.3.2"
 async-trait = "0.1.51"
 bstr = "0.2.17"
-byte-unit = { version = "4.0.12", default-features = false, features = ["std"] }
+byte-unit = { version = "4.0.12", default-features = false, features = ["std", "serde"] }
 bytes = "1.1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.1"
