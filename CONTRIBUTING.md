@@ -1,8 +1,8 @@
 # Contributing
 
-First, thank you for contributing to MeiliSearch! The goal of this document is to provide everything you need to start contributing to MeiliSearch.
+First, thank you for contributing to meilisearch! The goal of this document is to provide everything you need to start contributing to meilisearch.
 
-Remember that there are many ways to contribute other than writing code: writing [tutorials or blog posts](https://github.com/meilisearch/awesome-meilisearch), improving [the documentation](https://github.com/meilisearch/documentation), submitting [bug reports](https://github.com/meilisearch/MeiliSearch/issues/new?assignees=&labels=&template=bug_report.md&title=) and [feature requests](https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal)...
+Remember that there are many ways to contribute other than writing code: writing [tutorials or blog posts](https://github.com/meilisearch/awesome-meilisearch), improving [the documentation](https://github.com/meilisearch/documentation), submitting [bug reports](https://github.com/meilisearch/meilisearch/issues/new?assignees=&labels=&template=bug_report.md&title=) and [feature requests](https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal)...
 
 ## Table of Contents
 - [Assumptions](#assumptions)
@@ -13,8 +13,8 @@ Remember that there are many ways to contribute other than writing code: writing
 ## Assumptions
 
 1. **You're familiar with [Github](https://github.com) and the [Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(PR) workflow.**
-2. **You've read the MeiliSearch [documentation](https://docs.meilisearch.com).**
-3. **You know about the [MeiliSearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
+2. **You've read the meilisearch [documentation](https://docs.meilisearch.com).**
+3. **You know about the [meilisearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
    Please use this for help.**
 
 ## How to Contribute
@@ -22,21 +22,21 @@ Remember that there are many ways to contribute other than writing code: writing
 1. Ensure your change has an issue! Find an
    [existing issue](https://github.com/meilisearch/meilisearch/issues/) or [open a new issue](https://github.com/meilisearch/meilisearch/issues/new).
    * This is where you can get a feel if the change will be accepted or not.
-2. Once approved, [fork the MeiliSearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own Github account.
+2. Once approved, [fork the meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own Github account.
 3. [Create a new Git branch](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository)
 4. Review the [Development Workflow](#development-workflow) section that describes the steps to maintain the repository.
 5. Make your changes on your branch.
-6. [Submit the branch as a Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork) pointing to the `main` branch of the MeiliSearch repository. A maintainer should comment and/or review your Pull Request within a few days. Although depending on the circumstances, it may take longer.
+6. [Submit the branch as a Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork) pointing to the `main` branch of the meilisearch repository. A maintainer should comment and/or review your Pull Request within a few days. Although depending on the circumstances, it may take longer.
 
 ## Development Workflow
 
-### Setup and run MeiliSearch
+### Setup and run meilisearch
 
 ```bash
 cargo run --release
 ```
 
-We recommend using the `--release` flag to test the full performance of MeiliSearch.
+We recommend using the `--release` flag to test the full performance of meilisearch.
 
 ### Test
 
