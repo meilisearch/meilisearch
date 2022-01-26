@@ -1,4 +1,4 @@
-# GitHub Actions Workflow for MeiliSearch
+# GitHub Actions Workflow for Meilisearch
 
 > **Note:**
 

@@ -1,6 +1,6 @@
 [package]
 authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
-description = "MeiliSearch HTTP server"
+description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch-http"

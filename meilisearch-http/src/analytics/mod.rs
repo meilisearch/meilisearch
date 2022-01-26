@@ -29,12 +29,12 @@ pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub type SearchAggregator = segment_analytics::SearchAggregator;
 
-/// The MeiliSearch config dir:
-/// `~/.config/MeiliSearch` on *NIX or *BSD.
+/// The Meilisearch config dir:
+/// `~/.config/Meilisearch` on *NIX or *BSD.
 /// `~/Library/ApplicationSupport` on macOS.
 /// `%APPDATA` (= `C:\Users%USERNAME%\AppData\Roaming`) on windows.
 static MEILISEARCH_CONFIG_PATH: Lazy<Option<PathBuf>> =
-    Lazy::new(|| AppDirs::new(Some("MeiliSearch"), false).map(|appdir| appdir.config_dir));
+    Lazy::new(|| AppDirs::new(Some("Meilisearch"), false).map(|appdir| appdir.config_dir));
 
 fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
     db_path
@@ -50,7 +50,7 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
         .map(|(filename, config_path)| config_path.join(filename.trim_start_matches('-')))
 }
 
-/// Look for the instance-uid in the `data.ms` or in `~/.config/MeiliSearch/path-to-db-instance-uid`
+/// Look for the instance-uid in the `data.ms` or in `~/.config/Meilisearch/path-to-db-instance-uid`
 fn find_user_id(db_path: &Path) -> Option<String> {
     fs::read_to_string(db_path.join("instance-uid"))
         .ok()

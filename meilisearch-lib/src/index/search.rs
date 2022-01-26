@@ -877,7 +877,7 @@ mod test {
         assert_eq!(value["publication_year"], "<em>1937</em>");
     }
 
-    /// https://github.com/meilisearch/MeiliSearch/issues/1368
+    /// https://github.com/meilisearch/meilisearch/issues/1368
     #[test]
     fn formatted_with_highlight_emoji() {
         let stop_words = fst::Set::default();
