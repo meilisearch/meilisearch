@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Cursor, Read};
+use std::io::{stdin, BufRead, BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Instant;
 
 use byte_unit::Byte;
 use eyre::Result;
@@ -10,6 +12,8 @@ use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
 use milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
+use milli::Index;
+use serde_json::{Map, Value};
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -32,9 +36,108 @@ struct Cli {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    DocumentAddition(DocumentAddition),
+    Documents {
+        #[structopt(subcommand)]
+        cmd: Documents,
+    },
     Search(Search),
-    SettingsUpdate(SettingsUpdate),
+    Settings {
+        #[structopt(subcommand)]
+        cmd: Settings,
+    },
+}
+
+impl Performer for Command {
+    fn perform(self, index: Index) -> Result<()> {
+        match self {
+            Command::Documents { cmd } => cmd.perform(index),
+            Command::Search(cmd) => cmd.perform(index),
+            Command::Settings { cmd } => cmd.perform(index),
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+enum Settings {
+    Update(SettingsUpdate),
+    Show,
+}
+
+impl Settings {
+    fn show(&self, index: Index) -> Result<()> {
+        let txn = index.read_txn()?;
+        let displayed_attributes = index
+            .displayed_fields(&txn)?
+            .map(|fields| fields.into_iter().map(String::from).collect());
+
+        let searchable_attributes: Option<Vec<_>> = index
+            .searchable_fields(&txn)?
+            .map(|fields| fields.into_iter().map(String::from).collect());
+
+        let filterable_attributes: Vec<_> = index.filterable_fields(&txn)?.into_iter().collect();
+
+        let sortable_attributes: Vec<_> = index.sortable_fields(&txn)?.into_iter().collect();
+
+        let criteria: Vec<_> = index.criteria(&txn)?.into_iter().map(|c| c.to_string()).collect();
+
+        let stop_words = index
+            .stop_words(&txn)?
+            .map(|stop_words| -> Result<Vec<_>> {
+                Ok(stop_words.stream().into_strs()?.into_iter().collect())
+            })
+            .transpose()?
+            .unwrap_or_else(Vec::new);
+        let distinct_field = index.distinct_field(&txn)?.map(String::from);
+
+        // in milli each word in the synonyms map were split on their separator. Since we lost
+        // this information we are going to put space between words.
+        let synonyms: BTreeMap<_, Vec<_>> = index
+            .synonyms(&txn)?
+            .iter()
+            .map(|(key, values)| {
+                (key.join(" "), values.iter().map(|value| value.join(" ")).collect())
+            })
+            .collect();
+
+        println!(
+            "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\n",
+            displayed_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
+            searchable_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
+            filterable_attributes.join("\n\t"),
+            sortable_attributes.join("\n\t"),
+            criteria.join("\n\t"),
+            stop_words.join("\n\t"),
+            distinct_field.unwrap_or_default(),
+            synonyms.into_iter().map(|(k, v)| format!("\n\t{}:\n{:?}", k, v)).collect::<String>(),
+        );
+        Ok(())
+    }
+}
+
+impl Performer for Settings {
+    fn perform(self, index: Index) -> Result<()> {
+        match self {
+            Settings::Update(update) => update.perform(index),
+            Settings::Show => self.show(index),
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+enum Documents {
+    Add(DocumentAddition),
+}
+
+impl Performer for Documents {
+    fn perform(self, index: Index) -> Result<()> {
+        match self {
+            Self::Add(addition) => addition.perform(index),
+        }
+    }
+}
+
+trait Performer {
+    fn perform(self, index: Index) -> Result<()>;
 }
 
 fn setup(opt: &Cli) -> Result<()> {
@@ -56,11 +159,7 @@ fn main() -> Result<()> {
     options.map_size(command.index_size.get_bytes() as usize);
     let index = milli::Index::new(options, command.index_path)?;
 
-    match command.subcommand {
-        Command::DocumentAddition(addition) => addition.perform(index)?,
-        Command::Search(search) => search.perform(index)?,
-        Command::SettingsUpdate(update) => update.perform(index)?,
-    }
+    command.subcommand.perform(index)?;
 
     Ok(())
 }
@@ -100,8 +199,8 @@ struct DocumentAddition {
     update_documents: bool,
 }
 
-impl DocumentAddition {
-    fn perform(&self, index: milli::Index) -> Result<()> {
+impl Performer for DocumentAddition {
+    fn perform(self, index: milli::Index) -> Result<()> {
         let reader: Box<dyn Read> = match self.path {
             Some(ref path) => {
                 let file = File::open(path)?;
@@ -247,29 +346,88 @@ struct Search {
     offset: Option<usize>,
     #[structopt(short, long)]
     limit: Option<usize>,
+    #[structopt(short, long, conflicts_with = "query")]
+    interactive: bool,
+}
+
+impl Performer for Search {
+    fn perform(self, index: milli::Index) -> Result<()> {
+        if self.interactive {
+            let stdin = std::io::stdin();
+            let mut lines = stdin.lock().lines();
+            loop {
+                eprint!("> ");
+                std::io::stdout().flush()?;
+                match lines.next() {
+                    Some(Ok(line)) => {
+                        let now = Instant::now();
+                        let jsons = Self::perform_single_search(
+                            &index,
+                            &Some(line),
+                            &self.filter,
+                            &self.offset,
+                            &self.limit,
+                        )?;
+
+                        let time = now.elapsed();
+
+                        let hits = serde_json::to_string_pretty(&jsons)?;
+
+                        println!("{}", hits);
+                        eprintln!("found {} results in {:.02?}", jsons.len(), time);
+                    }
+                    _ => break,
+                }
+            }
+        } else {
+            let now = Instant::now();
+            let jsons = Self::perform_single_search(
+                &index,
+                &self.query,
+                &self.filter,
+                &self.offset,
+                &self.limit,
+            )?;
+
+            let time = now.elapsed();
+
+            let hits = serde_json::to_string_pretty(&jsons)?;
+
+            println!("{}", hits);
+            eprintln!("found {} results in {:.02?}", jsons.len(), time);
+        }
+
+        Ok(())
+    }
 }
 
 impl Search {
-    fn perform(&self, index: milli::Index) -> Result<()> {
+    fn perform_single_search(
+        index: &milli::Index,
+        query: &Option<String>,
+        filter: &Option<String>,
+        offset: &Option<usize>,
+        limit: &Option<usize>,
+    ) -> Result<Vec<Map<String, Value>>> {
         let txn = index.env.read_txn()?;
         let mut search = index.search(&txn);
 
-        if let Some(ref query) = self.query {
+        if let Some(ref query) = query {
             search.query(query);
         }
 
-        if let Some(ref filter) = self.filter {
+        if let Some(ref filter) = filter {
             if let Some(condition) = milli::Filter::from_str(filter)? {
                 search.filter(condition);
             }
         }
 
-        if let Some(offset) = self.offset {
-            search.offset(offset);
+        if let Some(offset) = offset {
+            search.offset(*offset);
         }
 
-        if let Some(limit) = self.limit {
-            search.limit(limit);
+        if let Some(limit) = limit {
+            search.limit(*limit);
         }
 
         let result = search.execute()?;
@@ -284,11 +442,7 @@ impl Search {
             jsons.push(json);
         }
 
-        let hits = serde_json::to_string_pretty(&jsons)?;
-
-        println!("{}", hits);
-
-        Ok(())
+        Ok(jsons)
     }
 }
 
@@ -298,8 +452,8 @@ struct SettingsUpdate {
     filterable_attributes: Option<Vec<String>>,
 }
 
-impl SettingsUpdate {
-    fn perform(&self, index: milli::Index) -> Result<()> {
+impl Performer for SettingsUpdate {
+    fn perform(self, index: milli::Index) -> Result<()> {
         let mut txn = index.env.write_txn()?;
 
         let config = IndexerConfig { log_every_n: Some(100), ..Default::default() };
