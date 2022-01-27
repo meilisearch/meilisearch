@@ -1,20 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::{cmp, str};
 
-use fst::Streamer;
 use grenad::{CompressionType, MergerBuilder};
 use heed::types::ByteSlice;
 use heed::{BytesDecode, BytesEncode};
 use log::debug;
-use slice_group_by::GroupBy;
 
 use crate::error::SerializationError;
 use crate::heed_codec::StrBEU32Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
-    create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_cbo_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
+    MergeFn,
 };
 use crate::{Index, Result};
 
@@ -57,25 +55,14 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixPositionDocids::{}")]
-    pub fn execute<A: AsRef<[u8]>>(
+    pub fn execute(
         self,
         new_word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        old_prefix_fst: &fst::Set<A>,
+        new_prefix_fst_words: &[String],
+        common_prefix_fst_words: &[&[String]],
+        del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
         debug!("Computing and writing the word levels positions docids into LMDB on disk...");
-
-        let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-
-        // We retrieve the common words between the previous and new prefix word fst.
-        let common_prefix_fst_keys =
-            fst_stream_into_vec(old_prefix_fst.op().add(&prefix_fst).intersection());
-        let common_prefix_fst_keys: Vec<_> = common_prefix_fst_keys
-            .as_slice()
-            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
-            .collect();
-
-        // We compute the set of prefixes that are no more part of the prefix fst.
-        let suppr_pw = fst_stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
 
         let mut prefix_position_docids_sorter = create_sorter(
             merge_cbo_roaring_bitmaps,
@@ -104,7 +91,7 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
                         &mut prefixes_cache,
                         &mut prefix_position_docids_sorter,
                     )?;
-                    common_prefix_fst_keys.iter().find(|prefixes| word.starts_with(&prefixes[0]))
+                    common_prefix_fst_words.iter().find(|prefixes| word.starts_with(&prefixes[0]))
                 }
             };
 
@@ -129,16 +116,15 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.index.word_position_docids.remap_data_type::<ByteSlice>();
-        let mut new_prefixes_stream = prefix_fst.op().add(old_prefix_fst).difference();
-        while let Some(prefix_bytes) = new_prefixes_stream.next() {
-            let prefix = str::from_utf8(prefix_bytes).map_err(|_| {
+        for prefix_bytes in new_prefix_fst_words {
+            let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
                 SerializationError::Decoding { db_name: Some(WORDS_PREFIXES_FST_KEY) }
             })?;
 
             // iter over all lines of the DB where the key is prefixed by the current prefix.
             let iter = db
                 .remap_key_type::<ByteSlice>()
-                .prefix_iter(self.wtxn, prefix_bytes)?
+                .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
                 .remap_key_type::<StrBEU32Codec>();
             for result in iter {
                 let ((word, pos), data) = result?;
@@ -150,14 +136,12 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             }
         }
 
-        drop(new_prefixes_stream);
-
         // We remove all the entries that are no more required in this word prefix position
         // docids database.
         let mut iter =
             self.index.word_prefix_position_docids.iter_mut(self.wtxn)?.lazily_decode_data();
         while let Some(((prefix, _), _)) = iter.next().transpose()? {
-            if suppr_pw.contains(prefix.as_bytes()) {
+            if del_prefix_fst_words.contains(prefix.as_bytes()) {
                 unsafe { iter.del_current()? };
             }
         }

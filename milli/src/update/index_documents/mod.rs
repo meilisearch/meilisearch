@@ -12,6 +12,7 @@ use crossbeam_channel::{Receiver, Sender};
 use log::debug;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 pub use self::helpers::{
@@ -420,6 +421,27 @@ where
         }
         builder.execute()?;
 
+        let current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
+
+        // We retrieve the common words between the previous and new prefix word fst.
+        let common_prefix_fst_words = fst_stream_into_vec(
+            previous_words_prefixes_fst.op().add(&current_prefix_fst).intersection(),
+        );
+        let common_prefix_fst_words: Vec<_> = common_prefix_fst_words
+            .as_slice()
+            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
+            .collect();
+
+        // We retrieve the newly added words between the previous and new prefix word fst.
+        let new_prefix_fst_words = fst_stream_into_vec(
+            current_prefix_fst.op().add(&previous_words_prefixes_fst).difference(),
+        );
+
+        // We compute the set of prefixes that are no more part of the prefix fst.
+        let del_prefix_fst_words = fst_stream_into_hashset(
+            previous_words_prefixes_fst.op().add(&current_prefix_fst).difference(),
+        );
+
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen,
@@ -432,7 +454,12 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute(word_docids, &previous_words_prefixes_fst)?;
+        builder.execute(
+            word_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -446,7 +473,12 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute(word_pair_proximity_docids, &previous_words_prefixes_fst)?;
+        builder.execute(
+            word_pair_proximity_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -466,7 +498,12 @@ where
         if let Some(value) = self.config.words_positions_min_level_size {
             builder.min_level_size(value);
         }
-        builder.execute(word_position_docids, &previous_words_prefixes_fst)?;
+        builder.execute(
+            word_position_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {

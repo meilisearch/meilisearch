@@ -1,13 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use fst::Streamer;
 use grenad::{CompressionType, MergerBuilder};
 use heed::types::ByteSlice;
-use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
+    create_sorter, merge_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result};
 
@@ -36,24 +33,13 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixDocids::{}")]
-    pub fn execute<A: AsRef<[u8]>>(
+    pub fn execute(
         self,
         new_word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        old_prefix_fst: &fst::Set<A>,
+        new_prefix_fst_words: &[String],
+        common_prefix_fst_words: &[&[String]],
+        del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
-        let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-
-        // We retrieve the common words between the previous and new prefix word fst.
-        let common_prefix_fst_keys =
-            fst_stream_into_vec(old_prefix_fst.op().add(&prefix_fst).intersection());
-        let common_prefix_fst_keys: Vec<_> = common_prefix_fst_keys
-            .as_slice()
-            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
-            .collect();
-
-        // We compute the set of prefixes that are no more part of the prefix fst.
-        let suppr_pw = fst_stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
-
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
@@ -75,7 +61,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
                 Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
                 _otherwise => {
                     write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
-                    common_prefix_fst_keys
+                    common_prefix_fst_words
                         .iter()
                         .find(|prefixes| word.starts_with(&prefixes[0].as_bytes()))
                 }
@@ -99,21 +85,18 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.index.word_docids.remap_data_type::<ByteSlice>();
-        let mut new_prefixes_stream = prefix_fst.op().add(old_prefix_fst).difference();
-        while let Some(bytes) = new_prefixes_stream.next() {
-            let prefix = std::str::from_utf8(bytes)?;
+        for prefix in new_prefix_fst_words {
+            let prefix = std::str::from_utf8(prefix.as_bytes())?;
             for result in db.prefix_iter(self.wtxn, prefix)? {
                 let (_word, data) = result?;
                 prefix_docids_sorter.insert(prefix, data)?;
             }
         }
 
-        drop(new_prefixes_stream);
-
         // We remove all the entries that are no more required in this word prefix docids database.
         let mut iter = self.index.word_prefix_docids.iter_mut(self.wtxn)?.lazily_decode_data();
         while let Some((prefix, _)) = iter.next().transpose()? {
-            if suppr_pw.contains(prefix.as_bytes()) {
+            if del_prefix_fst_words.contains(prefix.as_bytes()) {
                 unsafe { iter.del_current()? };
             }
         }

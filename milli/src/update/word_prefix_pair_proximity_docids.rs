@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use grenad::{CompressionType, MergerBuilder};
 use heed::types::ByteSlice;
@@ -7,8 +7,8 @@ use log::debug;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, fst_stream_into_hashset, fst_stream_into_vec, merge_cbo_roaring_bitmaps,
-    sorter_into_lmdb_database, CursorClonableMmap, MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
+    MergeFn,
 };
 use crate::{Index, Result, StrStrU8Codec};
 
@@ -62,39 +62,23 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
-    pub fn execute<A: AsRef<[u8]>>(
+    pub fn execute(
         self,
         new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        old_prefix_fst: &fst::Set<A>,
+        new_prefix_fst_words: &[String],
+        common_prefix_fst_words: &[&[String]],
+        del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
+
+        let new_prefix_fst_words: Vec<_> =
+            new_prefix_fst_words.linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
 
         // We retrieve and merge the created word pair proximities docids entries
         // for the newly added documents.
         let mut wppd_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
         wppd_merger.extend(new_word_pair_proximity_docids);
         let mut wppd_iter = wppd_merger.build().into_merger_iter()?;
-
-        let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-
-        // We retrieve the common words between the previous and new prefix word fst.
-        let common_prefix_fst_keys =
-            fst_stream_into_vec(old_prefix_fst.op().add(&prefix_fst).intersection());
-        let common_prefix_fst_keys: Vec<_> = common_prefix_fst_keys
-            .as_slice()
-            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
-            .collect();
-
-        // We retrieve the newly added words between the previous and new prefix word fst.
-        let new_prefix_fst_keys =
-            fst_stream_into_vec(prefix_fst.op().add(old_prefix_fst).difference());
-        let new_prefix_fst_keys: Vec<_> = new_prefix_fst_keys
-            .as_slice()
-            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
-            .collect();
-
-        // We compute the set of prefixes that are no more part of the prefix fst.
-        let suppr_pw = fst_stream_into_hashset(old_prefix_fst.op().add(&prefix_fst).difference());
 
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
             merge_cbo_roaring_bitmaps,
@@ -120,7 +104,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 &mut current_prefixes,
                 &mut prefixes_cache,
                 &mut word_prefix_pair_proximity_docids_sorter,
-                &common_prefix_fst_keys,
+                common_prefix_fst_words,
                 self.max_prefix_length,
                 w1,
                 w2,
@@ -152,7 +136,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 &mut current_prefixes,
                 &mut prefixes_cache,
                 &mut word_prefix_pair_proximity_docids_sorter,
-                &new_prefix_fst_keys,
+                &new_prefix_fst_words,
                 self.max_prefix_length,
                 w1,
                 w2,
@@ -166,7 +150,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             &mut word_prefix_pair_proximity_docids_sorter,
         )?;
 
-        drop(prefix_fst);
         drop(db_iter);
 
         // All of the word prefix pairs in the database that have a w2
@@ -177,7 +160,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             .remap_data_type::<ByteSlice>()
             .iter_mut(self.wtxn)?;
         while let Some(((_, w2, _), _)) = iter.next().transpose()? {
-            if suppr_pw.contains(w2.as_bytes()) {
+            if del_prefix_fst_words.contains(w2.as_bytes()) {
                 // Delete this entry as the w2 prefix is no more in the words prefix fst.
                 unsafe { iter.del_current()? };
             }
