@@ -8,6 +8,7 @@ use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use chrono::{DateTime, Utc};
 use http::header::CONTENT_TYPE;
+use meilisearch_auth::SearchRules;
 use meilisearch_lib::index::{SearchQuery, SearchResult};
 use meilisearch_lib::index_controller::Stats;
 use meilisearch_lib::MeiliSearch;
@@ -280,7 +281,7 @@ impl Segment {
     }
 
     async fn tick(&mut self, meilisearch: MeiliSearch) {
-        if let Ok(stats) = meilisearch.get_all_stats(&None).await {
+        if let Ok(stats) = meilisearch.get_all_stats(&SearchRules::default()).await {
             let _ = self
                 .batcher
                 .push(Identify {

@@ -44,6 +44,7 @@ heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 itertools = "0.10.1"
+jsonwebtoken = "7"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-error = { path = "../meilisearch-error" }

@@ -1,6 +1,7 @@
 mod api_keys;
 mod authorization;
 mod payload;
+mod tenant_token;
 
 use crate::common::Server;
 use actix_web::http::StatusCode;

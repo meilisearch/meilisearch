@@ -1,5 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
+use meilisearch_auth::IndexSearchRules;
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
 use meilisearch_lib::MeiliSearch;
@@ -79,6 +80,26 @@ impl From<SearchQueryGet> for SearchQuery {
     }
 }
 
+/// Incorporate search rules in search query
+fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
+    query.filter = match (query.filter.take(), rules.filter) {
+        (None, rules_filter) => rules_filter,
+        (filter, None) => filter,
+        (Some(filter), Some(rules_filter)) => {
+            let filter = match filter {
+                Value::Array(filter) => filter,
+                filter => vec![filter],
+            };
+            let rules_filter = match rules_filter {
+                Value::Array(rules_filter) => rules_filter,
+                rules_filter => vec![rules_filter],
+            };
+
+            Some(Value::Array([filter, rules_filter].concat()))
+        }
+    }
+}
+
 // TODO: TAMO: split on :asc, and :desc, instead of doing some weird things
 
 /// Transform the sort query parameter into something that matches the post expected format.
@@ -113,11 +134,21 @@ pub async fn search_with_url_query(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let query: SearchQuery = params.into_inner().into();
+    let mut query: SearchQuery = params.into_inner().into();
+
+    let index_uid = path.into_inner();
+    // Tenant token search_rules.
+    if let Some(search_rules) = meilisearch
+        .filters()
+        .search_rules
+        .get_index_search_rules(&index_uid)
+    {
+        add_search_rules(&mut query, search_rules);
+    }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(path.into_inner(), query).await;
+    let search_result = meilisearch.search(index_uid, query).await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -140,12 +171,22 @@ pub async fn search_with_post(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let query = params.into_inner();
+    let mut query = params.into_inner();
     debug!("search called with params: {:?}", query);
+
+    let index_uid = path.into_inner();
+    // Tenant token search_rules.
+    if let Some(search_rules) = meilisearch
+        .filters()
+        .search_rules
+        .get_index_search_rules(&index_uid)
+    {
+        add_search_rules(&mut query, search_rules);
+    }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(path.into_inner(), query).await;
+    let search_result = meilisearch.search(index_uid, query).await;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
