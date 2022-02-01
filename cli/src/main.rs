@@ -448,8 +448,10 @@ impl Search {
 
 #[derive(Debug, StructOpt)]
 struct SettingsUpdate {
-    #[structopt(short, long)]
+    #[structopt(long)]
     filterable_attributes: Option<Vec<String>>,
+    #[structopt(long)]
+    criteria: Option<Vec<String>>,
 }
 
 impl Performer for SettingsUpdate {
@@ -465,6 +467,14 @@ impl Performer for SettingsUpdate {
                 update.set_filterable_fields(filterable_attributes.iter().cloned().collect());
             } else {
                 update.reset_filterable_fields();
+            }
+        }
+
+        if let Some(criteria) = self.criteria {
+            if !criteria.is_empty() {
+                update.set_criteria(criteria);
+            } else {
+                update.reset_criteria();
             }
         }
 

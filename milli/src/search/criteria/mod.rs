@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use self::asc_desc::AscDesc;
@@ -318,21 +319,41 @@ pub fn resolve_query_tree<'t>(
             }
             Phrase(words) => {
                 let mut candidates = RoaringBitmap::new();
-                let mut first_loop = true;
-                for slice in words.windows(2) {
-                    let (left, right) = (&slice[0], &slice[1]);
-                    match ctx.word_pair_proximity_docids(left, right, 1)? {
-                        Some(pair_docids) => {
-                            if pair_docids.is_empty() {
-                                return Ok(RoaringBitmap::new());
-                            } else if first_loop {
-                                candidates = pair_docids;
-                                first_loop = false;
-                            } else {
-                                candidates &= pair_docids;
-                            }
+                let mut first_iter = true;
+                let winsize = words.len().min(7);
+
+                for win in words.windows(winsize) {
+                    // Get all the word pairs and their compute their relative distance
+                    let dists = win
+                        .iter()
+                        .enumerate()
+                        .cartesian_product(win.iter().enumerate())
+                        .filter(|(x, y)| y > x)
+                        .map(|((pos1, s1), (pos2, s2))| (s1, s2, pos2 - pos1));
+
+                    let mut bitmaps = Vec::with_capacity(winsize.pow(2));
+
+                    for (s1, s2, d) in dists {
+                        match ctx.word_pair_proximity_docids(s1, s2, d as u8)? {
+                            Some(m) => bitmaps.push(m),
+                            None => return Ok(RoaringBitmap::new()),
                         }
-                        None => return Ok(RoaringBitmap::new()),
+                    }
+
+                    // We sort the bitmaps so that we perform the small intersections first, which is faster.
+                    bitmaps.sort_unstable_by(|a, b| a.len().cmp(&b.len()));
+
+                    for bitmap in bitmaps {
+                        if first_iter {
+                            candidates = bitmap;
+                            first_iter = false;
+                        } else {
+                            candidates &= bitmap;
+                        }
+                        // There will be no match, return early
+                        if candidates.is_empty() {
+                            break;
+                        }
                     }
                 }
                 Ok(candidates)
