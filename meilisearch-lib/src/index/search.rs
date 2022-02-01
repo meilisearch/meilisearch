@@ -575,45 +575,78 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
         let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
             Some(crop_len) => {
-                let mut buffer = Vec::new();
-                let mut tokens = analyzed.reconstruct().peekable();
+                let crop_len = crop_len * 2;
+                let mut tokens = Vec::new();
+                let mut matches = Vec::new();
+                for (pos, (word, token)) in analyzed.reconstruct().enumerate() {
+                    if matcher.matches(token.text()).is_some() {
+                        matches.push(pos);
+                    }
 
-                while let Some((word, token)) =
-                    tokens.next_if(|(_, token)| matcher.matches(token.text()).is_none())
-                {
-                    buffer.push((word, token));
+                    tokens.push((word, token));
                 }
 
-                match tokens.next() {
-                    Some(token) => {
-                        let mut total_len: usize = buffer.iter().map(|(word, _)| word.len()).sum();
-                        let before_iter = buffer.into_iter().skip_while(move |(word, _)| {
-                            total_len -= word.len();
-                            total_len >= crop_len
-                        });
+                if let Some(first_match) = matches.first() {
+                    let (first_word, first_token) = &tokens[*first_match];
+                    let first_char_start = first_token.char_index;
+                    let first_char_end = first_token.char_index + first_word.chars().count();
 
-                        let mut taken_after = 0;
-                        let after_iter = tokens.take_while(move |(word, _)| {
-                            let take = taken_after < crop_len;
-                            taken_after += word.chars().count();
-                            take
-                        });
+                    let (mut best_char_start, mut best_char_end, mut best_match_count) =
+                        (first_char_start, first_char_end, 1);
+                    let mut interval_start = 0;
+                    for (i, wpos) in matches.iter().enumerate() {
+                        let word_pos_first = matches[interval_start];
+                        let word_pos_last = matches[i.saturating_sub(1)];
+                        let first_token = &tokens[word_pos_first].1;
+                        let (new_word, new_token) = &tokens[*wpos];
+                        // if adding the new token make the interval growth more than it can.
+                        if new_token.char_index + new_word.chars().count() - first_token.char_index
+                            > crop_len
+                        {
+                            let match_count = i.saturating_sub(interval_start);
+                            // if the current interval contains more matches than the best one,
+                            // we replace the best interval by the current one.
+                            if match_count > best_match_count {
+                                let (last_word, last_token) = &tokens[word_pos_last];
+                                best_char_start = first_token.char_index;
+                                best_char_end = last_token.char_index + last_word.chars().count();
+                                best_match_count = match_count;
+                            }
 
-                        let iter = before_iter.chain(Some(token)).chain(after_iter);
-
-                        Box::new(iter)
+                            // Advance interval start until interval chars count is lower than crop_len.
+                            while new_token.char_index + new_word.chars().count()
+                                - tokens[matches[interval_start]].1.char_index
+                                > crop_len
+                                && interval_start < i
+                            {
+                                interval_start += 1;
+                            }
+                        }
                     }
-                    // If no word matches in the attribute
-                    None => {
-                        let mut count = 0;
-                        let iter = buffer.into_iter().take_while(move |(word, _)| {
-                            let take = count < crop_len;
-                            count += word.len();
-                            take
-                        });
 
-                        Box::new(iter)
-                    }
+                    let interval_chars_len = best_char_end.saturating_sub(best_char_start);
+                    let remaining_chars = crop_len.saturating_sub(interval_chars_len);
+                    let remaining_chars_left = remaining_chars / 2;
+                    let crop_chars_start = best_char_start.saturating_sub(remaining_chars_left);
+                    // If matches are near the start of the attribute,
+                    // we steal the saturated count to add it to the right count.
+                    // This will avoid heterogeneous crop length.
+                    let remaining_chars_right =
+                        remaining_chars - best_char_start.saturating_sub(crop_chars_start);
+                    let crop_chars_end = best_char_end.saturating_add(remaining_chars_right);
+
+                    Box::new(
+                        tokens
+                            .into_iter()
+                            .skip_while(move |(_word, token)| token.char_index < crop_chars_start)
+                            .take_while(move |(word, token)| {
+                                token.char_index + word.chars().count() <= crop_chars_end
+                            }),
+                    )
+                } else {
+                    Box::new(tokens.into_iter().take_while(move |(word, token)| {
+                        token.char_index + word.chars().count() <= crop_len
+                    }))
                 }
             }
             None => Box::new(analyzed.reconstruct()),
@@ -1063,7 +1096,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and");
+        assert_eq!(value["title"], "Potter");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1127,7 +1160,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and the Half");
+        assert_eq!(value["title"], "Harry Potter and the");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1255,7 +1288,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry ");
+        assert_eq!(value["title"], "Harry Potter");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1319,7 +1352,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], " <em>and</em> ");
+        assert_eq!(value["title"], "<em>and</em>");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1383,7 +1416,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
+        assert_eq!(value["title"], " Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
