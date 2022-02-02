@@ -1063,12 +1063,11 @@ fn documents_from_jsonl(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
-    let mut buf = String::new();
-    let mut reader = BufReader::new(reader);
-
-    while reader.read_line(&mut buf)? > 0 {
-        documents.extend_from_json(&mut buf.as_bytes())?;
+    for result in BufReader::new(reader).lines() {
+        let line = result?;
+        documents.extend_from_json(Cursor::new(line))?;
     }
+
     documents.finish()?;
 
     Ok(writer.into_inner())
