@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::bail;
 use chrono::{DateTime, Utc};
@@ -12,7 +13,7 @@ use meilisearch_auth::AuthController;
 pub use message::DumpMsg;
 use tempfile::TempDir;
 use tokio::fs::create_dir_all;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, RwLock};
 
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
@@ -20,7 +21,7 @@ use crate::index_controller::dump_actor::error::DumpActorError;
 use crate::index_controller::dump_actor::loaders::{v2, v3, v4};
 use crate::options::IndexerOpts;
 use crate::tasks::task::Job;
-use crate::tasks::TaskStore;
+use crate::tasks::Scheduler;
 use crate::update_file_store::UpdateFileStore;
 use error::Result;
 
@@ -319,7 +320,7 @@ struct DumpJob {
     dump_path: PathBuf,
     db_path: PathBuf,
     update_file_store: UpdateFileStore,
-    task_store: TaskStore,
+    scheduler: Arc<RwLock<Scheduler>>,
     uid: String,
     update_db_size: usize,
     index_db_size: usize,
@@ -344,21 +345,28 @@ impl DumpJob {
 
         let (sender, receiver) = oneshot::channel();
 
-        self.task_store
-            .register_job(Job::Dump {
+        self.scheduler
+            .write()
+            .await
+            .schedule_job(Job::Dump {
                 ret: sender,
                 path: temp_dump_path.clone(),
             })
             .await;
-        receiver.await??;
-        self.task_store
-            .dump(&temp_dump_path, self.update_file_store.clone())
-            .await?;
+
+        // wait until the job has started performing before finishing the dump process
+        let sender = receiver.await??;
 
         AuthController::dump(&self.db_path, &temp_dump_path)?;
 
+        //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
+        self.scheduler
+            .read()
+            .await
+            .dump(&temp_dump_path, self.update_file_store.clone())
+            .await?;
+
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            let _ = &self;
             // for now we simply copy the updates/updates_files
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
@@ -374,6 +382,9 @@ impl DumpJob {
         })
         .await??;
 
+        // notify the update loop that we are finished performing the dump.
+        let _ = sender.send(());
+
         info!("Created dump in {:?}.", dump_path);
 
         Ok(())
@@ -382,19 +393,15 @@ impl DumpJob {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
-
-    use futures::future::{err, ok};
     use nelson::Mocker;
     use once_cell::sync::Lazy;
-    use uuid::Uuid;
 
     use super::*;
-    use crate::index::error::Result as IndexResult;
-    use crate::index::Index;
     use crate::index_resolver::error::IndexResolverError;
-    use crate::index_resolver::index_store::MockIndexStore;
-    use crate::index_resolver::meta_store::MockIndexMetaStore;
+    use crate::options::SchedulerConfig;
+    use crate::tasks::error::Result as TaskResult;
+    use crate::tasks::task::{Task, TaskId};
+    use crate::tasks::{MockTaskPerformer, TaskFilter, TaskStore};
     use crate::update_file_store::UpdateFileStore;
 
     fn setup() {
@@ -411,86 +418,91 @@ mod test {
     }
 
     #[actix_rt::test]
-    #[ignore]
     async fn test_dump_normal() {
         setup();
 
         let tmp = tempfile::tempdir().unwrap();
 
-        let uuids = std::iter::repeat_with(Uuid::new_v4)
-            .take(4)
-            .collect::<HashSet<_>>();
-        let mut uuid_store = MockIndexMetaStore::new();
-        uuid_store
-            .expect_dump()
-            .once()
-            .returning(move |_| Box::pin(ok(())));
-
-        let mut index_store = MockIndexStore::new();
-        index_store.expect_get().times(4).returning(move |uuid| {
-            let mocker = Mocker::default();
-            let uuids_clone = uuids.clone();
-            mocker.when::<(), Uuid>("uuid").once().then(move |_| {
-                assert!(uuids_clone.contains(&uuid));
-                uuid
-            });
-            mocker
-                .when::<&Path, IndexResult<()>>("dump")
-                .once()
-                .then(move |_| Ok(()));
-            Box::pin(ok(Some(Index::mock(mocker))))
-        });
-
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
 
-        //let update_sender =
-        //    create_update_handler(index_resolver.clone(), tmp.path(), 4096 * 100).unwrap();
-
-        //TODO: fix dump tests
+        let mut performer = MockTaskPerformer::new();
+        performer
+            .expect_process_job()
+            .once()
+            .returning(|j| match j {
+                Job::Dump { ret, .. } => {
+                    let (sender, _receiver) = oneshot::channel();
+                    ret.send(Ok(sender)).unwrap();
+                }
+                _ => unreachable!(),
+            });
+        let performer = Arc::new(performer);
         let mocker = Mocker::default();
-        let task_store = TaskStore::mock(mocker);
+        mocker
+            .when::<(&Path, UpdateFileStore), TaskResult<()>>("dump")
+            .then(|_| Ok(()));
+        mocker
+            .when::<(Option<TaskId>, Option<TaskFilter>, Option<usize>), TaskResult<Vec<Task>>>(
+                "list_tasks",
+            )
+            .then(|_| Ok(Vec::new()));
+        let store = TaskStore::mock(mocker);
+        let config = SchedulerConfig::default();
+
+        let scheduler = Scheduler::new(store, performer, config).unwrap();
 
         let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             update_file_store,
             db_path: tmp.path().into(),
-            task_store,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
             index_db_size: 4096 * 10,
+            scheduler,
         };
 
         task.run().await.unwrap();
     }
 
     #[actix_rt::test]
-    #[ignore]
     async fn error_performing_dump() {
         let tmp = tempfile::tempdir().unwrap();
-
-        let mut uuid_store = MockIndexMetaStore::new();
-        uuid_store
-            .expect_dump()
-            .once()
-            .returning(move |_| Box::pin(err(IndexResolverError::ExistingPrimaryKey)));
 
         let mocker = Mocker::default();
         let file_store = UpdateFileStore::mock(mocker);
 
         let mocker = Mocker::default();
+        mocker
+            .when::<(Option<TaskId>, Option<TaskFilter>, Option<usize>), TaskResult<Vec<Task>>>(
+                "list_tasks",
+            )
+            .then(|_| Ok(Vec::new()));
         let task_store = TaskStore::mock(mocker);
+        let mut performer = MockTaskPerformer::new();
+        performer
+            .expect_process_job()
+            .once()
+            .returning(|job| match job {
+                Job::Dump { ret, .. } => drop(ret.send(Err(IndexResolverError::BadlyFormatted(
+                    "blabla".to_string(),
+                )))),
+                _ => unreachable!(),
+            });
+        let performer = Arc::new(performer);
+
+        let scheduler = Scheduler::new(task_store, performer, SchedulerConfig::default()).unwrap();
 
         let task = DumpJob {
             dump_path: tmp.path().into(),
             // this should do nothing
             db_path: tmp.path().into(),
             update_file_store: file_store,
-            task_store,
             uid: String::from("test"),
             update_db_size: 4096 * 10,
             index_db_size: 4096 * 10,
+            scheduler,
         };
 
         assert!(task.run().await.is_err());

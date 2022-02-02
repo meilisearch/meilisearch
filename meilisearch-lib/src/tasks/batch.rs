@@ -1,14 +1,14 @@
 use chrono::{DateTime, Utc};
 
-use super::{task::Task, task_store::Pending};
+use super::task::Task;
 
-pub type BatchId = u32;
+pub type BatchId = u64;
 
 #[derive(Debug)]
 pub struct Batch {
     pub id: BatchId,
     pub created_at: DateTime<Utc>,
-    pub tasks: Vec<Pending<Task>>,
+    pub tasks: Vec<Task>,
 }
 
 impl Batch {

@@ -1,9 +1,10 @@
 use core::fmt;
-use std::{ops::Deref, str::FromStr};
+use std::{convert::TryFrom, ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use milli::CompressionType;
+use milli::{update::IndexerConfig, CompressionType};
+use serde::Serialize;
 use sysinfo::{RefreshKind, System, SystemExt};
 
 #[derive(Debug, Clone, Parser)]
@@ -41,6 +42,52 @@ pub struct IndexerOpts {
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[clap(long)]
     pub indexing_jobs: Option<usize>,
+}
+
+#[derive(Debug, Clone, Parser, Default, Serialize)]
+pub struct SchedulerConfig {
+    /// enable the autobatching experimental feature
+    #[clap(long, hide = true)]
+    pub enable_autobatching: bool,
+
+    // The maximum number of updates of the same type that can be batched together.
+    // If unspecified, this is unlimited. A value of 0 is interpreted as 1.
+    #[clap(long, requires = "enable-autobatching", hide = true)]
+    pub max_batch_size: Option<usize>,
+
+    // The maximum number of documents in a document batch. Since batches must contain at least one
+    // update for the scheduler to make progress, the number of documents in a batch will be at
+    // least the number of documents of its first update.
+    #[clap(long, requires = "enable-autobatching", hide = true)]
+    pub max_documents_per_batch: Option<usize>,
+
+    /// Debounce duration in seconds
+    ///
+    /// When a new task is enqueued, the scheduler waits for `debounce_duration_sec` seconds for new updates before
+    /// starting to process a batch of updates.
+    #[clap(long, requires = "enable-autobatching", hide = true)]
+    pub debounce_duration_sec: Option<u64>,
+}
+
+impl TryFrom<&IndexerOpts> for IndexerConfig {
+    type Error = anyhow::Error;
+
+    fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(other.indexing_jobs.unwrap_or(num_cpus::get() / 2))
+            .build()?;
+
+        Ok(Self {
+            log_every_n: Some(other.log_every_n),
+            max_nb_chunks: other.max_nb_chunks,
+            max_memory: (*other.max_memory).map(|b| b.get_bytes() as usize),
+            chunk_compression_type: other.chunk_compression_type,
+            chunk_compression_level: other.chunk_compression_level,
+            thread_pool: Some(thread_pool),
+            max_positions_per_attributes: None,
+            ..Default::default()
+        })
+    }
 }
 
 impl Default for IndexerOpts {

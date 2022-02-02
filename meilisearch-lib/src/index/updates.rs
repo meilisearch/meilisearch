@@ -5,7 +5,8 @@ use std::num::NonZeroUsize;
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
 use milli::update::{
-    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod, Setting,
+    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
+    Setting,
 };
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
@@ -178,7 +179,7 @@ impl Index {
         txn: &mut heed::RwTxn<'a, 'b>,
         primary_key: String,
     ) -> Result<IndexMeta> {
-        let mut builder = self.update_handler.update_builder().settings(txn, self);
+        let mut builder = milli::update::Settings::new(txn, self, self.indexer_config.as_ref());
         builder.set_primary_key(primary_key);
         builder.execute(|_| ())?;
         let meta = IndexMeta::new_txn(self, txn)?;
@@ -197,10 +198,7 @@ impl Index {
     /// Deletes `ids` from the index, and returns how many documents were deleted.
     pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
         let mut txn = self.write_txn()?;
-        let mut builder = self
-            .update_handler
-            .update_builder()
-            .delete_documents(&mut txn, self)?;
+        let mut builder = milli::update::DeleteDocuments::new(&mut txn, self)?;
 
         // We ignore unexisting document ids
         ids.iter().for_each(|id| {
@@ -216,11 +214,7 @@ impl Index {
 
     pub fn clear_documents(&self) -> Result<()> {
         let mut txn = self.write_txn()?;
-        self.update_handler
-            .update_builder()
-            .clear_documents(&mut txn, self)
-            .execute()?;
-
+        milli::update::ClearDocuments::new(&mut txn, self).execute()?;
         txn.commit()?;
 
         Ok(())
@@ -229,9 +223,9 @@ impl Index {
     pub fn update_documents(
         &self,
         method: IndexDocumentsMethod,
-        content_uuid: Uuid,
         primary_key: Option<String>,
         file_store: UpdateFileStore,
+        contents: impl IntoIterator<Item = Uuid>,
     ) -> Result<DocumentAdditionResult> {
         trace!("performing document addition");
         let mut txn = self.write_txn()?;
@@ -242,17 +236,27 @@ impl Index {
             }
         }
 
+        let config = IndexDocumentsConfig {
+            update_method: method,
+            ..Default::default()
+        };
+
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
+        let mut builder = milli::update::IndexDocuments::new(
+            &mut txn,
+            self,
+            self.indexer_config.as_ref(),
+            config,
+            indexing_callback,
+        );
 
-        let content_file = file_store.get_update(content_uuid).unwrap();
-        let reader = DocumentBatchReader::from_reader(content_file).unwrap();
+        for content_uuid in contents.into_iter() {
+            let content_file = file_store.get_update(content_uuid)?;
+            let reader = DocumentBatchReader::from_reader(content_file)?;
+            builder.add_documents(reader)?;
+        }
 
-        let mut builder = self
-            .update_handler
-            .update_builder()
-            .index_documents(&mut txn, self);
-        builder.index_documents_method(method);
-        let addition = builder.execute(reader, indexing_callback)?;
+        let addition = builder.execute()?;
 
         txn.commit()?;
 
@@ -264,10 +268,8 @@ impl Index {
     pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut txn = self.write_txn()?;
-        let mut builder = self
-            .update_handler
-            .update_builder()
-            .settings(&mut txn, self);
+        let mut builder =
+            milli::update::Settings::new(&mut txn, self, self.indexer_config.as_ref());
 
         apply_settings_to_builder(settings, &mut builder);
 

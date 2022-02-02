@@ -13,7 +13,7 @@ use futures::Stream;
 use futures::StreamExt;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -23,12 +23,11 @@ use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
 use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
-use crate::options::IndexerOpts;
+use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
-use crate::tasks::create_task_store;
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::{TaskFilter, TaskStore};
+use crate::tasks::{Scheduler, TaskFilter, TaskStore};
 use error::Result;
 
 use self::dump_actor::{DumpActorHandle, DumpInfo};
@@ -68,6 +67,7 @@ pub struct IndexSettings {
 
 pub struct IndexController<U, I> {
     index_resolver: Arc<IndexResolver<U, I>>,
+    scheduler: Arc<RwLock<Scheduler>>,
     task_store: TaskStore,
     dump_handle: dump_actor::DumpActorHandleImpl,
     update_file_store: UpdateFileStore,
@@ -78,9 +78,10 @@ impl<U, I> Clone for IndexController<U, I> {
     fn clone(&self) -> Self {
         Self {
             index_resolver: self.index_resolver.clone(),
-            task_store: self.task_store.clone(),
+            scheduler: self.scheduler.clone(),
             dump_handle: self.dump_handle.clone(),
             update_file_store: self.update_file_store.clone(),
+            task_store: self.task_store.clone(),
         }
     }
 }
@@ -160,6 +161,7 @@ impl IndexControllerBuilder {
         self,
         db_path: impl AsRef<Path>,
         indexer_options: IndexerOpts,
+        scheduler_config: SchedulerConfig,
     ) -> anyhow::Result<MeiliSearch> {
         let index_size = self
             .max_index_size
@@ -217,8 +219,9 @@ impl IndexControllerBuilder {
             update_file_store.clone(),
         )?);
 
-        let task_store =
-            create_task_store(meta_env, index_resolver.clone()).map_err(|e| anyhow::anyhow!(e))?;
+        let task_store = TaskStore::new(meta_env)?;
+        let scheduler =
+            Scheduler::new(task_store.clone(), index_resolver.clone(), scheduler_config)?;
 
         let dump_path = self
             .dump_dst
@@ -229,14 +232,14 @@ impl IndexControllerBuilder {
             let actor = DumpActor::new(
                 receiver,
                 update_file_store.clone(),
-                task_store.clone(),
+                scheduler.clone(),
                 dump_path,
                 analytics_path,
                 index_size,
                 task_store_size,
             );
 
-            tokio::task::spawn(actor.run());
+            tokio::task::spawn_local(actor.run());
 
             DumpActorHandleImpl { sender }
         };
@@ -255,17 +258,18 @@ impl IndexControllerBuilder {
                 snapshot_path,
                 index_size,
                 meta_env_size: task_store_size,
-                task_store: task_store.clone(),
+                scheduler: scheduler.clone(),
             };
 
-            tokio::task::spawn(snapshot_service.run());
+            tokio::task::spawn_local(snapshot_service.run());
         }
 
         Ok(IndexController {
             index_resolver,
-            task_store,
+            scheduler,
             dump_handle,
             update_file_store,
+            task_store,
         })
     }
 
@@ -415,12 +419,13 @@ where
         };
 
         let task = self.task_store.register(uid, content).await?;
+        self.scheduler.read().await.notify();
 
         Ok(task)
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
-        let task = self.task_store.get_task(id, filter).await?;
+        let task = self.scheduler.read().await.get_task(id, filter).await?;
         Ok(task)
     }
 
@@ -435,7 +440,12 @@ where
 
         let mut filter = TaskFilter::default();
         filter.filter_index(index_uid);
-        let task = self.task_store.get_task(task_id, Some(filter)).await?;
+        let task = self
+            .scheduler
+            .read()
+            .await
+            .get_task(task_id, Some(filter))
+            .await?;
 
         Ok(task)
     }
@@ -446,7 +456,12 @@ where
         limit: Option<usize>,
         offset: Option<TaskId>,
     ) -> Result<Vec<Task>> {
-        let tasks = self.task_store.list_tasks(offset, filter, limit).await?;
+        let tasks = self
+            .scheduler
+            .read()
+            .await
+            .list_tasks(offset, filter, limit)
+            .await?;
 
         Ok(tasks)
     }
@@ -466,7 +481,9 @@ where
         filter.filter_index(index_uid);
 
         let tasks = self
-            .task_store
+            .scheduler
+            .read()
+            .await
             .list_tasks(
                 Some(offset.unwrap_or_default() + task_id),
                 Some(filter),
@@ -547,10 +564,11 @@ where
     }
 
     pub async fn get_index_stats(&self, uid: String) -> Result<IndexStats> {
-        let last_task = self.task_store.get_processing_task().await?;
+        let processing_tasks = self.scheduler.read().await.get_processing_tasks().await?;
         // Check if the currently indexing update is from our index.
-        let is_indexing = last_task
-            .map(|task| task.index_uid.into_inner() == uid)
+        let is_indexing = processing_tasks
+            .first()
+            .map(|task| task.index_uid.as_str() == uid)
             .unwrap_or_default();
 
         let index = self.index_resolver.get_index(uid).await?;
@@ -564,7 +582,7 @@ where
         let mut last_task: Option<DateTime<_>> = None;
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
-        let processing_task = self.task_store.get_processing_task().await?;
+        let processing_tasks = self.scheduler.read().await.get_processing_tasks().await?;
 
         for (index_uid, index) in self.index_resolver.list().await? {
             if !search_rules.is_index_authorized(&index_uid) {
@@ -584,8 +602,8 @@ where
             });
 
             // Check if the currently indexing update is from our index.
-            stats.is_indexing = processing_task
-                .as_ref()
+            stats.is_indexing = processing_tasks
+                .first()
                 .map(|p| p.index_uid.as_str() == index_uid)
                 .or(Some(false));
 
@@ -637,16 +655,18 @@ mod test {
 
     impl IndexController<MockIndexMetaStore, MockIndexStore> {
         pub fn mock(
-            index_resolver: IndexResolver<MockIndexMetaStore, MockIndexStore>,
+            index_resolver: Arc<IndexResolver<MockIndexMetaStore, MockIndexStore>>,
             task_store: TaskStore,
             update_file_store: UpdateFileStore,
             dump_handle: DumpActorHandleImpl,
+            scheduler: Arc<RwLock<Scheduler>>,
         ) -> Self {
             IndexController {
-                index_resolver: Arc::new(index_resolver),
+                index_resolver,
                 task_store,
                 dump_handle,
                 update_file_store,
+                scheduler,
             }
         }
     }
@@ -719,13 +739,27 @@ mod test {
         let task_store_mocker = nelson::Mocker::default();
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
-        let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store.clone());
+        let index_resolver = Arc::new(IndexResolver::new(
+            uuid_store,
+            index_store,
+            update_file_store.clone(),
+        ));
         let task_store = TaskStore::mock(task_store_mocker);
-        // let dump_actor = MockDumpActorHandle::new();
+        let scheduler = Scheduler::new(
+            task_store.clone(),
+            index_resolver.clone(),
+            SchedulerConfig::default(),
+        )
+        .unwrap();
         let (sender, _) = mpsc::channel(1);
         let dump_handle = DumpActorHandleImpl { sender };
-        let index_controller =
-            IndexController::mock(index_resolver, task_store, update_file_store, dump_handle);
+        let index_controller = IndexController::mock(
+            index_resolver,
+            task_store,
+            update_file_store,
+            dump_handle,
+            scheduler,
+        );
 
         let r = index_controller
             .search(index_uid.to_owned(), query.clone())

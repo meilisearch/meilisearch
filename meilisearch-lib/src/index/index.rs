@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use heed::{EnvOpenOptions, RoTxn};
-use milli::update::Setting;
+use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, FieldId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -17,7 +17,6 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::update_handler::UpdateHandler;
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -68,7 +67,7 @@ pub struct Index {
     #[derivative(Debug = "ignore")]
     pub inner: Arc<milli::Index>,
     #[derivative(Debug = "ignore")]
-    pub update_handler: Arc<UpdateHandler>,
+    pub indexer_config: Arc<IndexerConfig>,
 }
 
 impl Deref for Index {
@@ -84,7 +83,7 @@ impl Index {
         path: impl AsRef<Path>,
         size: usize,
         uuid: Uuid,
-        update_handler: Arc<UpdateHandler>,
+        update_handler: Arc<IndexerConfig>,
     ) -> Result<Self> {
         log::debug!("opening index in {}", path.as_ref().display());
         create_dir_all(&path)?;
@@ -94,7 +93,7 @@ impl Index {
         Ok(Index {
             inner,
             uuid,
-            update_handler,
+            indexer_config: update_handler,
         })
     }
 

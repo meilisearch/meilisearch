@@ -2,10 +2,13 @@ use chrono::{DateTime, Duration, Utc};
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
+use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
 use serde::{Serialize, Serializer};
+
+use crate::AUTOBATCHING_ENABLED;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,6 +109,8 @@ pub struct TaskView {
     enqueued_at: DateTime<Utc>,
     started_at: Option<DateTime<Utc>>,
     finished_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    batch_uid: Option<Option<BatchId>>,
 }
 
 impl From<Task> for TaskView {
@@ -252,6 +257,16 @@ impl From<Task> for TaskView {
 
         let duration = finished_at.zip(started_at).map(|(tf, ts)| (tf - ts));
 
+        let batch_uid = if AUTOBATCHING_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            let id = events.iter().find_map(|e| match e {
+                TaskEvent::Batched { batch_id, .. } => Some(*batch_id),
+                _ => None,
+            });
+            Some(id)
+        } else {
+            None
+        };
+
         Self {
             uid: id,
             index_uid: index_uid.into_inner(),
@@ -263,6 +278,7 @@ impl From<Task> for TaskView {
             enqueued_at,
             started_at,
             finished_at,
+            batch_uid,
         }
     }
 }

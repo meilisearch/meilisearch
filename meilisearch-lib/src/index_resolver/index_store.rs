@@ -1,14 +1,15 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use milli::update::IndexerConfig;
 use tokio::fs;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 use super::error::{IndexResolverError, Result};
-use crate::index::update_handler::UpdateHandler;
 use crate::index::Index;
 use crate::options::IndexerOpts;
 
@@ -26,7 +27,7 @@ pub struct MapIndexStore {
     index_store: AsyncMap<Uuid, Index>,
     path: PathBuf,
     index_size: usize,
-    update_handler: Arc<UpdateHandler>,
+    indexer_config: Arc<IndexerConfig>,
 }
 
 impl MapIndexStore {
@@ -35,14 +36,14 @@ impl MapIndexStore {
         index_size: usize,
         indexer_opts: &IndexerOpts,
     ) -> anyhow::Result<Self> {
-        let update_handler = Arc::new(UpdateHandler::new(indexer_opts)?);
+        let indexer_config = Arc::new(IndexerConfig::try_from(indexer_opts)?);
         let path = path.as_ref().join("indexes/");
         let index_store = Arc::new(RwLock::new(HashMap::new()));
         Ok(Self {
             index_store,
             path,
             index_size,
-            update_handler,
+            indexer_config,
         })
     }
 }
@@ -63,7 +64,7 @@ impl IndexStore for MapIndexStore {
         }
 
         let index_size = self.index_size;
-        let update_handler = self.update_handler.clone();
+        let update_handler = self.indexer_config.clone();
         let index = spawn_blocking(move || -> Result<Index> {
             let index = Index::open(path, index_size, uuid, update_handler)?;
             Ok(index)
@@ -88,7 +89,7 @@ impl IndexStore for MapIndexStore {
                 }
 
                 let index_size = self.index_size;
-                let update_handler = self.update_handler.clone();
+                let update_handler = self.indexer_config.clone();
                 let index =
                     spawn_blocking(move || Index::open(path, index_size, uuid, update_handler))
                         .await??;

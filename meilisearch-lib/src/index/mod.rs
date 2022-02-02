@@ -4,7 +4,6 @@ pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecke
 mod dump;
 pub mod error;
 mod search;
-pub mod update_handler;
 pub mod updates;
 
 #[allow(clippy::module_inception)]
@@ -26,6 +25,7 @@ pub mod test {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use milli::update::IndexerConfig;
     use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
     use nelson::Mocker;
     use serde_json::{Map, Value};
@@ -33,7 +33,6 @@ pub mod test {
 
     use super::error::Result;
     use super::index::Index;
-    use super::update_handler::UpdateHandler;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
     use crate::update_file_store::UpdateFileStore;
 
@@ -52,7 +51,7 @@ pub mod test {
             path: impl AsRef<Path>,
             size: usize,
             uuid: Uuid,
-            update_handler: Arc<UpdateHandler>,
+            update_handler: Arc<IndexerConfig>,
         ) -> Result<Self> {
             let index = Index::open(path, size, uuid, update_handler)?;
             Ok(Self::Real(index))
@@ -62,7 +61,7 @@ pub mod test {
             src: impl AsRef<Path>,
             dst: impl AsRef<Path>,
             size: usize,
-            update_handler: &UpdateHandler,
+            update_handler: &IndexerConfig,
         ) -> anyhow::Result<()> {
             Index::load_dump(src, dst, size, update_handler)
         }
@@ -157,21 +156,18 @@ pub mod test {
         pub fn update_documents(
             &self,
             method: IndexDocumentsMethod,
-            content_uuid: Uuid,
             primary_key: Option<String>,
             file_store: UpdateFileStore,
+            contents: impl Iterator<Item = Uuid>,
         ) -> Result<DocumentAdditionResult> {
             match self {
                 MockIndex::Real(index) => {
-                    index.update_documents(method, content_uuid, primary_key, file_store)
+                    index.update_documents(method, primary_key, file_store, contents)
                 }
                 MockIndex::Mock(mocker) => unsafe {
-                    mocker.get("update_documents").call((
-                        method,
-                        content_uuid,
-                        primary_key,
-                        file_store,
-                    ))
+                    mocker
+                        .get("update_documents")
+                        .call((method, primary_key, file_store, contents))
                 },
             }
         }
