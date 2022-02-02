@@ -18,3 +18,6 @@ opt-level = 3
 opt-level = 3
 [profile.test.build-override]
 opt-level = 3
+
+[patch.crates-io]
+fst = { git = "https://github.com/MarinPostma/fst.git", rev = "e6c606b7507e8cb5e502d1609f9b909b8690bac5" }

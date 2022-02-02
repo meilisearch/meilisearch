@@ -365,7 +365,10 @@ fn create_query_tree(
                                 .collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
-                            let query = Query { prefix: is_prefix, kind: typos(concat, true, 1) };
+                            let query = Query {
+                                prefix: is_prefix,
+                                kind: typos(concat, authorize_typos, 1),
+                            };
                             operations.push(Operation::Query(query));
                             and_op_children.push(Operation::or(false, operations));
                         }
@@ -657,7 +660,7 @@ mod test {
                 ]),
                 Operation::Query(Query {
                     prefix: true,
-                    kind: QueryKind::tolerant(2, "heyfriends".to_string()),
+                    kind: QueryKind::tolerant(1, "heyfriends".to_string()),
                 }),
             ],
         );
@@ -690,7 +693,7 @@ mod test {
                 ]),
                 Operation::Query(Query {
                     prefix: false,
-                    kind: QueryKind::tolerant(2, "heyfriends".to_string()),
+                    kind: QueryKind::tolerant(1, "heyfriends".to_string()),
                 }),
             ],
         );
@@ -755,7 +758,7 @@ mod test {
                 ]),
                 Operation::Query(Query {
                     prefix: false,
-                    kind: QueryKind::tolerant(2, "helloworld".to_string()),
+                    kind: QueryKind::tolerant(1, "helloworld".to_string()),
                 }),
             ],
         );
@@ -853,7 +856,7 @@ mod test {
                         ]),
                         Operation::Query(Query {
                             prefix: false,
-                            kind: QueryKind::tolerant(2, "newyorkcity".to_string()),
+                            kind: QueryKind::tolerant(1, "newyorkcity".to_string()),
                         }),
                     ],
                 ),
@@ -927,7 +930,7 @@ mod test {
                 ]),
                 Operation::Query(Query {
                     prefix: false,
-                    kind: QueryKind::tolerant(2, "wordsplitfish".to_string()),
+                    kind: QueryKind::tolerant(1, "wordsplitfish".to_string()),
                 }),
             ],
         );
@@ -1047,7 +1050,7 @@ mod test {
                         ]),
                         Operation::Query(Query {
                             prefix: false,
-                            kind: QueryKind::tolerant(2, "heymyfriend".to_string()),
+                            kind: QueryKind::tolerant(1, "heymyfriend".to_string()),
                         }),
                     ],
                 ),

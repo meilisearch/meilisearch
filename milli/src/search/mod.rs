@@ -70,6 +70,7 @@ impl<'a> Search<'a> {
 
     pub fn offset(&mut self, offset: usize) -> &mut Search<'a> {
         self.offset = offset;
+
         self
     }
 
@@ -301,23 +302,34 @@ pub fn word_derivations<'c>(
                 if max_typo == 1 {
                     let dfa = build_dfa(word, 1, is_prefix);
                     let starts = Str::new(get_first(word)).starts_with();
-                    let mut stream = fst.search(starts.intersection(&dfa)).into_stream();
+                    let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
 
-                    while let Some(word) = stream.next() {
+                    while let Some((word, state)) = stream.next() {
                         let word = std::str::from_utf8(word)?;
-                        derived_words.push((word.to_string(), 1));
+                        let d = dfa.distance(state.1);
+                        derived_words.push((word.to_string(), d.to_u8()));
                     }
                 } else {
                     let starts = Str::new(get_first(word)).starts_with();
                     let first = build_dfa(word, 1, is_prefix).intersection((&starts).complement());
-                    let second = build_dfa(word, 2, is_prefix).intersection(&starts);
-                    let automaton = first.union(second);
+                    let second_dfa = build_dfa(word, 2, is_prefix);
+                    let second = (&second_dfa).intersection(&starts);
+                    let automaton = first.union(&second);
 
-                    let mut stream = fst.search(automaton).into_stream();
+                    let mut stream = fst.search_with_state(automaton).into_stream();
 
-                    while let Some(word) = stream.next() {
-                        let word = std::str::from_utf8(word)?;
-                        derived_words.push((word.to_string(), 2));
+                    while let Some((found_word, state)) = stream.next() {
+                        let found_word = std::str::from_utf8(found_word)?;
+                        // in the case the typo is on the first letter, we know the number of typo
+                        // is two
+                        if get_first(found_word) != get_first(word) {
+                            derived_words.push((word.to_string(), 2));
+                        } else {
+                            // Else, we know that it is the second dfa that matched and compute the
+                            // correct distance
+                            let d = second_dfa.distance((state.1).0);
+                            derived_words.push((word.to_string(), d.to_u8()));
+                        }
                     }
                 }
             }
