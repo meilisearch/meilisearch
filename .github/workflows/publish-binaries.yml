@@ -39,7 +39,7 @@ jobs:
         tag: ${{ github.ref }}
 
   publish-aarch64:
-    name: Publish to Github
+    name: Publish to GitHub
     runs-on: ${{ matrix.os }}
     continue-on-error: false
     strategy:
