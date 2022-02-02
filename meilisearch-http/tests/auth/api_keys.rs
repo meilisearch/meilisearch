@@ -1,6 +1,6 @@
 use crate::common::Server;
 use assert_json_diff::assert_json_include;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{thread, time};
 
 #[actix_rt::test]
@@ -127,6 +127,41 @@ async fn add_valid_api_key_no_description() {
     server.use_api_key("MASTER_KEY");
 
     let content = json!({
+        "indexes": ["products"],
+        "actions": [
+            "documents.add"
+        ],
+        "expiresAt": "2050-11-13T00:00:00"
+    });
+
+    let (response, code) = server.add_api_key(content).await;
+
+    assert!(response["key"].is_string());
+    assert!(response["expiresAt"].is_string());
+    assert!(response["createdAt"].is_string());
+    assert!(response["updatedAt"].is_string());
+
+    let expected_response = json!({
+        "actions": [
+            "documents.add"
+        ],
+        "indexes": [
+            "products"
+        ],
+        "expiresAt": "2050-11-13T00:00:00Z"
+    });
+
+    assert_json_include!(actual: response, expected: expected_response);
+    assert_eq!(code, 201);
+}
+
+#[actix_rt::test]
+async fn add_valid_api_key_null_description() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": Value::Null,
         "indexes": ["products"],
         "actions": [
             "documents.add"
