@@ -148,11 +148,18 @@ get_os() {
 get_archi() {
     architecture=$(uname -m)
     case "$architecture" in
-    'x86_64' | 'amd64' | 'arm64')
+    'x86_64' | 'amd64' )
         archi='amd64'
         ;;
+    'arm64')
+        if [ $os -eq 'macos' ]; then # MacOS M1
+            archi='amd64'
+        else
+            archi='aarch64'
+        fi
+        ;;
     'aarch64')
-        archi='armv8'
+        archi='aarch64'
         ;;
     *)
         return 1
