@@ -20,13 +20,14 @@ pub struct Key {
 
 impl Key {
     pub fn create_from_value(value: Value) -> Result<Self> {
-        let description = value
-            .get("description")
-            .map(|des| {
+        let description = match value.get("description") {
+            Some(Value::Null) => None,
+            Some(des) => Some(
                 from_value(des.clone())
-                    .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))
-            })
-            .transpose()?;
+                    .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))?,
+            ),
+            None => None,
+        };
 
         let id = generate_id();
 
