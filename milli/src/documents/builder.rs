@@ -118,16 +118,26 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
                 let value = match ty {
                     AllowedType::Number => {
-                        value.parse::<f64>().map(Value::from).map_err(|error| {
-                            Error::ParseFloat {
-                                error,
-                                // +1 for the header offset.
-                                line: i + 1,
-                                value: value.to_string(),
-                            }
-                        })?
+                        if value.trim().is_empty() {
+                            Value::Null
+                        } else {
+                            value.trim().parse::<f64>().map(Value::from).map_err(|error| {
+                                Error::ParseFloat {
+                                    error,
+                                    // +1 for the header offset.
+                                    line: i + 1,
+                                    value: value.to_string(),
+                                }
+                            })?
+                        }
                     }
-                    AllowedType::String => Value::String(value.to_string()),
+                    AllowedType::String => {
+                        if value.is_empty() {
+                            Value::Null
+                        } else {
+                            Value::String(value.to_string())
+                        }
+                    }
                 };
 
                 this.value_buffer.clear();
