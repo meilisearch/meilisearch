@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use self::asc_desc::AscDesc;
@@ -323,20 +322,16 @@ pub fn resolve_query_tree<'t>(
                 let winsize = words.len().min(7);
 
                 for win in words.windows(winsize) {
-                    // Get all the word pairs and their compute their relative distance
-                    let dists = win
-                        .iter()
-                        .enumerate()
-                        .cartesian_product(win.iter().enumerate())
-                        .filter(|(x, y)| y > x)
-                        .map(|((pos1, s1), (pos2, s2))| (s1, s2, pos2 - pos1));
-
+                    // Get all the documents with the matching distance for each word pairs.
                     let mut bitmaps = Vec::with_capacity(winsize.pow(2));
-
-                    for (s1, s2, d) in dists {
-                        match ctx.word_pair_proximity_docids(s1, s2, d as u8)? {
-                            Some(m) => bitmaps.push(m),
-                            None => return Ok(RoaringBitmap::new()),
+                    for (offset, s1) in win.iter().enumerate() {
+                        for (dist, s2) in win.iter().skip(offset).enumerate() {
+                            match ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
+                                Some(m) => bitmaps.push(m),
+                                // If there are no document for this distance, there will be no
+                                // results for the phrase query.
+                                None => return Ok(RoaringBitmap::new()),
+                            }
                         }
                     }
 
