@@ -318,21 +318,37 @@ pub fn resolve_query_tree<'t>(
             }
             Phrase(words) => {
                 let mut candidates = RoaringBitmap::new();
-                let mut first_loop = true;
-                for slice in words.windows(2) {
-                    let (left, right) = (&slice[0], &slice[1]);
-                    match ctx.word_pair_proximity_docids(left, right, 1)? {
-                        Some(pair_docids) => {
-                            if pair_docids.is_empty() {
-                                return Ok(RoaringBitmap::new());
-                            } else if first_loop {
-                                candidates = pair_docids;
-                                first_loop = false;
-                            } else {
-                                candidates &= pair_docids;
+                let mut first_iter = true;
+                let winsize = words.len().min(7);
+
+                for win in words.windows(winsize) {
+                    // Get all the documents with the matching distance for each word pairs.
+                    let mut bitmaps = Vec::with_capacity(winsize.pow(2));
+                    for (offset, s1) in win.iter().enumerate() {
+                        for (dist, s2) in win.iter().skip(offset).enumerate() {
+                            match ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
+                                Some(m) => bitmaps.push(m),
+                                // If there are no document for this distance, there will be no
+                                // results for the phrase query.
+                                None => return Ok(RoaringBitmap::new()),
                             }
                         }
-                        None => return Ok(RoaringBitmap::new()),
+                    }
+
+                    // We sort the bitmaps so that we perform the small intersections first, which is faster.
+                    bitmaps.sort_unstable_by(|a, b| a.len().cmp(&b.len()));
+
+                    for bitmap in bitmaps {
+                        if first_iter {
+                            candidates = bitmap;
+                            first_iter = false;
+                        } else {
+                            candidates &= bitmap;
+                        }
+                        // There will be no match, return early
+                        if candidates.is_empty() {
+                            break;
+                        }
                     }
                 }
                 Ok(candidates)
