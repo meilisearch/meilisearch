@@ -152,7 +152,7 @@ get_archi() {
         archi='amd64'
         ;;
     'arm64')
-        if [ $os -eq 'macos' ]; then # MacOS M1
+        if [ $os = 'macos' ]; then # MacOS M1
             archi='amd64'
         else
             archi='aarch64'
