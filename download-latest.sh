@@ -73,7 +73,7 @@ semverLT() {
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
 
-        if [ -z "$GITHUB_PAT" ]; then
+    if [ -z "$GITHUB_PAT" ]; then
         curl -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
     else
         curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
@@ -120,7 +120,7 @@ get_latest() {
     done
 
     rm -f "$temp_file"
-    echo $latest
+    return 0
 }
 
 # Gets the OS by setting the $os variable
@@ -176,30 +176,41 @@ success_usage() {
     echo '    $ ./meilisearch --help'
 }
 
-failure_usage() {
+not_available_failure_usage() {
     printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch binary is not available for your OS distribution or your architecture yet.'
     echo ''
     echo 'However, you can easily compile the binary from the source files.'
     echo 'Follow the steps at the page ("Source" tab): https://docs.meilisearch.com/learn/getting_started/installation.html'
 }
 
+fetch_release_failure_usage() {
+    echo ''
+    printf "$RED%s\n$DEFAULT" 'ERROR: Impossible to get the latest stable version of Meilisearch.'
+    echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch/issues/new/choose'
+}
+
 # MAIN
-latest="$(get_latest)"
+
+# Fill $latest variable
+if ! get_latest; then
+    fetch_release_failure_usage # TO CHANGE
+    exit 1
+fi
 
 if [ "$latest" = '' ]; then
-    echo ''
-    echo 'Impossible to get the latest stable version of Meilisearch.'
-    echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch/issues/new/choose'
+    fetch_release_failure_usage
     exit 1
 fi
 
+# Fill $os variable
 if ! get_os; then
-    failure_usage
+    not_available_failure_usage
     exit 1
 fi
 
+# Fill $archi variable
 if ! get_archi; then
-    failure_usage
+    not_available_failure_usage
     exit 1
 fi
 
@@ -207,16 +218,23 @@ echo "Downloading Meilisearch binary $latest for $os, architecture $archi..."
 case "$os" in
     'windows')
         release_file="meilisearch-$os-$archi.exe"
-		binary_name='meilisearch.exe'
+        binary_name='meilisearch.exe'
 
         ;;
-	*)
-		release_file="meilisearch-$os-$archi"
-		binary_name='meilisearch'
+    *)
+        release_file="meilisearch-$os-$archi"
+        binary_name='meilisearch'
 
 esac
+
+# Fetch the Meilisearch binary
 link="https://github.com/meilisearch/meilisearch/releases/download/$latest/$release_file"
 curl -OL "$link"
+if [ $? -ne 0 ]
+    fetch_release_failure_usage
+    exit 1
+fi
+
 mv "$release_file" "$binary_name"
 chmod 744 "$binary_name"
 success_usage
