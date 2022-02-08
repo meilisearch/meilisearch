@@ -229,7 +229,7 @@ esac
 
 # Fetch the Meilisearch binary
 link="https://github.com/meilisearch/meilisearch/releases/download/$latest/$release_file"
-curl --fail-with-body -OL "$link"
+curl --fail -OL "$link"
 if [ $? -ne 0 ]; then
     fetch_release_failure_usage
     exit 1
