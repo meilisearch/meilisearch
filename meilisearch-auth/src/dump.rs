@@ -10,7 +10,10 @@ const KEYS_PATH: &str = "keys";
 
 impl AuthController {
     pub fn dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let store = HeedAuthStore::new(&src)?;
+        let mut store = HeedAuthStore::new(&src)?;
+
+        // do not attempt to close the database on drop!
+        store.set_drop_on_close(false);
 
         let keys_file_path = dst.as_ref().join(KEYS_PATH);
 

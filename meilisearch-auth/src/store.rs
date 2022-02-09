@@ -28,11 +28,12 @@ pub struct HeedAuthStore {
     env: Arc<Env>,
     keys: Database<ByteSlice, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<DateTime<Utc>>>>,
+    should_close_on_drop: bool,
 }
 
 impl Drop for HeedAuthStore {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.env) == 1 {
+        if self.should_close_on_drop && Arc::strong_count(&self.env) == 1 {
             self.env.as_ref().clone().prepare_for_closing();
         }
     }
@@ -53,7 +54,12 @@ impl HeedAuthStore {
             env,
             keys,
             action_keyid_index_expiration,
+            should_close_on_drop: true,
         })
+    }
+
+    pub fn set_drop_on_close(&mut self, v: bool) {
+        self.should_close_on_drop = v;
     }
 
     pub fn is_empty(&self) -> Result<bool> {
