@@ -17,7 +17,6 @@ COPY    meilisearch-http/Cargo.toml meilisearch-http/
 COPY    meilisearch-lib/Cargo.toml meilisearch-lib/
 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
-# Issue #2115
 RUN     if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
         fi
