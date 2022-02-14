@@ -9,10 +9,10 @@ use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Arc;
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use time::OffsetDateTime;
 
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
@@ -148,7 +148,7 @@ impl AuthController {
                 None => self.store.prefix_first_expiration_date(key, action)?,
             }) {
             // check expiration date.
-            Some(Some(exp)) => Ok(Utc::now() < exp),
+            Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
             // no expiration date.
             Some(None) => Ok(true),
             // action or index forbidden.

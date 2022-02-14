@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
 use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
@@ -36,22 +36,22 @@ impl From<DocumentAdditionResult> for TaskResult {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskEvent {
-    Created(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] DateTime<Utc>),
+    Created(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] OffsetDateTime),
     Batched {
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
-        timestamp: DateTime<Utc>,
+        timestamp: OffsetDateTime,
         batch_id: BatchId,
     },
-    Processing(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] DateTime<Utc>),
+    Processing(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] OffsetDateTime),
     Succeded {
         result: TaskResult,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
-        timestamp: DateTime<Utc>,
+        timestamp: OffsetDateTime,
     },
     Failed {
         error: ResponseError,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
-        timestamp: DateTime<Utc>,
+        timestamp: OffsetDateTime,
     },
 }
 
@@ -165,7 +165,7 @@ mod test {
         ]
     }
 
-    pub(super) fn datetime_strategy() -> impl Strategy<Value = DateTime<Utc>> {
-        Just(Utc::now())
+    pub(super) fn datetime_strategy() -> impl Strategy<Value = OffsetDateTime> {
+        Just(OffsetDateTime::now_utc())
     }
 }

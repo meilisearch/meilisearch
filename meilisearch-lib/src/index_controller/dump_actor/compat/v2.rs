@@ -1,8 +1,8 @@
 use anyhow::bail;
-use chrono::{DateTime, Utc};
 use meilisearch_error::Code;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::index::{Settings, Unchecked};
@@ -51,7 +51,7 @@ pub enum UpdateMeta {
 pub struct Enqueued {
     pub update_id: u64,
     pub meta: UpdateMeta,
-    pub enqueued_at: DateTime<Utc>,
+    pub enqueued_at: OffsetDateTime,
     pub content: Option<Uuid>,
 }
 
@@ -59,7 +59,7 @@ pub struct Enqueued {
 #[serde(rename_all = "camelCase")]
 pub struct Processed {
     pub success: UpdateResult,
-    pub processed_at: DateTime<Utc>,
+    pub processed_at: OffsetDateTime,
     #[serde(flatten)]
     pub from: Processing,
 }
@@ -69,7 +69,7 @@ pub struct Processed {
 pub struct Processing {
     #[serde(flatten)]
     pub from: Enqueued,
-    pub started_processing_at: DateTime<Utc>,
+    pub started_processing_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,7 +77,7 @@ pub struct Processing {
 pub struct Aborted {
     #[serde(flatten)]
     pub from: Enqueued,
-    pub aborted_at: DateTime<Utc>,
+    pub aborted_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ pub struct Failed {
     #[serde(flatten)]
     pub from: Processing,
     pub error: ResponseError,
-    pub failed_at: DateTime<Utc>,
+    pub failed_at: OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

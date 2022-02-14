@@ -1,6 +1,6 @@
 use crate::common::Server;
-use chrono::DateTime;
 use serde_json::json;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[actix_rt::test]
 async fn update_primary_key() {
@@ -25,8 +25,10 @@ async fn update_primary_key() {
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
 
-    let created_at = DateTime::parse_from_rfc3339(response["createdAt"].as_str().unwrap()).unwrap();
-    let updated_at = DateTime::parse_from_rfc3339(response["updatedAt"].as_str().unwrap()).unwrap();
+    let created_at =
+        OffsetDateTime::parse(response["createdAt"].as_str().unwrap(), &Rfc3339).unwrap();
+    let updated_at =
+        OffsetDateTime::parse(response["updatedAt"].as_str().unwrap(), &Rfc3339).unwrap();
     assert!(created_at < updated_at);
 
     assert_eq!(response["primaryKey"], "primary");

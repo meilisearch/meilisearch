@@ -1,11 +1,11 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use chrono::SecondsFormat;
 
 use meilisearch_auth::{Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
 use meilisearch_error::ResponseError;
@@ -92,9 +92,12 @@ struct KeyView {
     key: String,
     actions: Vec<Action>,
     indexes: Vec<String>,
-    expires_at: Option<String>,
-    created_at: String,
-    updated_at: String,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    expires_at: Option<OffsetDateTime>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    created_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    updated_at: OffsetDateTime,
 }
 
 impl KeyView {
@@ -107,11 +110,9 @@ impl KeyView {
             key: generated_key,
             actions: key.actions,
             indexes: key.indexes,
-            expires_at: key
-                .expires_at
-                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Secs, true)),
-            created_at: key.created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-            updated_at: key.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+            expires_at: key.expires_at,
+            created_at: key.created_at,
+            updated_at: key.updated_at,
         }
     }
 }

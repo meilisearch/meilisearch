@@ -1,10 +1,12 @@
 use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
 use crate::store::{KeyId, KEY_ID_LENGTH};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
+use time::format_description::well_known::Rfc3339;
+use time::macros::{format_description, time};
+use time::{Date, OffsetDateTime, PrimitiveDateTime};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Key {
@@ -13,9 +15,12 @@ pub struct Key {
     pub id: KeyId,
     pub actions: Vec<Action>,
     pub indexes: Vec<String>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub expires_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
 }
 
 impl Key {
@@ -52,8 +57,8 @@ impl Key {
             .map(parse_expiration_date)
             .ok_or(AuthControllerError::MissingParameter("expiresAt"))??;
 
-        let created_at = Utc::now();
-        let updated_at = Utc::now();
+        let created_at = OffsetDateTime::now_utc();
+        let updated_at = created_at;
 
         Ok(Self {
             description,
@@ -89,24 +94,26 @@ impl Key {
             self.expires_at = parse_expiration_date(exp)?;
         }
 
-        self.updated_at = Utc::now();
+        self.updated_at = OffsetDateTime::now_utc();
 
         Ok(())
     }
 
     pub(crate) fn default_admin() -> Self {
+        let now = OffsetDateTime::now_utc();
         Self {
             description: Some("Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)".to_string()),
             id: generate_id(),
             actions: vec![Action::All],
             indexes: vec!["*".to_string()],
             expires_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
         }
     }
 
     pub(crate) fn default_search() -> Self {
+        let now = OffsetDateTime::now_utc();
         Self {
             description: Some(
                 "Default Search API Key (Use it to search from the frontend)".to_string(),
@@ -115,8 +122,8 @@ impl Key {
             actions: vec![Action::Search],
             indexes: vec!["*".to_string()],
             expires_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
         }
     }
 }
@@ -134,22 +141,34 @@ fn generate_id() -> [u8; KEY_ID_LENGTH] {
     bytes
 }
 
-fn parse_expiration_date(value: &Value) -> Result<Option<DateTime<Utc>>> {
+fn parse_expiration_date(value: &Value) -> Result<Option<OffsetDateTime>> {
     match value {
-        Value::String(string) => DateTime::parse_from_rfc3339(string)
-            .map(|d| d.into())
+        Value::String(string) => OffsetDateTime::parse(string, &Rfc3339)
             .or_else(|_| {
-                NaiveDateTime::parse_from_str(string, "%Y-%m-%dT%H:%M:%S")
-                    .map(|naive| DateTime::from_utc(naive, Utc))
+                PrimitiveDateTime::parse(
+                    string,
+                    format_description!(
+                        "[year repr:full base:calendar]-[month repr:numerical]-[day]T[hour]:[minute]:[second]"
+                    ),
+                ).map(|datetime| datetime.assume_utc())
             })
             .or_else(|_| {
-                NaiveDate::parse_from_str(string, "%Y-%m-%d")
-                    .map(|naive| DateTime::from_utc(naive.and_hms(0, 0, 0), Utc))
+                PrimitiveDateTime::parse(
+                    string,
+                    format_description!(
+                        "[year repr:full base:calendar]-[month repr:numerical]-[day] [hour]:[minute]:[second]"
+                    ),
+                ).map(|datetime| datetime.assume_utc())
+            })
+            .or_else(|_| {
+                    Date::parse(string, format_description!(
+                        "[year repr:full base:calendar]-[month repr:numerical]-[day]"
+                    )).map(|date| PrimitiveDateTime::new(date, time!(00:00)).assume_utc())
             })
             .map_err(|_| AuthControllerError::InvalidApiKeyExpiresAt(value.clone()))
             // check if the key is already expired.
             .and_then(|d| {
-                if d > Utc::now() {
+                if d > OffsetDateTime::now_utc() {
                     Ok(d)
                 } else {
                     Err(AuthControllerError::InvalidApiKeyExpiresAt(value.clone()))

@@ -1,4 +1,6 @@
-use chrono::{DateTime, Duration, Utc};
+use std::fmt::Write;
+use std::write;
+
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
@@ -7,6 +9,7 @@ use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
 use serde::{Serialize, Serializer};
+use time::{Duration, OffsetDateTime};
 
 use crate::AUTOBATCHING_ENABLED;
 
@@ -79,14 +82,52 @@ enum TaskDetails {
     ClearAll { deleted_documents: Option<u64> },
 }
 
+/// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
+/// https://github.com/time-rs/time/issues/378.
+/// This code is a port of the old code of time that was removed in 0.2.
 fn serialize_duration<S: Serializer>(
     duration: &Option<Duration>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     match duration {
         Some(duration) => {
-            let duration_str = duration.to_string();
-            serializer.serialize_str(&duration_str)
+            // technically speaking, negative duration is not valid ISO 8601
+            if duration.is_negative() {
+                return serializer.serialize_none();
+            }
+
+            const SECS_PER_DAY: i64 = Duration::DAY.whole_seconds();
+            let secs = duration.whole_seconds();
+            let days = secs / SECS_PER_DAY;
+            let secs = secs - days * SECS_PER_DAY;
+            let hasdate = days != 0;
+            let nanos = duration.subsec_nanoseconds();
+            let hastime = (secs != 0 || nanos != 0) || !hasdate;
+
+            // all the following unwrap can't fail
+            let mut res = String::new();
+            write!(&mut res, "P").unwrap();
+
+            if hasdate {
+                write!(&mut res, "{}D", days).unwrap();
+            }
+
+            const NANOS_PER_MILLI: i32 = Duration::MILLISECOND.subsec_nanoseconds();
+            const NANOS_PER_MICRO: i32 = Duration::MICROSECOND.subsec_nanoseconds();
+
+            if hastime {
+                if nanos == 0 {
+                    write!(&mut res, "T{}S", secs).unwrap();
+                } else if nanos % NANOS_PER_MILLI == 0 {
+                    write!(&mut res, "T{}.{:03}S", secs, nanos / NANOS_PER_MILLI).unwrap();
+                } else if nanos % NANOS_PER_MICRO == 0 {
+                    write!(&mut res, "T{}.{:06}S", secs, nanos / NANOS_PER_MICRO).unwrap();
+                } else {
+                    write!(&mut res, "T{}.{:09}S", secs, nanos).unwrap();
+                }
+            }
+
+            serializer.serialize_str(&res)
         }
         None => serializer.serialize_none(),
     }
@@ -106,9 +147,12 @@ pub struct TaskView {
     error: Option<ResponseError>,
     #[serde(serialize_with = "serialize_duration")]
     duration: Option<Duration>,
-    enqueued_at: DateTime<Utc>,
-    started_at: Option<DateTime<Utc>>,
-    finished_at: Option<DateTime<Utc>>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    enqueued_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    started_at: Option<OffsetDateTime>,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    finished_at: Option<OffsetDateTime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     batch_uid: Option<Option<BatchId>>,
 }
@@ -302,7 +346,8 @@ pub struct SummarizedTaskView {
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
-    enqueued_at: DateTime<Utc>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    enqueued_at: OffsetDateTime,
 }
 
 impl From<Task> for SummarizedTaskView {
