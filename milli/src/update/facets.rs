@@ -2,12 +2,12 @@ use std::fs::File;
 use std::num::{NonZeroU8, NonZeroUsize};
 use std::{cmp, mem};
 
-use chrono::Utc;
 use grenad::{CompressionType, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
+use time::OffsetDateTime;
 
 use crate::error::InternalError;
 use crate::heed_codec::facet::{
@@ -53,7 +53,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 
     #[logging_timer::time("Facets::{}")]
     pub fn execute(self) -> Result<()> {
-        self.index.set_updated_at(self.wtxn, &Utc::now())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
         // We get the faceted fields to be able to create the facet levels.
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 

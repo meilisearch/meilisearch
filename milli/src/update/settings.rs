@@ -1,10 +1,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
-use chrono::Utc;
 use itertools::Itertools;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use time::OffsetDateTime;
 
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
@@ -454,7 +454,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     where
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        self.index.set_updated_at(self.wtxn, &Utc::now())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         let old_faceted_fields = self.index.faceted_fields(&self.wtxn)?;
         let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
