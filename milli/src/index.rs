@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use std::mem::size_of;
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{Database, PolyDatabase, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use time::OffsetDateTime;
 
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -156,10 +156,19 @@ impl Index {
     fn initialize_creation_dates(env: &heed::Env, main: PolyDatabase) -> heed::Result<()> {
         let mut txn = env.write_txn()?;
         // The db was just created, we update its metadata with the relevant information.
-        if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, main_key::CREATED_AT_KEY)?.is_none() {
-            let now = Utc::now();
-            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, main_key::UPDATED_AT_KEY, &now)?;
-            main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, main_key::CREATED_AT_KEY, &now)?;
+        if main.get::<_, Str, SerdeJson<OffsetDateTime>>(&txn, main_key::CREATED_AT_KEY)?.is_none()
+        {
+            let now = OffsetDateTime::now_utc();
+            main.put::<_, Str, SerdeJson<OffsetDateTime>>(
+                &mut txn,
+                main_key::UPDATED_AT_KEY,
+                &now,
+            )?;
+            main.put::<_, Str, SerdeJson<OffsetDateTime>>(
+                &mut txn,
+                main_key::CREATED_AT_KEY,
+                &now,
+            )?;
             txn.commit()?;
         }
         Ok(())
@@ -219,7 +228,7 @@ impl Index {
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
     pub(crate) fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
-        self.set_updated_at(wtxn, &Utc::now())?;
+        self.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
         self.main.put::<_, Str, Str>(wtxn, main_key::PRIMARY_KEY_KEY, &primary_key)
     }
 
@@ -829,10 +838,10 @@ impl Index {
     }
 
     /// Returns the index creation time.
-    pub fn created_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
+    pub fn created_at(&self, rtxn: &RoTxn) -> Result<OffsetDateTime> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::CREATED_AT_KEY)?
+            .get::<_, Str, SerdeJson<OffsetDateTime>>(rtxn, main_key::CREATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::CREATED_AT_KEY),
@@ -840,10 +849,10 @@ impl Index {
     }
 
     /// Returns the index last updated time.
-    pub fn updated_at(&self, rtxn: &RoTxn) -> Result<DateTime<Utc>> {
+    pub fn updated_at(&self, rtxn: &RoTxn) -> Result<OffsetDateTime> {
         Ok(self
             .main
-            .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, main_key::UPDATED_AT_KEY)?
+            .get::<_, Str, SerdeJson<OffsetDateTime>>(rtxn, main_key::UPDATED_AT_KEY)?
             .ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::UPDATED_AT_KEY),
@@ -853,9 +862,9 @@ impl Index {
     pub(crate) fn set_updated_at(
         &self,
         wtxn: &mut RwTxn,
-        time: &DateTime<Utc>,
+        time: &OffsetDateTime,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<DateTime<Utc>>>(wtxn, main_key::UPDATED_AT_KEY, &time)
+        self.main.put::<_, Str, SerdeJson<OffsetDateTime>>(wtxn, main_key::UPDATED_AT_KEY, &time)
     }
 }
 

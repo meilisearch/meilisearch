@@ -1,13 +1,13 @@
 use std::collections::btree_map::Entry;
 use std::collections::HashMap;
 
-use chrono::Utc;
 use fst::IntoStreamer;
 use heed::types::ByteSlice;
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 use super::ClearDocuments;
 use crate::error::{InternalError, SerializationError, UserError};
@@ -61,7 +61,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> Result<DocumentDeletionResult> {
-        self.index.set_updated_at(self.wtxn, &Utc::now())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
         let current_documents_ids_len = documents_ids.len();

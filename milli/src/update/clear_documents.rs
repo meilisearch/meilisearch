@@ -1,5 +1,5 @@
-use chrono::Utc;
 use roaring::RoaringBitmap;
+use time::OffsetDateTime;
 
 use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
 
@@ -14,7 +14,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> Result<u64> {
-        self.index.set_updated_at(self.wtxn, &Utc::now())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
         let Index {
             env: _env,
             main: _main,
