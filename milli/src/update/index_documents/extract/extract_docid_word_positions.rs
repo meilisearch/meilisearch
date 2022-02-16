@@ -18,8 +18,8 @@ use crate::{absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_A
 /// Returns the generated internal documents ids and a grenad reader
 /// with the list of extracted words from the given chunk of documents.
 #[logging_timer::time]
-pub fn extract_docid_word_positions<R: io::Read>(
-    mut obkv_documents: grenad::Reader<R>,
+pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
+    obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
@@ -46,7 +46,8 @@ pub fn extract_docid_word_positions<R: io::Read>(
     }
     let analyzer = Analyzer::<Vec<u8>>::new(AnalyzerConfig::default());
 
-    while let Some((key, value)) = obkv_documents.next()? {
+    let mut cursor = obkv_documents.into_cursor()?;
+    while let Some((key, value)) = cursor.move_on_next()? {
         let document_id = key
             .try_into()
             .map(u32::from_be_bytes)

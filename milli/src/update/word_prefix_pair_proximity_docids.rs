@@ -77,8 +77,10 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         // We retrieve and merge the created word pair proximities docids entries
         // for the newly added documents.
         let mut wppd_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
-        wppd_merger.extend(new_word_pair_proximity_docids);
-        let mut wppd_iter = wppd_merger.build().into_merger_iter()?;
+        for reader in new_word_pair_proximity_docids {
+            wppd_merger.push(reader.into_cursor()?);
+        }
+        let mut wppd_iter = wppd_merger.build().into_stream_merger_iter()?;
 
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
             merge_cbo_roaring_bitmaps,

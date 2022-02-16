@@ -29,6 +29,7 @@ pub enum InternalError {
     FieldIdMapMissingEntry(FieldIdMapMissingEntry),
     Fst(fst::Error),
     GrenadInvalidCompressionType,
+    GrenadInvalidFormatVersion,
     IndexingMergingKeys { process: &'static str },
     InvalidDatabaseTyping,
     RayonThreadPool(ThreadPoolBuildError),
@@ -96,6 +97,9 @@ where
             grenad::Error::Merge(error) => Error::from(error),
             grenad::Error::InvalidCompressionType => {
                 Error::InternalError(InternalError::GrenadInvalidCompressionType)
+            }
+            grenad::Error::InvalidFormatVersion => {
+                Error::InternalError(InternalError::GrenadInvalidFormatVersion)
             }
         }
     }
@@ -185,6 +189,9 @@ impl fmt::Display for InternalError {
             Self::Fst(error) => error.fmt(f),
             Self::GrenadInvalidCompressionType => {
                 f.write_str("Invalid compression type have been specified to grenad.")
+            }
+            Self::GrenadInvalidFormatVersion => {
+                f.write_str("Invalid grenad file with an invalid version format.")
             }
             Self::IndexingMergingKeys { process } => {
                 write!(f, "Invalid merge while processing {}.", process)

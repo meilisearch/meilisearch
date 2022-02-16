@@ -73,9 +73,11 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
         );
 
         let mut word_position_docids_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
-        word_position_docids_merger.extend(new_word_position_docids);
+        for reader in new_word_position_docids {
+            word_position_docids_merger.push(reader.into_cursor()?);
+        }
         let mut word_position_docids_iter =
-            word_position_docids_merger.build().into_merger_iter()?;
+            word_position_docids_merger.build().into_stream_merger_iter()?;
 
         // We fetch all the new common prefixes between the previous and new prefix fst.
         let mut buffer = Vec::new();

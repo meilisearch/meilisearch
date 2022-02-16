@@ -17,7 +17,7 @@ pub fn create_writer<R: io::Write>(
     typ: grenad::CompressionType,
     level: Option<u32>,
     file: R,
-) -> io::Result<grenad::Writer<R>> {
+) -> grenad::Writer<R> {
     let mut builder = grenad::Writer::builder();
     builder.compression_type(typ);
     if let Some(level) = level {
@@ -52,10 +52,13 @@ pub fn sorter_into_reader(
     sorter: grenad::Sorter<MergeFn>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
-    let mut writer = tempfile::tempfile().and_then(|file| {
-        create_writer(indexer.chunk_compression_type, indexer.chunk_compression_level, file)
-    })?;
-    sorter.write_into(&mut writer)?;
+    let mut writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    sorter.write_into_stream_writer(&mut writer)?;
+
     Ok(writer_into_reader(writer)?)
 }
 
@@ -75,20 +78,25 @@ pub unsafe fn into_clonable_grenad(
     Ok(reader)
 }
 
-pub fn merge_readers<R: io::Read>(
+pub fn merge_readers<R: io::Read + io::Seek>(
     readers: Vec<grenad::Reader<R>>,
     merge_fn: MergeFn,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
     let mut merger_builder = grenad::MergerBuilder::new(merge_fn);
-    merger_builder.extend(readers);
+    for reader in readers {
+        merger_builder.push(reader.into_cursor()?);
+    }
+
     let merger = merger_builder.build();
-    let mut writer = tempfile::tempfile().and_then(|file| {
-        create_writer(indexer.chunk_compression_type, indexer.chunk_compression_level, file)
-    })?;
-    merger.write_into(&mut writer)?;
-    let reader = writer_into_reader(writer)?;
-    Ok(reader)
+    let mut writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    merger.write_into_stream_writer(&mut writer)?;
+
+    Ok(writer_into_reader(writer)?)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -125,12 +133,13 @@ impl GrenadParameters {
 /// The grenad obkv entries are composed of an incremental document id big-endian
 /// encoded as the key and an obkv object with an `u8` for the field as the key
 /// and a simple UTF-8 encoded string as the value.
-pub fn grenad_obkv_into_chunks<R: io::Read>(
-    mut reader: grenad::Reader<R>,
+pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
+    reader: grenad::Reader<R>,
     indexer: GrenadParameters,
     documents_chunk_size: usize,
 ) -> Result<impl Iterator<Item = Result<grenad::Reader<File>>>> {
     let mut continue_reading = true;
+    let mut cursor = reader.into_cursor()?;
 
     let indexer_clone = indexer.clone();
     let mut transposer = move || {
@@ -139,15 +148,13 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
         }
 
         let mut current_chunk_size = 0u64;
-        let mut obkv_documents = tempfile::tempfile().and_then(|file| {
-            create_writer(
-                indexer_clone.chunk_compression_type,
-                indexer_clone.chunk_compression_level,
-                file,
-            )
-        })?;
+        let mut obkv_documents = create_writer(
+            indexer_clone.chunk_compression_type,
+            indexer_clone.chunk_compression_level,
+            tempfile::tempfile()?,
+        );
 
-        while let Some((document_id, obkv)) = reader.next()? {
+        while let Some((document_id, obkv)) = cursor.move_on_next()? {
             obkv_documents.insert(document_id, obkv)?;
             current_chunk_size += document_id.len() as u64 + obkv.len() as u64;
 
@@ -166,13 +173,14 @@ pub fn grenad_obkv_into_chunks<R: io::Read>(
 pub fn write_into_lmdb_database(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
-    mut reader: Reader<File>,
+    reader: Reader<File>,
     merge: MergeFn,
 ) -> Result<()> {
     debug!("Writing MTBL stores...");
     let before = Instant::now();
 
-    while let Some((k, v)) = reader.next()? {
+    let mut cursor = reader.into_cursor()?;
+    while let Some((k, v)) = cursor.move_on_next()? {
         let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
         match iter.next().transpose()? {
             Some((key, old_val)) if key == k => {
@@ -201,19 +209,19 @@ pub fn sorter_into_lmdb_database(
     debug!("Writing MTBL sorter...");
     let before = Instant::now();
 
-    merger_iter_into_lmdb_database(wtxn, database, sorter.into_merger_iter()?, merge)?;
+    merger_iter_into_lmdb_database(wtxn, database, sorter.into_stream_merger_iter()?, merge)?;
 
     debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
 }
 
-fn merger_iter_into_lmdb_database<R: io::Read>(
+fn merger_iter_into_lmdb_database<R: io::Read + io::Seek>(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
-    mut sorter: MergerIter<R, MergeFn>,
+    mut merger_iter: MergerIter<R, MergeFn>,
     merge: MergeFn,
 ) -> Result<()> {
-    while let Some((k, v)) = sorter.next()? {
+    while let Some((k, v)) = merger_iter.next()? {
         let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
         match iter.next().transpose()? {
             Some((key, old_val)) if key == k => {

@@ -10,17 +10,20 @@ use crate::{FieldId, InternalError, Result, UserError};
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
 /// Returns the generated grenad reader containing the docid as key associated to the (latitude, longitude)
-pub fn extract_geo_points<R: io::Read>(
-    mut obkv_documents: grenad::Reader<R>,
+pub fn extract_geo_points<R: io::Read + io::Seek>(
+    obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     primary_key_id: FieldId,
     geo_field_id: FieldId,
 ) -> Result<grenad::Reader<File>> {
-    let mut writer = tempfile::tempfile().and_then(|file| {
-        create_writer(indexer.chunk_compression_type, indexer.chunk_compression_level, file)
-    })?;
+    let mut writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
 
-    while let Some((docid_bytes, value)) = obkv_documents.next()? {
+    let mut cursor = obkv_documents.into_cursor()?;
+    while let Some((docid_bytes, value)) = cursor.move_on_next()? {
         let obkv = obkv::KvReader::new(value);
         let point: Value = match obkv.get(geo_field_id) {
             Some(point) => serde_json::from_slice(point).map_err(InternalError::SerdeJson)?,

@@ -51,8 +51,10 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         );
 
         let mut word_docids_merger = MergerBuilder::new(merge_roaring_bitmaps);
-        word_docids_merger.extend(new_word_docids);
-        let mut word_docids_iter = word_docids_merger.build().into_merger_iter()?;
+        for reader in new_word_docids {
+            word_docids_merger.push(reader.into_cursor()?);
+        }
+        let mut word_docids_iter = word_docids_merger.build().into_stream_merger_iter()?;
 
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
