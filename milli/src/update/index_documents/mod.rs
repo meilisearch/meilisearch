@@ -12,15 +12,18 @@ use crossbeam_channel::{Receiver, Sender};
 use log::debug;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 pub use self::helpers::{
-    create_sorter, create_writer, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, MergeFn,
+    as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
+    fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
+    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::DocumentBatchReader;
+pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
     WordPrefixPairProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
@@ -55,12 +58,6 @@ impl Default for IndexDocumentsMethod {
     fn default() -> Self {
         Self::ReplaceDocuments
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum WriteMethod {
-    Append,
-    GetMergePut,
 }
 
 pub struct IndexDocuments<'t, 'u, 'i, 'a, F> {
@@ -282,6 +279,9 @@ where
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
+        let mut word_pair_proximity_docids = Vec::new();
+        let mut word_position_docids = Vec::new();
+        let mut word_docids = Vec::new();
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -289,9 +289,28 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        for typed_chunk in lmdb_writer_rx {
+        for result in lmdb_writer_rx {
+            let typed_chunk = match result? {
+                TypedChunk::WordDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_docids.push(cloneable_chunk);
+                    TypedChunk::WordDocids(chunk)
+                }
+                TypedChunk::WordPairProximityDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_pair_proximity_docids.push(cloneable_chunk);
+                    TypedChunk::WordPairProximityDocids(chunk)
+                }
+                TypedChunk::WordPositionDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_position_docids.push(cloneable_chunk);
+                    TypedChunk::WordPositionDocids(chunk)
+                }
+                otherwise => otherwise,
+            };
+
             let (docids, is_merged_database) =
-                write_typed_chunk_into_index(typed_chunk?, &self.index, self.wtxn, index_is_empty)?;
+                write_typed_chunk_into_index(typed_chunk, &self.index, self.wtxn, index_is_empty)?;
             if !docids.is_empty() {
                 final_documents_ids |= docids;
                 let documents_seen_count = final_documents_ids.len();
@@ -325,13 +344,25 @@ where
         let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
-        self.execute_prefix_databases()?;
+        self.execute_prefix_databases(
+            word_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+        )?;
 
         Ok(all_documents_ids.len())
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
-    pub fn execute_prefix_databases(self) -> Result<()> {
+    pub fn execute_prefix_databases(
+        self,
+        word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+    ) -> Result<()>
+    where
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
         // Merged databases are already been indexed, we start from this count;
         let mut databases_seen = MERGED_DATABASE_COUNT;
 
@@ -353,6 +384,9 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
+        let previous_words_prefixes_fst =
+            self.index.words_prefixes_fst(self.wtxn)?.map_data(|cow| cow.into_owned())?;
+
         // Run the words prefixes update operation.
         let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
         if let Some(value) = self.config.words_prefix_threshold {
@@ -362,6 +396,27 @@ where
             builder.max_prefix_length(value);
         }
         builder.execute()?;
+
+        let current_prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
+
+        // We retrieve the common words between the previous and new prefix word fst.
+        let common_prefix_fst_words = fst_stream_into_vec(
+            previous_words_prefixes_fst.op().add(&current_prefix_fst).intersection(),
+        );
+        let common_prefix_fst_words: Vec<_> = common_prefix_fst_words
+            .as_slice()
+            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
+            .collect();
+
+        // We retrieve the newly added words between the previous and new prefix word fst.
+        let new_prefix_fst_words = fst_stream_into_vec(
+            current_prefix_fst.op().add(&previous_words_prefixes_fst).difference(),
+        );
+
+        // We compute the set of prefixes that are no more part of the prefix fst.
+        let del_prefix_fst_words = fst_stream_into_hashset(
+            previous_words_prefixes_fst.op().add(&current_prefix_fst).difference(),
+        );
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -375,7 +430,12 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute()?;
+        builder.execute(
+            word_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -389,7 +449,12 @@ where
         builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
         builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
         builder.max_memory = self.indexer_config.max_memory;
-        builder.execute()?;
+        builder.execute(
+            word_pair_proximity_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -409,7 +474,12 @@ where
         if let Some(value) = self.config.words_positions_min_level_size {
             builder.min_level_size(value);
         }
-        builder.execute()?;
+        builder.execute(
+            word_position_docids,
+            &new_prefix_fst_words,
+            &common_prefix_fst_words,
+            &del_prefix_fst_words,
+        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {

@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fs::File;
+use std::io;
 
 use heed::types::ByteSlice;
 use heed::{BytesDecode, RwTxn};
@@ -11,7 +12,7 @@ use super::helpers::{
     CursorClonableMmap,
 };
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
-use crate::update::index_documents::helpers::into_clonable_grenad;
+use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::{
     lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
     Result,
@@ -65,8 +66,9 @@ pub(crate) fn write_typed_chunk_into_index(
                 },
             )?;
         }
-        TypedChunk::Documents(mut obkv_documents_iter) => {
-            while let Some((key, value)) = obkv_documents_iter.next()? {
+        TypedChunk::Documents(obkv_documents_iter) => {
+            let mut cursor = obkv_documents_iter.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
                 index.documents.remap_types::<ByteSlice, ByteSlice>().put(wtxn, key, value)?;
             }
         }
@@ -85,7 +87,7 @@ pub(crate) fn write_typed_chunk_into_index(
             return Ok((documents_ids, is_merged_database))
         }
         TypedChunk::WordDocids(word_docids_iter) => {
-            let mut word_docids_iter = unsafe { into_clonable_grenad(word_docids_iter) }?;
+            let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_iter) }?;
             append_entries_into_database(
                 word_docids_iter.clone(),
                 &index.word_docids,
@@ -97,7 +99,8 @@ pub(crate) fn write_typed_chunk_into_index(
 
             // create fst from word docids
             let mut builder = fst::SetBuilder::memory();
-            while let Some((word, _value)) = word_docids_iter.next()? {
+            let mut cursor = word_docids_iter.into_cursor()?;
+            while let Some((word, _value)) = cursor.move_on_next()? {
                 // This is a lexicographically ordered word position
                 // we use the key to construct the words fst.
                 builder.insert(word)?;
@@ -146,19 +149,21 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             is_merged_database = true;
         }
-        TypedChunk::FieldIdDocidFacetNumbers(mut fid_docid_facet_number) => {
+        TypedChunk::FieldIdDocidFacetNumbers(fid_docid_facet_number) => {
             let index_fid_docid_facet_numbers =
                 index.field_id_docid_facet_f64s.remap_types::<ByteSlice, ByteSlice>();
-            while let Some((key, value)) = fid_docid_facet_number.next()? {
+            let mut cursor = fid_docid_facet_number.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
                 if valid_lmdb_key(key) {
                     index_fid_docid_facet_numbers.put(wtxn, key, &value)?;
                 }
             }
         }
-        TypedChunk::FieldIdDocidFacetStrings(mut fid_docid_facet_string) => {
+        TypedChunk::FieldIdDocidFacetStrings(fid_docid_facet_string) => {
             let index_fid_docid_facet_strings =
                 index.field_id_docid_facet_strings.remap_types::<ByteSlice, ByteSlice>();
-            while let Some((key, value)) = fid_docid_facet_string.next()? {
+            let mut cursor = fid_docid_facet_string.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
                 if valid_lmdb_key(key) {
                     index_fid_docid_facet_strings.put(wtxn, key, &value)?;
                 }
@@ -183,11 +188,12 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             is_merged_database = true;
         }
-        TypedChunk::GeoPoints(mut geo_points) => {
+        TypedChunk::GeoPoints(geo_points) => {
             let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
             let mut geo_faceted_docids = index.geo_faceted_documents_ids(wtxn)?;
 
-            while let Some((key, value)) = geo_points.next()? {
+            let mut cursor = geo_points.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
                 // convert the key back to a u32 (4 bytes)
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
 
@@ -229,7 +235,7 @@ fn merge_cbo_roaring_bitmaps(
 /// Write provided entries in database using serialize_value function.
 /// merge_values function is used if an entry already exist in the database.
 fn write_entries_into_database<R, K, V, FS, FM>(
-    mut data: grenad::Reader<R>,
+    data: grenad::Reader<R>,
     database: &heed::Database<K, V>,
     wtxn: &mut RwTxn,
     index_is_empty: bool,
@@ -237,14 +243,15 @@ fn write_entries_into_database<R, K, V, FS, FM>(
     merge_values: FM,
 ) -> Result<()>
 where
-    R: std::io::Read,
+    R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
 {
     let mut buffer = Vec::new();
     let database = database.remap_types::<ByteSlice, ByteSlice>();
 
-    while let Some((key, value)) = data.next()? {
+    let mut cursor = data.into_cursor()?;
+    while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             buffer.clear();
             let value = if index_is_empty {
@@ -270,7 +277,7 @@ where
 /// All provided entries must be ordered.
 /// If the index is not empty, write_entries_into_database is called instead.
 fn append_entries_into_database<R, K, V, FS, FM>(
-    mut data: grenad::Reader<R>,
+    data: grenad::Reader<R>,
     database: &heed::Database<K, V>,
     wtxn: &mut RwTxn,
     index_is_empty: bool,
@@ -278,7 +285,7 @@ fn append_entries_into_database<R, K, V, FS, FM>(
     merge_values: FM,
 ) -> Result<()>
 where
-    R: std::io::Read,
+    R: io::Read + io::Seek,
     FS: for<'a> Fn(&'a [u8], &'a mut Vec<u8>) -> Result<&'a [u8]>,
     FM: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
 {
@@ -296,7 +303,8 @@ where
     let mut buffer = Vec::new();
     let mut database = database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
 
-    while let Some((key, value)) = data.next()? {
+    let mut cursor = data.into_cursor()?;
+    while let Some((key, value)) = cursor.move_on_next()? {
         if valid_lmdb_key(key) {
             buffer.clear();
             let value = serialize_value(value, &mut buffer)?;

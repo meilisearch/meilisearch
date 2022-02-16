@@ -15,9 +15,7 @@ use crate::heed_codec::facet::{
     FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
 };
 use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::update::index_documents::{
-    create_writer, write_into_lmdb_database, writer_into_reader, WriteMethod,
-};
+use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
 use crate::{FieldId, Index, Result};
 
 pub struct Facets<'t, 'u, 'i> {
@@ -120,7 +118,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 *self.index.facet_id_f64_docids.as_polymorph(),
                 facet_number_levels,
                 |_, _| Err(InternalError::IndexingMergingKeys { process: "facet number levels" })?,
-                WriteMethod::GetMergePut,
             )?;
 
             write_into_lmdb_database(
@@ -128,7 +125,6 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 *self.index.facet_id_string_docids.as_polymorph(),
                 facet_string_levels,
                 |_, _| Err(InternalError::IndexingMergingKeys { process: "facet string levels" })?,
-                WriteMethod::GetMergePut,
             )?;
         }
 
@@ -164,8 +160,7 @@ fn compute_facet_number_levels<'t>(
 
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
-    let mut writer = tempfile::tempfile()
-        .and_then(|file| create_writer(compression_type, compression_level, file))?;
+    let mut writer = create_writer(compression_type, compression_level, tempfile::tempfile()?);
 
     let level_0_range = {
         let left = (field_id, 0, f64::MIN, f64::MIN);
@@ -283,8 +278,7 @@ fn compute_facet_string_levels<'t>(
 
     // It is forbidden to keep a cursor and write in a database at the same time with LMDB
     // therefore we write the facet levels entries into a grenad file before transfering them.
-    let mut writer = tempfile::tempfile()
-        .and_then(|file| create_writer(compression_type, compression_level, file))?;
+    let mut writer = create_writer(compression_type, compression_level, tempfile::tempfile()?);
 
     // Groups sizes are always a power of the original level_group_size and therefore a group
     // always maps groups of the previous level and never splits previous levels groups in half.

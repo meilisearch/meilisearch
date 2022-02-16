@@ -25,7 +25,7 @@ use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
-    into_clonable_grenad, keep_first_prefix_value_merge_roaring_bitmaps, merge_cbo_roaring_bitmaps,
+    as_cloneable_grenad, keep_first_prefix_value_merge_roaring_bitmaps, merge_cbo_roaring_bitmaps,
     merge_readers, merge_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn,
 };
 use super::{helpers, TypedChunk};
@@ -184,7 +184,7 @@ fn extract_documents_data(
     grenad::Reader<CursorClonableMmap>,
     (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
 )> {
-    let documents_chunk = documents_chunk.and_then(|c| unsafe { into_clonable_grenad(c) })?;
+    let documents_chunk = documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
     let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
 
@@ -217,7 +217,7 @@ fn extract_documents_data(
 
                 // send docid_word_positions_chunk to DB writer
                 let docid_word_positions_chunk =
-                    unsafe { into_clonable_grenad(docid_word_positions_chunk)? };
+                    unsafe { as_cloneable_grenad(&docid_word_positions_chunk)? };
                 let _ = lmdb_writer_sx
                     .send(Ok(TypedChunk::DocidWordPositions(docid_word_positions_chunk.clone())));
 
@@ -233,7 +233,7 @@ fn extract_documents_data(
 
                 // send docid_fid_facet_numbers_chunk to DB writer
                 let docid_fid_facet_numbers_chunk =
-                    unsafe { into_clonable_grenad(docid_fid_facet_numbers_chunk)? };
+                    unsafe { as_cloneable_grenad(&docid_fid_facet_numbers_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
                     docid_fid_facet_numbers_chunk.clone(),
@@ -241,7 +241,7 @@ fn extract_documents_data(
 
                 // send docid_fid_facet_strings_chunk to DB writer
                 let docid_fid_facet_strings_chunk =
-                    unsafe { into_clonable_grenad(docid_fid_facet_strings_chunk)? };
+                    unsafe { as_cloneable_grenad(&docid_fid_facet_strings_chunk)? };
 
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
                     docid_fid_facet_strings_chunk.clone(),

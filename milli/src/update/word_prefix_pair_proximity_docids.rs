@@ -1,15 +1,16 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use fst::IntoStreamer;
-use grenad::CompressionType;
+use grenad::{CompressionType, MergerBuilder};
 use heed::types::ByteSlice;
+use heed::BytesDecode;
 use log::debug;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, MergeFn, WriteMethod,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
+    MergeFn,
 };
-use crate::{Index, Result};
+use crate::{Index, Result, StrStrU8Codec};
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -61,12 +62,26 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(
+        self,
+        new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        new_prefix_fst_words: &[String],
+        common_prefix_fst_words: &[&[String]],
+        del_prefix_fst_words: &HashSet<Vec<u8>>,
+    ) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
-        self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;
+        let new_prefix_fst_words: Vec<_> =
+            new_prefix_fst_words.linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
 
-        // Here we create a sorter akin to the previous one.
+        // We retrieve and merge the created word pair proximities docids entries
+        // for the newly added documents.
+        let mut wppd_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
+        for reader in new_word_pair_proximity_docids {
+            wppd_merger.push(reader.into_cursor()?);
+        }
+        let mut wppd_iter = wppd_merger.build().into_stream_merger_iter()?;
+
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
             merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
@@ -75,52 +90,29 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             self.max_memory,
         );
 
-        let prefix_fst = self.index.words_prefixes_fst(self.wtxn)?;
-        let prefix_fst_keys = prefix_fst.into_stream().into_strs()?;
-        let prefix_fst_keys: Vec<_> =
-            prefix_fst_keys.as_slice().linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
-
-        let mut db =
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(self.wtxn)?;
-
+        // We compute the prefix docids associated with the common prefixes between
+        // the old and new word prefix fst.
         let mut buffer = Vec::new();
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
-        while let Some(((w1, w2, prox), data)) = db.next().transpose()? {
+        while let Some((key, data)) = wppd_iter.next()? {
+            let (w1, w2, prox) = StrStrU8Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
             if prox > self.max_proximity {
                 continue;
             }
 
-            current_prefixes = match current_prefixes.take() {
-                Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
-                _otherwise => {
-                    write_prefixes_in_sorter(
-                        &mut prefixes_cache,
-                        &mut word_prefix_pair_proximity_docids_sorter,
-                    )?;
-                    prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
-                }
-            };
-
-            if let Some(prefixes) = current_prefixes {
-                buffer.clear();
-                buffer.extend_from_slice(w1.as_bytes());
-                buffer.push(0);
-                for prefix in prefixes.iter() {
-                    if prefix.len() <= self.max_prefix_length && w2.starts_with(prefix) {
-                        buffer.truncate(w1.len() + 1);
-                        buffer.extend_from_slice(prefix.as_bytes());
-                        buffer.push(prox);
-
-                        match prefixes_cache.get_mut(&buffer) {
-                            Some(value) => value.push(data),
-                            None => {
-                                prefixes_cache.insert(buffer.clone(), vec![data]);
-                            }
-                        }
-                    }
-                }
-            }
+            insert_current_prefix_data_in_sorter(
+                &mut buffer,
+                &mut current_prefixes,
+                &mut prefixes_cache,
+                &mut word_prefix_pair_proximity_docids_sorter,
+                common_prefix_fst_words,
+                self.max_prefix_length,
+                w1,
+                w2,
+                prox,
+                data,
+            )?;
         }
 
         write_prefixes_in_sorter(
@@ -128,16 +120,63 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             &mut word_prefix_pair_proximity_docids_sorter,
         )?;
 
-        drop(prefix_fst);
-        drop(db);
+        // We compute the prefix docids associated with the newly added prefixes
+        // in the new word prefix fst.
+        let mut db_iter =
+            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(self.wtxn)?;
 
-        // We finally write the word prefix pair proximity docids into the LMDB database.
+        let mut buffer = Vec::new();
+        let mut current_prefixes: Option<&&[String]> = None;
+        let mut prefixes_cache = HashMap::new();
+        while let Some(((w1, w2, prox), data)) = db_iter.next().transpose()? {
+            if prox > self.max_proximity {
+                continue;
+            }
+
+            insert_current_prefix_data_in_sorter(
+                &mut buffer,
+                &mut current_prefixes,
+                &mut prefixes_cache,
+                &mut word_prefix_pair_proximity_docids_sorter,
+                &new_prefix_fst_words,
+                self.max_prefix_length,
+                w1,
+                w2,
+                prox,
+                data,
+            )?;
+        }
+
+        write_prefixes_in_sorter(
+            &mut prefixes_cache,
+            &mut word_prefix_pair_proximity_docids_sorter,
+        )?;
+
+        drop(db_iter);
+
+        // All of the word prefix pairs in the database that have a w2
+        // that is contained in the `suppr_pw` set must be removed as well.
+        let mut iter = self
+            .index
+            .word_prefix_pair_proximity_docids
+            .remap_data_type::<ByteSlice>()
+            .iter_mut(self.wtxn)?;
+        while let Some(((_, w2, _), _)) = iter.next().transpose()? {
+            if del_prefix_fst_words.contains(w2.as_bytes()) {
+                // Delete this entry as the w2 prefix is no more in the words prefix fst.
+                unsafe { iter.del_current()? };
+            }
+        }
+
+        drop(iter);
+
+        // We finally write and merge the new word prefix pair proximity docids
+        // in the LMDB database.
         sorter_into_lmdb_database(
             self.wtxn,
             *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
             word_prefix_pair_proximity_docids_sorter,
             merge_cbo_roaring_bitmaps,
-            WriteMethod::Append,
         )?;
 
         Ok(())
@@ -145,12 +184,60 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 }
 
 fn write_prefixes_in_sorter(
-    prefixes: &mut HashMap<Vec<u8>, Vec<&[u8]>>,
+    prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
     sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
             sorter.insert(&key, data)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Computes the current prefix based on the previous and the currently iterated value
+/// i.e. w1, w2, prox. It also makes sure to follow the `max_prefix_length` setting.
+///
+/// Uses the current prefixes values to insert the associated data i.e. RoaringBitmap,
+/// into the sorter that will, later, be inserted in the LMDB database.
+fn insert_current_prefix_data_in_sorter<'a>(
+    buffer: &mut Vec<u8>,
+    current_prefixes: &mut Option<&'a &'a [String]>,
+    prefixes_cache: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
+    word_prefix_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,
+    prefix_fst_keys: &'a [&'a [std::string::String]],
+    max_prefix_length: usize,
+    w1: &str,
+    w2: &str,
+    prox: u8,
+    data: &[u8],
+) -> Result<()> {
+    *current_prefixes = match current_prefixes.take() {
+        Some(prefixes) if w2.starts_with(&prefixes[0]) => Some(prefixes),
+        _otherwise => {
+            write_prefixes_in_sorter(prefixes_cache, word_prefix_pair_proximity_docids_sorter)?;
+            prefix_fst_keys.iter().find(|prefixes| w2.starts_with(&prefixes[0]))
+        }
+    };
+
+    if let Some(prefixes) = current_prefixes {
+        buffer.clear();
+        buffer.extend_from_slice(w1.as_bytes());
+        buffer.push(0);
+        for prefix in prefixes.iter() {
+            if prefix.len() <= max_prefix_length && w2.starts_with(prefix) {
+                buffer.truncate(w1.len() + 1);
+                buffer.extend_from_slice(prefix.as_bytes());
+                buffer.push(prox);
+
+                match prefixes_cache.get_mut(buffer.as_slice()) {
+                    Some(value) => value.push(data.to_owned()),
+                    None => {
+                        prefixes_cache.insert(buffer.clone(), vec![data.to_owned()]);
+                    }
+                }
+            }
         }
     }
 

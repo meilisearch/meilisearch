@@ -14,8 +14,8 @@ use crate::{DocumentId, Result};
 /// Returns a grenad reader with the list of extracted words at positions and
 /// documents ids from the given chunk of docid word positions.
 #[logging_timer::time]
-pub fn extract_word_position_docids<R: io::Read>(
-    mut docid_word_positions: grenad::Reader<R>,
+pub fn extract_word_position_docids<R: io::Read + io::Seek>(
+    docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
     let max_memory = indexer.max_memory_by_thread();
@@ -29,7 +29,8 @@ pub fn extract_word_position_docids<R: io::Read>(
     );
 
     let mut key_buffer = Vec::new();
-    while let Some((key, value)) = docid_word_positions.next()? {
+    let mut cursor = docid_word_positions.into_cursor()?;
+    while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, word_bytes) = try_split_array_at(key)
             .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = DocumentId::from_be_bytes(document_id_bytes);

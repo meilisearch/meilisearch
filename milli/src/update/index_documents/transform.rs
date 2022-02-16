@@ -277,7 +277,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
 
         // consume sorter, in order to free the internal allocation, before creating a new one.
-        let mut iter = self.sorter.into_merger_iter()?;
+        let mut iter = self.sorter.into_stream_merger_iter()?;
 
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
@@ -374,16 +374,15 @@ impl<'a, 'i> Transform<'a, 'i> {
         });
 
         // We create a final writer to write the new documents in order from the sorter.
-        let file = tempfile::tempfile()?;
         let mut writer = create_writer(
             self.indexer_settings.chunk_compression_type,
             self.indexer_settings.chunk_compression_level,
-            file,
-        )?;
+            tempfile::tempfile()?,
+        );
 
         // Once we have written all the documents into the final sorter, we write the documents
         // into this writer, extract the file and reset the seek to be able to read it again.
-        final_sorter.write_into(&mut writer)?;
+        final_sorter.write_into_stream_writer(&mut writer)?;
         let mut documents_file = writer.into_inner()?;
         documents_file.seek(SeekFrom::Start(0))?;
 
@@ -424,12 +423,11 @@ impl<'a, 'i> Transform<'a, 'i> {
         let documents_count = documents_ids.len() as usize;
 
         // We create a final writer to write the new documents in order from the sorter.
-        let file = tempfile::tempfile()?;
         let mut writer = create_writer(
             self.indexer_settings.chunk_compression_type,
             self.indexer_settings.chunk_compression_level,
-            file,
-        )?;
+            tempfile::tempfile()?,
+        );
 
         let mut obkv_buffer = Vec::new();
         for result in self.index.documents.iter(wtxn)? {
