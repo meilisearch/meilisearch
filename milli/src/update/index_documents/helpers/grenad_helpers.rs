@@ -68,11 +68,11 @@ pub fn writer_into_reader(writer: grenad::Writer<File>) -> Result<grenad::Reader
     grenad::Reader::new(file).map_err(Into::into)
 }
 
-pub unsafe fn into_clonable_grenad(
-    reader: grenad::Reader<File>,
+pub unsafe fn as_cloneable_grenad(
+    reader: &grenad::Reader<File>,
 ) -> Result<grenad::Reader<CursorClonableMmap>> {
-    let file = reader.into_inner();
-    let mmap = memmap2::Mmap::map(&file)?;
+    let file = reader.get_ref();
+    let mmap = memmap2::Mmap::map(file)?;
     let cursor = io::Cursor::new(ClonableMmap::from(mmap));
     let reader = grenad::Reader::new(cursor)?;
     Ok(reader)

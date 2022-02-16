@@ -12,7 +12,7 @@ use super::helpers::{
     CursorClonableMmap,
 };
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
-use crate::update::index_documents::helpers::into_clonable_grenad;
+use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::{
     lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
     Result,
@@ -87,7 +87,7 @@ pub(crate) fn write_typed_chunk_into_index(
             return Ok((documents_ids, is_merged_database))
         }
         TypedChunk::WordDocids(word_docids_iter) => {
-            let word_docids_iter = unsafe { into_clonable_grenad(word_docids_iter) }?;
+            let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_iter) }?;
             append_entries_into_database(
                 word_docids_iter.clone(),
                 &index.word_docids,

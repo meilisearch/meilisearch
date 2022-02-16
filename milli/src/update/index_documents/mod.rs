@@ -16,9 +16,9 @@ use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 pub use self::helpers::{
-    create_sorter, create_writer, fst_stream_into_hashset, fst_stream_into_vec,
-    merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, sorter_into_lmdb_database,
-    write_into_lmdb_database, writer_into_reader, ClonableMmap, MergeFn,
+    as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
+    fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
+    sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
@@ -292,42 +292,18 @@ where
         for result in lmdb_writer_rx {
             let typed_chunk = match result? {
                 TypedChunk::WordDocids(chunk) => {
-                    // We extract and mmap our chunk file to be able to get it for next processes.
-                    let mut file = chunk.into_inner();
-                    let mmap = unsafe { memmap2::Mmap::map(&file)? };
-                    let cursor_mmap = CursorClonableMmap::new(ClonableMmap::from(mmap));
-                    let chunk = grenad::Reader::new(cursor_mmap)?;
-                    word_docids.push(chunk);
-
-                    // We reconstruct our typed-chunk back.
-                    file.rewind()?;
-                    let chunk = grenad::Reader::new(file)?;
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_docids.push(cloneable_chunk);
                     TypedChunk::WordDocids(chunk)
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
-                    // We extract and mmap our chunk file to be able to get it for next processes.
-                    let mut file = chunk.into_inner();
-                    let mmap = unsafe { memmap2::Mmap::map(&file)? };
-                    let cursor_mmap = CursorClonableMmap::new(ClonableMmap::from(mmap));
-                    let chunk = grenad::Reader::new(cursor_mmap)?;
-                    word_pair_proximity_docids.push(chunk);
-
-                    // We reconstruct our typed-chunk back.
-                    file.rewind()?;
-                    let chunk = grenad::Reader::new(file)?;
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_pair_proximity_docids.push(cloneable_chunk);
                     TypedChunk::WordPairProximityDocids(chunk)
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
-                    // We extract and mmap our chunk file to be able to get it for next processes.
-                    let mut file = chunk.into_inner();
-                    let mmap = unsafe { memmap2::Mmap::map(&file)? };
-                    let cursor_mmap = CursorClonableMmap::new(ClonableMmap::from(mmap));
-                    let chunk = grenad::Reader::new(cursor_mmap)?;
-                    word_position_docids.push(chunk);
-
-                    // We reconstruct our typed-chunk back.
-                    file.rewind()?;
-                    let chunk = grenad::Reader::new(file)?;
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_position_docids.push(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
                 }
                 otherwise => otherwise,
