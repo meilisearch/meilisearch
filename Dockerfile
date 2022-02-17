@@ -45,7 +45,7 @@ ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
 
 RUN     apk update --quiet \
-        && apk add -q --no-cache libgcc tini curl
+        && apk add -q --no-cache libgcc tini
 
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
