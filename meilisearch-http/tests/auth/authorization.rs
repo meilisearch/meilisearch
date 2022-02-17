@@ -1,9 +1,10 @@
 use crate::common::Server;
-use chrono::{Duration, Utc};
+use ::time::format_description::well_known::Rfc3339;
 use maplit::{hashmap, hashset};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use time::{Duration, OffsetDateTime};
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
@@ -76,7 +77,7 @@ async fn error_access_expired_key() {
     let content = json!({
         "indexes": ["products"],
         "actions": ALL_ACTIONS.clone(),
-        "expiresAt": (Utc::now() + Duration::seconds(1)),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::seconds(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -106,7 +107,7 @@ async fn error_access_unauthorized_index() {
     let content = json!({
         "indexes": ["sales"],
         "actions": ALL_ACTIONS.clone(),
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -137,7 +138,7 @@ async fn error_access_unauthorized_action() {
     let content = json!({
         "indexes": ["products"],
         "actions": [],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -174,7 +175,7 @@ async fn access_authorized_restricted_index() {
     let content = json!({
         "indexes": ["products"],
         "actions": [],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -213,7 +214,7 @@ async fn access_authorized_no_index_restriction() {
     let content = json!({
         "indexes": ["*"],
         "actions": [],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -263,7 +264,7 @@ async fn access_authorized_stats_restricted_index() {
     let content = json!({
         "indexes": ["products"],
         "actions": ["stats.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);
@@ -303,7 +304,7 @@ async fn access_authorized_stats_no_index_restriction() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["stats.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);
@@ -343,7 +344,7 @@ async fn list_authorized_indexes_restricted_index() {
     let content = json!({
         "indexes": ["products"],
         "actions": ["indexes.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);
@@ -384,7 +385,7 @@ async fn list_authorized_indexes_no_index_restriction() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["indexes.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);
@@ -424,7 +425,7 @@ async fn list_authorized_tasks_restricted_index() {
     let content = json!({
         "indexes": ["products"],
         "actions": ["tasks.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);
@@ -464,7 +465,7 @@ async fn list_authorized_tasks_no_index_restriction() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["tasks.get"],
-        "expiresAt": Utc::now() + Duration::hours(1),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(code, 201);

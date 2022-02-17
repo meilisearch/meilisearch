@@ -1,10 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use chrono::{DateTime, Utc};
 use log::debug;
 use meilisearch_error::ResponseError;
 use meilisearch_lib::MeiliSearch;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use time::OffsetDateTime;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -20,9 +20,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 pub struct UpdateIndexResponse {
     name: String,
     uid: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    primary_key: Option<String>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    created_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    updated_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    primary_key: OffsetDateTime,
 }
 
 #[derive(Deserialize)]

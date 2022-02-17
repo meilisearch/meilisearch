@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse};
-use chrono::{DateTime, Utc};
 use log::debug;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
@@ -54,8 +54,10 @@ pub struct ProcessedUpdateResult {
     #[serde(rename = "type")]
     pub update_type: UpdateType,
     pub duration: f64, // in seconds
-    pub enqueued_at: DateTime<Utc>,
-    pub processed_at: DateTime<Utc>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    pub processed_at: OffsetDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,8 +68,10 @@ pub struct FailedUpdateResult {
     pub update_type: UpdateType,
     pub error: ResponseError,
     pub duration: f64, // in seconds
-    pub enqueued_at: DateTime<Utc>,
-    pub processed_at: DateTime<Utc>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    pub processed_at: OffsetDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,9 +80,13 @@ pub struct EnqueuedUpdateResult {
     pub update_id: u64,
     #[serde(rename = "type")]
     pub update_type: UpdateType,
-    pub enqueued_at: DateTime<Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub started_processing_at: Option<DateTime<Utc>>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize"
+    )]
+    pub started_processing_at: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

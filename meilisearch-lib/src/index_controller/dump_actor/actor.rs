@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_stream::stream;
-use chrono::Utc;
 use futures::{lock::Mutex, stream::StreamExt};
 use log::{error, trace};
+use time::macros::format_description;
+use time::OffsetDateTime;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
@@ -29,7 +30,9 @@ pub struct DumpActor {
 
 /// Generate uid from creation date
 fn generate_uid() -> String {
-    Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
+    OffsetDateTime::now_utc()
+        .format(format_description!("%Y%m%d-%H%M%S%3f"))
+        .unwrap()
 }
 
 impl DumpActor {

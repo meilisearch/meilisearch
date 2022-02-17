@@ -94,10 +94,10 @@ pub trait Policy {
 }
 
 pub mod policies {
-    use chrono::Utc;
     use jsonwebtoken::{dangerous_insecure_decode, decode, Algorithm, DecodingKey, Validation};
     use once_cell::sync::Lazy;
     use serde::{Deserialize, Serialize};
+    use time::OffsetDateTime;
 
     use crate::extractors::authentication::Policy;
     use meilisearch_auth::{Action, AuthController, AuthFilter, SearchRules};
@@ -183,7 +183,7 @@ pub mod policies {
 
             // Check if token is expired.
             if let Some(exp) = exp {
-                if Utc::now().timestamp() > exp {
+                if OffsetDateTime::now_utc().unix_timestamp() > exp {
                     return None;
                 }
             }

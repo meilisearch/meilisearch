@@ -32,7 +32,6 @@ async-trait = "0.1.51"
 bstr = "0.2.17"
 byte-unit = { version = "4.0.12", default-features = false, features = ["std", "serde"] }
 bytes = "1.1.0"
-chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.1"
 either = "1.6.1"
 env_logger = "0.9.0"
@@ -43,6 +42,7 @@ futures-util = "0.3.17"
 heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
+iso8601-duration = "0.1.0"
 itertools = "0.10.1"
 jsonwebtoken = "7"
 log = "0.4.14"
@@ -61,7 +61,7 @@ rayon = "1.5.1"
 regex = "1.5.4"
 rustls = "0.20.2"
 rustls-pemfile = "0.2"
-segment = { version = "0.1.2", optional = true }
+segment = { version = "0.2.0", optional = true }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version = "1.0.67", features = ["preserve_order"] }
 sha2 = "0.9.6"
@@ -73,6 +73,7 @@ sysinfo = "0.20.2"
 tar = "0.4.37"
 tempfile = "3.2.0"
 thiserror = "1.0.28"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.11.0", features = ["full"] }
 tokio-stream = "0.1.7"
 uuid = { version = "0.8.2", features = ["serde"] }

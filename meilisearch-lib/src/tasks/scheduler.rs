@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use atomic_refcell::AtomicRefCell;
-use chrono::Utc;
 use milli::update::IndexDocumentsMethod;
+use time::OffsetDateTime;
 use tokio::sync::{watch, RwLock};
 
 use crate::options::SchedulerConfig;
@@ -357,7 +357,7 @@ impl Scheduler {
             tasks.iter_mut().for_each(|t| {
                 t.events.push(TaskEvent::Batched {
                     batch_id: id,
-                    timestamp: Utc::now(),
+                    timestamp: OffsetDateTime::now_utc(),
                 })
             });
 
@@ -365,7 +365,7 @@ impl Scheduler {
 
             let batch = Batch {
                 id,
-                created_at: Utc::now(),
+                created_at: OffsetDateTime::now_utc(),
                 tasks,
             };
 
