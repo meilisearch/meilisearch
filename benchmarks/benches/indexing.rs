@@ -294,6 +294,76 @@ fn indexing_wiki(c: &mut Criterion) {
     });
 }
 
+fn indexing_wiki_in_three_batches(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(10);
+    group.bench_function("Indexing wiki in three batches", |b| {
+        b.iter_with_setup(
+            move || {
+                let index = setup_index();
+
+                let config = IndexerConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields =
+                    ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields = ["title", "body"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                // there is NO faceted fields at all
+                builder.execute(|_| ()).unwrap();
+
+                // We index only one half of the dataset in the setup part
+                // as we don't care about the time it take.
+                let config = IndexerConfig::default();
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+                let documents =
+                    utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_1_2, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+
+                let documents =
+                    utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_3_4, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+
+                let documents =
+                    utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_4_4, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn indexing_movies_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
@@ -405,6 +475,7 @@ criterion_group!(
     indexing_songs_without_faceted_fields,
     indexing_songs_in_three_batches_default,
     indexing_wiki,
+    indexing_wiki_in_three_batches,
     indexing_movies_default,
     indexing_geo
 );
