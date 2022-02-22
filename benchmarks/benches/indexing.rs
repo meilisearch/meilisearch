@@ -413,6 +413,77 @@ fn indexing_movies_default(c: &mut Criterion) {
     });
 }
 
+fn indexing_movies_in_three_batches(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(10);
+    group.bench_function("Indexing movies in three batches", |b| {
+        b.iter_with_setup(
+            move || {
+                let index = setup_index();
+
+                let config = IndexerConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
+
+                builder.set_primary_key("id".to_owned());
+                let displayed_fields = ["title", "poster", "overview", "release_date", "genres"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                builder.set_displayed_fields(displayed_fields);
+
+                let searchable_fields =
+                    ["title", "overview"].iter().map(|s| s.to_string()).collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let faceted_fields =
+                    ["released_date", "genres"].iter().map(|s| s.to_string()).collect();
+                builder.set_filterable_fields(faceted_fields);
+
+                builder.execute(|_| ()).unwrap();
+
+                // We index only one half of the dataset in the setup part
+                // as we don't care about the time it take.
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+
+                let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+
+                let documents = utils::documents_from(datasets_paths::MOVIES_3_4, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+
+                let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn indexing_geo(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
@@ -477,6 +548,7 @@ criterion_group!(
     indexing_wiki,
     indexing_wiki_in_three_batches,
     indexing_movies_default,
+    indexing_movies_in_three_batches,
     indexing_geo
 );
 criterion_main!(benches);

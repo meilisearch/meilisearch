@@ -19,6 +19,9 @@ const DATASET_WIKI_1_2: (&str, &str) = ("smol-wiki-articles-1_2", "csv");
 const DATASET_WIKI_3_4: (&str, &str) = ("smol-wiki-articles-3_4", "csv");
 const DATASET_WIKI_4_4: (&str, &str) = ("smol-wiki-articles-4_4", "csv");
 const DATASET_MOVIES: (&str, &str) = ("movies", "json");
+const DATASET_MOVIES_1_2: (&str, &str) = ("movies-1_2", "json");
+const DATASET_MOVIES_3_4: (&str, &str) = ("movies-3_4", "json");
+const DATASET_MOVIES_4_4: (&str, &str) = ("movies-4_4", "json");
 const DATASET_GEO: (&str, &str) = ("smol-all-countries", "jsonl");
 
 const ALL_DATASETS: &[(&str, &str)] = &[
@@ -31,6 +34,9 @@ const ALL_DATASETS: &[(&str, &str)] = &[
     DATASET_WIKI_3_4,
     DATASET_WIKI_4_4,
     DATASET_MOVIES,
+    DATASET_MOVIES_1_2,
+    DATASET_MOVIES_3_4,
+    DATASET_MOVIES_4_4,
     DATASET_GEO,
 ];
 
