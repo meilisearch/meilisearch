@@ -42,6 +42,7 @@ pub struct Opt {
 
     /// Do not send analytics to Meili.
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
+    #[serde(skip)] // we can't send true
     #[clap(long, env = "MEILI_NO_ANALYTICS")]
     pub no_analytics: bool,
 
@@ -148,6 +149,7 @@ pub struct Opt {
     #[clap(skip)]
     pub indexer_options: IndexerOpts,
 
+    #[serde(flatten)]
     #[clap(flatten)]
     pub scheduler_options: SchedulerConfig,
 }
