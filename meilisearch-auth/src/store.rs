@@ -39,14 +39,18 @@ impl Drop for HeedAuthStore {
     }
 }
 
+pub fn open_auth_store_env(path: &Path) -> heed::Result<heed::Env> {
+    let mut options = EnvOpenOptions::new();
+    options.map_size(AUTH_STORE_SIZE); // 1GB
+    options.max_dbs(2);
+    options.open(path)
+}
+
 impl HeedAuthStore {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().join(AUTH_DB_PATH);
         create_dir_all(&path)?;
-        let mut options = EnvOpenOptions::new();
-        options.map_size(AUTH_STORE_SIZE); // 1GB
-        options.max_dbs(2);
-        let env = Arc::new(options.open(path)?);
+        let env = Arc::new(open_auth_store_env(path.as_ref())?);
         let keys = env.create_database(Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;

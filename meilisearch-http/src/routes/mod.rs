@@ -136,7 +136,6 @@ async fn get_stats(
     meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &meilisearch.filters().search_rules;
-
     let response = meilisearch.get_all_stats(search_rules).await?;
 
     debug!("returns: {:?}", response);

@@ -17,6 +17,7 @@ use time::OffsetDateTime;
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
 pub use key::Key;
+pub use store::open_auth_store_env;
 use store::HeedAuthStore;
 
 #[derive(Clone)]

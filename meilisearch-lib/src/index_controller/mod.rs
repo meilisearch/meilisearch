@@ -48,6 +48,13 @@ pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
 >;
 
+pub fn open_meta_env(path: &Path, size: usize) -> heed::Result<heed::Env> {
+    let mut options = heed::EnvOpenOptions::new();
+    options.map_size(size);
+    options.max_dbs(20);
+    options.open(path)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
@@ -202,11 +209,7 @@ impl IndexControllerBuilder {
 
         std::fs::create_dir_all(db_path.as_ref())?;
 
-        let mut options = heed::EnvOpenOptions::new();
-        options.map_size(task_store_size);
-        options.max_dbs(20);
-
-        let meta_env = Arc::new(options.open(&db_path)?);
+        let meta_env = Arc::new(open_meta_env(db_path.as_ref(), task_store_size)?);
 
         let update_file_store = UpdateFileStore::new(&db_path)?;
         // Create or overwrite the version file for this DB
