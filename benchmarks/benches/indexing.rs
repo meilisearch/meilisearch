@@ -116,7 +116,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 builder.execute(|_| ()).unwrap();
 
                 // We index only one half of the dataset in the setup part
-                // as we don't care about the time it take.
+                // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut builder =
@@ -318,7 +318,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 builder.execute(|_| ()).unwrap();
 
                 // We index only one half of the dataset in the setup part
-                // as we don't care about the time it take.
+                // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let indexing_config =
                     IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
@@ -443,7 +443,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 builder.execute(|_| ()).unwrap();
 
                 // We index only one half of the dataset in the setup part
-                // as we don't care about the time it take.
+                // as we don't care about the time it takes.
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut builder =
