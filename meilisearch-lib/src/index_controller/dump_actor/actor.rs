@@ -31,7 +31,9 @@ pub struct DumpActor {
 /// Generate uid from creation date
 fn generate_uid() -> String {
     OffsetDateTime::now_utc()
-        .format(format_description!("%Y%m%d-%H%M%S%3f"))
+        .format(format_description!(
+            "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+        ))
         .unwrap()
 }
 
@@ -155,5 +157,35 @@ impl DumpActor {
             Some(info) => Ok(info.clone()),
             _ => Err(DumpActorError::DumpDoesNotExist(uid)),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_generate_uid() {
+        let current = OffsetDateTime::now_utc();
+
+        let uid = generate_uid();
+        let (date, time) = uid.split_once('-').unwrap();
+
+        let date = time::Date::parse(
+            date,
+            &format_description!("[year repr:full][month repr:numerical][day padding:zero]"),
+        )
+        .unwrap();
+        let time = time::Time::parse(
+            time,
+            &format_description!(
+                "[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+            ),
+        )
+        .unwrap();
+        let datetime = time::PrimitiveDateTime::new(date, time);
+        let datetime = datetime.assume_utc();
+
+        assert!(current - datetime < time::Duration::SECOND);
     }
 }
