@@ -107,6 +107,7 @@ impl fmt::Display for DocumentAdditionFormat {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub database_size: u64,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub last_update: Option<OffsetDateTime>,
     pub indexes: BTreeMap<String, IndexStats>,
 }
