@@ -6,11 +6,13 @@ use std::time::Duration;
 use anyhow::bail;
 use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace};
+use meilisearch_auth::open_auth_store_env;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use walkdir::WalkDir;
 
 use crate::compression::from_tar_gz;
+use crate::index_controller::open_meta_env;
 use crate::index_controller::versioning::VERSION_FILE_NAME;
 use crate::tasks::task::Job;
 use crate::tasks::Scheduler;
@@ -39,7 +41,6 @@ impl SnapshotService {
             };
             let job = Job::Snapshot(snapshot_job);
             self.scheduler.write().await.schedule_job(job).await;
-
             sleep(self.snapshot_period).await;
         }
     }
@@ -145,9 +146,7 @@ impl SnapshotJob {
     }
 
     fn snapshot_meta_env(&self, path: &Path) -> anyhow::Result<()> {
-        let mut options = heed::EnvOpenOptions::new();
-        options.map_size(self.meta_env_size);
-        let env = options.open(&self.src_path)?;
+        let env = open_meta_env(&self.src_path, self.meta_env_size)?;
 
         let dst = path.join("data.mdb");
         env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
@@ -183,9 +182,10 @@ impl SnapshotJob {
 
             let mut options = heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
-            let env = options.open(entry.path())?;
-
-            env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
+            let index = milli::Index::new(options, entry.path())?;
+            index
+                .env
+                .copy_to_path(dst, heed::CompactionOption::Enabled)?;
         }
 
         Ok(())
@@ -197,9 +197,7 @@ impl SnapshotJob {
         std::fs::create_dir_all(&dst)?;
         let dst = dst.join("data.mdb");
 
-        let mut options = heed::EnvOpenOptions::new();
-        options.map_size(1_073_741_824);
-        let env = options.open(auth_path)?;
+        let env = open_auth_store_env(&auth_path)?;
         env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
 
         Ok(())
