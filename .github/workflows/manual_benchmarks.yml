@@ -15,6 +15,7 @@ jobs:
   benchmarks:
     name: Run and upload benchmarks
     runs-on: benchmarks
+    timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
