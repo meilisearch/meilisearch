@@ -11,9 +11,34 @@ use reqwest::IntoUrl;
 const BASE_URL: &str = "https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets";
 
 const DATASET_SONGS: (&str, &str) = ("smol-songs", "csv");
+const DATASET_SONGS_1_2: (&str, &str) = ("smol-songs-1_2", "csv");
+const DATASET_SONGS_3_4: (&str, &str) = ("smol-songs-3_4", "csv");
+const DATASET_SONGS_4_4: (&str, &str) = ("smol-songs-4_4", "csv");
 const DATASET_WIKI: (&str, &str) = ("smol-wiki-articles", "csv");
+const DATASET_WIKI_1_2: (&str, &str) = ("smol-wiki-articles-1_2", "csv");
+const DATASET_WIKI_3_4: (&str, &str) = ("smol-wiki-articles-3_4", "csv");
+const DATASET_WIKI_4_4: (&str, &str) = ("smol-wiki-articles-4_4", "csv");
 const DATASET_MOVIES: (&str, &str) = ("movies", "json");
+const DATASET_MOVIES_1_2: (&str, &str) = ("movies-1_2", "json");
+const DATASET_MOVIES_3_4: (&str, &str) = ("movies-3_4", "json");
+const DATASET_MOVIES_4_4: (&str, &str) = ("movies-4_4", "json");
 const DATASET_GEO: (&str, &str) = ("smol-all-countries", "jsonl");
+
+const ALL_DATASETS: &[(&str, &str)] = &[
+    DATASET_SONGS,
+    DATASET_SONGS_1_2,
+    DATASET_SONGS_3_4,
+    DATASET_SONGS_4_4,
+    DATASET_WIKI,
+    DATASET_WIKI_1_2,
+    DATASET_WIKI_3_4,
+    DATASET_WIKI_4_4,
+    DATASET_MOVIES,
+    DATASET_MOVIES_1_2,
+    DATASET_MOVIES_3_4,
+    DATASET_MOVIES_4_4,
+    DATASET_GEO,
+];
 
 /// The name of the environment variable used to select the path
 /// of the directory containing the datasets
@@ -33,7 +58,7 @@ fn main() -> anyhow::Result<()> {
     )?;
     writeln!(manifest_paths_file)?;
 
-    for (dataset, extension) in [DATASET_SONGS, DATASET_WIKI, DATASET_MOVIES, DATASET_GEO] {
+    for (dataset, extension) in ALL_DATASETS {
         let out_path = out_dir.join(dataset);
         let out_file = out_path.with_extension(extension);
 
