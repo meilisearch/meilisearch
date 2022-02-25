@@ -122,13 +122,13 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
             } = resource;
             // Redirect index.html to /
             if path == "index.html" {
-                config.service(web::resource("/").route(
-                    web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
-                ));
+                config.service(web::resource("/").route(web::get().to(move || async move {
+                    HttpResponse::Ok().content_type(mime_type).body(data)
+                })));
             } else {
-                config.service(web::resource(path).route(
-                    web::get().to(move || HttpResponse::Ok().content_type(mime_type).body(data)),
-                ));
+                config.service(web::resource(path).route(web::get().to(move || async move {
+                    HttpResponse::Ok().content_type(mime_type).body(data)
+                })));
             }
         }
     } else {
