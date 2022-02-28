@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use grenad::{CompressionType, MergerBuilder};
+use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::BytesDecode;
 use log::debug;
@@ -64,7 +64,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
     pub fn execute(
         self,
-        new_word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -74,14 +74,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         let new_prefix_fst_words: Vec<_> =
             new_prefix_fst_words.linear_group_by_key(|x| x.chars().nth(0).unwrap()).collect();
 
-        // We retrieve and merge the created word pair proximities docids entries
-        // for the newly added documents.
-        let mut wppd_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
-        for reader in new_word_pair_proximity_docids {
-            wppd_merger.push(reader.into_cursor()?);
-        }
-        let mut wppd_iter = wppd_merger.build().into_stream_merger_iter()?;
-
+        let mut new_wppd_iter = new_word_pair_proximity_docids.into_cursor()?;
         let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
             merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
@@ -95,7 +88,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         let mut buffer = Vec::new();
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
-        while let Some((key, data)) = wppd_iter.next()? {
+        while let Some((key, data)) = new_wppd_iter.move_on_next()? {
             let (w1, w2, prox) = StrStrU8Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
             if prox > self.max_proximity {
                 continue;

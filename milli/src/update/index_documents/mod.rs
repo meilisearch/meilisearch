@@ -279,9 +279,9 @@ where
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
-        let mut word_pair_proximity_docids = Vec::new();
-        let mut word_position_docids = Vec::new();
-        let mut word_docids = Vec::new();
+        let mut word_pair_proximity_docids = None;
+        let mut word_position_docids = None;
+        let mut word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -293,17 +293,17 @@ where
             let typed_chunk = match result? {
                 TypedChunk::WordDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_docids.push(cloneable_chunk);
+                    word_docids = Some(cloneable_chunk);
                     TypedChunk::WordDocids(chunk)
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_pair_proximity_docids.push(cloneable_chunk);
+                    word_pair_proximity_docids = Some(cloneable_chunk);
                     TypedChunk::WordPairProximityDocids(chunk)
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_position_docids.push(cloneable_chunk);
+                    word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
                 }
                 otherwise => otherwise,
@@ -345,9 +345,9 @@ where
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
         self.execute_prefix_databases(
-            word_docids,
-            word_pair_proximity_docids,
-            word_position_docids,
+            word_docids.unwrap(),
+            word_pair_proximity_docids.unwrap(),
+            word_position_docids.unwrap(),
         )?;
 
         Ok(all_documents_ids.len())
@@ -356,9 +356,9 @@ where
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_prefix_databases(
         self,
-        word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        word_docids: grenad::Reader<CursorClonableMmap>,
+        word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
+        word_position_docids: grenad::Reader<CursorClonableMmap>,
     ) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
