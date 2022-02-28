@@ -150,7 +150,7 @@ impl Index {
                 Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
             .transpose()?
-            .unwrap_or_else(BTreeSet::new);
+            .unwrap_or_default();
         let distinct_field = self.distinct_field(txn)?.map(String::from);
 
         // in milli each word in the synonyms map were split on their separator. Since we lost

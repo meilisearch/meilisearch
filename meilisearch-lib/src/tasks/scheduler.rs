@@ -443,7 +443,7 @@ mod test {
     fn gen_task(id: TaskId, index_uid: &str, content: TaskContent) -> Task {
         Task {
             id,
-            index_uid: IndexUid::new_unchecked(index_uid.to_owned()),
+            index_uid: IndexUid::new_unchecked(index_uid),
             content,
             events: vec![],
         }
