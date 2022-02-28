@@ -325,7 +325,7 @@ pub mod test {
         let tasks = (0..100)
             .map(|_| Task {
                 id: rand::random(),
-                index_uid: IndexUid::new_unchecked("test".to_string()),
+                index_uid: IndexUid::new_unchecked("test"),
                 content: TaskContent::IndexDeletion,
                 events: vec![],
             })
@@ -356,14 +356,14 @@ pub mod test {
 
         let task_1 = Task {
             id: 1,
-            index_uid: IndexUid::new_unchecked("test".to_string()),
+            index_uid: IndexUid::new_unchecked("test"),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
 
         let task_2 = Task {
             id: 0,
-            index_uid: IndexUid::new_unchecked("test1".to_string()),
+            index_uid: IndexUid::new_unchecked("test1"),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
@@ -384,13 +384,13 @@ pub mod test {
         // same thing but invert the ids
         let task_1 = Task {
             id: 0,
-            index_uid: IndexUid::new_unchecked("test".to_string()),
+            index_uid: IndexUid::new_unchecked("test"),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
         let task_2 = Task {
             id: 1,
-            index_uid: IndexUid::new_unchecked("test1".to_string()),
+            index_uid: IndexUid::new_unchecked("test1"),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };

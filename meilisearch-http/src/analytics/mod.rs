@@ -44,7 +44,7 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
             path.join("instance-uid")
                 .display()
                 .to_string()
-                .replace("/", "-")
+                .replace('/', "-")
         })
         .zip(MEILISEARCH_CONFIG_PATH.as_ref())
         .map(|(filename, config_path)| config_path.join(filename.trim_start_matches('-')))
