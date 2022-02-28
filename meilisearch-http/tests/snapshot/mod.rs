@@ -60,10 +60,7 @@ async fn perform_snapshot() {
 
     let temp = tempfile::tempdir().unwrap();
 
-    let snapshot_path = snapshot_dir
-        .path()
-        .to_owned()
-        .join("db.snapshot".to_string());
+    let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
 
     let options = Opt {
         import_snapshot: Some(snapshot_path),
