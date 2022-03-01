@@ -9,7 +9,7 @@ edition = "2018"
 anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 crossbeam-channel = "0.5.0"
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.7" }
 memmap2 = "0.5.0"
 milli = { path = "../milli" }

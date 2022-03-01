@@ -14,7 +14,7 @@ structopt = "0.3.22"
 milli = { path = "../milli" }
 eyre = "0.6.5"
 color-eyre = "0.5.11"
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 byte-unit = { version = "4.0.12", features = ["serde"] }
 bimap = "0.6.1"
 csv = "1.1.6"
