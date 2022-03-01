@@ -50,35 +50,38 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             self.max_memory,
         );
 
-        let mut new_word_docids_iter = new_word_docids.into_cursor()?;
-        let mut current_prefixes: Option<&&[String]> = None;
-        let mut prefixes_cache = HashMap::new();
-        while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
-            current_prefixes = match current_prefixes.take() {
-                Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
-                _otherwise => {
-                    write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
-                    common_prefix_fst_words
-                        .iter()
-                        .find(|prefixes| word.starts_with(&prefixes[0].as_bytes()))
-                }
-            };
+        if !common_prefix_fst_words.is_empty() {
+            let mut new_word_docids_iter = new_word_docids.into_cursor()?;
+            let mut current_prefixes: Option<&&[String]> = None;
+            let mut prefixes_cache = HashMap::new();
+            while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
+                current_prefixes = match current_prefixes.take() {
+                    Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
+                    _otherwise => {
+                        write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+                        common_prefix_fst_words
+                            .iter()
+                            .find(|prefixes| word.starts_with(&prefixes[0].as_bytes()))
+                    }
+                };
 
-            if let Some(prefixes) = current_prefixes {
-                for prefix in prefixes.iter() {
-                    if word.starts_with(prefix.as_bytes()) {
-                        match prefixes_cache.get_mut(prefix.as_bytes()) {
-                            Some(value) => value.push(data.to_owned()),
-                            None => {
-                                prefixes_cache.insert(prefix.clone().into(), vec![data.to_owned()]);
+                if let Some(prefixes) = current_prefixes {
+                    for prefix in prefixes.iter() {
+                        if word.starts_with(prefix.as_bytes()) {
+                            match prefixes_cache.get_mut(prefix.as_bytes()) {
+                                Some(value) => value.push(data.to_owned()),
+                                None => {
+                                    prefixes_cache
+                                        .insert(prefix.clone().into(), vec![data.to_owned()]);
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+            write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
+        }
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.index.word_docids.remap_data_type::<ByteSlice>();
