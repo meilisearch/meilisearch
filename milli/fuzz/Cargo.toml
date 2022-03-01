@@ -11,7 +11,7 @@ cargo-fuzz = true
 [dependencies]
 arbitrary = "1.0"
 libfuzzer-sys = "0.4"
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 serde_json = { version = "1.0.62", features = ["preserve_order"] }
 anyhow = "1.0"
 tempfile = "3.3"
