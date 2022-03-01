@@ -107,6 +107,7 @@ pub enum UpdateMeta {
 pub struct Enqueued {
     pub update_id: u64,
     pub meta: Update,
+    #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
 }
 
@@ -122,6 +123,7 @@ impl Enqueued {
 #[serde(rename_all = "camelCase")]
 pub struct Processed {
     pub success: v2::UpdateResult,
+    #[serde(with = "time::serde::rfc3339")]
     pub processed_at: OffsetDateTime,
     #[serde(flatten)]
     pub from: Processing,
@@ -144,6 +146,7 @@ impl Processed {
 pub struct Processing {
     #[serde(flatten)]
     pub from: Enqueued,
+    #[serde(with = "time::serde::rfc3339")]
     pub started_processing_at: OffsetDateTime,
 }
 
@@ -163,6 +166,7 @@ pub struct Failed {
     pub from: Processing,
     pub msg: String,
     pub code: Code,
+    #[serde(with = "time::serde::rfc3339")]
     pub failed_at: OffsetDateTime,
 }
 

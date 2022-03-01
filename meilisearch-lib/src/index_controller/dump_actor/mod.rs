@@ -40,6 +40,7 @@ pub struct Metadata {
     db_version: String,
     index_db_size: usize,
     update_db_size: usize,
+    #[serde(with = "time::serde::rfc3339")]
     dump_date: OffsetDateTime,
 }
 
