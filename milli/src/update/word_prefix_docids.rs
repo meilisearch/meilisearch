@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use grenad::{CompressionType, MergerBuilder};
+use grenad::CompressionType;
 use heed::types::ByteSlice;
 
 use crate::update::index_documents::{
@@ -35,7 +35,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixDocids::{}")]
     pub fn execute(
         self,
-        new_word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        new_word_docids: grenad::Reader<CursorClonableMmap>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -50,15 +50,10 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             self.max_memory,
         );
 
-        let mut word_docids_merger = MergerBuilder::new(merge_roaring_bitmaps);
-        for reader in new_word_docids {
-            word_docids_merger.push(reader.into_cursor()?);
-        }
-        let mut word_docids_iter = word_docids_merger.build().into_stream_merger_iter()?;
-
+        let mut new_word_docids_iter = new_word_docids.into_cursor()?;
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
-        while let Some((word, data)) = word_docids_iter.next()? {
+        while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
             current_prefixes = match current_prefixes.take() {
                 Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
                 _otherwise => {

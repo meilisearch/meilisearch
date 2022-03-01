@@ -279,9 +279,9 @@ where
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
         let index_is_empty = index_documents_ids.len() == 0;
         let mut final_documents_ids = RoaringBitmap::new();
-        let mut word_pair_proximity_docids = Vec::new();
-        let mut word_position_docids = Vec::new();
-        let mut word_docids = Vec::new();
+        let mut word_pair_proximity_docids = None;
+        let mut word_position_docids = None;
+        let mut word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -293,17 +293,17 @@ where
             let typed_chunk = match result? {
                 TypedChunk::WordDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_docids.push(cloneable_chunk);
+                    word_docids = Some(cloneable_chunk);
                     TypedChunk::WordDocids(chunk)
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_pair_proximity_docids.push(cloneable_chunk);
+                    word_pair_proximity_docids = Some(cloneable_chunk);
                     TypedChunk::WordPairProximityDocids(chunk)
                 }
                 TypedChunk::WordPositionDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                    word_position_docids.push(cloneable_chunk);
+                    word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
                 }
                 otherwise => otherwise,
@@ -356,9 +356,9 @@ where
     #[logging_timer::time("IndexDocuments::{}")]
     pub fn execute_prefix_databases(
         self,
-        word_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        word_pair_proximity_docids: Vec<grenad::Reader<CursorClonableMmap>>,
-        word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        word_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -424,18 +424,20 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        // Run the word prefix docids update operation.
-        let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
-        builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-        builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-        builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
-        builder.max_memory = self.indexer_config.max_memory;
-        builder.execute(
-            word_docids,
-            &new_prefix_fst_words,
-            &common_prefix_fst_words,
-            &del_prefix_fst_words,
-        )?;
+        if let Some(word_docids) = word_docids {
+            // Run the word prefix docids update operation.
+            let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
+            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
+            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
+            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
+            builder.max_memory = self.indexer_config.max_memory;
+            builder.execute(
+                word_docids,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
+        }
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -443,18 +445,20 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        // Run the word prefix pair proximity docids update operation.
-        let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
-        builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-        builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-        builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
-        builder.max_memory = self.indexer_config.max_memory;
-        builder.execute(
-            word_pair_proximity_docids,
-            &new_prefix_fst_words,
-            &common_prefix_fst_words,
-            &del_prefix_fst_words,
-        )?;
+        if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
+            // Run the word prefix pair proximity docids update operation.
+            let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
+            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
+            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
+            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
+            builder.max_memory = self.indexer_config.max_memory;
+            builder.execute(
+                word_pair_proximity_docids,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
+        }
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -462,24 +466,26 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        // Run the words prefix position docids update operation.
-        let mut builder = WordPrefixPositionDocids::new(self.wtxn, self.index);
-        builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-        builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-        builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
-        builder.max_memory = self.indexer_config.max_memory;
-        if let Some(value) = self.config.words_positions_level_group_size {
-            builder.level_group_size(value);
+        if let Some(word_position_docids) = word_position_docids {
+            // Run the words prefix position docids update operation.
+            let mut builder = WordPrefixPositionDocids::new(self.wtxn, self.index);
+            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
+            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
+            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
+            builder.max_memory = self.indexer_config.max_memory;
+            if let Some(value) = self.config.words_positions_level_group_size {
+                builder.level_group_size(value);
+            }
+            if let Some(value) = self.config.words_positions_min_level_size {
+                builder.min_level_size(value);
+            }
+            builder.execute(
+                word_position_docids,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
         }
-        if let Some(value) = self.config.words_positions_min_level_size {
-            builder.min_level_size(value);
-        }
-        builder.execute(
-            word_position_docids,
-            &new_prefix_fst_words,
-            &common_prefix_fst_words,
-            &del_prefix_fst_words,
-        )?;
 
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {

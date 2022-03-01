@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::{cmp, str};
 
-use grenad::{CompressionType, MergerBuilder};
+use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::{BytesDecode, BytesEncode};
 use log::debug;
@@ -57,7 +57,7 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixPositionDocids::{}")]
     pub fn execute(
         self,
-        new_word_position_docids: Vec<grenad::Reader<CursorClonableMmap>>,
+        new_word_position_docids: grenad::Reader<CursorClonableMmap>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -72,18 +72,13 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             self.max_memory,
         );
 
-        let mut word_position_docids_merger = MergerBuilder::new(merge_cbo_roaring_bitmaps);
-        for reader in new_word_position_docids {
-            word_position_docids_merger.push(reader.into_cursor()?);
-        }
-        let mut word_position_docids_iter =
-            word_position_docids_merger.build().into_stream_merger_iter()?;
+        let mut new_word_position_docids_iter = new_word_position_docids.into_cursor()?;
 
         // We fetch all the new common prefixes between the previous and new prefix fst.
         let mut buffer = Vec::new();
         let mut current_prefixes: Option<&&[String]> = None;
         let mut prefixes_cache = HashMap::new();
-        while let Some((key, data)) = word_position_docids_iter.next()? {
+        while let Some((key, data)) = new_word_position_docids_iter.move_on_next()? {
             let (word, pos) = StrBEU32Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
 
             current_prefixes = match current_prefixes.take() {
