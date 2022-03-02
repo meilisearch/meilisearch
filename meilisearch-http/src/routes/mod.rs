@@ -54,9 +54,9 @@ pub struct ProcessedUpdateResult {
     #[serde(rename = "type")]
     pub update_type: UpdateType,
     pub duration: f64, // in seconds
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(with = "time::serde::rfc3339")]
     pub processed_at: OffsetDateTime,
 }
 
@@ -68,9 +68,9 @@ pub struct FailedUpdateResult {
     pub update_type: UpdateType,
     pub error: ResponseError,
     pub duration: f64, // in seconds
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(with = "time::serde::rfc3339")]
     pub processed_at: OffsetDateTime,
 }
 
@@ -80,11 +80,11 @@ pub struct EnqueuedUpdateResult {
     pub update_id: u64,
     #[serde(rename = "type")]
     pub update_type: UpdateType,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
     #[serde(
         skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
+        with = "time::serde::rfc3339::option"
     )]
     pub started_processing_at: Option<OffsetDateTime>,
 }

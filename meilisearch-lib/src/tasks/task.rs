@@ -36,21 +36,32 @@ impl From<DocumentAdditionResult> for TaskResult {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum TaskEvent {
-    Created(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] OffsetDateTime),
+    Created(
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
+        OffsetDateTime,
+    ),
     Batched {
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
         batch_id: BatchId,
     },
-    Processing(#[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))] OffsetDateTime),
+    Processing(
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
+        OffsetDateTime,
+    ),
     Succeded {
         result: TaskResult,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
     },
     Failed {
         error: ResponseError,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
     },
 }
