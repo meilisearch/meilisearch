@@ -256,11 +256,20 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
             Self::InvalidSortableAttribute { field, valid_fields } => {
                 let valid_names =
                     valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
-                write!(
-                    f,
-                    "Attribute `{}` is not sortable. Available sortable attributes are: `{}`.",
-                    field, valid_names
-                )
+
+                    if valid_names.is_empty() {
+                        write!(
+                            f,
+                            "Attribute `{}` is not sortable. This index does not have configured sortable attributes.",
+                            field
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "Attribute `{}` is not sortable. Available sortable attributes are: `{}`.",
+                            field, valid_names
+                        )
+                    }
             }
             Self::SortRankingRuleMissing => f.write_str(
                 "The sort ranking rule must be specified in the \
@@ -320,3 +329,19 @@ impl fmt::Display for SerializationError {
 }
 
 impl StdError for SerializationError {}
+
+#[test]
+fn conditionally_lookup_for_error_message() {
+    let prefix = "Attribute `name` is not sortable.";
+    let messages = vec![
+        (BTreeSet::new(), "This index does not have configured sortable attributes."),
+        (BTreeSet::from(["age".to_string()]), "Available sortable attributes are: `age`."),
+    ];
+
+    for (list, suffix) in messages {
+        let err =
+            UserError::InvalidSortableAttribute { field: "name".to_string(), valid_fields: list };
+
+        assert_eq!(err.to_string(), format!("{} {}", prefix, suffix));
+    }
+}
