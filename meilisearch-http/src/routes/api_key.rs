@@ -7,20 +7,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::{
+    authentication::{policies::*, GuardedData},
+    sequential_extractor::SeqHandler,
+};
 use meilisearch_error::{Code, ResponseError};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::post().to(create_api_key))
-            .route(web::get().to(list_api_keys)),
+            .route(web::post().to(SeqHandler(create_api_key)))
+            .route(web::get().to(SeqHandler(list_api_keys))),
     )
     .service(
         web::resource("/{api_key}")
-            .route(web::get().to(get_api_key))
-            .route(web::patch().to(patch_api_key))
-            .route(web::delete().to(delete_api_key)),
+            .route(web::get().to(SeqHandler(get_api_key)))
+            .route(web::patch().to(SeqHandler(patch_api_key)))
+            .route(web::delete().to(SeqHandler(delete_api_key))),
     );
 }
 

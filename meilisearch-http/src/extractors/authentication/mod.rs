@@ -41,10 +41,7 @@ impl<P, D> GuardedData<P, D> {
                 }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            (token, None) => {
-                let token = token.to_string();
-                Err(AuthenticationError::InvalidToken(token).into())
-            }
+            (token, None) => Err(AuthenticationError::InvalidToken(token).into()),
         }
     }
 

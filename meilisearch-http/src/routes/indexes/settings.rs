@@ -23,6 +23,7 @@ macro_rules! make_setting_route {
 
             use crate::analytics::Analytics;
             use crate::extractors::authentication::{policies::*, GuardedData};
+            use crate::extractors::sequential_extractor::SeqHandler;
             use crate::task::SummarizedTaskView;
             use meilisearch_error::ResponseError;
 
@@ -98,9 +99,9 @@ macro_rules! make_setting_route {
 
             pub fn resources() -> Resource {
                 Resource::new($route)
-                    .route(web::get().to(get))
-                    .route(web::post().to(update))
-                    .route(web::delete().to(delete))
+                    .route(web::get().to(SeqHandler(get)))
+                    .route(web::post().to(SeqHandler(update)))
+                    .route(web::delete().to(SeqHandler(delete)))
             }
         }
     };
@@ -226,11 +227,12 @@ make_setting_route!(
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
+            use crate::extractors::sequential_extractor::SeqHandler;
             cfg.service(
                 web::resource("")
-                .route(web::post().to(update_all))
-                .route(web::get().to(get_all))
-                .route(web::delete().to(delete_all)))
+                .route(web::post().to(SeqHandler(update_all)))
+                .route(web::get().to(SeqHandler(get_all)))
+                .route(web::delete().to(SeqHandler(delete_all))))
                 $(.service($mod::resources()))*;
         }
     };

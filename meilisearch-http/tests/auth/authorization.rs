@@ -91,6 +91,7 @@ async fn error_access_expired_key() {
     thread::sleep(time::Duration::new(1, 0));
 
     for (method, route) in AUTHORIZATIONS.keys() {
+        dbg!(route);
         let (response, code) = server.dummy_request(method, route).await;
 
         assert_eq!(response, INVALID_RESPONSE.clone());
