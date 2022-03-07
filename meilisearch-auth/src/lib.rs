@@ -40,18 +40,18 @@ impl AuthController {
         })
     }
 
-    pub async fn create_key(&self, value: Value) -> Result<Key> {
+    pub fn create_key(&self, value: Value) -> Result<Key> {
         let key = Key::create_from_value(value)?;
         self.store.put_api_key(key)
     }
 
-    pub async fn update_key(&self, key: impl AsRef<str>, value: Value) -> Result<Key> {
-        let mut key = self.get_key(key).await?;
+    pub fn update_key(&self, key: impl AsRef<str>, value: Value) -> Result<Key> {
+        let mut key = self.get_key(key)?;
         key.update_from_value(value)?;
         self.store.put_api_key(key)
     }
 
-    pub async fn get_key(&self, key: impl AsRef<str>) -> Result<Key> {
+    pub fn get_key(&self, key: impl AsRef<str>) -> Result<Key> {
         self.store
             .get_api_key(&key)?
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(key.as_ref().to_string()))
@@ -101,11 +101,11 @@ impl AuthController {
         Ok(filters)
     }
 
-    pub async fn list_keys(&self) -> Result<Vec<Key>> {
+    pub fn list_keys(&self) -> Result<Vec<Key>> {
         self.store.list_api_keys()
     }
 
-    pub async fn delete_key(&self, key: impl AsRef<str>) -> Result<()> {
+    pub fn delete_key(&self, key: impl AsRef<str>) -> Result<()> {
         if self.store.delete_api_key(&key)? {
             Ok(())
         } else {

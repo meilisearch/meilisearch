@@ -7,10 +7,13 @@ use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(create_dump)))
-        .service(web::resource("/{dump_uid}/status").route(web::get().to(get_dump_status)));
+    cfg.service(web::resource("").route(web::post().to(SeqHandler(create_dump))))
+        .service(
+            web::resource("/{dump_uid}/status").route(web::get().to(SeqHandler(get_dump_status))),
+        );
 }
 
 pub async fn create_dump(

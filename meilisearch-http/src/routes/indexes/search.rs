@@ -9,12 +9,13 @@ use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::get().to(search_with_url_query))
-            .route(web::post().to(search_with_post)),
+            .route(web::get().to(SeqHandler(search_with_url_query)))
+            .route(web::post().to(SeqHandler(search_with_post))),
     );
 }
 

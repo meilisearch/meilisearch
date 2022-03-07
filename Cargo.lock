@@ -1780,7 +1780,7 @@ dependencies = [
  "once_cell",
  "parking_lot 0.11.2",
  "paste",
- "pin-project",
+ "pin-project-lite",
  "platform-dirs",
  "rand",
  "rayon",

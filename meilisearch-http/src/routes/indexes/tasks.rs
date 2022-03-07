@@ -8,11 +8,12 @@ use time::OffsetDateTime;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::{TaskListView, TaskView};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::get().to(get_all_tasks_status)))
-        .service(web::resource("{task_id}").route(web::get().to(get_task_status)));
+    cfg.service(web::resource("").route(web::get().to(SeqHandler(get_all_tasks_status))))
+        .service(web::resource("{task_id}").route(web::get().to(SeqHandler(get_task_status))));
 }
 
 #[derive(Debug, Serialize)]
