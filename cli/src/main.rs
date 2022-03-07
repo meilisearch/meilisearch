@@ -211,6 +211,8 @@ impl Performer for DocumentAddition {
 
         println!("parsing documents...");
 
+        let reader = BufReader::new(reader);
+
         let documents = match self.format {
             DocumentAdditionFormat::Csv => documents_from_csv(reader)?,
             DocumentAdditionFormat::Json => documents_from_json(reader)?,
