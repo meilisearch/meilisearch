@@ -6,7 +6,7 @@ use pin_project_lite::pin_project;
 
 /// `SeqHandler` is an actix `Handler` that enforces that extractors errors are returned in the
 /// same order as they are defined in the wrapped handler. This is needed because, by default, actix
-/// to resolves the extractors concurrently, whereas we always need the authentication extractor to
+/// resolves the extractors concurrently, whereas we always need the authentication extractor to
 /// throw first.
 #[derive(Clone)]
 pub struct SeqHandler<H>(pub H);
