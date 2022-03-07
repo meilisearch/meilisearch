@@ -33,7 +33,7 @@ impl<P, D> GuardedData<P, D> {
         P: Policy + 'static,
     {
         match Self::authenticate(auth, token, index).await? {
-            (_, Some(filters)) => match data {
+            Some(filters) => match data {
                 Some(data) => Ok(Self {
                     data,
                     filters,
@@ -41,7 +41,7 @@ impl<P, D> GuardedData<P, D> {
                 }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            (token, None) => Err(AuthenticationError::InvalidToken(token).into()),
+            None => Err(AuthenticationError::InvalidToken.into()),
         }
     }
 
@@ -49,7 +49,7 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
-        match Self::authenticate(auth, "", None).await?.1 {
+        match Self::authenticate(auth, String::new(), None).await? {
             Some(filters) => match data {
                 Some(data) => Ok(Self {
                     data,
@@ -62,18 +62,16 @@ impl<P, D> GuardedData<P, D> {
         }
     }
 
-    async fn authenticate<S>(
+    async fn authenticate(
         auth: AuthController,
-        token: S,
+        token: String,
         index: Option<String>,
-    ) -> Result<(S, Option<AuthFilter>), ResponseError>
+    ) -> Result<Option<AuthFilter>, ResponseError>
     where
         P: Policy + 'static,
-        S: AsRef<str> + 'static + Send,
     {
         Ok(tokio::task::spawn_blocking(move || {
-            let res = P::authenticate(auth, token.as_ref(), index.as_deref());
-            (token, res)
+            P::authenticate(auth, token.as_ref(), index.as_deref())
         })
         .await
         .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))?)
@@ -114,10 +112,7 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                                 index.map(String::from),
                                 req.app_data::<D>().cloned(),
                             )),
-                            None => Box::pin(err(AuthenticationError::InvalidToken(
-                                "unknown".to_string(),
-                            )
-                            .into())),
+                            None => Box::pin(err(AuthenticationError::InvalidToken.into())),
                         }
                     }
                     _otherwise => {
