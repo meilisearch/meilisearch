@@ -218,7 +218,7 @@ impl Scheduler {
         let debounce_time = config.debounce_duration_sec;
 
         // Disable autobatching
-        if !config.enable_autobatching {
+        if !config.enable_auto_batching {
             config.max_batch_size = Some(1);
         }
 
