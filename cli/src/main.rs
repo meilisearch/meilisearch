@@ -23,7 +23,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "Milli CLI", about = "A simple CLI to manipulate a milli index.")]
 struct Cli {
-    #[structopt(short, long)]
+    #[structopt(short, long, default_value = ".")]
     index_path: PathBuf,
     #[structopt(short = "s", long, default_value = "100GiB")]
     index_size: Byte,
