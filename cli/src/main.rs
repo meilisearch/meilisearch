@@ -11,7 +11,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
-use milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
+use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
 use milli::Index;
 use serde_json::{Map, Value};
 use structopt::StructOpt;
@@ -191,6 +191,9 @@ struct DocumentAddition {
     /// Path to the update file, if not present, will read from stdin.
     #[structopt(short, long)]
     path: Option<PathBuf>,
+    /// Specify the primary key.
+    #[structopt(long)]
+    primary: Option<String>,
     /// Whether to generate missing document ids.
     #[structopt(short, long)]
     autogen_docids: bool,
@@ -230,6 +233,12 @@ impl Performer for DocumentAddition {
         } else {
             IndexDocumentsMethod::ReplaceDocuments
         };
+
+        if let Some(primary) = self.primary {
+            let mut builder = update::Settings::new(&mut txn, &index, &config);
+            builder.set_primary_key(primary);
+            builder.execute(|_| ()).unwrap();
+        }
 
         let indexing_config = IndexDocumentsConfig {
             update_method,
