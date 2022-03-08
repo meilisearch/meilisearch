@@ -212,7 +212,7 @@ async fn error_add_malformed_csv_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `csv` payload provided is malformed. `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
+            r#"The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -236,7 +236,7 @@ async fn error_add_malformed_csv_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `csv` payload provided is malformed. `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
+            r#"The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -274,7 +274,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value. at line 1 column 14`"#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value at line 1 column 14`"#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -298,7 +298,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value. at line 1 column 14`"#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value at line 1 column 14`"#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -336,7 +336,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value. at line 1 column 2`"#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value at line 1 column 2`"#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -360,7 +360,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value. at line 1 column 2`"#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value at line 1 column 2`"#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
