@@ -32,14 +32,14 @@ pub enum DocumentFormatError {
 impl Display for DocumentFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Internal(e) => write!(f, "An internal error has occurred. `{}`.", e),
+            Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
             Self::MalformedPayload(me, b) => match me.borrow() {
                 milli::documents::Error::JsonError(se) => write!(
                     f,
-                    "The `{}` payload provided is malformed. `Couldn't serialize document value. at line {} column {}`",
-                    b,se.line(),se.column()
+                    "The `{}` payload provided is malformed. `Couldn't serialize document value at line {} column {}`",
+                    b, se.line(), se.column()
                 ),
-                _ => write!(f, "The `{}` payload provided is malformed. `{}`.", b, me),
+                _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
             },
         }
     }
