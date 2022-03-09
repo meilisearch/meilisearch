@@ -83,69 +83,75 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             self.max_memory,
         );
 
-        // We compute the prefix docids associated with the common prefixes between
-        // the old and new word prefix fst.
-        let mut buffer = Vec::new();
-        let mut current_prefixes: Option<&&[String]> = None;
-        let mut prefixes_cache = HashMap::new();
-        while let Some((key, data)) = new_wppd_iter.move_on_next()? {
-            let (w1, w2, prox) = StrStrU8Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
-            if prox > self.max_proximity {
-                continue;
+        if !common_prefix_fst_words.is_empty() {
+            // We compute the prefix docids associated with the common prefixes between
+            // the old and new word prefix fst.
+            let mut buffer = Vec::new();
+            let mut current_prefixes: Option<&&[String]> = None;
+            let mut prefixes_cache = HashMap::new();
+            while let Some((key, data)) = new_wppd_iter.move_on_next()? {
+                let (w1, w2, prox) =
+                    StrStrU8Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                if prox > self.max_proximity {
+                    continue;
+                }
+
+                insert_current_prefix_data_in_sorter(
+                    &mut buffer,
+                    &mut current_prefixes,
+                    &mut prefixes_cache,
+                    &mut word_prefix_pair_proximity_docids_sorter,
+                    common_prefix_fst_words,
+                    self.max_prefix_length,
+                    w1,
+                    w2,
+                    prox,
+                    data,
+                )?;
             }
 
-            insert_current_prefix_data_in_sorter(
-                &mut buffer,
-                &mut current_prefixes,
+            write_prefixes_in_sorter(
                 &mut prefixes_cache,
                 &mut word_prefix_pair_proximity_docids_sorter,
-                common_prefix_fst_words,
-                self.max_prefix_length,
-                w1,
-                w2,
-                prox,
-                data,
             )?;
         }
 
-        write_prefixes_in_sorter(
-            &mut prefixes_cache,
-            &mut word_prefix_pair_proximity_docids_sorter,
-        )?;
+        if !new_prefix_fst_words.is_empty() {
+            // We compute the prefix docids associated with the newly added prefixes
+            // in the new word prefix fst.
+            let mut db_iter = self
+                .index
+                .word_pair_proximity_docids
+                .remap_data_type::<ByteSlice>()
+                .iter(self.wtxn)?;
 
-        // We compute the prefix docids associated with the newly added prefixes
-        // in the new word prefix fst.
-        let mut db_iter =
-            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(self.wtxn)?;
+            let mut buffer = Vec::new();
+            let mut current_prefixes: Option<&&[String]> = None;
+            let mut prefixes_cache = HashMap::new();
+            while let Some(((w1, w2, prox), data)) = db_iter.next().transpose()? {
+                if prox > self.max_proximity {
+                    continue;
+                }
 
-        let mut buffer = Vec::new();
-        let mut current_prefixes: Option<&&[String]> = None;
-        let mut prefixes_cache = HashMap::new();
-        while let Some(((w1, w2, prox), data)) = db_iter.next().transpose()? {
-            if prox > self.max_proximity {
-                continue;
+                insert_current_prefix_data_in_sorter(
+                    &mut buffer,
+                    &mut current_prefixes,
+                    &mut prefixes_cache,
+                    &mut word_prefix_pair_proximity_docids_sorter,
+                    &new_prefix_fst_words,
+                    self.max_prefix_length,
+                    w1,
+                    w2,
+                    prox,
+                    data,
+                )?;
             }
 
-            insert_current_prefix_data_in_sorter(
-                &mut buffer,
-                &mut current_prefixes,
+            write_prefixes_in_sorter(
                 &mut prefixes_cache,
                 &mut word_prefix_pair_proximity_docids_sorter,
-                &new_prefix_fst_words,
-                self.max_prefix_length,
-                w1,
-                w2,
-                prox,
-                data,
             )?;
         }
-
-        write_prefixes_in_sorter(
-            &mut prefixes_cache,
-            &mut word_prefix_pair_proximity_docids_sorter,
-        )?;
-
-        drop(db_iter);
 
         // All of the word prefix pairs in the database that have a w2
         // that is contained in the `suppr_pw` set must be removed as well.
