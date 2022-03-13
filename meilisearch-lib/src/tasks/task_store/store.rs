@@ -1,5 +1,5 @@
 #[allow(clippy::upper_case_acronyms)]
-type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
+type BEU64 = milli::heed::zerocopy::U64<milli::heed::byteorder::BE>;
 
 const UID_TASK_IDS: &str = "uid_task_id";
 const TASKS: &str = "tasks";
@@ -12,8 +12,8 @@ use std::ops::Range;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
-use heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
-use heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
+use milli::heed::types::{ByteSlice, OwnedType, SerdeJson, Unit};
+use milli::heed::{BytesDecode, BytesEncode, Database, Env, RoTxn, RwTxn};
 
 use crate::tasks::task::{Task, TaskId};
 
@@ -73,7 +73,7 @@ impl Store {
     /// be in an invalid state, with dangling processing tasks.
     /// You want to patch  all un-finished tasks and put them in your pending
     /// queue with the `reset_and_return_unfinished_update` method.
-    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+    pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
         let uids_task_ids = env.create_database(Some(UID_TASK_IDS))?;
         let tasks = env.create_database(Some(TASKS))?;
 
@@ -130,9 +130,10 @@ impl Store {
         let range = from..limit
             .map(|limit| (limit as u64).saturating_add(from))
             .unwrap_or(u64::MAX);
-        let iter: Box<dyn Iterator<Item = StdResult<_, heed::Error>>> = match filter {
+        let iter: Box<dyn Iterator<Item = StdResult<_, milli::heed::Error>>> = match filter {
             Some(
-                ref filter @ TaskFilter {
+                ref
+                filter @ TaskFilter {
                     indexes: Some(_), ..
                 },
             ) => {
@@ -150,7 +151,7 @@ impl Store {
             ),
         };
 
-        let apply_fitler = |task: &StdResult<_, heed::Error>| match task {
+        let apply_fitler = |task: &StdResult<_, milli::heed::Error>| match task {
             Ok(ref t) => filter
                 .as_ref()
                 .and_then(|filter| filter.filter_fn.as_ref())
@@ -162,7 +163,7 @@ impl Store {
         let tasks = iter
             .filter(apply_fitler)
             .take(limit.unwrap_or(usize::MAX))
-            .try_fold::<_, _, StdResult<_, heed::Error>>(Vec::new(), |mut v, task| {
+            .try_fold::<_, _, StdResult<_, milli::heed::Error>>(Vec::new(), |mut v, task| {
                 v.push(task?);
                 Ok(v)
             })?;
@@ -172,7 +173,7 @@ impl Store {
 
     fn compute_candidates(
         &self,
-        txn: &heed::RoTxn,
+        txn: &milli::heed::RoTxn,
         filter: &TaskFilter,
         range: Range<TaskId>,
     ) -> Result<BinaryHeap<TaskId>> {
@@ -188,10 +189,10 @@ impl Store {
                 self.uids_task_ids
                     .remap_key_type::<ByteSlice>()
                     .rev_prefix_iter(txn, &index_uid)?
-                    .map(|entry| -> StdResult<_, heed::Error> {
+                    .map(|entry| -> StdResult<_, milli::heed::Error> {
                         let (key, _) = entry?;
-                        let (_, id) =
-                            IndexUidTaskIdCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                        let (_, id) = IndexUidTaskIdCodec::bytes_decode(key)
+                            .ok_or(milli::heed::Error::Decoding)?;
                         Ok(id)
                     })
                     .skip_while(|entry| {
@@ -212,7 +213,7 @@ impl Store {
                             // if we encounter an error we returns true to collect it later
                             .unwrap_or(true)
                     })
-                    .try_for_each::<_, StdResult<(), heed::Error>>(|id| {
+                    .try_for_each::<_, StdResult<(), milli::heed::Error>>(|id| {
                         candidates.push(id?);
                         Ok(())
                     })?;
@@ -225,8 +226,8 @@ impl Store {
 
 #[cfg(test)]
 pub mod test {
-    use heed::EnvOpenOptions;
     use itertools::Itertools;
+    use milli::heed::EnvOpenOptions;
     use nelson::Mocker;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -244,10 +245,10 @@ pub mod test {
         Fake(Mocker),
     }
 
-    pub struct TmpEnv(TempDir, Arc<heed::Env>);
+    pub struct TmpEnv(TempDir, Arc<milli::heed::Env>);
 
     impl TmpEnv {
-        pub fn env(&self) -> Arc<heed::Env> {
+        pub fn env(&self) -> Arc<milli::heed::Env> {
             self.1.clone()
         }
     }
@@ -264,7 +265,7 @@ pub mod test {
     }
 
     impl MockStore {
-        pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+        pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
             Ok(Self::Real(Store::new(env)?))
         }
 

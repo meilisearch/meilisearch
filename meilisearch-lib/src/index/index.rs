@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use heed::{EnvOpenOptions, RoTxn};
+use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, FieldId};
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,7 @@ impl IndexMeta {
         Self::new_txn(index, &txn)
     }
 
-    pub fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
+    pub fn new_txn(index: &Index, txn: &milli::heed::RoTxn) -> Result<Self> {
         let created_at = index.created_at(txn)?;
         let updated_at = index.updated_at(txn)?;
         let primary_key = index.primary_key(txn)?.map(String::from);
@@ -248,7 +248,7 @@ impl Index {
 
     fn fields_to_display<S: AsRef<str>>(
         &self,
-        txn: &heed::RoTxn,
+        txn: &milli::heed::RoTxn,
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> Result<Vec<FieldId>> {
@@ -276,7 +276,7 @@ impl Index {
         let _txn = self.write_txn()?;
         self.inner
             .env
-            .copy_to_path(dst, heed::CompactionOption::Enabled)?;
+            .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
         Ok(())
     }
 }

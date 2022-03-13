@@ -48,8 +48,8 @@ pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
 >;
 
-pub fn open_meta_env(path: &Path, size: usize) -> heed::Result<heed::Env> {
-    let mut options = heed::EnvOpenOptions::new();
+pub fn open_meta_env(path: &Path, size: usize) -> milli::heed::Result<milli::heed::Env> {
+    let mut options = milli::heed::EnvOpenOptions::new();
     options.map_size(size);
     options.max_dbs(20);
     options.open(path)

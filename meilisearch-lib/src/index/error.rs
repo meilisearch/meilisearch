@@ -21,7 +21,7 @@ pub enum IndexError {
 
 internal_error!(
     IndexError: std::io::Error,
-    heed::Error,
+    milli::heed::Error,
     fst::Error,
     serde_json::Error,
     update_file_store::UpdateFileStoreError,
