@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_stream::stream;
-use chrono::Utc;
 use futures::{lock::Mutex, stream::StreamExt};
 use log::{error, trace};
+use time::macros::format_description;
+use time::OffsetDateTime;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
 use super::error::{DumpActorError, Result};
@@ -29,7 +30,11 @@ pub struct DumpActor {
 
 /// Generate uid from creation date
 fn generate_uid() -> String {
-    Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
+    OffsetDateTime::now_utc()
+        .format(format_description!(
+            "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+        ))
+        .unwrap()
 }
 
 impl DumpActor {
@@ -152,5 +157,35 @@ impl DumpActor {
             Some(info) => Ok(info.clone()),
             _ => Err(DumpActorError::DumpDoesNotExist(uid)),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_generate_uid() {
+        let current = OffsetDateTime::now_utc();
+
+        let uid = generate_uid();
+        let (date, time) = uid.split_once('-').unwrap();
+
+        let date = time::Date::parse(
+            date,
+            &format_description!("[year repr:full][month repr:numerical][day padding:zero]"),
+        )
+        .unwrap();
+        let time = time::Time::parse(
+            time,
+            &format_description!(
+                "[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+            ),
+        )
+        .unwrap();
+        let datetime = time::PrimitiveDateTime::new(date, time);
+        let datetime = datetime.assume_utc();
+
+        assert!(current - datetime < time::Duration::SECOND);
     }
 }

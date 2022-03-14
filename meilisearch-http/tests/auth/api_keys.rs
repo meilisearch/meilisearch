@@ -257,7 +257,7 @@ async fn error_add_api_key_missing_parameter() {
         "message": "`indexes` field is mandatory.",
         "code": "missing_parameter",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#missing_parameter"
+        "link": "https://docs.meilisearch.com/errors#missing_parameter"
     });
 
     assert_eq!(response, expected_response);
@@ -275,7 +275,7 @@ async fn error_add_api_key_missing_parameter() {
         "message": "`actions` field is mandatory.",
         "code": "missing_parameter",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#missing_parameter"
+        "link": "https://docs.meilisearch.com/errors#missing_parameter"
     });
 
     assert_eq!(response, expected_response);
@@ -293,7 +293,7 @@ async fn error_add_api_key_missing_parameter() {
         "message": "`expiresAt` field is mandatory.",
         "code": "missing_parameter",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#missing_parameter"
+        "link": "https://docs.meilisearch.com/errors#missing_parameter"
     });
 
     assert_eq!(response, expected_response);
@@ -316,7 +316,7 @@ async fn error_add_api_key_invalid_parameters_description() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"description field value `{"name":"products"}` is invalid. It should be a string or specified as a null value."#,
+        "message": r#"`description` field value `{"name":"products"}` is invalid. It should be a string or specified as a null value."#,
         "code": "invalid_api_key_description",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
@@ -342,7 +342,7 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"indexes field value `{"name":"products"}` is invalid. It should be an array of string representing index names."#,
+        "message": r#"`indexes` field value `{"name":"products"}` is invalid. It should be an array of string representing index names."#,
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
@@ -366,7 +366,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"actions field value `{"name":"products"}` is invalid. It should be an array of string representing action names."#,
+        "message": r#"`actions` field value `{"name":"products"}` is invalid. It should be an array of string representing action names."#,
         "code": "invalid_api_key_actions",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -386,7 +386,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"actions field value `["doc.add"]` is invalid. It should be an array of string representing action names."#,
+        "message": r#"`actions` field value `["doc.add"]` is invalid. It should be an array of string representing action names."#,
         "code": "invalid_api_key_actions",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -412,7 +412,7 @@ async fn error_add_api_key_invalid_parameters_expires_at() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"expiresAt field value `{"name":"products"}` is invalid. It should be in ISO-8601 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'."#,
+        "message": r#"`expiresAt` field value `{"name":"products"}` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'."#,
         "code": "invalid_api_key_expires_at",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"
@@ -438,7 +438,7 @@ async fn error_add_api_key_invalid_parameters_expires_at_in_the_past() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"expiresAt field value `"2010-11-13T00:00:00Z"` is invalid. It should be in ISO-8601 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'."#,
+        "message": r#"`expiresAt` field value `"2010-11-13T00:00:00Z"` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'."#,
         "code": "invalid_api_key_expires_at",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"
@@ -1213,7 +1213,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&key, content).await;
 
     let expected_response = json!({
-        "message": "description field value `13` is invalid. It should be a string or specified as a null value.",
+        "message": "`description` field value `13` is invalid. It should be a string or specified as a null value.",
         "code": "invalid_api_key_description",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
@@ -1230,7 +1230,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&key, content).await;
 
     let expected_response = json!({
-        "message": "indexes field value `13` is invalid. It should be an array of string representing index names.",
+        "message": "`indexes` field value `13` is invalid. It should be an array of string representing index names.",
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
@@ -1246,7 +1246,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&key, content).await;
 
     let expected_response = json!({
-        "message": "actions field value `13` is invalid. It should be an array of string representing action names.",
+        "message": "`actions` field value `13` is invalid. It should be an array of string representing action names.",
         "code": "invalid_api_key_actions",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -1262,7 +1262,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&key, content).await;
 
     let expected_response = json!({
-        "message": "expiresAt field value `13` is invalid. It should be in ISO-8601 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'.",
+        "message": "`expiresAt` field value `13` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.",
         "code": "invalid_api_key_expires_at",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"

@@ -1,8 +1,8 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
-use chrono::DateTime;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -568,9 +568,9 @@ async fn add_documents_no_index_creation() {
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
     let processed_at =
-        DateTime::parse_from_rfc3339(response["finishedAt"].as_str().unwrap()).unwrap();
+        OffsetDateTime::parse(response["finishedAt"].as_str().unwrap(), &Rfc3339).unwrap();
     let enqueued_at =
-        DateTime::parse_from_rfc3339(response["enqueuedAt"].as_str().unwrap()).unwrap();
+        OffsetDateTime::parse(response["enqueuedAt"].as_str().unwrap(), &Rfc3339).unwrap();
     assert!(processed_at > enqueued_at);
 
     // index was created, and primary key was infered.

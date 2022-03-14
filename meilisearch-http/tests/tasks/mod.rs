@@ -1,6 +1,7 @@
 use crate::common::Server;
-use chrono::{DateTime, Utc};
 use serde_json::json;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 #[actix_rt::test]
 async fn error_get_task_unexisting_index() {
@@ -98,7 +99,8 @@ macro_rules! assert_valid_summarized_task {
         assert_eq!($response["status"], "enqueued");
         assert_eq!($response["type"], $task_type);
         let date = $response["enqueuedAt"].as_str().expect("missing date");
-        date.parse::<DateTime<Utc>>().unwrap();
+
+        OffsetDateTime::parse(date, &Rfc3339).unwrap();
     }};
 }
 

@@ -1,26 +1,29 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use chrono::SecondsFormat;
 
-use meilisearch_auth::{Action, AuthController, Key};
+use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::OffsetDateTime;
 
-use crate::extractors::authentication::{policies::*, GuardedData};
-use meilisearch_error::ResponseError;
+use crate::extractors::{
+    authentication::{policies::*, GuardedData},
+    sequential_extractor::SeqHandler,
+};
+use meilisearch_error::{Code, ResponseError};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::post().to(create_api_key))
-            .route(web::get().to(list_api_keys)),
+            .route(web::post().to(SeqHandler(create_api_key)))
+            .route(web::get().to(SeqHandler(list_api_keys))),
     )
     .service(
         web::resource("/{api_key}")
-            .route(web::get().to(get_api_key))
-            .route(web::patch().to(patch_api_key))
-            .route(web::delete().to(delete_api_key)),
+            .route(web::get().to(SeqHandler(get_api_key)))
+            .route(web::patch().to(SeqHandler(patch_api_key)))
+            .route(web::delete().to(SeqHandler(delete_api_key))),
     );
 }
 
@@ -29,8 +32,13 @@ pub async fn create_api_key(
     body: web::Json<Value>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
-    let key = auth_controller.create_key(body.into_inner()).await?;
-    let res = KeyView::from_key(key, &auth_controller);
+    let v = body.into_inner();
+    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+        let key = auth_controller.create_key(v)?;
+        Ok(KeyView::from_key(key, &auth_controller))
+    })
+    .await
+    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
     Ok(HttpResponse::Created().json(res))
 }
@@ -39,11 +47,16 @@ pub async fn list_api_keys(
     auth_controller: GuardedData<MasterPolicy, AuthController>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
-    let keys = auth_controller.list_keys().await?;
-    let res: Vec<_> = keys
-        .into_iter()
-        .map(|k| KeyView::from_key(k, &auth_controller))
-        .collect();
+    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+        let keys = auth_controller.list_keys()?;
+        let res: Vec<_> = keys
+            .into_iter()
+            .map(|k| KeyView::from_key(k, &auth_controller))
+            .collect();
+        Ok(res)
+    })
+    .await
+    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
     Ok(HttpResponse::Ok().json(KeyListView::from(res)))
 }
@@ -52,8 +65,13 @@ pub async fn get_api_key(
     auth_controller: GuardedData<MasterPolicy, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let key = auth_controller.get_key(&path.api_key).await?;
-    let res = KeyView::from_key(key, &auth_controller);
+    let api_key = path.into_inner().api_key;
+    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+        let key = auth_controller.get_key(&api_key)?;
+        Ok(KeyView::from_key(key, &auth_controller))
+    })
+    .await
+    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
     Ok(HttpResponse::Ok().json(res))
 }
@@ -63,10 +81,14 @@ pub async fn patch_api_key(
     body: web::Json<Value>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let key = auth_controller
-        .update_key(&path.api_key, body.into_inner())
-        .await?;
-    let res = KeyView::from_key(key, &auth_controller);
+    let api_key = path.into_inner().api_key;
+    let body = body.into_inner();
+    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+        let key = auth_controller.update_key(&api_key, body)?;
+        Ok(KeyView::from_key(key, &auth_controller))
+    })
+    .await
+    .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
     Ok(HttpResponse::Ok().json(res))
 }
@@ -75,7 +97,10 @@ pub async fn delete_api_key(
     auth_controller: GuardedData<MasterPolicy, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    auth_controller.delete_key(&path.api_key).await?;
+    let api_key = path.into_inner().api_key;
+    tokio::task::spawn_blocking(move || auth_controller.delete_key(&api_key))
+        .await
+        .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
     Ok(HttpResponse::NoContent().finish())
 }
@@ -92,9 +117,12 @@ struct KeyView {
     key: String,
     actions: Vec<Action>,
     indexes: Vec<String>,
-    expires_at: Option<String>,
-    created_at: String,
-    updated_at: String,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    expires_at: Option<OffsetDateTime>,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    created_at: OffsetDateTime,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    updated_at: OffsetDateTime,
 }
 
 impl KeyView {
@@ -107,11 +135,9 @@ impl KeyView {
             key: generated_key,
             actions: key.actions,
             indexes: key.indexes,
-            expires_at: key
-                .expires_at
-                .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Secs, true)),
-            created_at: key.created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-            updated_at: key.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+            expires_at: key.expires_at,
+            created_at: key.created_at,
+            updated_at: key.updated_at,
         }
     }
 }

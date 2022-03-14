@@ -1,9 +1,10 @@
 use crate::common::Server;
-use chrono::{Duration, Utc};
+use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
 
@@ -63,22 +64,22 @@ static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         json!({
             "indexes": ["*"],
             "actions": ["*"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         json!({
             "indexes": ["*"],
             "actions": ["search"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         json!({
             "indexes": ["sales"],
             "actions": ["*"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         json!({
             "indexes": ["sales"],
             "actions": ["search"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
     ]
 });
@@ -89,23 +90,23 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         json!({
             "indexes": ["*"],
             "actions": ALL_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         json!({
             "indexes": ["sales"],
             "actions": ALL_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         // bad index
         json!({
             "indexes": ["products"],
             "actions": ["*"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         json!({
             "indexes": ["products"],
             "actions": ["search"],
-            "expiresAt": Utc::now() + Duration::days(1)
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
     ]
 });
@@ -204,19 +205,19 @@ async fn search_authorized_simple_token() {
     let tenant_tokens = vec![
         hashmap! {
             "searchRules" => json!({"*": {}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["*"]),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["sales"]),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"*": {}}),
@@ -253,19 +254,19 @@ async fn search_authorized_filter_token() {
     let tenant_tokens = vec![
         hashmap! {
             "searchRules" => json!({"*": {"filter": "color = blue"}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {"filter": "color = blue"}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"*": {"filter": ["color = blue"]}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {"filter": ["color = blue"]}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         // filter on sales should override filters on *
         hashmap! {
@@ -273,28 +274,28 @@ async fn search_authorized_filter_token() {
                 "*": {"filter": "color = green"},
                 "sales": {"filter": "color = blue"}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {},
                 "sales": {"filter": "color = blue"}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {"filter": "color = green"},
                 "sales": {"filter": ["color = blue"]}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {},
                 "sales": {"filter": ["color = blue"]}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
     ];
 
@@ -307,19 +308,19 @@ async fn filter_search_authorized_filter_token() {
     let tenant_tokens = vec![
         hashmap! {
             "searchRules" => json!({"*": {"filter": "color = blue"}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {"filter": "color = blue"}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"*": {"filter": ["color = blue"]}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {"filter": ["color = blue"]}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         // filter on sales should override filters on *
         hashmap! {
@@ -327,28 +328,28 @@ async fn filter_search_authorized_filter_token() {
                 "*": {"filter": "color = green"},
                 "sales": {"filter": "color = blue"}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {},
                 "sales": {"filter": "color = blue"}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {"filter": "color = green"},
                 "sales": {"filter": ["color = blue"]}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({
                 "*": {},
                 "sales": {"filter": ["color = blue"]}
             }),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
     ];
 
@@ -361,27 +362,27 @@ async fn error_search_token_forbidden_parent_key() {
     let tenant_tokens = vec![
         hashmap! {
             "searchRules" => json!({"*": {}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"*": Value::Null}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["*"]),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": Value::Null}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["sales"]),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
     ];
 
@@ -395,11 +396,11 @@ async fn error_search_forbidden_token() {
         // bad index
         hashmap! {
             "searchRules" => json!({"products": {}}),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["products"]),
-            "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"products": {}}),
@@ -416,27 +417,27 @@ async fn error_search_forbidden_token() {
         // expired token
         hashmap! {
             "searchRules" => json!({"*": {}}),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"*": Value::Null}),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["*"]),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": {}}),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!({"sales": Value::Null}),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
         hashmap! {
             "searchRules" => json!(["sales"]),
-            "exp" => json!((Utc::now() - Duration::hours(1)).timestamp())
+            "exp" => json!((OffsetDateTime::now_utc() - Duration::hours(1)).unix_timestamp())
         },
     ];
 
@@ -452,7 +453,7 @@ async fn error_access_forbidden_routes() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["*"],
-        "expiresAt": (Utc::now() + Duration::hours(1)),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -463,7 +464,7 @@ async fn error_access_forbidden_routes() {
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["*"]),
-        "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+        "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
     let web_token = generate_tenant_token(&key, tenant_token);
     server.use_api_key(&web_token);
@@ -487,7 +488,7 @@ async fn error_access_expired_parent_key() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["*"],
-        "expiresAt": (Utc::now() + Duration::seconds(1)),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::seconds(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -498,7 +499,7 @@ async fn error_access_expired_parent_key() {
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["*"]),
-        "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+        "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
     let web_token = generate_tenant_token(&key, tenant_token);
     server.use_api_key(&web_token);
@@ -529,7 +530,7 @@ async fn error_access_modified_token() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["*"],
-        "expiresAt": (Utc::now() + Duration::hours(1)),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -540,7 +541,7 @@ async fn error_access_modified_token() {
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["products"]),
-        "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+        "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
     let web_token = generate_tenant_token(&key, tenant_token);
     server.use_api_key(&web_token);
@@ -554,7 +555,7 @@ async fn error_access_modified_token() {
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["*"]),
-        "exp" => json!((Utc::now() + Duration::hours(1)).timestamp())
+        "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
 
     let alt = generate_tenant_token(&key, tenant_token);

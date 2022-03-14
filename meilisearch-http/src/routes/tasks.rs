@@ -7,11 +7,12 @@ use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::{TaskListView, TaskView};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::get().to(get_tasks)))
-        .service(web::resource("/{task_id}").route(web::get().to(get_task)));
+    cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
+        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
 async fn get_tasks(

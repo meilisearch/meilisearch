@@ -9,10 +9,10 @@ use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Arc;
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use time::OffsetDateTime;
 
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
@@ -40,18 +40,18 @@ impl AuthController {
         })
     }
 
-    pub async fn create_key(&self, value: Value) -> Result<Key> {
+    pub fn create_key(&self, value: Value) -> Result<Key> {
         let key = Key::create_from_value(value)?;
         self.store.put_api_key(key)
     }
 
-    pub async fn update_key(&self, key: impl AsRef<str>, value: Value) -> Result<Key> {
-        let mut key = self.get_key(key).await?;
+    pub fn update_key(&self, key: impl AsRef<str>, value: Value) -> Result<Key> {
+        let mut key = self.get_key(key)?;
         key.update_from_value(value)?;
         self.store.put_api_key(key)
     }
 
-    pub async fn get_key(&self, key: impl AsRef<str>) -> Result<Key> {
+    pub fn get_key(&self, key: impl AsRef<str>) -> Result<Key> {
         self.store
             .get_api_key(&key)?
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(key.as_ref().to_string()))
@@ -101,11 +101,11 @@ impl AuthController {
         Ok(filters)
     }
 
-    pub async fn list_keys(&self) -> Result<Vec<Key>> {
+    pub fn list_keys(&self) -> Result<Vec<Key>> {
         self.store.list_api_keys()
     }
 
-    pub async fn delete_key(&self, key: impl AsRef<str>) -> Result<()> {
+    pub fn delete_key(&self, key: impl AsRef<str>) -> Result<()> {
         if self.store.delete_api_key(&key)? {
             Ok(())
         } else {
@@ -149,7 +149,7 @@ impl AuthController {
                 None => self.store.prefix_first_expiration_date(key, action)?,
             }) {
             // check expiration date.
-            Some(Some(exp)) => Ok(Utc::now() < exp),
+            Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
             // no expiration date.
             Some(None) => Ok(true),
             // action or index forbidden.
