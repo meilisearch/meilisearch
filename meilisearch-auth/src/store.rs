@@ -8,7 +8,6 @@ use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use time::OffsetDateTime;
