@@ -6,11 +6,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 
-use chrono::Utc;
 use log::debug;
 use milli::heed::{Env, RwTxn};
 use time::OffsetDateTime;
-
 
 use super::error::TaskError;
 use super::task::{Task, TaskContent, TaskId};
