@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use time::OffsetDateTime;
 
 use super::task::Task;
 
@@ -7,7 +7,7 @@ pub type BatchId = u64;
 #[derive(Debug)]
 pub struct Batch {
     pub id: BatchId,
-    pub created_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
     pub tasks: Vec<Task>,
 }
 

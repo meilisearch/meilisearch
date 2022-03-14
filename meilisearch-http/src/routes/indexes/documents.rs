@@ -20,6 +20,7 @@ use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
+use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::SummarizedTaskView;
 
 const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
@@ -71,17 +72,17 @@ pub struct DocumentParam {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::get().to(get_all_documents))
-            .route(web::post().to(add_documents))
-            .route(web::put().to(update_documents))
-            .route(web::delete().to(clear_all_documents)),
+            .route(web::get().to(SeqHandler(get_all_documents)))
+            .route(web::post().to(SeqHandler(add_documents)))
+            .route(web::put().to(SeqHandler(update_documents)))
+            .route(web::delete().to(SeqHandler(clear_all_documents))),
     )
     // this route needs to be before the /documents/{document_id} to match properly
-    .service(web::resource("/delete-batch").route(web::post().to(delete_documents)))
+    .service(web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents))))
     .service(
         web::resource("/{document_id}")
-            .route(web::get().to(get_document))
-            .route(web::delete().to(delete_document)),
+            .route(web::get().to(SeqHandler(get_document)))
+            .route(web::delete().to(SeqHandler(delete_document))),
     );
 }
 

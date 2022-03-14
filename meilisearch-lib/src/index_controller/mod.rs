@@ -8,11 +8,11 @@ use std::time::Duration;
 
 use actix_web::error::PayloadError;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures::Stream;
 use futures::StreamExt;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
@@ -114,7 +114,8 @@ impl fmt::Display for DocumentAdditionFormat {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub database_size: u64,
-    pub last_update: Option<DateTime<Utc>>,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    pub last_update: Option<OffsetDateTime>,
     pub indexes: BTreeMap<String, IndexStats>,
 }
 
@@ -582,7 +583,7 @@ where
     }
 
     pub async fn get_all_stats(&self, search_rules: &SearchRules) -> Result<Stats> {
-        let mut last_task: Option<DateTime<_>> = None;
+        let mut last_task: Option<OffsetDateTime> = None;
         let mut indexes = BTreeMap::new();
         let mut database_size = 0;
         let processing_tasks = self.scheduler.read().await.get_processing_tasks().await?;

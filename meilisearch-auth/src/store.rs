@@ -11,6 +11,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
+use time::OffsetDateTime;
 
 use super::error::Result;
 use super::{Action, Key};
@@ -27,7 +28,7 @@ pub type KeyId = [u8; KEY_ID_LENGTH];
 pub struct HeedAuthStore {
     env: Arc<Env>,
     keys: Database<ByteSlice, SerdeJson<Key>>,
-    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<DateTime<Utc>>>>,
+    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
     should_close_on_drop: bool,
 }
 
@@ -150,7 +151,7 @@ impl HeedAuthStore {
         key: &[u8],
         action: Action,
         index: Option<&[u8]>,
-    ) -> Result<Option<Option<DateTime<Utc>>>> {
+    ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
         match self.get_key_id(key) {
             Some(id) => {
@@ -165,7 +166,7 @@ impl HeedAuthStore {
         &self,
         key: &[u8],
         action: Action,
-    ) -> Result<Option<Option<DateTime<Utc>>>> {
+    ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
         match self.get_key_id(key) {
             Some(id) => {

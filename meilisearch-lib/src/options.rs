@@ -48,7 +48,7 @@ pub struct IndexerOpts {
 pub struct SchedulerConfig {
     /// enable the autobatching experimental feature
     #[clap(long, hide = true)]
-    pub enable_autobatching: bool,
+    pub enable_auto_batching: bool,
 
     // The maximum number of updates of the same type that can be batched together.
     // If unspecified, this is unlimited. A value of 0 is interpreted as 1.

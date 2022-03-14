@@ -300,6 +300,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5d78ce20460b82d3fa150275ed9d55e21064fc7951177baacf86a145c4a4b1f"
 
 [[package]]
+name = "arrayvec"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+
+[[package]]
 name = "as-slice"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -646,7 +652,6 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
- "serde",
  "time 0.1.44",
  "winapi",
 ]
@@ -988,9 +993,9 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.1#ea15ad6c34492b32eb7ac06e69de02b6dc70a707"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.2#f2984f66e64838d51f5cce412693fa411ee3f2d4"
 dependencies = [
- "nom",
+ "nom 7.1.0",
  "nom_locate",
 ]
 
@@ -1478,6 +1483,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35e70ee094dc02fd9c13fdad4940090f22dbd6ac7c9e7094a46cf0232a50bc7c"
 
 [[package]]
+name = "iso8601-duration"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60b51dd97fa24074214b9eb14da518957573f4dec3189112610ae1ccec9ac464"
+dependencies = [
+ "nom 5.1.2",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1564,6 +1578,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2cdeb66e45e9f36bfad5bbdb4d2384e70936afbee843c6f6543f0c551ebb25"
 dependencies = [
  "fst",
+]
+
+[[package]]
+name = "lexical-core"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6607c62aa161d23d17a9072cc5da0be67cdfc89d3afb1e8d9c842bebc2525ffe"
+dependencies = [
+ "arrayvec",
+ "bitflags",
+ "cfg-if 1.0.0",
+ "ryu",
+ "static_assertions",
 ]
 
 [[package]]
@@ -1686,7 +1713,6 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 name = "meilisearch-auth"
 version = "0.26.0"
 dependencies = [
- "chrono",
  "enum-iterator",
  "meilisearch-error",
  "milli",
@@ -1695,6 +1721,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+ "time 0.3.7",
 ]
 
 [[package]]
@@ -1725,7 +1752,6 @@ dependencies = [
  "byte-unit",
  "bytes",
  "cargo_toml",
- "chrono",
  "clap",
  "crossbeam-channel",
  "either",
@@ -1737,6 +1763,7 @@ dependencies = [
  "hex",
  "http",
  "indexmap",
+ "iso8601-duration",
  "itertools",
  "jsonwebtoken",
  "log",
@@ -1751,7 +1778,7 @@ dependencies = [
  "once_cell",
  "parking_lot 0.11.2",
  "paste",
- "pin-project",
+ "pin-project-lite",
  "platform-dirs",
  "rand",
  "rayon",
@@ -1773,6 +1800,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tikv-jemallocator",
+ "time 0.3.7",
  "tokio",
  "tokio-stream",
  "urlencoding",
@@ -1794,7 +1822,6 @@ dependencies = [
  "atomic_refcell",
  "byte-unit",
  "bytes",
- "chrono",
  "clap",
  "crossbeam-channel",
  "csv",
@@ -1837,6 +1864,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
+ "time 0.3.7",
  "tokio",
  "uuid",
  "walkdir",
@@ -1885,14 +1913,13 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.22.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.1#ea15ad6c34492b32eb7ac06e69de02b6dc70a707"
+version = "0.23.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.2#f2984f66e64838d51f5cce412693fa411ee3f2d4"
 dependencies = [
  "bimap",
  "bincode",
  "bstr",
  "byteorder",
- "chrono",
  "concat-arrays",
  "crossbeam-channel",
  "csv",
@@ -1924,6 +1951,7 @@ dependencies = [
  "smallstr",
  "smallvec",
  "tempfile",
+ "time 0.3.7",
  "uuid",
 ]
 
@@ -2016,6 +2044,17 @@ source = "git+https://github.com/MarinPostma/nelson.git?rev=675f13885548fb415ead
 
 [[package]]
 name = "nom"
+version = "5.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffb4262d26ed83a1c0a33a38fe2bb15797329c85770da05e6b828ddb782627af"
+dependencies = [
+ "lexical-core",
+ "memchr",
+ "version_check",
+]
+
+[[package]]
+name = "nom"
 version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b1d11e1ef389c76fe5b81bcaf2ea32cf88b62bc494e19f493d0b30e7a930109"
@@ -2033,7 +2072,7 @@ checksum = "37794436ca3029a3089e0b95d42da1f0b565ad271e4d3bb4bad0c7bb70b10605"
 dependencies = [
  "bytecount",
  "memchr",
- "nom",
+ "nom 7.1.0",
 ]
 
 [[package]]
@@ -2778,16 +2817,16 @@ dependencies = [
 
 [[package]]
 name = "segment"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bdcc286fff0e7c5ccd46c06a301c7a8a848b06acedc6983707bd311eb358002"
+checksum = "5c14967a911a216177366bac6dfa1209b597e311a32360431c63526e27b814fb"
 dependencies = [
  "async-trait",
- "chrono",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror",
+ "time 0.3.7",
 ]
 
 [[package]]
@@ -2975,6 +3014,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3145,6 +3190,7 @@ dependencies = [
  "itoa 1.0.1",
  "libc",
  "num_threads",
+ "serde",
  "time-macros",
 ]
 

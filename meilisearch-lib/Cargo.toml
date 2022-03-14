@@ -12,7 +12,6 @@ async-stream = "0.3.2"
 async-trait = "0.1.51"
 byte-unit = { version = "4.0.12", default-features = false, features = ["std"] }
 bytes = "1.1.0"
-chrono = { version = "0.4.19", features = ["serde"] }
 csv = "1.1.6"
 crossbeam-channel = "0.5.1"
 either = "1.6.1"
@@ -27,7 +26,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-error = { path = "../meilisearch-error" }
 meilisearch-auth = { path = "../meilisearch-auth" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.22.1" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.22.2" }
 mime = "0.3.16"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
@@ -44,6 +43,7 @@ clap = { version = "3.0", features = ["derive", "env"] }
 tar = "0.4.37"
 tempfile = "3.2.0"
 thiserror = "1.0.28"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.11.0", features = ["full"] }
 uuid = { version = "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"

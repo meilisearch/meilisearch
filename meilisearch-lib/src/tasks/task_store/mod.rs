@@ -5,9 +5,12 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
+
 use chrono::Utc;
 use log::debug;
 use milli::heed::{Env, RwTxn};
+use time::OffsetDateTime;
+
 
 use super::error::TaskError;
 use super::task::{Task, TaskContent, TaskId};
@@ -72,7 +75,7 @@ impl TaskStore {
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
             let mut txn = store.wtxn()?;
             let next_task_id = store.next_task_id(&mut txn)?;
-            let created_at = TaskEvent::Created(Utc::now());
+            let created_at = TaskEvent::Created(OffsetDateTime::now_utc());
             let task = Task {
                 id: next_task_id,
                 index_uid,
