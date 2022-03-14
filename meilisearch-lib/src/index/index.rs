@@ -5,7 +5,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, FieldId};
