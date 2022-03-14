@@ -18,8 +18,8 @@ use either::Either;
 use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
 use heed::EnvOpenOptions;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use milli::documents::DocumentBatchReader;
+use milli::tokenizer::{Analyzer, AnalyzerConfig};
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{
     ClearDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,

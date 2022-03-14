@@ -12,15 +12,12 @@ byteorder = "1.4.2"
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.1"
 either = "1.6.1"
-flate2 = "1.0.20"
 fst = "0.4.5"
 fxhash = "0.2.1"
 grenad = { version = "0.4.1", default-features = false, features = ["tempfile"] }
 geoutils = "0.4.1"
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
-human_format = "1.0.3"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
-linked-hash-map = "0.5.4"
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.7" }
 memmap2 = "0.5.0"
 obkv = "0.2.0"
