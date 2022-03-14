@@ -26,7 +26,6 @@ actix-cors = "0.6"
 actix-web = { version = "4", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.43", features = ["backtrace"] }
-arc-swap = "1.3.2"
 async-stream = "0.3.2"
 async-trait = "0.1.51"
 bstr = "0.2.17"
@@ -41,7 +40,6 @@ futures = "0.3.17"
 futures-util = "0.3.17"
 http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
-iso8601-duration = "0.1.0"
 itertools = "0.10.1"
 jsonwebtoken = "7"
 log = "0.4.14"
