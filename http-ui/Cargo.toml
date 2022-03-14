@@ -27,6 +27,7 @@ futures = "0.3.21"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
 tokio = { version = "1.17.0", features = ["full"] }
+tokio-stream = { version = "0.1.8", default-features = false, features = ["sync"] }
 warp = "0.3.2"
 
 # logging

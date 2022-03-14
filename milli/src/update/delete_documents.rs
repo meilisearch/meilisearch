@@ -186,7 +186,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // We create the FST map of the external ids that we must delete.
         external_ids.sort_unstable();
-        let external_ids_to_delete = fst::Set::from_iter(external_ids.iter().map(AsRef::as_ref))?;
+        let external_ids_to_delete = fst::Set::from_iter(external_ids)?;
 
         // We acquire the current external documents ids map...
         let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
@@ -209,7 +209,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             // the LMDB B-Tree two times but only once.
             let mut iter = word_docids.prefix_iter_mut(self.wtxn, &word)?;
             if let Some((key, mut docids)) = iter.next().transpose()? {
-                if key == word.as_ref() {
+                if key == word.as_str() {
                     let previous_len = docids.len();
                     docids -= &self.documents_ids;
                     if docids.is_empty() {
@@ -230,7 +230,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             words.iter().filter_map(
                 |(word, must_remove)| {
                     if *must_remove {
-                        Some(word.as_ref())
+                        Some(word.as_str())
                     } else {
                         None
                     }

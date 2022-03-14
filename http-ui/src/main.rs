@@ -3,7 +3,7 @@ mod update_store;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{create_dir_all, File};
-use std::io::{BufRead, BufReader, Cursor};
+use std::io::{BufRead, BufReader, Cursor, Read};
 use std::net::SocketAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
@@ -35,6 +35,7 @@ use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 use warp::filters::ws::Message;
 use warp::http::Response;
 use warp::Filter;
@@ -885,7 +886,8 @@ async fn main() -> anyhow::Result<()> {
         let mut file = TFile::from_std(file);
 
         while let Some(result) = stream.next().await {
-            let bytes = result.unwrap().to_bytes();
+            let mut bytes = Vec::new();
+            result.unwrap().reader().read_to_end(&mut bytes).unwrap();
             file.write_all(&bytes[..]).await.unwrap();
         }
 
@@ -1004,8 +1006,7 @@ async fn main() -> anyhow::Result<()> {
             let update_status_receiver = update_status_sender.subscribe();
             ws.on_upgrade(|websocket| {
                 // Just echo all updates messages...
-                update_status_receiver
-                    .into_stream()
+                BroadcastStream::new(update_status_receiver)
                     .flat_map(|result| match result {
                         Ok(status) => {
                             let msg = serde_json::to_string(&status).unwrap();
