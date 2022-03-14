@@ -23,7 +23,7 @@ zip = { version = "0.5.13", optional = true }
 
 [dependencies]
 actix-cors = "0.6"
-actix-web = { version = "4", features = ["rustls"] }
+actix-web = { version = "4", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.43", features = ["backtrace"] }
 async-stream = "0.3.2"
