@@ -86,6 +86,8 @@ serde_url_params = "0.2.1"
 urlencoding = "2.1.0"
 
 [features]
+default = ["analytics", "mini-dashboard"]
+analytics = ["segment"]
 mini-dashboard = [
     "actix-web-static-files",
     "static-files",
@@ -97,8 +99,6 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-analytics = ["segment"]
-default = ["analytics", "mini-dashboard"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tikv-jemallocator = "0.4.1"
