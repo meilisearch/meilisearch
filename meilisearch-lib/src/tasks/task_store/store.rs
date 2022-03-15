@@ -132,8 +132,7 @@ impl Store {
             .unwrap_or(u64::MAX);
         let iter: Box<dyn Iterator<Item = StdResult<_, milli::heed::Error>>> = match filter {
             Some(
-                ref
-                filter @ TaskFilter {
+                ref filter @ TaskFilter {
                     indexes: Some(_), ..
                 },
             ) => {

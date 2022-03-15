@@ -652,6 +652,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "serde",
  "time 0.1.44",
  "winapi",
 ]
@@ -988,6 +989,15 @@ dependencies = [
  "libc",
  "redox_syscall",
  "winapi",
+]
+
+[[package]]
+name = "filter-parser"
+version = "0.1.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.1#ea15ad6c34492b32eb7ac06e69de02b6dc70a707"
+dependencies = [
+ "nom 7.1.0",
+ "nom_locate",
 ]
 
 [[package]]
@@ -1715,7 +1725,7 @@ version = "0.26.0"
 dependencies = [
  "enum-iterator",
  "meilisearch-error",
- "milli",
+ "milli 0.22.1",
  "rand",
  "serde",
  "serde_json",
@@ -1771,7 +1781,7 @@ dependencies = [
  "meilisearch-auth",
  "meilisearch-error",
  "meilisearch-lib",
- "milli",
+ "milli 0.22.1",
  "mime",
  "num_cpus",
  "obkv",
@@ -1839,7 +1849,7 @@ dependencies = [
  "log",
  "meilisearch-auth",
  "meilisearch-error",
- "milli",
+ "milli 0.23.0",
  "mime",
  "mockall",
  "nelson",
@@ -1913,6 +1923,50 @@ dependencies = [
 
 [[package]]
 name = "milli"
+version = "0.22.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.1#ea15ad6c34492b32eb7ac06e69de02b6dc70a707"
+dependencies = [
+ "bimap",
+ "bincode",
+ "bstr",
+ "byteorder",
+ "chrono",
+ "concat-arrays",
+ "crossbeam-channel",
+ "csv",
+ "either",
+ "filter-parser 0.1.0 (git+https://github.com/meilisearch/milli.git?tag=v0.22.1)",
+ "flate2",
+ "fst",
+ "fxhash",
+ "geoutils",
+ "grenad",
+ "heed",
+ "human_format",
+ "itertools",
+ "levenshtein_automata",
+ "linked-hash-map",
+ "log",
+ "logging_timer",
+ "meilisearch-tokenizer",
+ "memmap2",
+ "obkv",
+ "once_cell",
+ "ordered-float",
+ "rayon",
+ "roaring",
+ "rstar",
+ "serde",
+ "serde_json",
+ "slice-group-by",
+ "smallstr",
+ "smallvec",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "milli"
 version = "0.23.0"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.22.2#f2984f66e64838d51f5cce412693fa411ee3f2d4"
 dependencies = [
@@ -1924,7 +1978,7 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser",
+ "filter-parser 0.1.0 (git+https://github.com/meilisearch/milli.git?tag=v0.22.2)",
  "flate2",
  "fst",
  "fxhash",

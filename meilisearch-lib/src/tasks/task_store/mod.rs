@@ -5,7 +5,6 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-
 use log::debug;
 use milli::heed::{Env, RwTxn};
 use time::OffsetDateTime;
