@@ -155,19 +155,19 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 
         // All of the word prefix pairs in the database that have a w2
         // that is contained in the `suppr_pw` set must be removed as well.
-        let mut iter = self
-            .index
-            .word_prefix_pair_proximity_docids
-            .remap_data_type::<ByteSlice>()
-            .iter_mut(self.wtxn)?;
-        while let Some(((_, w2, _), _)) = iter.next().transpose()? {
-            if del_prefix_fst_words.contains(w2.as_bytes()) {
-                // Delete this entry as the w2 prefix is no more in the words prefix fst.
-                unsafe { iter.del_current()? };
+        if !del_prefix_fst_words.is_empty() {
+            let mut iter = self
+                .index
+                .word_prefix_pair_proximity_docids
+                .remap_data_type::<ByteSlice>()
+                .iter_mut(self.wtxn)?;
+            while let Some(((_, w2, _), _)) = iter.next().transpose()? {
+                if del_prefix_fst_words.contains(w2.as_bytes()) {
+                    // Delete this entry as the w2 prefix is no more in the words prefix fst.
+                    unsafe { iter.del_current()? };
+                }
             }
         }
-
-        drop(iter);
 
         // We finally write and merge the new word prefix pair proximity docids
         // in the LMDB database.
