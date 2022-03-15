@@ -1,4 +1,5 @@
-use std::iter::FromIterator;
+use std::iter::{repeat_with, FromIterator};
+use std::str;
 
 use fst::{SetBuilder, Streamer};
 
@@ -45,8 +46,8 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
 
         let mut current_prefix = vec![SmallString32::new(); self.max_prefix_length];
         let mut current_prefix_count = vec![0; self.max_prefix_length];
-        let mut builders: Vec<_> =
-            std::iter::repeat_with(SetBuilder::memory).take(self.max_prefix_length).collect();
+        let mut builders =
+            repeat_with(SetBuilder::memory).take(self.max_prefix_length).collect::<Vec<_>>();
 
         let mut stream = words_fst.stream();
         while let Some(bytes) = stream.next() {
@@ -58,7 +59,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
                 // We try to get the first n bytes out of this string but we only want
                 // to split at valid characters bounds. If we try to split in the middle of
                 // a character we ignore this word and go to the next one.
-                let word = std::str::from_utf8(bytes)?;
+                let word = str::from_utf8(bytes)?;
                 let prefix = match word.get(..=n) {
                     Some(prefix) => prefix,
                     None => continue,
