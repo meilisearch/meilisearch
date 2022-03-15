@@ -498,6 +498,7 @@ fn query_pair_proximity_docids(
 #[cfg(test)]
 pub mod test {
     use std::collections::HashMap;
+    use std::iter;
 
     use maplit::hashmap;
     use rand::rngs::StdRng;
@@ -567,7 +568,8 @@ pub mod test {
                     .iter()
                     .enumerate()
                     .map(|(i, w)| {
-                        (w.clone(), RoaringBitmap::from_sorted_iter(std::iter::once(i as u32)))
+                        let bitmap = RoaringBitmap::from_sorted_iter(iter::once(i as u32)).unwrap();
+                        (w.clone(), bitmap)
                     })
                     .collect())
             } else {
@@ -622,7 +624,7 @@ pub mod test {
                 }
                 values.sort_unstable();
 
-                RoaringBitmap::from_sorted_iter(values.into_iter())
+                RoaringBitmap::from_sorted_iter(values.into_iter()).unwrap()
             }
 
             let word_docids = hashmap! {

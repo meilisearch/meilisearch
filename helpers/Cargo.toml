@@ -5,12 +5,12 @@ authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.38"
-byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
+anyhow = "1.0.56"
+byte-unit = { version = "4.0.14", default-features = false, features = ["std"] }
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 milli = { path = "../milli" }
 stderrlog = "0.5.1"
-structopt = { version = "0.3.21", default-features = false }
+structopt = { version = "0.3.26", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"
