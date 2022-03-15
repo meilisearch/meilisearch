@@ -1,7 +1,7 @@
-use std::iter::FromIterator;
+use std::iter::{repeat_with, FromIterator};
 use std::str;
 
-use fst::Streamer;
+use fst::{SetBuilder, Streamer};
 
 use crate::{Index, Result, SmallString32};
 
@@ -44,43 +44,45 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
     pub fn execute(self) -> Result<()> {
         let words_fst = self.index.words_fst(&self.wtxn)?;
 
-        let mut prefix_fsts = Vec::with_capacity(self.max_prefix_length);
-        for n in 1..=self.max_prefix_length {
-            let mut current_prefix = SmallString32::new();
-            let mut current_prefix_count = 0;
-            let mut builder = fst::SetBuilder::memory();
+        let mut current_prefix = vec![SmallString32::new(); self.max_prefix_length];
+        let mut current_prefix_count = vec![0; self.max_prefix_length];
+        let mut builders =
+            repeat_with(SetBuilder::memory).take(self.max_prefix_length).collect::<Vec<_>>();
 
-            let mut stream = words_fst.stream();
-            while let Some(bytes) = stream.next() {
+        let mut stream = words_fst.stream();
+        while let Some(bytes) = stream.next() {
+            for n in 0..self.max_prefix_length {
+                let current_prefix = &mut current_prefix[n];
+                let current_prefix_count = &mut current_prefix_count[n];
+                let builder = &mut builders[n];
+
                 // We try to get the first n bytes out of this string but we only want
                 // to split at valid characters bounds. If we try to split in the middle of
                 // a character we ignore this word and go to the next one.
                 let word = str::from_utf8(bytes)?;
-                let prefix = match word.get(..n) {
+                let prefix = match word.get(..=n) {
                     Some(prefix) => prefix,
                     None => continue,
                 };
 
                 // This is the first iteration of the loop,
                 // or the current word doesn't starts with the current prefix.
-                if current_prefix_count == 0 || prefix != current_prefix.as_str() {
-                    current_prefix = SmallString32::from(prefix);
-                    current_prefix_count = 0;
+                if *current_prefix_count == 0 || prefix != current_prefix.as_str() {
+                    *current_prefix = SmallString32::from(prefix);
+                    *current_prefix_count = 0;
                 }
 
-                current_prefix_count += 1;
+                *current_prefix_count += 1;
 
                 // There is enough words corresponding to this prefix to add it to the cache.
-                if current_prefix_count >= self.threshold {
+                if *current_prefix_count >= self.threshold {
                     builder.insert(prefix)?;
                 }
             }
-
-            // We construct the final set for prefixes of size n.
-            prefix_fsts.push(builder.into_set());
         }
 
         // We merge all of the previously computed prefixes into on final set.
+        let prefix_fsts: Vec<_> = builders.into_iter().map(|sb| sb.into_set()).collect();
         let op = fst::set::OpBuilder::from_iter(prefix_fsts.iter());
         let mut builder = fst::SetBuilder::memory();
         builder.extend_stream(op.r#union())?;
