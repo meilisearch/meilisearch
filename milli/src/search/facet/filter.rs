@@ -39,12 +39,22 @@ impl<'a> std::error::Error for FilterError<'a> {}
 impl<'a> Display for FilterError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::AttributeNotFilterable { attribute, filterable } => write!(
-                f,
-                "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
-                attribute,
-                filterable,
-            ),
+            Self::AttributeNotFilterable { attribute, filterable } => {
+                if filterable.is_empty() {
+                    write!(
+                        f,
+                        "Attribute `{}` is not filterable. This index does not have configured filterable attributes.",
+                        attribute,
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
+                        attribute,
+                        filterable,
+                    )
+                }
+            },
             Self::TooDeep => write!(f,
                 "Too many filter conditions, can't process more than {} filters.",
                 MAX_FILTER_DEPTH
@@ -554,13 +564,13 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
-            "Attribute `_geo` is not filterable. Available filterable attributes are: ``."
+            "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
         ));
 
         let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
-            "Attribute `dog` is not filterable. Available filterable attributes are: ``."
+            "Attribute `dog` is not filterable. This index does not have configured filterable attributes."
         ));
         drop(rtxn);
 
