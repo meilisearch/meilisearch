@@ -6,3 +6,5 @@ members = [
     "meilisearch-lib",
     "meilisearch-auth",
 ]
+[dependencies]
+job_scheduler = "*"

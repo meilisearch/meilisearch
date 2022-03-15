@@ -22,6 +22,7 @@ vergen = { version = "5.1.15", default-features = false, features = ["git"] }
 zip = { version = "0.5.13", optional = true }
 
 [dependencies]
+job_scheduler = "*"
 actix-cors = "0.6"
 actix-web = { version = "4", features = ["rustls"] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
