@@ -144,6 +144,7 @@ pub mod policies {
     pub static TENANT_TOKEN_VALIDATION: Lazy<Validation> = Lazy::new(|| {
         let mut validation = Validation::default();
         validation.validate_exp = false;
+        validation.required_spec_claims.remove("exp");
         validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
         validation
     });
@@ -205,9 +206,7 @@ pub mod policies {
                 return None;
             }
 
-            let mut validation = Validation::default();
-            validation.validate_exp = false;
-            validation.validate_nbf = false;
+            let mut validation = TENANT_TOKEN_VALIDATION.clone();
             validation.insecure_disable_signature_validation();
             let dummy_key = DecodingKey::from_secret(b"secret");
             let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
