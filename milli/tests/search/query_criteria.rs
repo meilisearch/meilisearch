@@ -61,6 +61,7 @@ test_criterion!(
     vec![Attribute],
     vec![]
 );
+test_criterion!(typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Typo], vec![]);
 test_criterion!(
     attribute_disallow_typo,
     DISALLOW_OPTIONAL_WORDS,

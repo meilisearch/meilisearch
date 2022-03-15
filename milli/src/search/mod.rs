@@ -7,7 +7,8 @@ use std::str::Utf8Error;
 use std::time::Instant;
 
 use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
-use fst::{IntoStreamer, Streamer};
+use fst::automaton::Str;
+use fst::{Automaton, IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::debug;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
@@ -15,6 +16,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, FacetNumberIter, Filter};
+use self::fst_utils::{Complement, Intersection, StartsWith, Union};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
@@ -29,6 +31,7 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 mod criteria;
 mod distinct;
 mod facet;
+mod fst_utils;
 mod matching_words;
 mod query_tree;
 
@@ -284,17 +287,63 @@ pub fn word_derivations<'c>(
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
             let mut derived_words = Vec::new();
-            let dfa = build_dfa(word, max_typo, is_prefix);
-            let mut stream = fst.search_with_state(&dfa).into_stream();
+            if max_typo == 0 {
+                if is_prefix {
+                    let prefix = Str::new(word).starts_with();
+                    let mut stream = fst.search(prefix).into_stream();
 
-            while let Some((word, state)) = stream.next() {
-                let word = std::str::from_utf8(word)?;
-                let distance = dfa.distance(state);
-                derived_words.push((word.to_string(), distance.to_u8()));
+                    while let Some(word) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        derived_words.push((word.to_string(), 0));
+                    }
+                } else if fst.contains(word) {
+                    derived_words.push((word.to_string(), 0));
+                }
+            } else {
+                if max_typo == 1 {
+                    let dfa = build_dfa(word, 1, is_prefix);
+                    let starts = StartsWith(Str::new(get_first(word)));
+                    let mut stream =
+                        fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+
+                    while let Some((word, state)) = stream.next() {
+                        let word = std::str::from_utf8(word)?;
+                        let d = dfa.distance(state.1);
+                        derived_words.push((word.to_string(), d.to_u8()));
+                    }
+                } else {
+                    let starts = StartsWith(Str::new(get_first(word)));
+                    let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
+                    let second_dfa = build_dfa(word, 2, is_prefix);
+                    let second = Intersection(&second_dfa, &starts);
+                    let automaton = Union(first, &second);
+
+                    let mut stream = fst.search_with_state(automaton).into_stream();
+
+                    while let Some((found_word, state)) = stream.next() {
+                        let found_word = std::str::from_utf8(found_word)?;
+                        // in the case the typo is on the first letter, we know the number of typo
+                        // is two
+                        if get_first(found_word) != get_first(word) {
+                            derived_words.push((word.to_string(), 2));
+                        } else {
+                            // Else, we know that it is the second dfa that matched and compute the
+                            // correct distance
+                            let d = second_dfa.distance((state.1).0);
+                            derived_words.push((word.to_string(), d.to_u8()));
+                        }
+                    }
+                }
             }
-
             Ok(entry.insert(derived_words))
         }
+    }
+}
+
+fn get_first(s: &str) -> &str {
+    match s.chars().next() {
+        Some(c) => &s[..c.len_utf8()],
+        None => panic!("unexpected empty query"),
     }
 }
 
