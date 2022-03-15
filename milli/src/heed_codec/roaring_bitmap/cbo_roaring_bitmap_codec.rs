@@ -82,7 +82,7 @@ impl CboRoaringBitmapCodec {
                     buffer.extend_from_slice(&integer.to_ne_bytes());
                 }
             } else {
-                // Integers *must* be ordered here, no matter what.
+                // We can unwrap safely because the vector is sorted upper.
                 let roaring = RoaringBitmap::from_sorted_iter(vec.into_iter()).unwrap();
                 roaring.serialize_into(buffer)?;
             }
