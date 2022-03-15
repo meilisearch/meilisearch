@@ -16,6 +16,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, FacetNumberIter, Filter};
+use self::fst_utils::{Complement, Intersection, StartsWith, Union};
 pub use self::matching_words::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
@@ -30,6 +31,7 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 mod criteria;
 mod distinct;
 mod facet;
+mod fst_utils;
 mod matching_words;
 mod query_tree;
 
@@ -70,7 +72,6 @@ impl<'a> Search<'a> {
 
     pub fn offset(&mut self, offset: usize) -> &mut Search<'a> {
         self.offset = offset;
-
         self
     }
 
@@ -301,8 +302,9 @@ pub fn word_derivations<'c>(
             } else {
                 if max_typo == 1 {
                     let dfa = build_dfa(word, 1, is_prefix);
-                    let starts = Str::new(get_first(word)).starts_with();
-                    let mut stream = fst.search_with_state(starts.intersection(&dfa)).into_stream();
+                    let starts = StartsWith(Str::new(get_first(word)));
+                    let mut stream =
+                        fst.search_with_state(Intersection(starts, &dfa)).into_stream();
 
                     while let Some((word, state)) = stream.next() {
                         let word = std::str::from_utf8(word)?;
@@ -310,11 +312,11 @@ pub fn word_derivations<'c>(
                         derived_words.push((word.to_string(), d.to_u8()));
                     }
                 } else {
-                    let starts = Str::new(get_first(word)).starts_with();
-                    let first = build_dfa(word, 1, is_prefix).intersection((&starts).complement());
+                    let starts = StartsWith(Str::new(get_first(word)));
+                    let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
                     let second_dfa = build_dfa(word, 2, is_prefix);
-                    let second = (&second_dfa).intersection(&starts);
-                    let automaton = first.union(&second);
+                    let second = Intersection(&second_dfa, &starts);
+                    let automaton = Union(first, &second);
 
                     let mut stream = fst.search_with_state(automaton).into_stream();
 
