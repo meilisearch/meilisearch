@@ -7,10 +7,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use error::{IndexResolverError, Result};
-use heed::Env;
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
+use milli::heed::Env;
 use milli::update::{DocumentDeletionResult, IndexerConfig};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -39,7 +39,7 @@ pub fn create_index_resolver(
     path: impl AsRef<Path>,
     index_size: usize,
     indexer_opts: &IndexerOpts,
-    meta_env: Arc<heed::Env>,
+    meta_env: Arc<milli::heed::Env>,
     file_store: UpdateFileStore,
 ) -> anyhow::Result<HardStateIndexResolver> {
     let uuid_store = HeedMetaStore::new(meta_env)?;

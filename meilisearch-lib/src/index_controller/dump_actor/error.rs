@@ -18,7 +18,7 @@ pub enum DumpActorError {
 }
 
 internal_error!(
-    DumpActorError: heed::Error,
+    DumpActorError: milli::heed::Error,
     std::io::Error,
     tokio::task::JoinError,
     tokio::sync::oneshot::error::RecvError,

@@ -39,7 +39,6 @@ flate2 = "1.0.21"
 fst = "0.4.7"
 futures = "0.3.17"
 futures-util = "0.3.17"
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
 http = "0.2.4"
 indexmap = { version = "1.7.0", features = ["serde-1"] }
 iso8601-duration = "0.1.0"
@@ -77,6 +76,7 @@ tokio = { version = "1.11.0", features = ["full"] }
 tokio-stream = "0.1.7"
 uuid = { version = "0.8.2", features = ["serde"] }
 walkdir = "2.3.2"
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.24.0" }
 pin-project-lite = "0.2.8"
 
 [dev-dependencies]
