@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-error"
-version = "0.26.0"
+version = "0.26.1"
 authors = ["marin <postma.marin@protonmail.com>"]
 edition = "2021"
 
