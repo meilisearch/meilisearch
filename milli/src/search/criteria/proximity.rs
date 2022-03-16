@@ -11,7 +11,7 @@ use super::{
 };
 use crate::search::query_tree::{maximum_proximity, Operation, Query, QueryKind};
 use crate::search::{build_dfa, WordDerivationsCache};
-use crate::{DocumentId, Position, Result};
+use crate::{Position, Result};
 
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
 
@@ -90,7 +90,6 @@ impl<'t> Criterion for Proximity<'t> {
                                 self.ctx,
                                 query_tree,
                                 allowed_candidates,
-                                params.wdcache,
                             )?;
                             self.plane_sweep_cache = Some(cache.into_iter());
 
@@ -343,7 +342,6 @@ fn resolve_plane_sweep_candidates(
     ctx: &dyn Context,
     query_tree: &Operation,
     allowed_candidates: &RoaringBitmap,
-    wdcache: &mut WordDerivationsCache,
 ) -> Result<BTreeMap<u8, RoaringBitmap>> {
     /// FIXME may be buggy with query like "new new york"
     fn plane_sweep(
@@ -467,12 +465,9 @@ fn resolve_plane_sweep_candidates(
     }
 
     fn resolve_operation<'a>(
-        ctx: &dyn Context,
         query_tree: &'a Operation,
-        docid: DocumentId,
         rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
         words_positions: &HashMap<String, RoaringBitmap>,
-        wdcache: &mut WordDerivationsCache,
     ) -> Result<Vec<(Position, u8, Position)>> {
         use Operation::{And, Or, Phrase};
 
@@ -484,14 +479,7 @@ fn resolve_plane_sweep_candidates(
             And(ops) => {
                 let mut groups_positions = Vec::with_capacity(ops.len());
                 for operation in ops {
-                    let positions = resolve_operation(
-                        ctx,
-                        operation,
-                        docid,
-                        rocache,
-                        words_positions,
-                        wdcache,
-                    )?;
+                    let positions = resolve_operation(operation, rocache, words_positions)?;
                     groups_positions.push(positions);
                 }
                 plane_sweep(groups_positions, false)?
@@ -501,7 +489,7 @@ fn resolve_plane_sweep_candidates(
                 for word in words {
                     let positions = match words_positions.get(word) {
                         Some(positions) => positions.iter().map(|p| (p, 0, p)).collect(),
-                        None => vec![],
+                        None => return Ok(vec![]),
                     };
                     groups_positions.push(positions);
                 }
@@ -510,14 +498,7 @@ fn resolve_plane_sweep_candidates(
             Or(_, ops) => {
                 let mut result = Vec::new();
                 for op in ops {
-                    result.extend(resolve_operation(
-                        ctx,
-                        op,
-                        docid,
-                        rocache,
-                        words_positions,
-                        wdcache,
-                    )?)
+                    result.extend(resolve_operation(op, rocache, words_positions)?)
                 }
 
                 result.sort_unstable();
@@ -572,14 +553,8 @@ fn resolve_plane_sweep_candidates(
     for docid in allowed_candidates {
         let words_positions = ctx.docid_words_positions(docid)?;
         resolve_operation_cache.clear();
-        let positions = resolve_operation(
-            ctx,
-            query_tree,
-            docid,
-            &mut resolve_operation_cache,
-            &words_positions,
-            wdcache,
-        )?;
+        let positions =
+            resolve_operation(query_tree, &mut resolve_operation_cache, &words_positions)?;
         let best_proximity = positions.into_iter().min_by_key(|(_, proximity, _)| *proximity);
         let best_proximity = best_proximity.map(|(_, proximity, _)| proximity).unwrap_or(7);
         candidates.entry(best_proximity).or_insert_with(RoaringBitmap::new).insert(docid);
