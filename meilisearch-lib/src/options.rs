@@ -52,20 +52,20 @@ pub struct SchedulerConfig {
 
     // The maximum number of updates of the same type that can be batched together.
     // If unspecified, this is unlimited. A value of 0 is interpreted as 1.
-    #[clap(long, requires = "enable-autobatching", hide = true)]
+    #[clap(long, requires = "enable-auto-batching", hide = true)]
     pub max_batch_size: Option<usize>,
 
     // The maximum number of documents in a document batch. Since batches must contain at least one
     // update for the scheduler to make progress, the number of documents in a batch will be at
     // least the number of documents of its first update.
-    #[clap(long, requires = "enable-autobatching", hide = true)]
+    #[clap(long, requires = "enable-auto-batching", hide = true)]
     pub max_documents_per_batch: Option<usize>,
 
     /// Debounce duration in seconds
     ///
     /// When a new task is enqueued, the scheduler waits for `debounce_duration_sec` seconds for new updates before
     /// starting to process a batch of updates.
-    #[clap(long, requires = "enable-autobatching", hide = true)]
+    #[clap(long, requires = "enable-auto-batching", hide = true)]
     pub debounce_duration_sec: Option<u64>,
 }
 
