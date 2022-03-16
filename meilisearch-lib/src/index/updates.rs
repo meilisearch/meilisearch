@@ -176,7 +176,7 @@ pub struct Facets {
 impl Index {
     fn update_primary_key_txn<'a, 'b>(
         &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
+        txn: &mut milli::heed::RwTxn<'a, 'b>,
         primary_key: String,
     ) -> Result<IndexMeta> {
         let mut builder = milli::update::Settings::new(txn, self, self.indexer_config.as_ref());

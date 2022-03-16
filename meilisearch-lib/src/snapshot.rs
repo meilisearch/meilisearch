@@ -149,7 +149,7 @@ impl SnapshotJob {
         let env = open_meta_env(&self.src_path, self.meta_env_size)?;
 
         let dst = path.join("data.mdb");
-        env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
+        env.copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
 
         Ok(())
     }
@@ -180,12 +180,12 @@ impl SnapshotJob {
 
             let dst = dst.join("data.mdb");
 
-            let mut options = heed::EnvOpenOptions::new();
+            let mut options = milli::heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
             let index = milli::Index::new(options, entry.path())?;
             index
                 .env
-                .copy_to_path(dst, heed::CompactionOption::Enabled)?;
+                .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
         }
 
         Ok(())
@@ -198,7 +198,7 @@ impl SnapshotJob {
         let dst = dst.join("data.mdb");
 
         let env = open_auth_store_env(&auth_path)?;
-        env.copy_to_path(dst, heed::CompactionOption::Enabled)?;
+        env.copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
 
         Ok(())
     }

@@ -5,8 +5,8 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use heed::{Env, RwTxn};
 use log::debug;
+use milli::heed::{Env, RwTxn};
 use time::OffsetDateTime;
 
 use super::error::TaskError;
@@ -61,7 +61,7 @@ impl Clone for TaskStore {
 }
 
 impl TaskStore {
-    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+    pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
         let store = Arc::new(Store::new(env)?);
         Ok(Self { store })
     }
@@ -248,7 +248,7 @@ pub mod test {
     }
 
     impl MockTaskStore {
-        pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+        pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
             Ok(Self::Real(TaskStore::new(env)?))
         }
 
