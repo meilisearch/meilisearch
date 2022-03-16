@@ -112,7 +112,11 @@ impl<'a> Search<'a> {
             Some(query) => {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
-                builder.authorize_typos(self.authorize_typos);
+
+                // only authorize typos if both the index and the query allow it.
+                let index_authorizes_typos = self.index.authorize_typos(self.rtxn)?;
+                builder.authorize_typos(self.authorize_typos && index_authorizes_typos);
+
                 builder.words_limit(self.words_limit);
                 // We make sure that the analyzer is aware of the stop words
                 // this ensures that the query builder is able to properly remove them.
