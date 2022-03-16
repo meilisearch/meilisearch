@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = ["milli", "filter-parser", "http-ui", "benchmarks", "infos", "helpers", "cli"]
 default-members = ["milli"]
 
