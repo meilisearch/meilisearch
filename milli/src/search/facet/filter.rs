@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
 use std::ops::Deref;
@@ -27,7 +28,7 @@ pub struct Filter<'a> {
 
 #[derive(Debug)]
 enum FilterError<'a> {
-    AttributeNotFilterable { attribute: &'a str, filterable: String },
+    AttributeNotFilterable { attribute: &'a str, filterable_fields: HashSet<String> },
     BadGeo(&'a str),
     BadGeoLat(f64),
     BadGeoLng(f64),
@@ -39,12 +40,24 @@ impl<'a> std::error::Error for FilterError<'a> {}
 impl<'a> Display for FilterError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::AttributeNotFilterable { attribute, filterable } => write!(
-                f,
-                "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
-                attribute,
-                filterable,
-            ),
+            Self::AttributeNotFilterable { attribute, filterable_fields } => {
+                if filterable_fields.is_empty() {
+                    write!(
+                        f,
+                        "Attribute `{}` is not filterable. This index does not have configured filterable attributes.",
+                        attribute,
+                    )
+                } else {
+                    let filterables_list = filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
+
+                    write!(
+                        f,
+                        "Attribute `{}` is not filterable. Available filterable attributes are: `{}`.",
+                        attribute,
+                        filterables_list,
+                    )
+                }
+            },
             Self::TooDeep => write!(f,
                 "Too many filter conditions, can't process more than {} filters.",
                 MAX_FILTER_DEPTH
@@ -362,10 +375,7 @@ impl<'a> Filter<'a> {
                             return Err(fid.as_external_error(
                                 FilterError::AttributeNotFilterable {
                                     attribute,
-                                    filterable: filterable_fields
-                                        .into_iter()
-                                        .collect::<Vec<_>>()
-                                        .join(" "),
+                                    filterable_fields,
                                 },
                             ))?;
                         }
@@ -416,7 +426,7 @@ impl<'a> Filter<'a> {
                 } else {
                     return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: "_geo",
-                        filterable: filterable_fields.into_iter().collect::<Vec<_>>().join(" "),
+                        filterable_fields,
                     }))?;
                 }
             }
@@ -554,13 +564,13 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
-            "Attribute `_geo` is not filterable. Available filterable attributes are: ``."
+            "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
         ));
 
         let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
-            "Attribute `dog` is not filterable. Available filterable attributes are: ``."
+            "Attribute `dog` is not filterable. This index does not have configured filterable attributes."
         ));
         drop(rtxn);
 
