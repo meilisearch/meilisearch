@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-lib"
-version = "0.26.0"
+version = "0.26.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

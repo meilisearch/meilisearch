@@ -1713,7 +1713,7 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "enum-iterator",
  "heed",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "actix-web",
  "proptest",
@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -1814,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "actix-rt",
  "actix-web",
