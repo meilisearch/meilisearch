@@ -162,6 +162,13 @@ make_setting_route!(
 );
 
 make_setting_route!(
+    "/typo",
+    meilisearch_lib::index::updates::TypoSettings,
+    typo,
+    "typo"
+);
+
+make_setting_route!(
     "/searchable-attributes",
     Vec<String>,
     searchable_attributes,
@@ -246,7 +253,8 @@ generate_configure!(
     distinct_attribute,
     stop_words,
     synonyms,
-    ranking_rules
+    ranking_rules,
+    typo
 );
 
 pub async fn update_all(

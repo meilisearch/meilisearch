@@ -17,6 +17,7 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
+use super::updates::TypoSettings;
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -168,6 +169,10 @@ impl Index {
             })
             .collect();
 
+        let typo_tolerance = TypoSettings {
+            enabled: Setting::Set(self.authorize_typos(txn)?),
+        };
+
         Ok(Settings {
             displayed_attributes: match displayed_attributes {
                 Some(attrs) => Setting::Set(attrs),
@@ -186,6 +191,7 @@ impl Index {
                 None => Setting::Reset,
             },
             synonyms: Setting::Set(synonyms),
+            typo: Setting::Set(typo_tolerance),
             _kind: PhantomData,
         })
     }
