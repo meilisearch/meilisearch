@@ -132,7 +132,6 @@ pub trait Policy {
 
 pub mod policies {
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-    use once_cell::sync::Lazy;
     use serde::{Deserialize, Serialize};
     use time::OffsetDateTime;
 
@@ -141,13 +140,13 @@ pub mod policies {
     // reexport actions in policies in order to be used in routes configuration.
     pub use meilisearch_auth::actions;
 
-    pub static TENANT_TOKEN_VALIDATION: Lazy<Validation> = Lazy::new(|| {
+    fn tenant_token_validation() -> Validation {
         let mut validation = Validation::default();
         validation.validate_exp = false;
         validation.required_spec_claims.remove("exp");
         validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
         validation
-    });
+    }
 
     pub struct MasterPolicy;
 
@@ -206,7 +205,7 @@ pub mod policies {
                 return None;
             }
 
-            let mut validation = TENANT_TOKEN_VALIDATION.clone();
+            let mut validation = tenant_token_validation();
             validation.insecure_disable_signature_validation();
             let dummy_key = DecodingKey::from_secret(b"secret");
             let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
@@ -242,7 +241,7 @@ pub mod policies {
                 decode::<Claims>(
                     token,
                     &DecodingKey::from_secret(key.as_bytes()),
-                    &TENANT_TOKEN_VALIDATION,
+                    &tenant_token_validation(),
                 )
                 .ok()?;
 
