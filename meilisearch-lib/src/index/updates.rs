@@ -397,6 +397,8 @@ pub fn apply_settings_to_builder(
         Setting::Reset => {
             // all typo settings need to be reset here.
             builder.reset_authorize_typos();
+            builder.reset_min_word_len_one_typo();
+            builder.reset_min_word_len_two_typos();
         }
         Setting::NotSet => (),
     }
