@@ -7,7 +7,6 @@ use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
 use meilisearch_auth::AuthController;
 use meilisearch_http::setup_meilisearch;
-use meilisearch_lib::options::{IndexerOpts, MaxMemory};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
