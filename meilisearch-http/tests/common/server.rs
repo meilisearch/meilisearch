@@ -7,6 +7,7 @@ use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
 use meilisearch_auth::AuthController;
 use meilisearch_http::setup_meilisearch;
+use meilisearch_lib::options::{IndexerOpts, MaxMemory};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -134,6 +135,11 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
         snapshot_dir: ".".into(),
+        indexer_options: IndexerOpts {
+            // memory has to be unlimited because several meilisearch are running in test context.
+            max_memory: MaxMemory::unlimited(),
+            ..Parser::parse_from(None as Option<&str>)
+        },
         ..Parser::parse_from(None as Option<&str>)
     }
 }
