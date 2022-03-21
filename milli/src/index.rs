@@ -23,6 +23,9 @@ use crate::{
     Search, StrBEU32Codec, StrStrU8Codec, BEU32,
 };
 
+pub const DEFAULT_MIN_WORD_LEN_1_TYPO: u8 = 5;
+pub const DEFAULT_MIN_WORD_LEN_2_TYPOS: u8 = 9;
+
 pub mod main_key {
     pub const CRITERIA_KEY: &str = "criteria";
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
@@ -47,6 +50,8 @@ pub mod main_key {
     pub const CREATED_AT_KEY: &str = "created-at";
     pub const UPDATED_AT_KEY: &str = "updated-at";
     pub const AUTHORIZE_TYPOS: &str = "authorize-typos";
+    pub const ONE_TYPO_WORD_LEN: &str = "one-typo-word-len";
+    pub const TWO_TYPOS_WORD_LEN: &str = "two-typos-word-len";
 }
 
 pub mod db_name {
@@ -884,6 +889,42 @@ impl Index {
         // because by default, we authorize typos.
         self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::AUTHORIZE_TYPOS, &(flag as u8))?;
 
+        Ok(())
+    }
+
+    pub fn min_word_len_1_typo(&self, txn: &RoTxn) -> heed::Result<u8> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        Ok(self
+            .main
+            .get::<_, Str, OwnedType<u8>>(txn, main_key::ONE_TYPO_WORD_LEN)?
+            .unwrap_or(DEFAULT_MIN_WORD_LEN_1_TYPO))
+    }
+
+    pub(crate) fn put_min_word_len_1_typo(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::ONE_TYPO_WORD_LEN, &val)?;
+        Ok(())
+    }
+
+    pub fn min_word_len_2_typo(&self, txn: &RoTxn) -> heed::Result<u8> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        Ok(self
+            .main
+            .get::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN)?
+            .unwrap_or(DEFAULT_MIN_WORD_LEN_2_TYPOS))
+    }
+
+    pub(crate) fn put_min_word_len_2_typo(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN, &val)?;
         Ok(())
     }
 }

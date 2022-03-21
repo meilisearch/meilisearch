@@ -72,6 +72,7 @@ pub enum UserError {
     SerdeJson(serde_json::Error),
     SortError(SortError),
     UnknownInternalDocumentId { document_id: DocumentId },
+    InvalidMinTypoWordSetting(u8, u8),
 }
 
 impl From<io::Error> for Error {
@@ -291,6 +292,7 @@ ranking rules settings to use the sort parameter at search time.",
             Self::UnknownInternalDocumentId { document_id } => {
                 write!(f, "An unknown internal document id have been used: `{}`.", document_id)
             }
+            Self::InvalidMinTypoWordSetting(one, two) => write!(f, "Invalid settings for MinWordLenForTypo, expected 0 < 1-typo < 2-typos < 255, but found 1-typo: {} and 2-typo: {}", one, two),
         }
     }
 }

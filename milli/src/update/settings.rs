@@ -90,6 +90,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     synonyms: Setting<HashMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
+    min_2_typos_word_len: Setting<u8>,
+    min_1_typo_word_len: Setting<u8>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -112,6 +114,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             indexer_config,
+            min_2_typos_word_len: Setting::Reset,
+            min_1_typo_word_len: Setting::Reset,
         }
     }
 
@@ -194,6 +198,22 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_authorize_typos(&mut self) {
         self.authorize_typos = Setting::Reset;
+    }
+
+    pub fn set_min_2_typos_word_len(&mut self, val: u8) {
+        self.min_2_typos_word_len = Setting::Set(val);
+    }
+
+    pub fn reset_min_2_typos_word_len(&mut self) {
+        self.min_2_typos_word_len = Setting::Reset;
+    }
+
+    pub fn set_min_1_typo_word_len(&mut self, val: u8) {
+        self.min_1_typo_word_len = Setting::Set(val);
+    }
+
+    pub fn reset_min_1_typos_word_len(&mut self) {
+        self.min_1_typo_word_len = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -474,6 +494,38 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    fn update_min_typo_word_len(&mut self) -> Result<()> {
+        match (&self.min_1_typo_word_len, &self.min_2_typos_word_len) {
+            (Setting::Set(one), Setting::Set(two)) => {
+                if one < two {
+                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
+                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
+                } else {
+                    return Err(UserError::InvalidMinTypoWordSetting(*one, *two).into());
+                }
+            }
+            (Setting::Set(one), _) => {
+                let two = self.index.min_word_len_2_typo(&self.wtxn)?;
+                if *one < two {
+                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
+                } else {
+                    return Err(UserError::InvalidMinTypoWordSetting(*one, two).into());
+                }
+            }
+            (_, Setting::Set(two)) => {
+                let one = self.index.min_word_len_1_typo(&self.wtxn)?;
+                if one < *two {
+                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
+                } else {
+                    return Err(UserError::InvalidMinTypoWordSetting(one, *two).into());
+                }
+            }
+            _ => (),
+        }
+
+        Ok(())
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -490,6 +542,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_criteria()?;
         self.update_primary_key()?;
         self.update_authorize_typos()?;
+        self.update_min_typo_word_len()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
