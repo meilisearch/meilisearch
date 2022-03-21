@@ -90,19 +90,6 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     }
 }
 
-impl Default for IndexerOpts {
-    fn default() -> Self {
-        Self {
-            log_every_n: 100_000,
-            max_nb_chunks: None,
-            max_memory: MaxMemory::default(),
-            chunk_compression_type: CompressionType::None,
-            chunk_compression_level: None,
-            indexing_jobs: None,
-        }
-    }
-}
-
 /// A type used to detect the max memory available and use 2/3 of it.
 #[derive(Debug, Clone, Copy)]
 pub struct MaxMemory(Option<Byte>);
