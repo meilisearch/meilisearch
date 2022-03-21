@@ -148,6 +148,18 @@ pub mod policies {
         validation
     }
 
+    /// Extracts the key prefix used to sign the payload from the payload, without performing any validation.
+    fn extract_key_prefix(token: &str) -> Option<String> {
+        let mut validation = tenant_token_validation();
+        validation.insecure_disable_signature_validation();
+        let dummy_key = DecodingKey::from_secret(b"secret");
+        let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
+
+        // get token fields without validating it.
+        let Claims { api_key_prefix, .. } = token_data.claims;
+        Some(api_key_prefix)
+    }
+
     pub struct MasterPolicy;
 
     impl Policy for MasterPolicy {
@@ -205,32 +217,7 @@ pub mod policies {
                 return None;
             }
 
-            let mut validation = tenant_token_validation();
-            validation.insecure_disable_signature_validation();
-            let dummy_key = DecodingKey::from_secret(b"secret");
-            let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
-
-            // get token fields without validating it.
-            let Claims {
-                search_rules,
-                exp,
-                api_key_prefix,
-            } = token_data.claims;
-
-            // Check index access if an index restriction is provided.
-            if let Some(index) = index {
-                if !search_rules.is_index_authorized(index) {
-                    return None;
-                }
-            }
-
-            // Check if token is expired.
-            if let Some(exp) = exp {
-                if OffsetDateTime::now_utc().unix_timestamp() > exp {
-                    return None;
-                }
-            }
-
+            let api_key_prefix = extract_key_prefix(token)?;
             // check if parent key is authorized to do the action.
             if auth
                 .is_key_authorized(api_key_prefix.as_bytes(), Action::Search, index)
@@ -238,15 +225,29 @@ pub mod policies {
             {
                 // Check if tenant token is valid.
                 let key = auth.generate_key(&api_key_prefix)?;
-                decode::<Claims>(
+                let data = decode::<Claims>(
                     token,
                     &DecodingKey::from_secret(key.as_bytes()),
                     &tenant_token_validation(),
                 )
                 .ok()?;
 
+                // Check index access if an index restriction is provided.
+                if let Some(index) = index {
+                    if !data.claims.search_rules.is_index_authorized(index) {
+                        return None;
+                    }
+                }
+
+                // Check if token is expired.
+                if let Some(exp) = data.claims.exp {
+                    if OffsetDateTime::now_utc().unix_timestamp() > exp {
+                        return None;
+                    }
+                }
+
                 return auth
-                    .get_key_filters(api_key_prefix, Some(search_rules))
+                    .get_key_filters(api_key_prefix, Some(data.claims.search_rules))
                     .ok();
             }
 
