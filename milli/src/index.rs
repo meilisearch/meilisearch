@@ -53,6 +53,7 @@ pub mod main_key {
     pub const ONE_TYPO_WORD_LEN: &str = "one-typo-word-len";
     pub const TWO_TYPOS_WORD_LEN: &str = "two-typos-word-len";
     pub const EXACT_WORDS: &str = "exact-words";
+    pub const EXACT_ATTRIBUTES: &str = "exact-attributes";
 }
 
 pub mod db_name {
@@ -947,6 +948,23 @@ impl Index {
             main_key::EXACT_WORDS,
             words.as_fst().as_bytes(),
         )?;
+        Ok(())
+    }
+
+    pub fn exact_attributes<'t>(&self, txn: &'t RoTxn) -> Result<Vec<&'t str>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<Vec<&str>>>(txn, main_key::EXACT_ATTRIBUTES)?
+            .unwrap_or_default())
+    }
+
+    pub(crate) fn put_exact_attributes(&self, txn: &mut RwTxn, attrs: &[&str]) -> Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(txn, main_key::EXACT_ATTRIBUTES, &attrs)?;
+        Ok(())
+    }
+
+    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> Result<()> {
+        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)?;
         Ok(())
     }
 }

@@ -93,6 +93,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
     exact_words: Setting<BTreeSet<String>>,
+    /// attributes on which typo tolerance is not enabled.
+    exact_attributes: Setting<HashSet<String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -117,6 +119,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             exact_words: Setting::NotSet,
             min_word_len_two_typos: Setting::Reset,
             min_word_len_one_typo: Setting::Reset,
+            exact_attributes: Setting::Reset,
             indexer_config,
         }
     }
@@ -224,6 +227,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_exact_words(&mut self) {
         self.exact_words = Setting::Reset;
+    }
+
+    pub fn set_exact_attributes(&mut self, attrs: HashSet<String>) {
+        self.exact_attributes = Setting::Set(attrs);
+    }
+
+    pub fn reset_exact_attributes(&mut self) {
+        self.exact_attributes = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -411,6 +422,21 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    fn update_exact_attributes(&mut self) -> Result<bool> {
+        match self.exact_attributes {
+            Setting::Set(ref attrs) => {
+                let attrs = attrs.iter().map(String::as_str).collect::<Vec<_>>();
+                self.index.put_exact_attributes(&mut self.wtxn, &attrs)?;
+                Ok(true)
+            }
+            Setting::Reset => {
+                self.index.delete_exact_attributes(&mut self.wtxn)?;
+                Ok(true)
+            }
+            Setting::NotSet => Ok(false),
+        }
+    }
+
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
@@ -579,8 +605,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let stop_words_updated = self.update_stop_words()?;
         let synonyms_updated = self.update_synonyms()?;
         let searchable_updated = self.update_searchable()?;
+        let exact_attributes_updated = self.update_exact_attributes()?;
 
-        if stop_words_updated || faceted_updated || synonyms_updated || searchable_updated {
+        if stop_words_updated
+            || faceted_updated
+            || synonyms_updated
+            || searchable_updated
+            || exact_attributes_updated
+        {
             self.reindex(&progress_callback, old_fields_ids_map)?;
         }
 
