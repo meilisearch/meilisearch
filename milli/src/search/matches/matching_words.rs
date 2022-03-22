@@ -1,11 +1,11 @@
 use std::cmp::{min, Reverse};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Index, IndexMut};
 
 use levenshtein_automata::{Distance, DFA};
 use meilisearch_tokenizer::Token;
 
-use super::build_dfa;
+use crate::search::build_dfa;
 use crate::search::query_tree::{Operation, Query};
 
 type IsPrefix = bool;
@@ -14,7 +14,7 @@ type IsPrefix = bool;
 /// referencing words that match the given query tree.
 #[derive(Default)]
 pub struct MatchingWords {
-    dfas: Vec<(DFA, String, u8, IsPrefix)>,
+    dfas: Vec<(DFA, String, u8, IsPrefix, usize)>,
 }
 
 impl MatchingWords {
@@ -23,11 +23,11 @@ impl MatchingWords {
         let mut dfas: Vec<_> = fetch_queries(tree)
             .into_iter()
             // create DFAs for each word
-            .map(|(w, t, p)| (build_dfa(w, t, p), w.to_string(), t, p))
+            .map(|((w, t, p), id)| (build_dfa(w, t, p), w.to_string(), t, p, id))
             .collect();
         // Sort word by len in DESC order prioritizing the longuest word,
         // in order to highlight the longuest part of the matched word.
-        dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix)| {
+        dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix, _id)| {
             Reverse(query_word.len())
         });
         Self { dfas }
@@ -35,14 +35,21 @@ impl MatchingWords {
 
     /// Returns the number of matching bytes if the word matches one of the query words.
     pub fn matching_bytes(&self, word_to_highlight: &Token) -> Option<usize> {
-        self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix)| {
+        self.matching_bytes_with_id(word_to_highlight).map(|(len, _)| len)
+    }
+
+    pub fn matching_bytes_with_id(&self, word_to_highlight: &Token) -> Option<(usize, usize)> {
+        self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix, id)| {
             match dfa.eval(word_to_highlight.text()) {
                 Distance::Exact(t) if t <= *typo => {
                     if *is_prefix {
                         let len = bytes_to_highlight(word_to_highlight.text(), query_word);
-                        Some(word_to_highlight.num_chars_from_bytes(len))
+                        Some((word_to_highlight.num_chars_from_bytes(len), *id))
                     } else {
-                        Some(word_to_highlight.num_chars_from_bytes(word_to_highlight.text().len()))
+                        Some((
+                            word_to_highlight.num_chars_from_bytes(word_to_highlight.text().len()),
+                            *id,
+                        ))
                     }
                 }
                 _otherwise => None,
@@ -52,26 +59,37 @@ impl MatchingWords {
 }
 
 /// Lists all words which can be considered as a match for the query tree.
-fn fetch_queries(tree: &Operation) -> HashSet<(&str, u8, IsPrefix)> {
-    fn resolve_ops<'a>(tree: &'a Operation, out: &mut HashSet<(&'a str, u8, IsPrefix)>) {
+fn fetch_queries(tree: &Operation) -> HashMap<(&str, u8, IsPrefix), usize> {
+    fn resolve_ops<'a>(
+        tree: &'a Operation,
+        out: &mut HashMap<(&'a str, u8, IsPrefix), usize>,
+        id: &mut usize,
+    ) {
         match tree {
             Operation::Or(_, ops) | Operation::And(ops) => {
-                ops.as_slice().iter().for_each(|op| resolve_ops(op, out));
+                ops.as_slice().iter().for_each(|op| resolve_ops(op, out, id));
             }
             Operation::Query(Query { prefix, kind }) => {
                 let typo = if kind.is_exact() { 0 } else { kind.typo() };
-                out.insert((kind.word(), typo, *prefix));
+                out.entry((kind.word(), typo, *prefix)).or_insert_with(|| {
+                    *id += 1;
+                    *id
+                });
             }
             Operation::Phrase(words) => {
                 for word in words {
-                    out.insert((word, 0, false));
+                    out.entry((word, 0, false)).or_insert_with(|| {
+                        *id += 1;
+                        *id
+                    });
                 }
             }
         }
     }
 
-    let mut queries = HashSet::new();
-    resolve_ops(tree, &mut queries);
+    let mut queries = HashMap::new();
+    let mut id = 0;
+    resolve_ops(tree, &mut queries, &mut id);
     queries
 }
 
