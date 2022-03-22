@@ -623,9 +623,7 @@ mod test {
         }
 
         fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
-            let builder = fst::SetBuilder::new(Vec::new()).unwrap();
-            let data = builder.into_inner().unwrap();
-            Ok(fst::Set::new(Cow::Owned(data)).unwrap())
+            Ok(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap())
         }
     }
 
@@ -1269,6 +1267,7 @@ mod test {
             QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
         );
     }
+
     #[test]
     fn disable_typo_on_word() {
         let query = "goodbye";
