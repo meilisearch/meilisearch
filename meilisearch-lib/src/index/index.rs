@@ -17,7 +17,7 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::updates::TypoSettings;
+use super::updates::{MinWordLengthTypoSetting, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -169,8 +169,14 @@ impl Index {
             })
             .collect();
 
+        let min_typo_word_len = MinWordLengthTypoSetting {
+            one_typo: Setting::Set(self.min_word_len_one_typo(txn)?),
+            two_typos: Setting::Set(self.min_word_len_two_typos(txn)?),
+        };
+
         let typo_tolerance = TypoSettings {
             enabled: Setting::Set(self.authorize_typos(txn)?),
+            min_word_length_for_typo: Setting::Set(min_typo_word_len),
         };
 
         Ok(Settings {
