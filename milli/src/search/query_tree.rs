@@ -584,6 +584,8 @@ mod test {
     struct TestContext {
         synonyms: HashMap<Vec<String>, Vec<Vec<String>>>,
         postings: HashMap<String, RoaringBitmap>,
+        // Raw bytes for the exact word fst Set
+        exact_words: Vec<u8>,
     }
 
     impl TestContext {
@@ -620,9 +622,7 @@ mod test {
         }
 
         fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
-            let builder = fst::SetBuilder::new(Vec::new()).unwrap();
-            let data = builder.into_inner().unwrap();
-            Ok(fst::Set::new(Cow::Owned(data)).unwrap())
+            Ok(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap())
         }
     }
 
@@ -639,6 +639,8 @@ mod test {
                 values.sort_unstable();
                 RoaringBitmap::from_sorted_iter(values.into_iter()).unwrap()
             }
+
+            let exact_words = fst::SetBuilder::new(Vec::new()).unwrap().into_inner().unwrap();
 
             TestContext {
                 synonyms: hashmap! {
@@ -679,6 +681,7 @@ mod test {
                     String::from("good")       => random_postings(rng,   1250),
                     String::from("morning")    => random_postings(rng,    125),
                 },
+                exact_words,
             }
         }
     }
@@ -1262,5 +1265,21 @@ mod test {
             typos("verylongword".to_string(), true, config.clone()),
             QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
         );
+    }
+    #[test]
+    fn disable_typo_on_word() {
+        let query = "goodbye";
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+        let result = analyzer.analyze(query);
+
+        let tokens = result.tokens();
+        let exact_words = fst::Set::from_iter(Some("goodbye")).unwrap().into_fst().into_inner();
+        let context = TestContext { exact_words, ..Default::default() };
+        let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
+
+        assert!(matches!(
+            query_tree,
+            Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
+        ));
     }
 }

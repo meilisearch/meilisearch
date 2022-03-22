@@ -92,7 +92,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     authorize_typos: Setting<bool>,
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
-    exact_words: Setting<Vec<String>>,
+    exact_words: Setting<BTreeSet<String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -115,9 +115,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             exact_words: Setting::NotSet,
-            indexer_config,
             min_word_len_two_typos: Setting::Reset,
             min_word_len_one_typo: Setting::Reset,
+            indexer_config,
         }
     }
 
@@ -218,7 +218,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.min_word_len_one_typo = Setting::Reset;
     }
 
-    pub fn set_exact_words(&mut self, words: Vec<String>) {
+    pub fn set_exact_words(&mut self, words: BTreeSet<String>) {
         self.exact_words = Setting::Set(words);
     }
 
@@ -539,8 +539,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
-                words.sort_unstable();
-                let words = fst::Set::from_iter(words)?;
+                let words = fst::Set::from_iter(words.iter())?;
                 self.index.put_exact_words(&mut self.wtxn, &words)?;
             }
             Setting::Reset => {
