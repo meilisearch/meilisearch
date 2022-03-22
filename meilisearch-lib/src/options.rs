@@ -69,11 +69,22 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             log_every_n: Some(other.log_every_n),
             max_nb_chunks: other.max_nb_chunks,
-            max_memory: (*other.max_memory).map(|b| b.get_bytes() as usize),
+            max_memory: other.max_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             ..Default::default()
         })
+    }
+}
+
+impl Default for IndexerOpts {
+    fn default() -> Self {
+        Self {
+            log_every_n: 100_000,
+            max_nb_chunks: None,
+            max_memory: MaxMemory::default(),
+            indexing_jobs: None,
+        }
     }
 }
 
