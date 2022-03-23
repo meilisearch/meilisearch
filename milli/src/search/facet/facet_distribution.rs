@@ -220,9 +220,13 @@ impl<'a> FacetDistribution<'a> {
     pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
+
         let fields = match self.facets {
             Some(ref facets) => {
-                let invalid_fields: HashSet<_> = facets.difference(&filterable_fields).collect();
+                let invalid_fields: HashSet<_> = facets
+                    .iter()
+                    .filter(|facet| !crate::is_faceted(facet, &filterable_fields))
+                    .collect();
                 if !invalid_fields.is_empty() {
                     return Err(UserError::InvalidFacetsDistribution {
                         invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
@@ -236,10 +240,12 @@ impl<'a> FacetDistribution<'a> {
         };
 
         let mut distribution = BTreeMap::new();
-        for name in fields {
-            if let Some(fid) = fields_ids_map.id(&name) {
+        for (fid, name) in fields_ids_map.iter() {
+            if crate::is_faceted(name, &fields) {
                 let values = self.facet_values(fid)?;
-                distribution.insert(name, values);
+                if !values.is_empty() {
+                    distribution.insert(name.to_string(), values);
+                }
             }
         }
 

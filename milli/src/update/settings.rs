@@ -249,11 +249,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
 
         let transform = Transform::new(
+            self.wtxn,
             &self.index,
             &self.indexer_config,
             IndexDocumentsMethod::ReplaceDocuments,
             false,
-        );
+        )?;
 
         // We remap the documents fields based on the new `FieldsIdsMap`.
         let output = transform.remap_index_documents(
@@ -261,6 +262,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             old_fields_ids_map,
             fields_ids_map.clone(),
         )?;
+
+        let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
+        self.index.put_faceted_fields(self.wtxn, &new_facets)?;
 
         // We clear the full database (words-fst, documents ids and documents content).
         ClearDocuments::new(self.wtxn, self.index).execute()?;
@@ -273,7 +277,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             &self.indexer_config,
             IndexDocumentsConfig::default(),
             &cb,
-        );
+        )?;
         indexing_builder.execute_raw(output)?;
 
         Ok(())
@@ -583,7 +587,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_faceted_fields = self.index.faceted_fields(&self.wtxn)?;
+        let old_faceted_fields = self.index.user_defined_faceted_fields(&self.wtxn)?;
         let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
 
         self.update_displayed()?;
@@ -599,7 +603,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
         // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = self.index.faceted_fields(&self.wtxn)?;
+        let new_faceted_fields = self.index.user_defined_faceted_fields(&self.wtxn)?;
         let faceted_updated = old_faceted_fields != new_faceted_fields;
 
         let stop_words_updated = self.update_stop_words()?;
@@ -651,7 +655,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -713,7 +718,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -764,7 +770,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -793,7 +800,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -846,7 +854,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -858,7 +867,6 @@ mod tests {
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
-        println!("fidmap: {:?}", fidmap);
         for document in index.all_documents(&rtxn).unwrap() {
             let document = document.unwrap();
             let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1)
@@ -886,7 +894,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -927,7 +936,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -977,7 +987,51 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        // Run an empty query just to ensure that the search results are ordered.
+        let rtxn = index.read_txn().unwrap();
+        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+
+        // There must be at least one document with a 34 as the age.
+        assert_eq!(documents_ids.len(), 3);
+    }
+
+    #[test]
+    fn set_nested_distinct_field() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
+
+        // Set the filterable fields to be the age.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
+        // Don't display the generated `id` field.
+        builder.set_displayed_fields(vec![S("person")]);
+        builder.set_distinct_field(S("person.age"));
+        builder.execute(|_| ()).unwrap();
+
+        // Then index some documents.
+        let content = documents!([
+            { "person": { "name": "kevin", "age": 23 }},
+            { "person": { "name": "kevina", "age": 21 }},
+            { "person": { "name": "benoit", "age": 34 }},
+            { "person": { "name": "bernard", "age": 34 }},
+            { "person": { "name": "bertrand", "age": 34 }},
+            { "person": { "name": "bernie", "age": 34 }},
+            { "person": { "name": "ben", "age": 34 }}
+        ]);
+        let indexing_config =
+            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1008,7 +1062,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1037,7 +1092,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1115,7 +1171,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1252,7 +1309,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1314,7 +1372,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();

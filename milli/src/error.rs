@@ -27,6 +27,7 @@ pub enum InternalError {
     DatabaseClosing,
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
     FieldIdMapMissingEntry(FieldIdMapMissingEntry),
+    FieldIdMappingMissingEntry { key: FieldId },
     Fst(fst::Error),
     GrenadInvalidCompressionType,
     GrenadInvalidFormatVersion,
@@ -59,7 +60,7 @@ pub enum UserError {
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
-    InvalidGeoField { document_id: Value, object: Value },
+    InvalidGeoField { document_id: Value },
     InvalidFilter(String),
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     SortRankingRuleMissing,
@@ -187,6 +188,9 @@ impl fmt::Display for InternalError {
                 write!(f, "Missing {} in the {} database.", key.unwrap_or("key"), db_name)
             }
             Self::FieldIdMapMissingEntry(error) => error.fmt(f),
+            Self::FieldIdMappingMissingEntry { key } => {
+                write!(f, "Missing {} in the field id mapping.", key)
+            }
             Self::Fst(error) => error.fmt(f),
             Self::GrenadInvalidCompressionType => {
                 f.write_str("Invalid compression type have been specified to grenad.")
@@ -226,19 +230,15 @@ impl fmt::Display for UserError {
                     name_list
                 )
             }
-            Self::InvalidGeoField { document_id, object } => {
+            Self::InvalidGeoField { document_id } => {
                 let document_id = match document_id {
                     Value::String(id) => id.clone(),
                     _ => document_id.to_string(),
                 };
-                let object = match object {
-                    Value::String(id) => id.clone(),
-                    _ => object.to_string(),
-                };
                 write!(
                     f,
-                    "The document with the id: `{}` contains an invalid _geo field: `{}`.",
-                    document_id, object
+                    "The document with the id: `{}` contains an invalid `_geo` field.",
+                    document_id
                 )
             },
             Self::InvalidDocumentId { document_id } => {

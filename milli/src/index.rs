@@ -31,6 +31,7 @@ pub mod main_key {
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+    pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
@@ -567,12 +568,46 @@ impl Index {
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
-    /* faceted documents ids */
+    /* faceted fields */
+
+    /// Writes the faceted fields in the database.
+    pub(crate) fn put_faceted_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &HashSet<String>,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, main_key::HIDDEN_FACETED_FIELDS_KEY, fields)
+    }
 
     /// Returns the faceted fields names.
+    pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashSet<String>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeJson<_>>(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
+            .unwrap_or_default())
+    }
+
+    /// Identical to `faceted_fields`, but returns ids instead.
+    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let fields = self.faceted_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+
+        let mut fields_ids = HashSet::new();
+        for name in fields {
+            if let Some(field_id) = fields_ids_map.id(&name) {
+                fields_ids.insert(field_id);
+            }
+        }
+
+        Ok(fields_ids)
+    }
+
+    /* faceted documents ids */
+
+    /// Returns the user defined faceted fields names.
     ///
-    /// Faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
-    pub fn faceted_fields(&self, rtxn: &RoTxn) -> Result<HashSet<String>> {
+    /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
+    pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn) -> Result<HashSet<String>> {
         let filterable_fields = self.filterable_fields(rtxn)?;
         let sortable_fields = self.sortable_fields(rtxn)?;
         let distinct_field = self.distinct_field(rtxn)?;
@@ -592,8 +627,8 @@ impl Index {
         Ok(faceted_fields)
     }
 
-    /// Identical to `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
+    /// Identical to `user_defined_faceted_fields`, but returns ids instead.
+    pub fn user_defined_faceted_fields_ids(&self, rtxn: &RoTxn) -> Result<HashSet<FieldId>> {
         let fields = self.faceted_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
 
@@ -1040,13 +1075,14 @@ pub(crate) mod tests {
         let content = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 }
+            { "id": 2, "name": "bob", "age": 20 },
         ]);
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1067,11 +1103,12 @@ pub(crate) mod tests {
         // field_distribution in the end
         let mut wtxn = index.write_txn().unwrap();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         let content = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 }
+            { "id": 2, "name": "bob", "age": 20 },
         ]);
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
@@ -1097,7 +1134,8 @@ pub(crate) mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();

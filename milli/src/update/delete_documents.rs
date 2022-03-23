@@ -647,7 +647,8 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -681,7 +682,8 @@ mod tests {
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -733,7 +735,8 @@ mod tests {
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -790,7 +793,8 @@ mod tests {
 
         let indexing_config = IndexDocumentsConfig::default();
 
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 

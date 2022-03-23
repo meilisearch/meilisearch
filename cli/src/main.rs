@@ -261,7 +261,8 @@ impl Performer for DocumentAddition {
             &config,
             indexing_config,
             |step| indexing_callback(step, &bars),
-        );
+        )
+        .unwrap();
         addition.add_documents(reader)?;
 
         std::thread::spawn(move || {

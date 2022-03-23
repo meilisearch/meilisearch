@@ -97,7 +97,8 @@ mod test {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             ..Default::default()
         };
-        let mut addition = IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ());
+        let mut addition =
+            IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
 
         let reader =
             crate::documents::DocumentBatchReader::from_reader(Cursor::new(&*JSON)).unwrap();

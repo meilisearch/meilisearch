@@ -96,7 +96,8 @@ pub fn base_setup(conf: &Conf) -> Index {
         update_method: IndexDocumentsMethod::ReplaceDocuments,
         ..Default::default()
     };
-    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+    let mut builder =
+        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
     let documents = documents_from(conf.dataset, conf.dataset_format);
 
     builder.add_documents(documents).unwrap();

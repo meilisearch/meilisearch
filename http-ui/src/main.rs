@@ -410,7 +410,7 @@ async fn main() -> anyhow::Result<()> {
                         GLOBAL_CONFIG.get().unwrap(),
                         indexing_config,
                         indexing_callback,
-                    );
+                    )?;
 
                     let reader = match encoding.as_deref() {
                         Some("gzip") => Box::new(GzDecoder::new(content)),
