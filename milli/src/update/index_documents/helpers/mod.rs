@@ -8,9 +8,9 @@ use std::convert::{TryFrom, TryInto};
 pub use clonable_mmap::{ClonableMmap, CursorClonableMmap};
 use fst::{IntoStreamer, Streamer};
 pub use grenad_helpers::{
-    as_cloneable_grenad, create_sorter, create_writer, grenad_obkv_into_chunks, merge_readers,
+    as_cloneable_grenad, create_sorter, create_writer, grenad_obkv_into_chunks,
     sorter_into_lmdb_database, sorter_into_reader, write_into_lmdb_database, writer_into_reader,
-    GrenadParameters,
+    GrenadParameters, MergeableReader,
 };
 pub use merge_functions::{
     concat_u32s_array, keep_first, keep_first_prefix_value_merge_roaring_bitmaps, keep_latest_obkv,
