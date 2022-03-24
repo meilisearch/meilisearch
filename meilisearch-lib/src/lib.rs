@@ -13,7 +13,6 @@ mod update_file_store;
 use std::path::Path;
 
 pub use index_controller::MeiliSearch;
-
 pub use milli;
 
 mod compression;

@@ -1,10 +1,11 @@
+use meilisearch_lib::milli::heed::Env;
 use walkdir::WalkDir;
 
 pub trait EnvSizer {
     fn size(&self) -> u64;
 }
 
-impl EnvSizer for milli::heed::Env {
+impl EnvSizer for Env {
     fn size(&self) -> u64 {
         WalkDir::new(self.path())
             .into_iter()
