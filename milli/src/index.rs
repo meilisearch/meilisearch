@@ -59,6 +59,7 @@ pub mod main_key {
 pub mod db_name {
     pub const MAIN: &str = "main";
     pub const WORD_DOCIDS: &str = "word-docids";
+    pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
@@ -83,6 +84,10 @@ pub struct Index {
 
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
+
+    /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
+    pub exact_word_docids: Database<Str, RoaringBitmapCodec>,
+
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
 
@@ -119,12 +124,13 @@ impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(14);
+        options.max_dbs(15);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some(MAIN))?;
         let word_docids = env.create_database(Some(WORD_DOCIDS))?;
+        let exact_word_docids = env.create_database(Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(Some(WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
@@ -146,6 +152,7 @@ impl Index {
             env,
             main,
             word_docids,
+            exact_word_docids,
             word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,

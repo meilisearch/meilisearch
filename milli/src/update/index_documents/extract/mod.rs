@@ -86,13 +86,16 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-wordcount-docids",
     );
 
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+    spawn_extraction_task::<_, _, Vec<(grenad::Reader<File>, grenad::Reader<File>)>>(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
         extract_word_docids,
         merge_roaring_bitmaps,
-        TypedChunk::WordDocids,
+        |(word_docids_reader, exact_word_docids_reader)| TypedChunk::WordDocids {
+            word_docids_reader,
+            exact_word_docids_reader,
+        },
         "word-docids",
     );
 

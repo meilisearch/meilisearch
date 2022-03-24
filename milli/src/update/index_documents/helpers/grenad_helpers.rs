@@ -277,3 +277,8 @@ pub fn sorter_into_lmdb_database(
     debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
 }
+
+/// Used when trying to merge readers, but you don't actually care about the values.
+pub fn merge_nothing<'a>(_key: &[u8], _values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
+    Ok(Cow::Owned(Vec::new()))
+}

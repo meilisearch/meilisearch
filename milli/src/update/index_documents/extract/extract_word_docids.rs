@@ -10,17 +10,21 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
+use crate::update::index_documents::MergeFn;
 use crate::Result;
 
 /// Extracts the word and the documents ids where this word appear.
 ///
 /// Returns a grenad reader with the list of extracted words and
 /// documents ids from the given chunk of docid word positions.
+///
+/// The first returned reader in the one for normal word_docids, and the second one is for
+/// exact_word_docids
 #[logging_timer::time]
 pub fn extract_word_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
-) -> Result<grenad::Reader<File>> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_docids_sorter = create_sorter(
@@ -43,5 +47,9 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         word_docids_sorter.insert(word_bytes, &value_buffer)?;
     }
 
-    sorter_into_reader(word_docids_sorter, indexer)
+    let empty_sorter = grenad::Sorter::new(merge_roaring_bitmaps as MergeFn);
+    Ok((
+        sorter_into_reader(word_docids_sorter, indexer)?,
+        sorter_into_reader(empty_sorter, indexer)?,
+    ))
 }

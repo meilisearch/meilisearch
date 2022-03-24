@@ -35,7 +35,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixDocids::{}")]
     pub fn execute(
         self,
-        new_word_docids: grenad::Reader<CursorClonableMmap>,
+        mut new_word_docids_iter: grenad::MergerIter<CursorClonableMmap, MergeFn>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -51,10 +51,9 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         );
 
         if !common_prefix_fst_words.is_empty() {
-            let mut new_word_docids_iter = new_word_docids.into_cursor()?;
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
-            while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
+            while let Some((word, data)) = new_word_docids_iter.next()? {
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
                     _otherwise => {

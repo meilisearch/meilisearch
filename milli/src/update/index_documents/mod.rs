@@ -20,7 +20,7 @@ pub use self::helpers::{
     fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
     sorter_into_lmdb_database, write_into_lmdb_database, writer_into_reader, ClonableMmap, MergeFn,
 };
-use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
+use self::helpers::{grenad_obkv_into_chunks, merge_nothing, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use crate::documents::DocumentBatchReader;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
@@ -282,6 +282,7 @@ where
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
         let mut word_docids = None;
+        let mut _exact_word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -291,10 +292,13 @@ where
 
         for result in lmdb_writer_rx {
             let typed_chunk = match result? {
-                TypedChunk::WordDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
                     word_docids = Some(cloneable_chunk);
-                    TypedChunk::WordDocids(chunk)
+                    let cloneable_chunk =
+                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                    _exact_word_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader }
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
@@ -425,6 +429,10 @@ where
         });
 
         if let Some(word_docids) = word_docids {
+            let mut word_docids_builder = grenad::MergerBuilder::new(merge_nothing as MergeFn);
+            word_docids_builder.push(word_docids.into_cursor()?);
+            // TODO: push exact_word_docids
+            let word_docids_iter = word_docids_builder.build().into_stream_merger_iter()?;
             // Run the word prefix docids update operation.
             let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
             builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
@@ -432,7 +440,7 @@ where
             builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
             builder.max_memory = self.indexer_config.max_memory;
             builder.execute(
-                word_docids,
+                word_docids_iter,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,

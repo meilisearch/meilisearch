@@ -3,14 +3,16 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 
+use grenad::MergerBuilder;
 use heed::types::ByteSlice;
 use heed::{BytesDecode, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, valid_lmdb_key,
+    self, merge_nothing, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, valid_lmdb_key,
     CursorClonableMmap,
 };
+use super::{ClonableMmap, MergeFn};
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
 use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::{
@@ -25,7 +27,10 @@ pub(crate) enum TypedChunk {
     Documents(grenad::Reader<CursorClonableMmap>),
     FieldIdWordcountDocids(grenad::Reader<File>),
     NewDocumentsIds(RoaringBitmap),
-    WordDocids(grenad::Reader<File>),
+    WordDocids {
+        word_docids_reader: grenad::Reader<File>,
+        exact_word_docids_reader: grenad::Reader<File>,
+    },
     WordPositionDocids(grenad::Reader<File>),
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
@@ -86,8 +91,8 @@ pub(crate) fn write_typed_chunk_into_index(
         TypedChunk::NewDocumentsIds(documents_ids) => {
             return Ok((documents_ids, is_merged_database))
         }
-        TypedChunk::WordDocids(word_docids_iter) => {
-            let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_iter) }?;
+        TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+            let word_docids_iter = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
             append_entries_into_database(
                 word_docids_iter.clone(),
                 &index.word_docids,
@@ -97,15 +102,18 @@ pub(crate) fn write_typed_chunk_into_index(
                 merge_roaring_bitmaps,
             )?;
 
+            let exact_word_docids_iter = unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
+            append_entries_into_database(
+                exact_word_docids_iter.clone(),
+                &index.exact_word_docids,
+                wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
+                merge_roaring_bitmaps,
+            )?;
+
             // create fst from word docids
-            let mut builder = fst::SetBuilder::memory();
-            let mut cursor = word_docids_iter.into_cursor()?;
-            while let Some((word, _value)) = cursor.move_on_next()? {
-                // This is a lexicographically ordered word position
-                // we use the key to construct the words fst.
-                builder.insert(word)?;
-            }
-            let fst = builder.into_set().map_data(std::borrow::Cow::Owned)?;
+            let fst = merge_word_docids_reader_into_fst(word_docids_iter, exact_word_docids_iter)?;
             let db_fst = index.words_fst(wtxn)?;
 
             // merge new fst with database fst
@@ -212,6 +220,23 @@ pub(crate) fn write_typed_chunk_into_index(
     }
 
     Ok((RoaringBitmap::new(), is_merged_database))
+}
+
+fn merge_word_docids_reader_into_fst(
+    word_docids_iter: grenad::Reader<io::Cursor<ClonableMmap>>,
+    exact_word_docids_iter: grenad::Reader<io::Cursor<ClonableMmap>>,
+) -> Result<fst::Set<Vec<u8>>> {
+    let mut merger_builder = MergerBuilder::new(merge_nothing as MergeFn);
+    merger_builder.push(word_docids_iter.into_cursor()?);
+    merger_builder.push(exact_word_docids_iter.into_cursor()?);
+    let mut iter = merger_builder.build().into_stream_merger_iter()?;
+    let mut builder = fst::SetBuilder::memory();
+
+    while let Some((k, _)) = iter.next()? {
+        builder.insert(k)?;
+    }
+
+    Ok(builder.into_set())
 }
 
 fn merge_roaring_bitmaps(new_value: &[u8], db_value: &[u8], buffer: &mut Vec<u8>) -> Result<()> {

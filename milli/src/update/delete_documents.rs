@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::HashMap;
 
 use fst::IntoStreamer;
-use heed::types::ByteSlice;
+use heed::types::{ByteSlice, Str};
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,10 @@ use crate::heed_codec::facet::{
 };
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
-use crate::{DocumentId, ExternalDocumentsIds, FieldId, Index, Result, SmallString32, BEU32};
+use crate::{
+    DocumentId, ExternalDocumentsIds, FieldId, Index, Result, RoaringBitmapCodec, SmallString32,
+    BEU32,
+};
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -108,6 +111,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             env: _env,
             main: _main,
             word_docids,
+            exact_word_docids,
             word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
@@ -204,25 +208,21 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We iterate over the words and delete the documents ids
         // from the word docids database.
         for (word, must_remove) in &mut words {
-            // We create an iterator to be able to get the content and delete the word docids.
-            // It's faster to acquire a cursor to get and delete or put, as we avoid traversing
-            // the LMDB B-Tree two times but only once.
-            let mut iter = word_docids.prefix_iter_mut(self.wtxn, &word)?;
-            if let Some((key, mut docids)) = iter.next().transpose()? {
-                if key == word.as_str() {
-                    let previous_len = docids.len();
-                    docids -= &self.documents_ids;
-                    if docids.is_empty() {
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.del_current()? };
-                        *must_remove = true;
-                    } else if docids.len() != previous_len {
-                        let key = key.to_owned();
-                        // safety: we don't keep references from inside the LMDB database.
-                        unsafe { iter.put_current(&key, &docids)? };
-                    }
-                }
-            }
+            remove_from_word_docids(
+                self.wtxn,
+                word_docids,
+                word.as_str(),
+                must_remove,
+                &self.documents_ids,
+            )?;
+
+            remove_from_word_docids(
+                self.wtxn,
+                exact_word_docids,
+                word.as_str(),
+                must_remove,
+                &self.documents_ids,
+            )?;
         }
 
         // We construct an FST set that contains the words to delete from the words FST.
@@ -455,6 +455,35 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             remaining_documents: documents_ids.len(),
         })
     }
+}
+
+fn remove_from_word_docids(
+    txn: &mut heed::RwTxn,
+    db: &heed::Database<Str, RoaringBitmapCodec>,
+    word: &str,
+    must_remove: &mut bool,
+    to_remove: &RoaringBitmap,
+) -> Result<()> {
+    // We create an iterator to be able to get the content and delete the word docids.
+    // It's faster to acquire a cursor to get and delete or put, as we avoid traversing
+    // the LMDB B-Tree two times but only once.
+    let mut iter = db.prefix_iter_mut(txn, &word)?;
+    if let Some((key, mut docids)) = iter.next().transpose()? {
+        if key == word {
+            let previous_len = docids.len();
+            docids -= to_remove;
+            if docids.is_empty() {
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
+                *must_remove = true;
+            } else if docids.len() != previous_len {
+                let key = key.to_owned();
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&key, &docids)? };
+            }
+        }
+    }
+    Ok(())
 }
 
 fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F, DC, V>(
