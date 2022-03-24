@@ -14,6 +14,7 @@ use std::path::Path;
 
 pub use index_controller::MeiliSearch;
 pub use milli;
+pub use milli::heed;
 
 mod compression;
 pub mod document_formats;

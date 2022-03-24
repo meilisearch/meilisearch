@@ -1,4 +1,4 @@
-use meilisearch_lib::milli::heed::Env;
+use meilisearch_lib::heed::Env;
 use walkdir::WalkDir;
 
 pub trait EnvSizer {
