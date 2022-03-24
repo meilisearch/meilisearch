@@ -152,7 +152,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         ignore_dump_if_db_exists: false,
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
-            max_memory: MaxMemory::unlimited(),
+            max_indexing_memory: MaxMemory::unlimited(),
             ..Default::default()
         },
         log_level: "off".into(),
