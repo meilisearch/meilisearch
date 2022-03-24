@@ -68,6 +68,7 @@ impl Default for Candidates {
 pub trait Context<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap>;
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
+    fn exact_word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_pair_proximity_docids(
         &self,
@@ -116,6 +117,10 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
 
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
         self.index.word_docids.get(self.rtxn, &word)
+    }
+
+    fn exact_word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        self.index.exact_word_docids.get(self.rtxn, &word)
     }
 
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
@@ -400,11 +405,14 @@ fn query_docids(
                 let mut docids = RoaringBitmap::new();
                 for (word, _typo) in words {
                     let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
-                    docids |= current_docids;
+                    let exact_current_docids = ctx.exact_word_docids(&word)?.unwrap_or_default();
+                    docids |= current_docids | exact_current_docids;
                 }
                 Ok(docids)
             } else {
-                Ok(ctx.word_docids(&word)?.unwrap_or_default())
+                let word_docids = ctx.word_docids(&word)?.unwrap_or_default();
+                let exact_word_docids = ctx.exact_word_docids(&word)?.unwrap_or_default();
+                Ok(word_docids | exact_word_docids)
             }
         }
         QueryKind::Tolerant { typo, word } => {
@@ -512,6 +520,7 @@ pub mod test {
     pub struct TestContext<'t> {
         words_fst: fst::Set<Cow<'t, [u8]>>,
         word_docids: HashMap<String, RoaringBitmap>,
+        exact_word_docids: HashMap<String, RoaringBitmap>,
         word_prefix_docids: HashMap<String, RoaringBitmap>,
         word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         word_prefix_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
@@ -525,6 +534,10 @@ pub mod test {
 
         fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
             Ok(self.word_docids.get(&word.to_string()).cloned())
+        }
+
+        fn exact_word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+            Ok(self.exact_word_docids.get(&word.to_string()).cloned())
         }
 
         fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
@@ -643,6 +656,8 @@ pub mod test {
                 s("morning")    => random_postings(rng,    125),
             };
 
+            let exact_word_docids = HashMap::new();
+
             let mut docid_words = HashMap::new();
             for (word, docids) in word_docids.iter() {
                 for docid in docids {
@@ -712,6 +727,7 @@ pub mod test {
             TestContext {
                 words_fst,
                 word_docids,
+                exact_word_docids,
                 word_prefix_docids,
                 word_pair_proximity_docids,
                 word_prefix_pair_proximity_docids,

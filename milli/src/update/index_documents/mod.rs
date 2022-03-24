@@ -284,7 +284,7 @@ where
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
         let mut word_docids = None;
-        let mut _exact_word_docids = None;
+        let mut exact_word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -299,7 +299,7 @@ where
                     word_docids = Some(cloneable_chunk);
                     let cloneable_chunk =
                         unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
-                    _exact_word_docids = Some(cloneable_chunk);
+                    exact_word_docids = Some(cloneable_chunk);
                     TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader }
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
@@ -352,6 +352,7 @@ where
 
         self.execute_prefix_databases(
             word_docids,
+            exact_word_docids,
             word_pair_proximity_docids,
             word_position_docids,
         )?;
@@ -363,6 +364,7 @@ where
     pub fn execute_prefix_databases(
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
@@ -433,7 +435,10 @@ where
         if let Some(word_docids) = word_docids {
             let mut word_docids_builder = grenad::MergerBuilder::new(merge_nothing as MergeFn);
             word_docids_builder.push(word_docids.into_cursor()?);
-            // TODO: push exact_word_docids
+            if let Some(exact_word_docids) = exact_word_docids {
+                word_docids_builder.push(exact_word_docids.into_cursor()?);
+            }
+
             let word_docids_iter = word_docids_builder.build().into_stream_merger_iter()?;
             // Run the word prefix docids update operation.
             let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
