@@ -226,6 +226,7 @@ where
         };
 
         let stop_words = self.index.stop_words(self.wtxn)?;
+        let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
@@ -255,6 +256,7 @@ where
                     geo_field_id,
                     stop_words,
                     self.indexer_config.max_positions_per_attributes,
+                    exact_attributes,
                 )
             });
 

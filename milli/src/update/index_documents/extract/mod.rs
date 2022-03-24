@@ -43,6 +43,7 @@ pub(crate) fn data_from_obkv_documents(
     geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
+    exact_attributes: HashSet<FieldId>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
         .par_bridge()
@@ -90,7 +91,7 @@ pub(crate) fn data_from_obkv_documents(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
-        extract_word_docids,
+        move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
         merge_roaring_bitmaps,
         |(word_docids_reader, exact_word_docids_reader)| TypedChunk::WordDocids {
             word_docids_reader,

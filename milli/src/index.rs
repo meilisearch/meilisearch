@@ -964,6 +964,11 @@ impl Index {
             .get::<_, Str, SerdeBincode<Vec<&str>>>(txn, main_key::EXACT_ATTRIBUTES)?
             .unwrap_or_default())
     }
+    pub fn exact_attributes_ids(&self, txn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let attrs = self.exact_attributes(txn)?;
+        let fid_map = self.fields_ids_map(txn)?;
+        Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
+    }
 
     pub(crate) fn put_exact_attributes(&self, txn: &mut RwTxn, attrs: &[&str]) -> Result<()> {
         self.main.put::<_, Str, SerdeBincode<&[&str]>>(txn, main_key::EXACT_ATTRIBUTES, &attrs)?;
