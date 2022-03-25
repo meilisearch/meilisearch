@@ -34,11 +34,31 @@ impl Display for DocumentFormatError {
         match self {
             Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
             Self::MalformedPayload(me, b) => match me.borrow() {
-                milli::documents::Error::JsonError(se) => write!(
+                milli::documents::Error::JsonError(se) => {
+                    // "invalid type: {}, expected {}"
+                    let mut serde_msg = se.to_string();
+
+                    // https://github.com/meilisearch/meilisearch/issues/2107
+                    // The user input maybe insanely long. We need to truncate it.
+                    let prefix = r#"invalid type: string ""#;
+
+                    if serde_msg.starts_with(prefix) {
+                        let start_idx = prefix.len();
+                        if let Some(end_idx) = serde_msg.rfind("\"") {
+                            if end_idx - start_idx > 100 {
+                                serde_msg.replace_range(start_idx + 50..end_idx - 50, " ... ");
+                            }
+                        } else {
+                            serde_msg = String::from("");
+                        }
+                    }
+
+                    write!(
                     f,
-                    "The `{}` payload provided is malformed. `Couldn't serialize document value at line {} column {}`",
-                    b, se.line(), se.column()
-                ),
+                    "The `{}` payload provided is malformed. `Couldn't serialize document value: {}. at line {} column {} `",
+                    b, se.line(), se.column(),serde_msg
+                )
+                }
                 _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
             },
         }
