@@ -441,7 +441,11 @@ where
 
             let word_docids_iter = word_docids_builder.build().into_stream_merger_iter()?;
             // Run the word prefix docids update operation.
-            let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
+            let mut builder = WordPrefixDocids::new(
+                self.wtxn,
+                self.index.word_docids.clone(),
+                self.index.word_prefix_docids.clone(),
+            );
             builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
             builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
             builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
