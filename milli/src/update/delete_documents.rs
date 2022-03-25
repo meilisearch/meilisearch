@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Str};
-use heed::{BytesDecode, BytesEncode};
+use heed::{BytesDecode, BytesEncode, Database};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -113,6 +113,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_docids,
             exact_word_docids,
             word_prefix_docids,
+            exact_word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
             field_id_word_count_docids,
@@ -254,34 +255,24 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We write the new words FST into the main database.
         self.index.put_words_fst(self.wtxn, &new_words_fst)?;
 
-        // We iterate over the word prefix docids database and remove the deleted documents ids
-        // from every docids lists. We register the empty prefixes in an fst Set for futur deletion.
-        let mut prefixes_to_delete = fst::SetBuilder::memory();
-        let mut iter = word_prefix_docids.iter_mut(self.wtxn)?;
-        while let Some(result) = iter.next() {
-            let (prefix, mut docids) = result?;
-            let prefix = prefix.to_owned();
-            let previous_len = docids.len();
-            docids -= &self.documents_ids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-                prefixes_to_delete.insert(prefix)?;
-            } else if docids.len() != previous_len {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&prefix, &docids)? };
-            }
-        }
+        let prefixes_to_delete =
+            remove_from_word_prefix_docids(self.wtxn, word_prefix_docids, &self.documents_ids)?;
 
-        drop(iter);
+        let exact_prefix_to_delete = remove_from_word_prefix_docids(
+            self.wtxn,
+            exact_word_prefix_docids,
+            &self.documents_ids,
+        )?;
+
+        let all_prefixes_to_delete = prefixes_to_delete.op().add(&exact_prefix_to_delete).union();
 
         // We compute the new prefix FST and write it only if there is a change.
-        let prefixes_to_delete = prefixes_to_delete.into_set();
-        if !prefixes_to_delete.is_empty() {
+        if !prefixes_to_delete.is_empty() || !exact_prefix_to_delete.is_empty() {
             let new_words_prefixes_fst = {
                 // We retrieve the current words prefixes FST from the database.
                 let words_prefixes_fst = self.index.words_prefixes_fst(self.wtxn)?;
-                let difference = words_prefixes_fst.op().add(&prefixes_to_delete).difference();
+                let difference =
+                    words_prefixes_fst.op().add(all_prefixes_to_delete.into_stream()).difference();
 
                 // We stream the new external ids that does no more contains the to-delete external ids.
                 let mut new_words_prefixes_fst_builder = fst::SetBuilder::memory();
@@ -455,6 +446,36 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             remaining_documents: documents_ids.len(),
         })
     }
+}
+
+fn remove_from_word_prefix_docids(
+    txn: &mut heed::RwTxn,
+    db: &Database<Str, RoaringBitmapCodec>,
+    to_remove: &RoaringBitmap,
+) -> Result<fst::Set<Vec<u8>>> {
+    let mut prefixes_to_delete = fst::SetBuilder::memory();
+
+    // We iterate over the word prefix docids database and remove the deleted documents ids
+    // from every docids lists. We register the empty prefixes in an fst Set for futur deletion.
+    let mut iter = db.iter_mut(txn)?;
+    while let Some(result) = iter.next() {
+        let (prefix, mut docids) = result?;
+        let prefix = prefix.to_owned();
+        let previous_len = docids.len();
+        docids -= to_remove;
+        if docids.is_empty() {
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.del_current()? };
+            prefixes_to_delete.insert(prefix)?;
+        } else if docids.len() != previous_len {
+            // safety: we don't keep references from inside the LMDB database.
+            unsafe { iter.put_current(&prefix, &docids)? };
+        }
+    }
+
+    drop(iter);
+
+    Ok(prefixes_to_delete.into_set())
 }
 
 fn remove_from_word_docids(

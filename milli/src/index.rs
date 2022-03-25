@@ -61,6 +61,7 @@ pub mod db_name {
     pub const WORD_DOCIDS: &str = "word-docids";
     pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
+    pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
     pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
@@ -90,6 +91,9 @@ pub struct Index {
 
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+
+    /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
+    pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
 
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
@@ -124,7 +128,7 @@ impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(15);
+        options.max_dbs(16);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -132,6 +136,7 @@ impl Index {
         let word_docids = env.create_database(Some(WORD_DOCIDS))?;
         let exact_word_docids = env.create_database(Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(Some(WORD_PREFIX_DOCIDS))?;
+        let exact_word_prefix_docids = env.create_database(Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
@@ -154,6 +159,7 @@ impl Index {
             word_docids,
             exact_word_docids,
             word_prefix_docids,
+            exact_word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
             word_prefix_pair_proximity_docids,
