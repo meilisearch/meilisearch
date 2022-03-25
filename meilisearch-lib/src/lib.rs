@@ -13,8 +13,8 @@ mod update_file_store;
 use std::path::Path;
 
 pub use index_controller::MeiliSearch;
-
 pub use milli;
+pub use milli::heed;
 
 mod compression;
 pub mod document_formats;
@@ -25,7 +25,7 @@ pub trait EnvSizer {
     fn size(&self) -> u64;
 }
 
-impl EnvSizer for heed::Env {
+impl EnvSizer for milli::heed::Env {
     fn size(&self) -> u64 {
         WalkDir::new(self.path())
             .into_iter()

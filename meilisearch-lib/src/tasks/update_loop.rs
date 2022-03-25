@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use time::OffsetDateTime;
 use tokio::sync::{watch, RwLock};
 use tokio::time::interval_at;
 
@@ -63,7 +63,8 @@ where
         match pending {
             Pending::Batch(mut batch) => {
                 for task in &mut batch.tasks {
-                    task.events.push(TaskEvent::Processing(Utc::now()));
+                    task.events
+                        .push(TaskEvent::Processing(OffsetDateTime::now_utc()));
                 }
 
                 batch.tasks = {

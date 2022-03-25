@@ -6,14 +6,14 @@ use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::sync::Arc;
 
-use chrono::Utc;
 use error::{IndexResolverError, Result};
-use heed::Env;
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_error::ResponseError;
 use meta_store::{HeedMetaStore, IndexMetaStore};
+use milli::heed::Env;
 use milli::update::{DocumentDeletionResult, IndexerConfig};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio::sync::oneshot;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -39,7 +39,7 @@ pub fn create_index_resolver(
     path: impl AsRef<Path>,
     index_size: usize,
     indexer_opts: &IndexerOpts,
-    meta_env: Arc<heed::Env>,
+    meta_env: Arc<milli::heed::Env>,
     file_store: UpdateFileStore,
 ) -> anyhow::Result<HardStateIndexResolver> {
     let uuid_store = HeedMetaStore::new(meta_env)?;
@@ -115,18 +115,19 @@ where
             self.process_document_addition_batch(batch).await
         } else {
             if let Some(task) = batch.tasks.first_mut() {
-                task.events.push(TaskEvent::Processing(Utc::now()));
+                task.events
+                    .push(TaskEvent::Processing(OffsetDateTime::now_utc()));
 
                 match self.process_task(task).await {
                     Ok(success) => {
                         task.events.push(TaskEvent::Succeded {
                             result: success,
-                            timestamp: Utc::now(),
+                            timestamp: OffsetDateTime::now_utc(),
                         });
                     }
                     Err(err) => task.events.push(TaskEvent::Failed {
                         error: err.into(),
-                        timestamp: Utc::now(),
+                        timestamp: OffsetDateTime::now_utc(),
                     }),
                 }
             }
@@ -225,7 +226,7 @@ where
 
                 // If the index doesn't exist and we are not allowed to create it with the first
                 // task, we must fails the whole batch.
-                let now = Utc::now();
+                let now = OffsetDateTime::now_utc();
                 let index = match index {
                     Ok(index) => index,
                     Err(e) => {
@@ -253,17 +254,17 @@ where
 
                 let event = match result {
                     Ok(Ok(result)) => TaskEvent::Succeded {
-                        timestamp: Utc::now(),
+                        timestamp: OffsetDateTime::now_utc(),
                         result: TaskResult::DocumentAddition {
                             indexed_documents: result.indexed_documents,
                         },
                     },
                     Ok(Err(e)) => TaskEvent::Failed {
-                        timestamp: Utc::now(),
+                        timestamp: OffsetDateTime::now_utc(),
                         error: e.into(),
                     },
                     Err(e) => TaskEvent::Failed {
-                        timestamp: Utc::now(),
+                        timestamp: OffsetDateTime::now_utc(),
                         error: IndexResolverError::from(e).into(),
                     },
                 };
@@ -524,7 +525,7 @@ mod test {
                         };
                         if primary_key.is_some() {
                             mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
-                                .then(move |_| Ok(IndexMeta{ created_at: Utc::now(), updated_at: Utc::now(), primary_key: None }));
+                                .then(move |_| Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None }));
                         }
                         mocker.when::<(IndexDocumentsMethod, Option<String>, UpdateFileStore, IntoIter<Uuid>), IndexResult<DocumentAdditionResult>>("update_documents")
                                 .then(move |(_, _, _, _)| result());
@@ -569,7 +570,7 @@ mod test {
                     | TaskContent::IndexCreation { primary_key } => {
                         if primary_key.is_some() {
                             let result = move || if !index_op_fails {
-                                Ok(IndexMeta{ created_at: Utc::now(), updated_at: Utc::now(), primary_key: None })
+                                Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None })
                             } else {
                                 // return this error because it's easy to generate...
                                 Err(IndexError::DocumentNotFound("a doc".into()))
@@ -640,7 +641,7 @@ mod test {
                 let update_file_store = UpdateFileStore::mock(mocker);
                 let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store);
 
-                let batch = Batch { id: 1, created_at: Utc::now(), tasks: vec![task.clone()] };
+                let batch = Batch { id: 1, created_at: OffsetDateTime::now_utc(), tasks: vec![task.clone()] };
                 let result = index_resolver.process_batch(batch).await;
 
                 // Test for some expected output scenarios:

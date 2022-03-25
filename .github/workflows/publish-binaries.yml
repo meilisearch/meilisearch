@@ -6,7 +6,7 @@ name: Publish binaries to release
 
 jobs:
   publish:
-    name: Publish for ${{ matrix.os }}
+    name: Publish binary for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -39,7 +39,7 @@ jobs:
         tag: ${{ github.ref }}
 
   publish-aarch64:
-    name: Publish to GitHub
+    name: Publish binary for aarch64
     runs-on: ${{ matrix.os }}
     continue-on-error: false
     strategy:

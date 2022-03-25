@@ -1,4 +1,5 @@
 use serde_json::json;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use crate::common::Server;
 
@@ -57,11 +58,15 @@ async fn stats() {
 
     index.wait_task(1).await;
 
+    let timestamp = OffsetDateTime::now_utc();
     let (response, code) = server.stats().await;
 
     assert_eq!(code, 200);
     assert!(response["databaseSize"].as_u64().unwrap() > 0);
-    assert!(response.get("lastUpdate").is_some());
+    let last_update =
+        OffsetDateTime::parse(response["lastUpdate"].as_str().unwrap(), &Rfc3339).unwrap();
+    assert!(last_update - timestamp < time::Duration::SECOND);
+
     assert_eq!(response["indexes"]["test"]["numberOfDocuments"], 2);
     assert!(response["indexes"]["test"]["isIndexing"] == false);
     assert_eq!(response["indexes"]["test"]["fieldDistribution"]["id"], 2);

@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
-use chrono::{DateTime, Utc};
 use http::header::CONTENT_TYPE;
 use meilisearch_auth::SearchRules;
 use meilisearch_lib::index::{SearchQuery, SearchResult};
@@ -18,6 +17,7 @@ use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
 use serde_json::{json, Value};
 use sysinfo::{DiskExt, System, SystemExt};
+use time::OffsetDateTime;
 use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
@@ -323,7 +323,7 @@ impl Segment {
 
 #[derive(Default)]
 pub struct SearchAggregator {
-    timestamp: Option<DateTime<Utc>>,
+    timestamp: Option<OffsetDateTime>,
 
     // context
     user_agents: HashSet<String>,
@@ -360,7 +360,7 @@ pub struct SearchAggregator {
 impl SearchAggregator {
     pub fn from_query(query: &SearchQuery, request: &HttpRequest) -> Self {
         let mut ret = Self::default();
-        ret.timestamp = Some(chrono::offset::Utc::now());
+        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.total_received = 1;
         ret.user_agents = extract_user_agents(request).into_iter().collect();
@@ -504,7 +504,7 @@ impl SearchAggregator {
 
 #[derive(Default)]
 pub struct DocumentsAggregator {
-    timestamp: Option<DateTime<Utc>>,
+    timestamp: Option<OffsetDateTime>,
 
     // set to true when at least one request was received
     updated: bool,
@@ -524,7 +524,7 @@ impl DocumentsAggregator {
         request: &HttpRequest,
     ) -> Self {
         let mut ret = Self::default();
-        ret.timestamp = Some(chrono::offset::Utc::now());
+        ret.timestamp = Some(OffsetDateTime::now_utc());
 
         ret.updated = true;
         ret.user_agents = extract_user_agents(request).into_iter().collect();

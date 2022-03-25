@@ -36,6 +36,25 @@ jobs:
         command: test
         args: --locked --release
 
+  # We run tests in debug also, to make sure that the debug_assertions are hit
+  test-debug:
+    name: Run tests in debug
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v1.3.0
+      - name: Run tests in debug
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked
+
   clippy:
     name: Run Clippy
     runs-on: ubuntu-18.04

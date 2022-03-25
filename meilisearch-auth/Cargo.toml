@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 enum-iterator = "0.7.0"
-heed = { git = "https://github.com/Kerollmops/heed", tag = "v0.12.1" }
-sha2 = "0.9.6"
-chrono = { version = "0.4.19", features = ["serde"] }
 meilisearch-error = { path = "../meilisearch-error" }
-serde_json = { version = "1.0.67", features = ["preserve_order"] }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.24.0" }
 rand = "0.8.4"
-serde = { version = "1.0.130", features = ["derive"] }
-thiserror = "1.0.28"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = { version = "1.0.79", features = ["preserve_order"] }
+sha2 = "0.10.2"
+thiserror = "1.0.30"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }

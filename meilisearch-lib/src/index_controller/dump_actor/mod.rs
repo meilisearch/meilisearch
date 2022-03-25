@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::bail;
-use chrono::{DateTime, Utc};
 use log::{info, trace};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
@@ -40,7 +40,8 @@ pub struct Metadata {
     db_version: String,
     index_db_size: usize,
     update_db_size: usize,
-    dump_date: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    dump_date: OffsetDateTime,
 }
 
 impl Metadata {
@@ -49,7 +50,7 @@ impl Metadata {
             db_version: env!("CARGO_PKG_VERSION").to_string(),
             index_db_size,
             update_db_size,
-            dump_date: Utc::now(),
+            dump_date: OffsetDateTime::now_utc(),
         }
     }
 }
@@ -144,7 +145,7 @@ impl MetadataVersion {
         }
     }
 
-    pub fn dump_date(&self) -> Option<&DateTime<Utc>> {
+    pub fn dump_date(&self) -> Option<&OffsetDateTime> {
         match self {
             MetadataVersion::V1(_) => None,
             MetadataVersion::V2(meta) | MetadataVersion::V3(meta) | MetadataVersion::V4(meta) => {
@@ -169,9 +170,13 @@ pub struct DumpInfo {
     pub status: DumpStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    started_at: DateTime<Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    finished_at: Option<DateTime<Utc>>,
+    #[serde(with = "time::serde::rfc3339")]
+    started_at: OffsetDateTime,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
+    finished_at: Option<OffsetDateTime>,
 }
 
 impl DumpInfo {
@@ -180,19 +185,19 @@ impl DumpInfo {
             uid,
             status,
             error: None,
-            started_at: Utc::now(),
+            started_at: OffsetDateTime::now_utc(),
             finished_at: None,
         }
     }
 
     pub fn with_error(&mut self, error: String) {
         self.status = DumpStatus::Failed;
-        self.finished_at = Some(Utc::now());
+        self.finished_at = Some(OffsetDateTime::now_utc());
         self.error = Some(error);
     }
 
     pub fn done(&mut self) {
-        self.finished_at = Some(Utc::now());
+        self.finished_at = Some(OffsetDateTime::now_utc());
         self.status = DumpStatus::Done;
     }
 

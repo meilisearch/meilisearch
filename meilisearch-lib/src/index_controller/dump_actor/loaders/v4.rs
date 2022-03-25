@@ -1,9 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use heed::EnvOpenOptions;
 use log::info;
 use meilisearch_auth::AuthController;
+use milli::heed::EnvOpenOptions;
 
 use crate::analytics;
 use crate::index_controller::dump_actor::Metadata;

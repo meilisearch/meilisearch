@@ -5,9 +5,9 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use chrono::Utc;
-use heed::{Env, RwTxn};
 use log::debug;
+use milli::heed::{Env, RwTxn};
+use time::OffsetDateTime;
 
 use super::error::TaskError;
 use super::task::{Task, TaskContent, TaskId};
@@ -61,7 +61,7 @@ impl Clone for TaskStore {
 }
 
 impl TaskStore {
-    pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+    pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
         let store = Arc::new(Store::new(env)?);
         Ok(Self { store })
     }
@@ -72,7 +72,7 @@ impl TaskStore {
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
             let mut txn = store.wtxn()?;
             let next_task_id = store.next_task_id(&mut txn)?;
-            let created_at = TaskEvent::Created(Utc::now());
+            let created_at = TaskEvent::Created(OffsetDateTime::now_utc());
             let task = Task {
                 id: next_task_id,
                 index_uid,
@@ -248,7 +248,7 @@ pub mod test {
     }
 
     impl MockTaskStore {
-        pub fn new(env: Arc<heed::Env>) -> Result<Self> {
+        pub fn new(env: Arc<milli::heed::Env>) -> Result<Self> {
             Ok(Self::Real(TaskStore::new(env)?))
         }
 

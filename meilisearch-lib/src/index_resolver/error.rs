@@ -45,7 +45,7 @@ impl From<OneshotRecvError> for IndexResolverError {
 }
 
 internal_error!(
-    IndexResolverError: heed::Error,
+    IndexResolverError: milli::heed::Error,
     uuid::Error,
     std::io::Error,
     tokio::task::JoinError,

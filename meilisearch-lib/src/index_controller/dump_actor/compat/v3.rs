@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use meilisearch_error::{Code, ResponseError};
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::index::{Settings, Unchecked};
@@ -107,7 +107,8 @@ pub enum UpdateMeta {
 pub struct Enqueued {
     pub update_id: u64,
     pub meta: Update,
-    pub enqueued_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub enqueued_at: OffsetDateTime,
 }
 
 impl Enqueued {
@@ -122,7 +123,8 @@ impl Enqueued {
 #[serde(rename_all = "camelCase")]
 pub struct Processed {
     pub success: v2::UpdateResult,
-    pub processed_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub processed_at: OffsetDateTime,
     #[serde(flatten)]
     pub from: Processing,
 }
@@ -144,7 +146,8 @@ impl Processed {
 pub struct Processing {
     #[serde(flatten)]
     pub from: Enqueued,
-    pub started_processing_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub started_processing_at: OffsetDateTime,
 }
 
 impl Processing {
@@ -163,7 +166,8 @@ pub struct Failed {
     pub from: Processing,
     pub msg: String,
     pub code: Code,
-    pub failed_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub failed_at: OffsetDateTime,
 }
 
 impl Failed {
