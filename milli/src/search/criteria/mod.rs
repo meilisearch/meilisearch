@@ -404,7 +404,9 @@ fn query_docids(
     match &query.kind {
         QueryKind::Exact { word, .. } => {
             if query.prefix && ctx.in_prefix_cache(&word) {
-                Ok(ctx.word_prefix_docids(&word)?.unwrap_or_default())
+                let doc_ids = ctx.word_prefix_docids(&word)?.unwrap_or_default();
+                let exact_docids = ctx.exact_word_prefix_docids(&word)?.unwrap_or_default();
+                Ok(doc_ids | exact_docids)
             } else if query.prefix {
                 let words = word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?;
                 let mut docids = RoaringBitmap::new();
