@@ -70,6 +70,7 @@ pub trait Context<'c> {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn exact_word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
+    fn exact_word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_pair_proximity_docids(
         &self,
         left: &str,
@@ -125,6 +126,10 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
 
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
         self.index.word_prefix_docids.get(self.rtxn, &word)
+    }
+
+    fn exact_word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        self.index.exact_word_prefix_docids.get(self.rtxn, &word)
     }
 
     fn word_pair_proximity_docids(
@@ -522,6 +527,7 @@ pub mod test {
         word_docids: HashMap<String, RoaringBitmap>,
         exact_word_docids: HashMap<String, RoaringBitmap>,
         word_prefix_docids: HashMap<String, RoaringBitmap>,
+        exact_word_prefix_docids: HashMap<String, RoaringBitmap>,
         word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         word_prefix_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         docid_words: HashMap<u32, Vec<String>>,
@@ -542,6 +548,10 @@ pub mod test {
 
         fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
             Ok(self.word_prefix_docids.get(&word.to_string()).cloned())
+        }
+
+        fn exact_word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+            Ok(self.exact_word_prefix_docids.get(&word.to_string()).cloned())
         }
 
         fn word_pair_proximity_docids(
@@ -672,6 +682,8 @@ pub mod test {
                 s("20")  => &word_docids[&s("2020")]  | &word_docids[&s("2021")],
             };
 
+            let exact_word_prefix_docids = HashMap::new();
+
             let mut word_pair_proximity_docids = HashMap::new();
             let mut word_prefix_pair_proximity_docids = HashMap::new();
             for (lword, lcandidates) in &word_docids {
@@ -729,6 +741,7 @@ pub mod test {
                 word_docids,
                 exact_word_docids,
                 word_prefix_docids,
+                exact_word_prefix_docids,
                 word_pair_proximity_docids,
                 word_prefix_pair_proximity_docids,
                 docid_words,
