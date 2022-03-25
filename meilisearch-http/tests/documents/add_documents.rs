@@ -1,5 +1,6 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
+use itertools::Itertools;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -274,7 +275,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value at line 1 column 14`"#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -298,7 +299,73 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value at line 1 column 14`"#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`."#
+        )
+    );
+    assert_eq!(response["code"], json!("malformed_payload"));
+    assert_eq!(response["type"], json!("invalid_request"));
+    assert_eq!(
+        response["link"],
+        json!("https://docs.meilisearch.com/errors#malformed_payload")
+    );
+
+    // truncate
+
+    // length = 100
+    let long = String::from_utf8(
+        "0123456789"
+            .as_bytes()
+            .iter()
+            .cycle()
+            .cloned()
+            .take(100)
+            .collect_vec(),
+    )
+    .unwrap();
+
+    let document = format!("\"{}\"", long);
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document)
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let body = test::read_body(res).await;
+    dbg!(&body);
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    dbg!(&response);
+    assert_eq!(status_code, 400);
+    assert_eq!(
+        response["message"],
+        json!(
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789", expected a documents, or a sequence of documents. at line 1 column 102`."#
+        )
+    );
+    assert_eq!(response["code"], json!("malformed_payload"));
+    assert_eq!(response["type"], json!("invalid_request"));
+    assert_eq!(
+        response["link"],
+        json!("https://docs.meilisearch.com/errors#malformed_payload")
+    );
+
+
+
+    let document = format!("\"{}m\"", long);
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document)
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let body = test::read_body(res).await;
+    dbg!(&body);
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    dbg!(&response);
+    assert_eq!(status_code, 400);
+    assert_eq!(
+        response["message"],
+        json!(
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "01234567890123456789012345678901234567890123456789 ... 1234567890123456789012345678901234567890123456789m", expected a documents, or a sequence of documents. at line 1 column 103`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -336,7 +403,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value at line 1 column 2`"#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -360,7 +427,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value at line 1 column 2`"#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));

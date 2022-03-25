@@ -55,8 +55,8 @@ impl Display for DocumentFormatError {
 
                     write!(
                     f,
-                    "The `{}` payload provided is malformed. `Couldn't serialize document value: {}. at line {} column {} `",
-                    b, se.line(), se.column(),serde_msg
+                    "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
+                    b,serde_msg
                 )
                 }
                 _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
