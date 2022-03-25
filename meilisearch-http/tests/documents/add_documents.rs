@@ -348,8 +348,7 @@ async fn error_add_malformed_json_documents() {
         json!("https://docs.meilisearch.com/errors#malformed_payload")
     );
 
-
-
+    // add one more char to the long string to test if the truncating works.
     let document = format!("\"{}m\"", long);
     let req = test::TestRequest::put()
         .uri("/indexes/dog/documents")
