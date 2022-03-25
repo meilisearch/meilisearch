@@ -23,12 +23,12 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         word_docids: Database<Str, RoaringBitmapCodec>,
-        word_prefixes_docids: Database<Str, RoaringBitmapCodec>,
+        word_prefix_docids: Database<Str, RoaringBitmapCodec>,
     ) -> WordPrefixDocids<'t, 'u, 'i> {
         WordPrefixDocids {
             wtxn,
             word_docids,
-            word_prefix_docids: word_prefixes_docids,
+            word_prefix_docids,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             max_nb_chunks: None,
@@ -39,7 +39,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
     #[logging_timer::time("WordPrefixDocids::{}")]
     pub fn execute(
         self,
-        mut new_word_docids_iter: grenad::MergerIter<CursorClonableMmap, MergeFn>,
+        mut new_word_docids_iter: grenad::ReaderCursor<CursorClonableMmap>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -57,7 +57,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         if !common_prefix_fst_words.is_empty() {
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
-            while let Some((word, data)) = new_word_docids_iter.next()? {
+            while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
                     _otherwise => {
