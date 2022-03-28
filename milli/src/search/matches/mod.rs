@@ -92,7 +92,7 @@ impl MatcherBuilder {
 //     }
 // }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Match {
     match_len: usize,
     // id of the query word that matches.
@@ -103,6 +103,7 @@ pub struct Match {
     token_position: usize,
 }
 
+#[derive(Clone, Debug)]
 pub struct MatchBounds {
     start: usize,
     length: usize,
@@ -151,7 +152,7 @@ impl<'t> Matcher<'t, '_> {
         }
     }
 
-    fn crop_around(&self, matches: &[Match]) -> (usize, usize) {
+    fn token_crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
         let last_match_word_position = matches.last().map(|m| m.word_position).unwrap_or(0);
@@ -229,16 +230,84 @@ impl<'t> Matcher<'t, '_> {
             last_token_position += 1;
         }
 
-        (self.tokens[first_token_position].byte_start, self.tokens[last_token_position].byte_end)
+        (first_token_position, last_token_position)
+    }
+
+    fn match_interval_score(&self, matches: &[Match]) -> (i16, i16, i16) {
+        let mut ids = Vec::with_capacity(matches.len());
+        let mut order_score = 0;
+        let mut distance_score = 0;
+
+        let mut iter = matches.iter().peekable();
+        while let Some(m) = iter.next() {
+            if let Some(next_match) = iter.peek() {
+                // if matches are ordered
+                if next_match.id > m.id {
+                    order_score += 1;
+                }
+
+                // compute distance between matches
+                distance_score -= (next_match.word_position - m.word_position).min(7) as i16;
+            }
+
+            ids.push(m.id);
+        }
+
+        ids.sort_unstable();
+        ids.dedup();
+        let uniq_score = ids.len() as i16;
+
+        // rank by unique match count, then by distance between matches, then by ordered match count.
+        (uniq_score, distance_score, order_score)
+    }
+
+    fn find_best_match_interval<'a>(&self, matches: &'a [Match]) -> &'a [Match] {
+        if matches.len() > 1 {
+            let mut best_interval = (0, 1);
+            let mut best_interval_score = self.match_interval_score(&matches[0..=1]);
+            let mut interval_first = 0;
+            let mut interval_last = 1;
+            for (index, next_match) in matches.iter().enumerate().skip(2) {
+                // if next match would make interval gross more than crop_size
+                if next_match.word_position - matches[interval_first].word_position > self.crop_size
+                {
+                    let interval_score =
+                        self.match_interval_score(&matches[interval_first..=interval_last]);
+
+                    // keep interval if it's the best
+                    if interval_score > best_interval_score {
+                        best_interval = (interval_first, interval_last);
+                        best_interval_score = interval_score;
+                    }
+
+                    // advance start of the interval while interval is longer than crop_size
+                    while next_match.word_position - matches[interval_first].word_position
+                        > self.crop_size
+                    {
+                        interval_first += 1;
+                    }
+                }
+                interval_last = index;
+            }
+
+            let interval_score =
+                self.match_interval_score(&matches[interval_first..=interval_last]);
+            if interval_score > best_interval_score {
+                best_interval = (interval_first, interval_last);
+            }
+
+            &matches[best_interval.0..=best_interval.1]
+        } else {
+            matches
+        }
     }
 
     fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
-        match matches {
-            // at least 2 matches
-            [first, last, ..] => self.crop_around(&[first.clone()][..]),
-            // less than 2 matches
-            _ => self.crop_around(matches),
-        }
+        let match_interval = self.find_best_match_interval(matches);
+
+        let (first_token_position, last_token_position) = self.token_crop_bounds(match_interval);
+
+        (self.tokens[first_token_position].byte_start, self.tokens[last_token_position].byte_end)
     }
 
     pub fn format(&mut self, highlight: bool, crop: bool) -> Cow<'t, str> {
@@ -459,6 +528,28 @@ mod tests {
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // crop should return 10 last words with a marker at the start.
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "…void void void void void split the world void void"
+        );
+
+        // Text containing matches with diferent density.
+        let text = "split void the void void world void void void void void void void void void void split the world void void";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // crop should return 10 last words with a marker at the start.
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "…void void void void void split the world void void"
+        );
+
+        // Text containing matches with same word.
+        let text = "split split split split split split void void void void void void void void void void split the world void void";
         let analyzed = analyzer.analyze(&text);
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
