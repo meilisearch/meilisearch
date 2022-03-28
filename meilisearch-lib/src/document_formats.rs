@@ -62,6 +62,7 @@ impl Display for DocumentFormatError {
         }
     }
 }
+
 impl std::error::Error for DocumentFormatError {}
 
 impl From<(PayloadType, milli::documents::Error)> for DocumentFormatError {
