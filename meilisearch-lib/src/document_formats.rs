@@ -29,6 +29,7 @@ pub enum DocumentFormatError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     MalformedPayload(Box<milli::documents::Error>, PayloadType),
 }
+
 impl Display for DocumentFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
