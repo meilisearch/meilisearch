@@ -92,24 +92,20 @@ impl MatcherBuilder {
 //     }
 // }
 
-pub struct Match<'t> {
-    token: &'t Token<'t>,
+#[derive(Clone)]
+pub struct Match {
     match_len: usize,
     // id of the query word that matches.
     id: usize,
     // position of the word in the whole text.
-    position: usize,
+    word_position: usize,
+    // position of the token in the whole text.
+    token_position: usize,
 }
 
 pub struct MatchBounds {
     start: usize,
     length: usize,
-}
-
-impl<'t> From<&Match<'t>> for MatchBounds {
-    fn from(m: &Match) -> Self {
-        MatchBounds { start: m.token.byte_start, length: m.match_len }
-    }
 }
 
 pub struct Matcher<'t, 'm> {
@@ -120,26 +116,22 @@ pub struct Matcher<'t, 'm> {
     crop_marker: &'m str,
     highlight_prefix: &'m str,
     highlight_suffix: &'m str,
-    matches: Option<Vec<Match<'t>>>,
+    matches: Option<Vec<Match>>,
 }
 
 impl<'t> Matcher<'t, '_> {
     fn compute_matches(&mut self) -> &mut Self {
         let mut matches = Vec::new();
-        let mut position = 0;
+        let mut word_position = 0;
+        let mut token_position = 0;
         for token in self.tokens {
-            match token.is_separator() {
-                Some(SeparatorKind::Hard) => position += 7,
-                None => {
-                    if let Some((match_len, id)) =
-                        self.matching_words.matching_bytes_with_id(&token)
-                    {
-                        matches.push(Match { token, match_len, id, position });
-                    }
-                    position += 1;
+            if token.is_separator().is_none() {
+                if let Some((match_len, id)) = self.matching_words.matching_bytes_with_id(&token) {
+                    matches.push(Match { match_len, id, word_position, token_position });
                 }
-                _otherwise => {}
+                word_position += 1;
             }
+            token_position += 1;
         }
 
         self.matches = Some(matches);
@@ -149,21 +141,104 @@ impl<'t> Matcher<'t, '_> {
     pub fn matches(&mut self) -> Vec<MatchBounds> {
         match &self.matches {
             None => self.compute_matches().matches(),
-            Some(matches) => matches.iter().map(MatchBounds::from).collect(),
+            Some(matches) => matches
+                .iter()
+                .map(|m| MatchBounds {
+                    start: self.tokens[m.token_position].byte_start,
+                    length: m.match_len,
+                })
+                .collect(),
         }
     }
 
-    fn crop_bounds(&self, matches: &[Match<'t>]) -> (usize, usize) {
-        let byte_end = self
-            .tokens
-            .iter()
-            .filter(|t| t.is_separator().is_none())
-            .enumerate()
-            .take_while(|(i, _)| *i < self.crop_size)
-            .last()
-            .map_or(self.text.len(), |(_, t)| t.byte_end);
+    fn crop_around(&self, matches: &[Match]) -> (usize, usize) {
+        let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
+        let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
+        let last_match_word_position = matches.last().map(|m| m.word_position).unwrap_or(0);
+        let last_match_token_position = matches.last().map(|m| m.token_position).unwrap_or(0);
 
-        (0, byte_end)
+        // TODO: buggy if no match and fisrt token is a sepparator
+        let mut remaining_words =
+            self.crop_size + first_match_word_position - last_match_word_position - 1;
+        let mut first_token_position = first_match_token_position;
+        let mut last_token_position = last_match_token_position;
+
+        while remaining_words > 0 {
+            match (
+                first_token_position.checked_sub(1).and_then(|i| self.tokens.get(i)),
+                last_token_position.checked_add(1).and_then(|i| self.tokens.get(i)),
+            ) {
+                (Some(ft), Some(lt)) => {
+                    match (ft.is_separator(), lt.is_separator()) {
+                        // if they are both separators and are the same kind then advance both
+                        (Some(f_kind), Some(s_kind)) => {
+                            if f_kind == s_kind {
+                                first_token_position -= 1;
+                                last_token_position += 1;
+                            } else if f_kind == SeparatorKind::Hard {
+                                last_token_position += 1;
+                            } else {
+                                first_token_position -= 1;
+                            }
+                        }
+                        // left is a word, advance left
+                        (None, Some(_)) => {
+                            first_token_position -= 1;
+                            remaining_words -= 1;
+                        }
+                        // right is a word, advance right
+                        (Some(_), None) => {
+                            last_token_position += 1;
+                            remaining_words -= 1;
+                        }
+                        // both are words, advance left then right if remaining_word > 0
+                        (None, None) => {
+                            first_token_position -= 1;
+                            remaining_words -= 1;
+
+                            if remaining_words > 0 {
+                                last_token_position += 1;
+                                remaining_words -= 1;
+                            }
+                        }
+                    }
+                }
+                (Some(ft), None) => {
+                    first_token_position -= 1;
+                    if ft.is_separator().is_none() {
+                        remaining_words -= 1;
+                    }
+                }
+                (None, Some(lt)) => {
+                    last_token_position += 1;
+                    if lt.is_separator().is_none() {
+                        remaining_words -= 1;
+                    }
+                }
+                (None, None) => break,
+            }
+        }
+
+        // if tokens after the end of the window are separators,
+        // then add them to the window in order to keep context in cropped text.
+        while let Some(_separator_kind) = last_token_position
+            .checked_add(1)
+            .and_then(|i| self.tokens.get(i))
+            .and_then(|t| t.is_separator())
+        {
+            last_token_position += 1;
+        }
+
+        (self.tokens[first_token_position].byte_start, self.tokens[last_token_position].byte_end)
+    }
+
+    fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
+        match matches {
+            // at least 2 matches
+            [first, last, ..] => self.crop_around(&[first.clone()][..]),
+            // less than 2 matches
+            _ => self.crop_around(matches),
+        }
     }
 
     pub fn format(&mut self, highlight: bool, crop: bool) -> Cow<'t, str> {
@@ -187,20 +262,23 @@ impl<'t> Matcher<'t, '_> {
 
                     if highlight {
                         // insert highlight markers around matches.
+                        let tokens = self.tokens;
                         for m in matches
                             .iter()
-                            .skip_while(|m| m.token.byte_start < byte_start)
-                            .take_while(|m| m.token.byte_start < byte_end)
+                            .skip_while(|m| tokens[m.token_position].byte_start < byte_start)
+                            .take_while(|m| tokens[m.token_position].byte_start < byte_end)
                         {
-                            if byte_index < m.token.byte_start {
-                                formatted.push(&self.text[byte_index..m.token.byte_start]);
+                            let token = &tokens[m.token_position];
+
+                            if byte_index < token.byte_start {
+                                formatted.push(&self.text[byte_index..token.byte_start]);
                             }
 
                             formatted.push(self.highlight_prefix);
-                            formatted.push(&self.text[m.token.byte_start..m.token.byte_end]);
+                            formatted.push(&self.text[token.byte_start..token.byte_end]);
                             formatted.push(self.highlight_suffix);
 
-                            byte_index = m.token.byte_end;
+                            byte_index = token.byte_end;
                         }
                     }
 
@@ -271,7 +349,7 @@ mod tests {
         assert_eq!(&matcher.format(highlight, crop), &text);
 
         // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World";
+        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
         let analyzed = analyzer.analyze(&text);
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
@@ -306,12 +384,12 @@ mod tests {
         assert_eq!(&matcher.format(highlight, crop), &text);
 
         // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World";
+        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
         let analyzed = analyzer.analyze(&text);
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
         // no crop should return complete text with highlighted matches.
-        assert_eq!(&matcher.format(highlight, crop), "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>");
+        assert_eq!(&matcher.format(highlight, crop), "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
@@ -343,18 +421,18 @@ mod tests {
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "A quick brown fox can not jump 32 feet, right…"
+            "A quick brown fox can not jump 32 feet, right? …"
         );
 
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World";
+        // Test phrase propagation
+        let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
         let analyzed = analyzer.analyze(&text);
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
-        // no highlight should return 10 last words with a marker at the start.
+        // should crop the phrase instead of croping around the match.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "…she loves. Emily Henry: The Love That Split The World"
+            "…Split The World is a book written by Emily Henry. …"
         );
 
         // Text containing some matches.
@@ -366,6 +444,17 @@ mod tests {
         assert_eq!(
             &matcher.format(highlight, crop),
             "…future to build a world with the boy she loves."
+        );
+
+        // Text containing all matches.
+        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // no highlight should return 10 last words with a marker at the start.
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "…she loves. Emily Henry: The Love That Split The World."
         );
 
         // Text containing a match unordered and a match ordered.
@@ -398,16 +487,8 @@ mod tests {
         // both should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "A quick brown fox can not jump 32 feet, right…"
+            "A quick brown fox can not jump 32 feet, right? …"
         );
-
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World";
-        let analyzed = analyzer.analyze(&text);
-        let tokens: Vec<_> = analyzed.tokens().collect();
-        let mut matcher = builder.build(&tokens[..], text);
-        // both should return 10 last words with a marker at the start and highlighted matches.
-        assert_eq!(&matcher.format(highlight, crop), "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>");
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
@@ -419,6 +500,14 @@ mod tests {
             &matcher.format(highlight, crop),
             "…future to build a <em>world</em> with <em>the</em> boy she loves."
         );
+
+        // Text containing all matches.
+        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // both should return 10 last words with a marker at the start and highlighted matches.
+        assert_eq!(&matcher.format(highlight, crop), "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
