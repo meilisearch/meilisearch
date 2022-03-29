@@ -17,7 +17,7 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, FacetNumberIter, Filter};
 use self::fst_utils::{Complement, Intersection, StartsWith, Union};
-pub use self::matches::matching_words::MatchingWords;
+pub use self::matches::{Matcher, MatcherBuilder, MatchingWords};
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};

@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
-use matching_words::MatchingWords;
+pub use matching_words::MatchingWords;
 use meilisearch_tokenizer::token::SeparatorKind;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
 
 use crate::search::query_tree::Operation;
 
-pub mod matching_words;
+mod matching_words;
 
 const DEFAULT_CROP_SIZE: usize = 10;
 const DEFAULT_CROP_MARKER: &'static str = "…";
