@@ -34,6 +34,10 @@ pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 
+/// The maximimum number of results that the engine
+/// will be able to return in one search call.
+pub const HARD_RESULT_LIMIT: usize = 1000;
+
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQuery {
@@ -123,6 +127,8 @@ impl Index {
             candidates,
             ..
         } = search.execute()?;
+
+        let documents_ids: Vec<_> = documents_ids.into_iter().take(HARD_RESULT_LIMIT).collect();
 
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
