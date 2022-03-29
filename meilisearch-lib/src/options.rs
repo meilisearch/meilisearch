@@ -3,7 +3,7 @@ use std::{convert::TryFrom, ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use milli::{update::IndexerConfig, CompressionType};
+use milli::update::IndexerConfig;
 use serde::Serialize;
 use sysinfo::{RefreshKind, System, SystemExt};
 
@@ -27,17 +27,6 @@ pub struct IndexerOpts {
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
     #[clap(long, default_value_t)]
     pub max_memory: MaxMemory,
-
-    /// The name of the compression algorithm to use when compressing intermediate
-    /// Grenad chunks while indexing documents.
-    ///
-    /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
-    #[clap(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
-    pub chunk_compression_type: CompressionType,
-
-    /// The level of compression of the chosen algorithm.
-    #[clap(long, requires = "chunk-compression-type")]
-    pub chunk_compression_level: Option<u32>,
 
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[clap(long)]
@@ -80,9 +69,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             log_every_n: Some(other.log_every_n),
             max_nb_chunks: other.max_nb_chunks,
-            max_memory: (*other.max_memory).map(|b| b.get_bytes() as usize),
-            chunk_compression_type: other.chunk_compression_type,
-            chunk_compression_level: other.chunk_compression_level,
+            max_memory: other.max_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             ..Default::default()
@@ -96,8 +83,6 @@ impl Default for IndexerOpts {
             log_every_n: 100_000,
             max_nb_chunks: None,
             max_memory: MaxMemory::default(),
-            chunk_compression_type: CompressionType::None,
-            chunk_compression_level: None,
             indexing_jobs: None,
         }
     }
