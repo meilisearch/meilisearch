@@ -622,6 +622,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "chunked_transfer"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fff857943da45f546682664a79488be82e69e43c1a7a2307679ab9afb3a66d2e"
+
+[[package]]
 name = "clap"
 version = "3.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -677,16 +683,6 @@ dependencies = [
  "percent-encoding",
  "time 0.3.9",
  "version_check",
-]
-
-[[package]]
-name = "core-foundation"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "194a7a9e6de53fa55116934067c844d9d749312f75c6f6d0980e8c252f8c2146"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -1033,7 +1029,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.24.0#5863afa1a568950de2928ba2d78b95aee243dad1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.24.1#e10c26e70da3a1735db452d54877da39e09d8b1a"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1071,21 +1067,6 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
-
-[[package]]
-name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
@@ -1495,19 +1476,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes",
- "hyper",
- "native-tls",
- "tokio",
- "tokio-native-tls",
-]
-
-[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1665,27 +1633,51 @@ dependencies = [
 
 [[package]]
 name = "lindera"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29719eff479c5d34182dd16c708a413790106b790aa25f5e2f57ae6730715e69"
+checksum = "9986e3ed230e1fb08dcfdb8f9f54ef10a403132814f7febb2353bfc3e6ffd81a"
 dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
  "encoding",
+ "lindera-cc-cedict-builder",
  "lindera-core",
  "lindera-dictionary",
  "lindera-ipadic",
  "lindera-ipadic-builder",
+ "lindera-ko-dic-builder",
+ "lindera-unidic-builder",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "lindera-cc-cedict-builder"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c23edd173ed036c28e34ca33f3f2f8f6613b431d6515efcd43b709bea999cf9"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "clap",
+ "csv",
+ "encoding",
+ "env_logger",
+ "glob",
+ "lindera-core",
+ "lindera-decompress",
+ "log",
+ "yada",
 ]
 
 [[package]]
 name = "lindera-core"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bc4dc99a35081246649b978d212c2c8d6b9adf8171c14bed844ad9c6475af45"
+checksum = "fdf5218f8d991d5763b99a2408dad45ed696330a3f63a2e46761afa5e726c35b"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1699,21 +1691,20 @@ dependencies = [
 
 [[package]]
 name = "lindera-decompress"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc8e3d628f7d94c84fa864741b35172ea6b87d2a6efb37f7bca41532b952c24d"
+checksum = "fe665156d30ae22a97f2f2fc71579d8b3d4d49753f13dc7502e1db6210153f6d"
 dependencies = [
  "anyhow",
- "bincode",
  "lzma-rs",
  "serde",
 ]
 
 [[package]]
 name = "lindera-dictionary"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "632f75733b3b366a0079ee5fb70215b706c1986dcebddfd5db95849b32e6e694"
+checksum = "cb1802efa17ce73d8e766ce614c1a548a5fec471f0111baefb2f224bb228694e"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1723,9 +1714,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b71878006e14474ae3aa7265c4dc5bb9db861e42ba8df9a254e0b5c746cccbd4"
+checksum = "7c15dbb09d5076cc1b1738dc130dc25ea5fe222db42ef010bc486a0ef6f573e8"
 dependencies = [
  "bincode",
  "byteorder",
@@ -1734,16 +1725,15 @@ dependencies = [
  "lindera-core",
  "lindera-ipadic-builder",
  "once_cell",
- "reqwest",
  "tar",
- "tokio",
+ "ureq",
 ]
 
 [[package]]
 name = "lindera-ipadic-builder"
-version = "0.10.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd441a227cbf9b9a9708b01e45e47fe9fde0f7cf8d10639baf59b1696cf2971f"
+checksum = "2bdde8eab25444e23f0ba80b9baa17c3fae4773b3c764e57d57e948211d20837"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1756,6 +1746,46 @@ dependencies = [
  "lindera-decompress",
  "log",
  "serde",
+ "yada",
+]
+
+[[package]]
+name = "lindera-ko-dic-builder"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "551c01dec367d2db4e97bbbba97bba3f3e7704d45e3f7fd3ef5fce33f0392952"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "clap",
+ "csv",
+ "encoding",
+ "env_logger",
+ "glob",
+ "lindera-core",
+ "lindera-decompress",
+ "log",
+ "yada",
+]
+
+[[package]]
+name = "lindera-unidic-builder"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34a2c62a3942f849edf249d7cc1080ab32d621cea5bddabbfe88e7f2dfcc9e42"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "clap",
+ "csv",
+ "encoding",
+ "env_logger",
+ "glob",
+ "lindera-core",
+ "lindera-decompress",
+ "log",
  "yada",
 ]
 
@@ -2009,8 +2039,8 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.2.8"
-source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.8#afd1097bdb389d0528fee7cd5167d0b68ca922a0"
+version = "0.2.9"
+source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.9#1dfc8ad9f5b338c39c3bc5fd5b2d0c1328314ddc"
 dependencies = [
  "character_converter",
  "cow-utils",
@@ -2051,8 +2081,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.23.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.24.0#5863afa1a568950de2928ba2d78b95aee243dad1"
+version = "0.24.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.24.1#e10c26e70da3a1735db452d54877da39e09d8b1a"
 dependencies = [
  "bimap",
  "bincode",
@@ -2173,24 +2203,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "native-tls"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
-dependencies = [
- "lazy_static",
- "libc",
- "log",
- "openssl",
- "openssl-probe",
- "openssl-sys",
- "schannel",
- "security-framework",
- "security-framework-sys",
- "tempfile",
-]
-
-[[package]]
 name = "nelson"
 version = "0.1.0"
 source = "git+https://github.com/MarinPostma/nelson.git?rev=675f13885548fb415ead8fbb447e9e6d9314000a#675f13885548fb415ead8fbb447e9e6d9314000a"
@@ -2300,39 +2312,6 @@ name = "once_cell"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
-
-[[package]]
-name = "openssl"
-version = "0.10.38"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c7ae222234c30df141154f159066c5093ff73b63204dcda7121eb082fc56a95"
-dependencies = [
- "bitflags",
- "cfg-if 1.0.0",
- "foreign-types",
- "libc",
- "once_cell",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-probe"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.72"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e46109c383602735fa0a2e48dd2b7c892b048e1bf69e5c3b1d804b7d9c203cb"
-dependencies = [
- "autocfg",
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "ordered-float"
@@ -2772,13 +2751,11 @@ dependencies = [
  "http-body",
  "hyper",
  "hyper-rustls",
- "hyper-tls",
  "ipnet",
  "js-sys",
  "lazy_static",
  "log",
  "mime",
- "native-tls",
  "percent-encoding",
  "pin-project-lite",
  "rustls",
@@ -2787,7 +2764,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "tokio",
- "tokio-native-tls",
  "tokio-rustls",
  "url",
  "wasm-bindgen",
@@ -2912,16 +2888,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schannel"
-version = "0.1.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f05ba609c234e60bee0d547fe94a4c7e9da733d1c962cf6e59efa4cd9c8bc75"
-dependencies = [
- "lazy_static",
- "winapi",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2935,29 +2901,6 @@ checksum = "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
 dependencies = [
  "ring",
  "untrusted",
-]
-
-[[package]]
-name = "security-framework"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dc14f172faf8a0194a3aded622712b0de276821addc574fa54fc0a1167e10dc"
-dependencies = [
- "bitflags",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0160a13a177a45bfb43ce71c01580998474f556ad854dcbca936dd2841a5c556"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -3372,16 +3315,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-native-tls"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
-dependencies = [
- "native-tls",
- "tokio",
-]
-
-[[package]]
 name = "tokio-rustls"
 version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3526,6 +3459,22 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
+
+[[package]]
+name = "ureq"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9399fa2f927a3d327187cbd201480cee55bee6ac5d3c77dd27f0c6814cff16d5"
+dependencies = [
+ "base64",
+ "chunked_transfer",
+ "log",
+ "once_cell",
+ "rustls",
+ "url",
+ "webpki",
+ "webpki-roots",
+]
 
 [[package]]
 name = "url"
