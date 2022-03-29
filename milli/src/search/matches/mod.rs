@@ -158,9 +158,13 @@ impl<'t> Matcher<'t, '_> {
         let last_match_word_position = matches.last().map(|m| m.word_position).unwrap_or(0);
         let last_match_token_position = matches.last().map(|m| m.token_position).unwrap_or(0);
 
-        // TODO: buggy if no match and fisrt token is a sepparator
+        // TODO: buggy if no match and first token is a sepparator
         let mut remaining_words =
-            self.crop_size + first_match_word_position - last_match_word_position - 1;
+            self.crop_size + first_match_word_position - last_match_word_position;
+        // if first token is a word, then remove 1 to remaining_words.
+        if let Some(None) = self.tokens.get(first_match_token_position).map(|t| t.is_separator()) {
+            remaining_words -= 1;
+        }
         let mut first_token_position = first_match_token_position;
         let mut last_token_position = last_match_token_position;
 
@@ -204,18 +208,21 @@ impl<'t> Matcher<'t, '_> {
                         }
                     }
                 }
+                // the end of the text is reached, advance left.
                 (Some(ft), None) => {
                     first_token_position -= 1;
                     if ft.is_separator().is_none() {
                         remaining_words -= 1;
                     }
                 }
+                // the start of the text is reached, advance right.
                 (None, Some(lt)) => {
                     last_token_position += 1;
                     if lt.is_separator().is_none() {
                         remaining_words -= 1;
                     }
                 }
+                // no more token to add.
                 (None, None) => break,
             }
         }
@@ -263,13 +270,14 @@ impl<'t> Matcher<'t, '_> {
 
     fn find_best_match_interval<'a>(&self, matches: &'a [Match]) -> &'a [Match] {
         if matches.len() > 1 {
-            let mut best_interval = (0, 1);
-            let mut best_interval_score = self.match_interval_score(&matches[0..=1]);
+            let mut best_interval = (0, 0);
+            let mut best_interval_score = self.match_interval_score(&matches[0..=0]);
             let mut interval_first = 0;
-            let mut interval_last = 1;
-            for (index, next_match) in matches.iter().enumerate().skip(2) {
+            let mut interval_last = 0;
+            for (index, next_match) in matches.iter().enumerate().skip(1) {
                 // if next match would make interval gross more than crop_size
-                if next_match.word_position - matches[interval_first].word_position > self.crop_size
+                if next_match.word_position - matches[interval_first].word_position
+                    >= self.crop_size
                 {
                     let interval_score =
                         self.match_interval_score(&matches[interval_first..=interval_last]);
@@ -282,7 +290,7 @@ impl<'t> Matcher<'t, '_> {
 
                     // advance start of the interval while interval is longer than crop_size
                     while next_match.word_position - matches[interval_first].word_position
-                        > self.crop_size
+                        >= self.crop_size
                     {
                         interval_first += 1;
                     }
@@ -307,10 +315,15 @@ impl<'t> Matcher<'t, '_> {
 
         let (first_token_position, last_token_position) = self.token_crop_bounds(match_interval);
 
-        (self.tokens[first_token_position].byte_start, self.tokens[last_token_position].byte_end)
+        let byte_start = self.tokens.get(first_token_position).map_or(0, |t| t.byte_start);
+        let byte_end = self.tokens.get(last_token_position).map_or(byte_start, |t| t.byte_end);
+        (byte_start, byte_end)
     }
 
     pub fn format(&mut self, highlight: bool, crop: bool) -> Cow<'t, str> {
+        // If 0 it will be considered null and thus not crop the field
+        // https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
+        let crop = crop && self.crop_size > 0;
         if !highlight && !crop {
             // compute matches is not needed if no highlight or crop is requested.
             Cow::Borrowed(self.text)
@@ -444,6 +457,20 @@ mod tests {
         let highlight = true;
         let crop = false;
 
+        // empty text.
+        let text = "";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), "");
+
+        // text containing only separators.
+        let text = ":-)";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), ":-)");
+
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
         let analyzed = analyzer.analyze(&text);
@@ -482,6 +509,20 @@ mod tests {
         let highlight = false;
         let crop = true;
 
+        // empty text.
+        let text = "";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), "");
+
+        // text containing only separators.
+        let text = ":-)";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), ":-)");
+
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
         let analyzed = analyzer.analyze(&text);
@@ -491,6 +532,17 @@ mod tests {
         assert_eq!(
             &matcher.format(highlight, crop),
             "A quick brown fox can not jump 32 feet, right? …"
+        );
+
+        // Text without any match starting by a separator.
+        let text = "(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // no highlight should return 10 first words with a marker at the end.
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "(A quick brown fox can not jump 32 feet, right? …"
         );
 
         // Test phrase propagation
@@ -570,6 +622,20 @@ mod tests {
         let highlight = true;
         let crop = true;
 
+        // empty text.
+        let text = "";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), "");
+
+        // text containing only separators.
+        let text = ":-)";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(&matcher.format(highlight, crop), ":-)");
+
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
         let analyzed = analyzer.analyze(&text);
@@ -610,5 +676,39 @@ mod tests {
             &matcher.format(highlight, crop),
             "…void void void void void <em>split</em> <em>the</em> <em>world</em> void void"
         );
+    }
+
+    #[test]
+    fn smaller_crop_size() {
+        //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
+        let query_tree = query_tree();
+
+        let mut builder = MatcherBuilder::from_query_tree(&query_tree);
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+
+        let highlight = false;
+        let crop = true;
+
+        let text = "void void split the world void void.";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+
+        // set a smaller crop size
+        builder.crop_size(2);
+        let mut matcher = builder.build(&tokens[..], text);
+        // because crop size < query size, partially format matches.
+        assert_eq!(&matcher.format(highlight, crop), "…split the …");
+
+        // set a smaller crop size
+        builder.crop_size(1);
+        let mut matcher = builder.build(&tokens[..], text);
+        // because crop size < query size, partially format matches.
+        assert_eq!(&matcher.format(highlight, crop), "…split …");
+
+        // set a smaller crop size
+        builder.crop_size(0);
+        let mut matcher = builder.build(&tokens[..], text);
+        // because crop size is 0, crop is ignored.
+        assert_eq!(&matcher.format(highlight, crop), "void void split the world void void.");
     }
 }
