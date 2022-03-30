@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
@@ -101,8 +102,13 @@ impl Index {
             search.query(query);
         }
 
-        search.limit(query.limit);
-        search.offset(query.offset.unwrap_or_default());
+        // Make sure that a user can't get more documents than the hard limit,
+        // we align that on the offset too.
+        let offset = min(query.offset.unwrap_or(0), HARD_RESULT_LIMIT);
+        let limit = min(query.limit, HARD_RESULT_LIMIT.saturating_sub(offset));
+
+        search.offset(offset);
+        search.limit(limit);
 
         if let Some(ref filter) = query.filter {
             if let Some(facets) = parse_filter(filter)? {
@@ -127,8 +133,6 @@ impl Index {
             candidates,
             ..
         } = search.execute()?;
-
-        let documents_ids: Vec<_> = documents_ids.into_iter().take(HARD_RESULT_LIMIT).collect();
 
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
