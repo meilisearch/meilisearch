@@ -402,31 +402,42 @@ fn query_docids(
     wdcache: &mut WordDerivationsCache,
 ) -> Result<RoaringBitmap> {
     match &query.kind {
-        QueryKind::Exact { word, .. } => {
+        QueryKind::Exact { word, original_typo } => {
             if query.prefix && ctx.in_prefix_cache(&word) {
-                let doc_ids = ctx.word_prefix_docids(&word)?.unwrap_or_default();
-                let exact_docids = ctx.exact_word_prefix_docids(&word)?.unwrap_or_default();
-                Ok(doc_ids | exact_docids)
+                let mut docids = ctx.word_prefix_docids(&word)?.unwrap_or_default();
+                // only add the exact docids if the word hasn't been derived
+                if *original_typo == 0 {
+                    docids |= ctx.exact_word_prefix_docids(&word)?.unwrap_or_default();
+                }
+                Ok(docids)
             } else if query.prefix {
                 let words = word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?;
                 let mut docids = RoaringBitmap::new();
                 for (word, _typo) in words {
-                    let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
-                    let exact_current_docids = ctx.exact_word_docids(&word)?.unwrap_or_default();
-                    docids |= current_docids | exact_current_docids;
+                    docids |= ctx.word_docids(&word)?.unwrap_or_default();
+                    // only add the exact docids if the word hasn't been derived
+                    if *original_typo == 0 {
+                        docids |= ctx.exact_word_docids(&word)?.unwrap_or_default();
+                    }
                 }
                 Ok(docids)
             } else {
-                let word_docids = ctx.word_docids(&word)?.unwrap_or_default();
-                let exact_word_docids = ctx.exact_word_docids(&word)?.unwrap_or_default();
-                Ok(word_docids | exact_word_docids)
+                let mut docids = ctx.word_docids(&word)?.unwrap_or_default();
+                // only add the exact docids if the word hasn't been derived
+                if *original_typo == 0 {
+                    docids |= ctx.exact_word_docids(&word)?.unwrap_or_default();
+                }
+                Ok(docids)
             }
         }
         QueryKind::Tolerant { typo, word } => {
             let words = word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)?;
             let mut docids = RoaringBitmap::new();
-            for (word, _typo) in words {
-                let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
+            for (word, typo) in words {
+                let mut current_docids = ctx.word_docids(&word)?.unwrap_or_default();
+                if *typo == 0 {
+                    current_docids |= ctx.exact_word_docids(&word)?.unwrap_or_default()
+                }
                 docids |= current_docids;
             }
             Ok(docids)

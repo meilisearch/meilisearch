@@ -69,9 +69,11 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
                 }
                 let fid = field_id_from_position(position);
                 if exact_attributes.contains(&fid) && !added_to_exact {
+                    println!("is exact: {}", std::str::from_utf8(&word_bytes).unwrap());
                     exact_word_docids_sorter.insert(word_bytes, &value_buffer)?;
                     added_to_exact = true;
                 } else if !added_to_word_docids {
+                    println!("isnt exact: {}", std::str::from_utf8(&word_bytes).unwrap());
                     word_docids_sorter.insert(word_bytes, &value_buffer)?;
                     added_to_word_docids = true;
                 }
