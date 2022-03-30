@@ -376,8 +376,10 @@ impl<'t> Matcher<'t, '_> {
                             }
 
                             formatted.push(self.highlight_prefix);
-                            formatted.push(&self.text[token.byte_start..token.byte_end]);
+                            formatted.push(&self.text[token.byte_start..][..m.match_len]);
                             formatted.push(self.highlight_suffix);
+                            formatted
+                                .push(&self.text[token.byte_start + m.match_len..token.byte_end]);
 
                             byte_index = token.byte_end;
                         }
@@ -515,6 +517,17 @@ mod tests {
         assert_eq!(
             &matcher.format(highlight, crop),
             "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves."
+        );
+
+        // Text containing some matches by prefix.
+        let text = "Natalie risk her future to build a worldle with the boy she loves.";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // no crop should return complete text with highlighted matches.
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "Natalie risk her future to build a <em>world</em>le with <em>the</em> boy she loves."
         );
     }
 
