@@ -3,7 +3,7 @@ use std::{convert::TryFrom, num::ParseIntError, ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use milli::{update::IndexerConfig, CompressionType};
+use milli::update::IndexerConfig;
 use serde::Serialize;
 use sysinfo::{RefreshKind, System, SystemExt};
 
@@ -34,19 +34,6 @@ pub struct IndexerOpts {
     /// It defaults to half of the available threads.
     #[clap(long, env = "MEILI_MAX_INDEXING_THREADS", default_value_t)]
     pub max_indexing_threads: MaxThreads,
-
-    /// The name of the compression algorithm to use when compressing intermediate
-    /// Grenad chunks while indexing documents.
-    ///
-    /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
-    #[serde(skip)]
-    #[clap(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"], hide = true)]
-    pub chunk_compression_type: CompressionType,
-
-    /// The level of compression of the chosen algorithm.
-    #[serde(skip)]
-    #[clap(long, requires = "chunk-compression-type", hide = true)]
-    pub chunk_compression_level: Option<u32>,
 
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[serde(skip)]
@@ -90,9 +77,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             log_every_n: Some(other.log_every_n),
             max_nb_chunks: other.max_nb_chunks,
-            max_memory: (*other.max_indexing_memory).map(|b| b.get_bytes() as usize),
-            chunk_compression_type: other.chunk_compression_type,
-            chunk_compression_level: other.chunk_compression_level,
+            max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             ..Default::default()
@@ -107,8 +92,6 @@ impl Default for IndexerOpts {
             max_nb_chunks: None,
             max_indexing_memory: MaxMemory::default(),
             max_indexing_threads: MaxThreads::default(),
-            chunk_compression_type: CompressionType::None,
-            chunk_compression_level: None,
             indexing_jobs: None,
         }
     }

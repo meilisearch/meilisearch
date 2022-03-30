@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+
+use clap::Parser;
 use std::path::Path;
 
 use actix_web::http::StatusCode;
@@ -126,36 +128,19 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
     Opt {
         db_path: dir.as_ref().join("db"),
         dumps_dir: dir.as_ref().join("dump"),
-        http_addr: "127.0.0.1:7700".to_owned(),
-        master_key: None,
         env: "development".to_owned(),
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         no_analytics: true,
         max_index_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
-        ssl_cert_path: None,
-        ssl_key_path: None,
-        ssl_auth_path: None,
-        ssl_ocsp_path: None,
-        ssl_require_auth: false,
-        ssl_resumption: false,
-        ssl_tickets: false,
-        import_snapshot: None,
-        ignore_missing_snapshot: false,
-        ignore_snapshot_if_db_exists: false,
         snapshot_dir: ".".into(),
-        schedule_snapshot: false,
-        snapshot_interval_sec: 0,
-        import_dump: None,
-        ignore_missing_dump: false,
-        ignore_dump_if_db_exists: false,
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
             ..Default::default()
+            ..Parser::parse_from(None as Option<&str>)
         },
-        log_level: "off".into(),
-        scheduler_options: meilisearch_lib::options::SchedulerConfig::default(),
+        ..Parser::parse_from(None as Option<&str>)
     }
 }
