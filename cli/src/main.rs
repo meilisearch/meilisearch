@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
@@ -99,8 +99,10 @@ impl Settings {
             })
             .collect();
 
+        let exact_attributes = index.exact_attributes(&txn)?;
+
         println!(
-            "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\n",
+            "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\nexact attributes:\n{}",
             displayed_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
             searchable_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
             filterable_attributes.join("\n\t"),
@@ -109,6 +111,7 @@ impl Settings {
             stop_words.join("\n\t"),
             distinct_field.unwrap_or_default(),
             synonyms.into_iter().map(|(k, v)| format!("\n\t{}:\n{:?}", k, v)).collect::<String>(),
+            exact_attributes.join("\n\t"),
         );
         Ok(())
     }
@@ -463,6 +466,8 @@ struct SettingsUpdate {
     filterable_attributes: Option<Vec<String>>,
     #[structopt(long)]
     criteria: Option<Vec<String>>,
+    #[structopt(long)]
+    exact_attributes: Option<Vec<String>>,
 }
 
 impl Performer for SettingsUpdate {
@@ -486,6 +491,14 @@ impl Performer for SettingsUpdate {
                 update.set_criteria(criteria);
             } else {
                 update.reset_criteria();
+            }
+        }
+
+        if let Some(exact_attributes) = self.exact_attributes {
+            if !exact_attributes.is_empty() {
+                update.set_exact_attributes(exact_attributes.into_iter().collect());
+            } else {
+                update.reset_exact_attributes();
             }
         }
 
