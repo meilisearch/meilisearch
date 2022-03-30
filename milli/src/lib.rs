@@ -37,7 +37,7 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::search::{
-    FacetDistribution, Filter, MatcherBuilder, MatchingWords, Search, SearchResult,
+    FacetDistribution, Filter, MatchBounds, MatcherBuilder, MatchingWords, Search, SearchResult,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;

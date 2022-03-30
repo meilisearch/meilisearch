@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 
 pub use matching_words::MatchingWords;
-use meilisearch_tokenizer::token::SeparatorKind;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token};
+use meilisearch_tokenizer::token::{SeparatorKind, Token};
 
 use crate::search::query_tree::Operation;
 
@@ -91,17 +90,6 @@ impl MatcherBuilder {
     }
 }
 
-// impl Default for MatcherBuilder {
-//     fn default() -> Self {
-//         Self {
-//             crop_size: DEFAULT_CROP_SIZE,
-//             crop_marker: None,
-//             highlight_prefix: None,
-//             highlight_suffix: None,
-//         }
-//     }
-// }
-
 #[derive(Clone, Debug)]
 pub struct Match {
     match_len: usize,
@@ -115,8 +103,8 @@ pub struct Match {
 
 #[derive(Clone, Debug)]
 pub struct MatchBounds {
-    start: usize,
-    length: usize,
+    pub start: usize,
+    pub length: usize,
 }
 
 pub struct Matcher<'t, 'm> {
