@@ -34,6 +34,16 @@ impl MatcherBuilder {
         }
     }
 
+    pub fn from_matching_words(matching_words: MatchingWords) -> Self {
+        Self {
+            matching_words,
+            crop_size: DEFAULT_CROP_SIZE,
+            crop_marker: None,
+            highlight_prefix: None,
+            highlight_suffix: None,
+        }
+    }
+
     pub fn crop_size(&mut self, word_count: usize) -> &Self {
         self.crop_size = word_count;
         self

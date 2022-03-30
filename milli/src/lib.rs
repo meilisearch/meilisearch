@@ -36,7 +36,9 @@ pub use self::heed_codec::{
     RoaringBitmapLenCodec, StrBEU32Codec, StrStrU8Codec,
 };
 pub use self::index::Index;
-pub use self::search::{FacetDistribution, Filter, MatchingWords, Search, SearchResult};
+pub use self::search::{
+    FacetDistribution, Filter, MatcherBuilder, MatchingWords, Search, SearchResult,
+};
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 
