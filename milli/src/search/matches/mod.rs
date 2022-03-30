@@ -225,25 +225,6 @@ impl<'t> Matcher<'t, '_> {
             }
         }
 
-        // if tokens after the end of the window are separators,
-        // then add them to the window in order to keep context in cropped text.
-        while let Some(_separator_kind) = last_token_position
-            .checked_add(1)
-            .and_then(|i| self.tokens.get(i))
-            .and_then(|t| t.is_separator())
-        {
-            last_token_position += 1;
-        }
-
-        // same for start
-        while let Some(_separator_kind) = first_token_position
-            .checked_sub(1)
-            .and_then(|i| self.tokens.get(i))
-            .and_then(|t| t.is_separator())
-        {
-            first_token_position -= 1;
-        }
-
         (first_token_position, last_token_position)
     }
 
@@ -593,7 +574,7 @@ mod tests {
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "A quick brown fox can not jump 32 feet, right? …"
+            "A quick brown fox can not jump 32 feet, right…"
         );
 
         // Text without any match starting by a separator.
@@ -604,7 +585,7 @@ mod tests {
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "(A quick brown fox can not jump 32 feet, right? …"
+            "(A quick brown fox can not jump 32 feet, right…"
         );
 
         // Test phrase propagation
@@ -615,7 +596,7 @@ mod tests {
         // should crop the phrase instead of croping around the match.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "…. Split The World is a book written by Emily Henry. …"
+            "…Split The World is a book written by Emily Henry…"
         );
 
         // Text containing some matches.
@@ -626,7 +607,7 @@ mod tests {
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… future to build a world with the boy she loves."
+            "…future to build a world with the boy she loves…"
         );
 
         // Text containing all matches.
@@ -637,7 +618,7 @@ mod tests {
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… she loves. Emily Henry: The Love That Split The World."
+            "…she loves. Emily Henry: The Love That Split The World."
         );
 
         // Text containing a match unordered and a match ordered.
@@ -648,7 +629,7 @@ mod tests {
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… void void void void void split the world void void"
+            "…void void void void void split the world void void"
         );
 
         // Text containing matches with diferent density.
@@ -659,7 +640,7 @@ mod tests {
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… void void void void void split the world void void"
+            "…void void void void void split the world void void"
         );
 
         // Text containing matches with same word.
@@ -670,7 +651,7 @@ mod tests {
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… void void void void void split the world void void"
+            "…void void void void void split the world void void"
         );
     }
 
@@ -706,7 +687,7 @@ mod tests {
         // both should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "A quick brown fox can not jump 32 feet, right? …"
+            "A quick brown fox can not jump 32 feet, right…"
         );
 
         // Text containing some matches.
@@ -717,7 +698,7 @@ mod tests {
         // both should return 10 last words with a marker at the start and highlighted matches.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… future to build a <em>world</em> with <em>the</em> boy she loves."
+            "…future to build a <em>world</em> with <em>the</em> boy she loves…"
         );
 
         // Text containing all matches.
@@ -726,7 +707,7 @@ mod tests {
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
         // both should return 10 last words with a marker at the start and highlighted matches.
-        assert_eq!(&matcher.format(highlight, crop), "… she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
+        assert_eq!(&matcher.format(highlight, crop), "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
@@ -736,7 +717,7 @@ mod tests {
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(highlight, crop),
-            "… void void void void void <em>split</em> <em>the</em> <em>world</em> void void"
+            "…void void void void void <em>split</em> <em>the</em> <em>world</em> void void"
         );
     }
 
@@ -759,13 +740,13 @@ mod tests {
         builder.crop_size(2);
         let mut matcher = builder.build(&tokens[..], text);
         // because crop size < query size, partially format matches.
-        assert_eq!(&matcher.format(highlight, crop), "… split the …");
+        assert_eq!(&matcher.format(highlight, crop), "…split the…");
 
         // set a smaller crop size
         builder.crop_size(1);
         let mut matcher = builder.build(&tokens[..], text);
         // because crop size < query size, partially format matches.
-        assert_eq!(&matcher.format(highlight, crop), "… split …");
+        assert_eq!(&matcher.format(highlight, crop), "…split…");
 
         // set a smaller crop size
         builder.crop_size(0);
