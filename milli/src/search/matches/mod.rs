@@ -363,11 +363,15 @@ impl<'t> Matcher<'t, '_> {
                                 formatted.push(&self.text[byte_index..token.byte_start]);
                             }
 
+                            let highlight_byte_index = self.text[token.byte_start..]
+                                .char_indices()
+                                .enumerate()
+                                .find(|(i, _)| *i == m.match_len)
+                                .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start);
                             formatted.push(self.highlight_prefix);
-                            formatted.push(&self.text[token.byte_start..][..m.match_len]);
+                            formatted.push(&self.text[token.byte_start..highlight_byte_index]);
                             formatted.push(self.highlight_suffix);
-                            formatted
-                                .push(&self.text[token.byte_start + m.match_len..token.byte_end]);
+                            formatted.push(&self.text[highlight_byte_index..token.byte_end]);
 
                             byte_index = token.byte_end;
                         }
@@ -398,6 +402,8 @@ impl<'t> Matcher<'t, '_> {
 
 #[cfg(test)]
 mod tests {
+    use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+
     use super::*;
     use crate::search::query_tree::{Query, QueryKind};
 
@@ -506,17 +512,53 @@ mod tests {
             &matcher.format(highlight, crop),
             "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves."
         );
+    }
 
-        // Text containing some matches by prefix.
-        let text = "Natalie risk her future to build a worldle with the boy she loves.";
+    #[test]
+    fn highlight_unicode() {
+        let query_tree = Operation::Or(
+            false,
+            vec![Operation::And(vec![
+                Operation::Query(Query {
+                    prefix: true,
+                    kind: QueryKind::tolerant(1, "wessfalia".to_string()),
+                }),
+                Operation::Query(Query {
+                    prefix: true,
+                    kind: QueryKind::tolerant(1, "world".to_string()),
+                }),
+            ])],
+        );
+
+        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+
+        let highlight = true;
+        let crop = false;
+
+        // Text containing prefix match.
+        let text = "Ŵôřlḑôle";
         let analyzed = analyzer.analyze(&text);
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
         // no crop should return complete text with highlighted matches.
-        assert_eq!(
-            &matcher.format(highlight, crop),
-            "Natalie risk her future to build a <em>world</em>le with <em>the</em> boy she loves."
-        );
+        assert_eq!(&matcher.format(highlight, crop), "<em>Ŵôřlḑ</em>ôle");
+
+        // Text containing unicode match.
+        let text = "Ŵôřlḑ";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // no crop should return complete text with highlighted matches.
+        assert_eq!(&matcher.format(highlight, crop), "<em>Ŵôřlḑ</em>");
+
+        // Text containing unicode match.
+        let text = "Westfália";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+        let mut matcher = builder.build(&tokens[..], text);
+        // no crop should return complete text with highlighted matches.
+        assert_eq!(&matcher.format(highlight, crop), "<em>Westfália</em>");
     }
 
     #[test]
