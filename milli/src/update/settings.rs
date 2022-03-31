@@ -14,7 +14,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,
@@ -495,29 +495,29 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_min_typo_word_len(&mut self) -> Result<()> {
-        match (&self.min_word_len_one_typo, &self.min_word_len_two_typos) {
+        match (self.min_word_len_one_typo, self.min_word_len_two_typos) {
             (Setting::Set(one), Setting::Set(two)) => {
                 if one > two {
-                    return Err(UserError::InvalidMinTypoWordLenSetting(*one, *two).into());
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_one_typo(&mut self.wtxn, *one)?;
-                    self.index.put_min_word_len_two_typos(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
                 }
             }
             (Setting::Set(one), _) => {
                 let two = self.index.min_word_len_two_typos(&self.wtxn)?;
-                if *one > two {
-                    return Err(UserError::InvalidMinTypoWordLenSetting(*one, two).into());
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_one_typo(&mut self.wtxn, *one)?;
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
                 }
             }
             (_, Setting::Set(two)) => {
                 let one = self.index.min_word_len_one_typo(&self.wtxn)?;
-                if one > *two {
-                    return Err(UserError::InvalidMinTypoWordLenSetting(one, *two).into());
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_two_typos(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
                 }
             }
             _ => (),
