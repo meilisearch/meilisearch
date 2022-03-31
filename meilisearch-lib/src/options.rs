@@ -31,6 +31,9 @@ pub struct IndexerOpts {
     pub max_indexing_memory: MaxMemory,
 
     /// The maximum number of threads the indexer will use.
+    /// If the number set is higher than the real number of cores available in the machine,
+    /// it will use the maximum number of available cores.
+    ///
     /// It defaults to half of the available threads.
     #[clap(long, env = "MEILI_MAX_INDEXING_THREADS", default_value_t)]
     pub max_indexing_threads: MaxThreads,
