@@ -498,7 +498,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match (&self.min_1_typo_word_len, &self.min_2_typos_word_len) {
             (Setting::Set(one), Setting::Set(two)) => {
                 if one > two {
-                    return Err(UserError::InvalidMinTypoWordSetting(*one, *two).into());
+                    return Err(UserError::InvalidMinTypoWordLenSetting(*one, *two).into());
                 } else {
                     self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
                     self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
@@ -507,7 +507,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             (Setting::Set(one), _) => {
                 let two = self.index.min_word_len_2_typos(&self.wtxn)?;
                 if *one > two {
-                    return Err(UserError::InvalidMinTypoWordSetting(*one, two).into());
+                    return Err(UserError::InvalidMinTypoWordLenSetting(*one, two).into());
                 } else {
                     self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
                 }
@@ -515,7 +515,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             (_, Setting::Set(two)) => {
                 let one = self.index.min_word_len_1_typo(&self.wtxn)?;
                 if one > *two {
-                    return Err(UserError::InvalidMinTypoWordSetting(one, *two).into());
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, *two).into());
                 } else {
                     self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
                 }
