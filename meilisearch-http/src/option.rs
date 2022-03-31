@@ -145,8 +145,8 @@ pub struct Opt {
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
-    #[serde(skip)]
-    #[clap(skip)]
+    #[serde(flatten)]
+    #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
     #[serde(flatten)]

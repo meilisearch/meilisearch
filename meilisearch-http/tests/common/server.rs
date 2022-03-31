@@ -137,7 +137,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         snapshot_dir: ".".into(),
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
-            max_memory: MaxMemory::unlimited(),
+            max_indexing_memory: MaxMemory::unlimited(),
             ..Parser::parse_from(None as Option<&str>)
         },
         ..Parser::parse_from(None as Option<&str>)

@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{convert::TryFrom, ops::Deref, str::FromStr};
+use std::{convert::TryFrom, num::ParseIntError, ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
@@ -7,15 +7,17 @@ use milli::update::IndexerConfig;
 use serde::Serialize;
 use sysinfo::{RefreshKind, System, SystemExt};
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Debug, Clone, Parser, Serialize)]
 pub struct IndexerOpts {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[clap(long, default_value = "100000")] // 100k
+    #[serde(skip)]
+    #[clap(long, default_value = "100000", hide = true)] // 100k
     pub log_every_n: usize,
 
     /// Grenad max number of chunks in bytes.
-    #[clap(long)]
+    #[serde(skip)]
+    #[clap(long, hide = true)]
     pub max_nb_chunks: Option<usize>,
 
     /// The maximum amount of memory the indexer will use. It defaults to 2/3
@@ -25,12 +27,16 @@ pub struct IndexerOpts {
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
-    #[clap(long, default_value_t)]
-    pub max_memory: MaxMemory,
+    #[clap(long, env = "MEILI_MAX_INDEXING_MEMORY", default_value_t)]
+    pub max_indexing_memory: MaxMemory,
 
-    /// Number of parallel jobs for indexing, defaults to # of CPUs.
-    #[clap(long)]
-    pub indexing_jobs: Option<usize>,
+    /// The maximum number of threads the indexer will use.
+    /// If the number set is higher than the real number of cores available in the machine,
+    /// it will use the maximum number of available cores.
+    ///
+    /// It defaults to half of the available threads.
+    #[clap(long, env = "MEILI_MAX_INDEXING_THREADS", default_value_t)]
+    pub max_indexing_threads: MaxThreads,
 }
 
 #[derive(Debug, Clone, Parser, Default, Serialize)]
@@ -63,13 +69,13 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(other.indexing_jobs.unwrap_or(num_cpus::get() / 2))
+            .num_threads(*other.max_indexing_threads)
             .build()?;
 
         Ok(Self {
             log_every_n: Some(other.log_every_n),
             max_nb_chunks: other.max_nb_chunks,
-            max_memory: other.max_memory.map(|b| b.get_bytes() as usize),
+            max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             ..Default::default()
@@ -82,14 +88,14 @@ impl Default for IndexerOpts {
         Self {
             log_every_n: 100_000,
             max_nb_chunks: None,
-            max_memory: MaxMemory::default(),
-            indexing_jobs: None,
+            max_indexing_memory: MaxMemory::default(),
+            max_indexing_threads: MaxThreads::default(),
         }
     }
 }
 
 /// A type used to detect the max memory available and use 2/3 of it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct MaxMemory(Option<Byte>);
 
 impl FromStr for MaxMemory {
@@ -142,5 +148,36 @@ fn total_memory_bytes() -> Option<u64> {
         Some(system.total_memory() * 1024) // KiB into bytes
     } else {
         None
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MaxThreads(usize);
+
+impl FromStr for MaxThreads {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        usize::from_str(s).map(Self)
+    }
+}
+
+impl Default for MaxThreads {
+    fn default() -> Self {
+        MaxThreads(num_cpus::get() / 2)
+    }
+}
+
+impl fmt::Display for MaxThreads {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for MaxThreads {
+    type Target = usize;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
