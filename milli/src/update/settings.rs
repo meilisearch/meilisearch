@@ -89,6 +89,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     distinct_field: Setting<String>,
     synonyms: Setting<HashMap<String, Vec<String>>>,
     primary_key: Setting<String>,
+    authorize_typos: Setting<bool>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -109,6 +110,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
+            authorize_typos: Setting::NotSet,
             indexer_config,
         }
     }
@@ -184,6 +186,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn set_primary_key(&mut self, primary_key: String) {
         self.primary_key = Setting::Set(primary_key);
+    }
+
+    pub fn set_autorize_typos(&mut self, val: bool) {
+        self.authorize_typos = Setting::Set(val);
+    }
+
+    pub fn reset_authorize_typos(&mut self) {
+        self.authorize_typos = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -450,6 +460,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    fn update_authorize_typos(&mut self) -> Result<()> {
+        match self.authorize_typos {
+            Setting::Set(flag) => {
+                self.index.put_authorize_typos(self.wtxn, flag)?;
+                Ok(())
+            }
+            Setting::Reset => {
+                self.index.put_authorize_typos(self.wtxn, true)?;
+                Ok(())
+            }
+            Setting::NotSet => Ok(()),
+        }
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -465,6 +489,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_distinct_field()?;
         self.update_criteria()?;
         self.update_primary_key()?;
+        self.update_authorize_typos()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
@@ -493,6 +518,7 @@ mod tests {
 
     use super::*;
     use crate::error::Error;
+    use crate::index::tests::TempIndex;
     use crate::update::IndexDocuments;
     use crate::{Criterion, Filter, SearchResult};
 
@@ -1192,5 +1218,19 @@ mod tests {
         let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
         let line = std::str::from_utf8(content.get(fid).unwrap()).unwrap();
         assert_eq!(line, r#""Star Wars""#);
+    }
+
+    #[test]
+    fn test_disable_typo() {
+        let index = TempIndex::new();
+
+        let mut txn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+
+        assert!(index.authorize_typos(&txn).unwrap());
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_autorize_typos(false);
+        builder.execute(|_| ()).unwrap();
+        assert!(!index.authorize_typos(&txn).unwrap());
     }
 }

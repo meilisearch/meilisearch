@@ -191,7 +191,6 @@ impl<'a> QueryTreeBuilder<'a> {
     /// generated forcing all query words to be present in each matching documents
     /// (the criterion `words` will be ignored).
     /// default value if not called: `true`
-    #[allow(unused)]
     pub fn optional_words(&mut self, optional_words: bool) -> &mut Self {
         self.optional_words = optional_words;
         self
@@ -201,7 +200,6 @@ impl<'a> QueryTreeBuilder<'a> {
     /// forcing all query words to match documents without any typo
     /// (the criterion `typo` will be ignored).
     /// default value if not called: `true`
-    #[allow(unused)]
     pub fn authorize_typos(&mut self, authorize_typos: bool) -> &mut Self {
         self.authorize_typos = authorize_typos;
         self

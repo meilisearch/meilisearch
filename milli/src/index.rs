@@ -46,6 +46,7 @@ pub mod main_key {
     pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
     pub const CREATED_AT_KEY: &str = "created-at";
     pub const UPDATED_AT_KEY: &str = "updated-at";
+    pub const AUTHORIZE_TYPOS: &str = "authorize-typos";
 }
 
 pub mod db_name {
@@ -866,6 +867,25 @@ impl Index {
     ) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<OffsetDateTime>>(wtxn, main_key::UPDATED_AT_KEY, &time)
     }
+
+    pub fn authorize_typos(&self, txn: &RoTxn) -> heed::Result<bool> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        match self.main.get::<_, Str, OwnedType<u8>>(txn, main_key::AUTHORIZE_TYPOS)? {
+            Some(0) => Ok(false),
+            _ => Ok(true),
+        }
+    }
+
+    pub(crate) fn put_authorize_typos(&self, txn: &mut RwTxn, flag: bool) -> heed::Result<()> {
+        // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
+        // identify 0 as being false, and anything else as true. The absence of a value is true,
+        // because by default, we authorize typos.
+        self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::AUTHORIZE_TYPOS, &(flag as u8))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -988,5 +1008,19 @@ pub(crate) mod tests {
                 "has_dog".to_string() => 1,
             }
         );
+    }
+
+    #[test]
+    fn put_and_retrieve_disable_typo() {
+        let index = TempIndex::new();
+        let mut txn = index.write_txn().unwrap();
+        // default value is true
+        assert!(index.authorize_typos(&txn).unwrap());
+        // set to false
+        index.put_authorize_typos(&mut txn, false).unwrap();
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+        assert!(!index.authorize_typos(&txn).unwrap());
     }
 }

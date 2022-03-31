@@ -105,6 +105,12 @@ impl<'a> Search<'a> {
         self
     }
 
+    fn is_typo_authorized(&self) -> Result<bool> {
+        let index_authorizes_typos = self.index.authorize_typos(self.rtxn)?;
+        // only authorize typos if both the index and the query allow it.
+        Ok(self.authorize_typos && index_authorizes_typos)
+    }
+
     pub fn execute(&self) -> Result<SearchResult> {
         // We create the query tree by spliting the query into tokens.
         let before = Instant::now();
@@ -112,7 +118,9 @@ impl<'a> Search<'a> {
             Some(query) => {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
-                builder.authorize_typos(self.authorize_typos);
+
+                builder.authorize_typos(self.is_typo_authorized()?);
+
                 builder.words_limit(self.words_limit);
                 // We make sure that the analyzer is aware of the stop words
                 // this ensures that the query builder is able to properly remove them.
@@ -358,5 +366,36 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
         lev.build_prefix_dfa(word)
     } else {
         lev.build_dfa(word)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::index::tests::TempIndex;
+
+    #[test]
+    fn test_is_authorized_typos() {
+        let index = TempIndex::new();
+        let mut txn = index.write_txn().unwrap();
+
+        let mut search = Search::new(&txn, &index);
+
+        // default is authorized
+        assert!(search.is_typo_authorized().unwrap());
+
+        search.authorize_typos(false);
+        assert!(!search.is_typo_authorized().unwrap());
+
+        index.put_authorize_typos(&mut txn, false).unwrap();
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+        let mut search = Search::new(&txn, &index);
+
+        assert!(!search.is_typo_authorized().unwrap());
+
+        search.authorize_typos(true);
+        assert!(!search.is_typo_authorized().unwrap());
     }
 }
