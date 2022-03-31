@@ -518,6 +518,7 @@ mod tests {
 
     use super::*;
     use crate::error::Error;
+    use crate::index::tests::TempIndex;
     use crate::update::IndexDocuments;
     use crate::{Criterion, Filter, SearchResult};
 
@@ -1217,5 +1218,19 @@ mod tests {
         let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
         let line = std::str::from_utf8(content.get(fid).unwrap()).unwrap();
         assert_eq!(line, r#""Star Wars""#);
+    }
+
+    #[test]
+    fn test_disable_typo() {
+        let index = TempIndex::new();
+
+        let mut txn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+
+        assert!(index.authorize_typos(&txn).unwrap());
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_autorize_typos(false);
+        builder.execute(|_| ()).unwrap();
+        assert!(!index.authorize_typos(&txn).unwrap());
     }
 }
