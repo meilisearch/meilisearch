@@ -312,16 +312,7 @@ async fn error_add_malformed_json_documents() {
     // truncate
 
     // length = 100
-    let long = String::from_utf8(
-        "0123456789"
-            .as_bytes()
-            .iter()
-            .cycle()
-            .cloned()
-            .take(100)
-            .collect_vec(),
-    )
-    .unwrap();
+    let long = "0123456789".repeat(10);
 
     let document = format!("\"{}\"", long);
     let req = test::TestRequest::put()
