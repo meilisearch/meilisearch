@@ -39,22 +39,15 @@ impl Display for DocumentFormatError {
                     // https://github.com/meilisearch/meilisearch/issues/2107
                     // The user input maybe insanely long. We need to truncate it.
                     let mut serde_msg = se.to_string();
-                    let prefix = r#"invalid type: string ""#;
-                    if serde_msg.starts_with(prefix) {
-                        let start_idx = prefix.len();
-                        if let Some(end_idx) = serde_msg.rfind("\"") {
-                            if end_idx - start_idx > 100 {
-                                serde_msg.replace_range(start_idx + 50..end_idx - 50, " ... ");
-                            }
-                        } else {
-                            serde_msg = String::from("");
-                        }
+                    let ellipsis = "...";
+                    if serde_msg.len() > 100 + ellipsis.len() {
+                        serde_msg.replace_range(50..serde_msg.len() - 50, ellipsis);
                     }
 
                     write!(
-                    f,
-                    "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
-                    b,serde_msg
+                        f,
+                        "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
+                        b, serde_msg
                 )
                 }
                 _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
