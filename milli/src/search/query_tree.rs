@@ -183,7 +183,7 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
         let one = self.index.min_word_len_1_typo(&self.rtxn)?;
-        let two = self.index.min_word_len_2_typo(&self.rtxn)?;
+        let two = self.index.min_word_len_2_typos(&self.rtxn)?;
         Ok((one, two))
     }
 }

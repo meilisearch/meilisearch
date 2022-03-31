@@ -501,11 +501,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     return Err(UserError::InvalidMinTypoWordSetting(*one, *two).into());
                 } else {
                     self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
-                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
                 }
             }
             (Setting::Set(one), _) => {
-                let two = self.index.min_word_len_2_typo(&self.wtxn)?;
+                let two = self.index.min_word_len_2_typos(&self.wtxn)?;
                 if *one > two {
                     return Err(UserError::InvalidMinTypoWordSetting(*one, two).into());
                 } else {
@@ -517,7 +517,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 if one > *two {
                     return Err(UserError::InvalidMinTypoWordSetting(one, *two).into());
                 } else {
-                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
                 }
             }
             _ => (),
@@ -1304,7 +1304,7 @@ mod tests {
         let txn = index.read_txn().unwrap();
 
         assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), 8);
-        assert_eq!(index.min_word_len_2_typo(&txn).unwrap(), 8);
+        assert_eq!(index.min_word_len_2_typos(&txn).unwrap(), 8);
     }
 
     #[test]
