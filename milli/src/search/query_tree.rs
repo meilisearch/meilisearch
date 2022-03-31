@@ -276,9 +276,9 @@ pub struct TypoConfig {
 fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
     if authorize_typos {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
-        if (0..config.word_len_one_typo).contains(&count) {
+        if count < config.word_len_one_typo {
             QueryKind::exact(word)
-        } else if (config.word_len_one_typo..config.word_len_two_typo).contains(&count) {
+        } else if count < config.word_len_two_typo {
             QueryKind::tolerant(1.min(config.max_typos), word)
         } else {
             QueryKind::tolerant(2.min(config.max_typos), word)
