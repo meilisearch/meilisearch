@@ -1009,4 +1009,18 @@ pub(crate) mod tests {
             }
         );
     }
+
+    #[test]
+    fn put_and_retrieve_disable_typo() {
+        let index = TempIndex::new();
+        let mut txn = index.write_txn().unwrap();
+        // default value is true
+        assert!(index.authorize_typos(&txn).unwrap());
+        // set to false
+        index.put_authorize_typos(&mut txn, false).unwrap();
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+        assert!(!index.authorize_typos(&txn).unwrap());
+    }
 }
