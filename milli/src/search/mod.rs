@@ -371,9 +371,8 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 
 #[cfg(test)]
 mod test {
-    use crate::index::tests::TempIndex;
-
     use super::*;
+    use crate::index::tests::TempIndex;
 
     #[test]
     fn test_is_authorized_typos() {
