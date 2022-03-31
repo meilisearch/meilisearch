@@ -34,11 +34,6 @@ pub struct IndexerOpts {
     /// It defaults to half of the available threads.
     #[clap(long, env = "MEILI_MAX_INDEXING_THREADS", default_value_t)]
     pub max_indexing_threads: MaxThreads,
-
-    /// Number of parallel jobs for indexing, defaults to # of CPUs.
-    #[serde(skip)]
-    #[clap(long, hide = true)]
-    pub indexing_jobs: Option<usize>,
 }
 
 #[derive(Debug, Clone, Parser, Default, Serialize)]
@@ -71,7 +66,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(other.indexing_jobs.unwrap_or(*other.max_indexing_threads))
+            .num_threads(*other.max_indexing_threads)
             .build()?;
 
         Ok(Self {
@@ -92,7 +87,6 @@ impl Default for IndexerOpts {
             max_nb_chunks: None,
             max_indexing_memory: MaxMemory::default(),
             max_indexing_threads: MaxThreads::default(),
-            indexing_jobs: None,
         }
     }
 }
