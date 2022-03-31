@@ -564,6 +564,8 @@ mod test {
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
 
+    use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+
     use super::*;
 
     #[derive(Debug)]
@@ -602,7 +604,7 @@ mod test {
         }
 
         fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
-            Ok((5, 9))
+            Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
     }
 
