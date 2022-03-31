@@ -23,8 +23,8 @@ use crate::{
     Search, StrBEU32Codec, StrStrU8Codec, BEU32,
 };
 
-pub const DEFAULT_MIN_WORD_LEN_1_TYPO: u8 = 5;
-pub const DEFAULT_MIN_WORD_LEN_2_TYPOS: u8 = 9;
+pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
+pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;
 
 pub mod main_key {
     pub const CRITERIA_KEY: &str = "criteria";
@@ -892,17 +892,17 @@ impl Index {
         Ok(())
     }
 
-    pub fn min_word_len_1_typo(&self, txn: &RoTxn) -> heed::Result<u8> {
+    pub fn min_word_len_one_typo(&self, txn: &RoTxn) -> heed::Result<u8> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
         Ok(self
             .main
             .get::<_, Str, OwnedType<u8>>(txn, main_key::ONE_TYPO_WORD_LEN)?
-            .unwrap_or(DEFAULT_MIN_WORD_LEN_1_TYPO))
+            .unwrap_or(DEFAULT_MIN_WORD_LEN_ONE_TYPO))
     }
 
-    pub(crate) fn put_min_word_len_1_typo(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
+    pub(crate) fn put_min_word_len_one_typo(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
@@ -910,17 +910,17 @@ impl Index {
         Ok(())
     }
 
-    pub fn min_word_len_2_typos(&self, txn: &RoTxn) -> heed::Result<u8> {
+    pub fn min_word_len_two_typos(&self, txn: &RoTxn) -> heed::Result<u8> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
         Ok(self
             .main
             .get::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN)?
-            .unwrap_or(DEFAULT_MIN_WORD_LEN_2_TYPOS))
+            .unwrap_or(DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
     }
 
-    pub(crate) fn put_min_word_len_2_typos(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
+    pub(crate) fn put_min_word_len_two_typos(&self, txn: &mut RwTxn, val: u8) -> heed::Result<()> {
         // It is not possible to put a bool in heed with OwnedType, so we put a u8 instead. We
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
@@ -937,7 +937,7 @@ pub(crate) mod tests {
     use maplit::btreemap;
     use tempfile::TempDir;
 
-    use crate::index::{DEFAULT_MIN_WORD_LEN_1_TYPO, DEFAULT_MIN_WORD_LEN_2_TYPOS};
+    use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
     use crate::Index;
 
@@ -1071,16 +1071,16 @@ pub(crate) mod tests {
         let index = TempIndex::new();
         let mut txn = index.write_txn().unwrap();
 
-        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_1_TYPO);
-        assert_eq!(index.min_word_len_2_typos(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_2_TYPOS);
+        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_ONE_TYPO);
+        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_TWO_TYPOS);
 
-        index.put_min_word_len_1_typo(&mut txn, 3).unwrap();
-        index.put_min_word_len_2_typos(&mut txn, 15).unwrap();
+        index.put_min_word_len_one_typo(&mut txn, 3).unwrap();
+        index.put_min_word_len_two_typos(&mut txn, 15).unwrap();
 
         txn.commit().unwrap();
 
         let txn = index.read_txn().unwrap();
-        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), 3);
-        assert_eq!(index.min_word_len_2_typos(&txn).unwrap(), 15);
+        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 3);
+        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 15);
     }
 }

@@ -182,8 +182,8 @@ impl<'a> Context for QueryTreeBuilder<'a> {
     }
 
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
-        let one = self.index.min_word_len_1_typo(&self.rtxn)?;
-        let two = self.index.min_word_len_2_typos(&self.rtxn)?;
+        let one = self.index.min_word_len_one_typo(&self.rtxn)?;
+        let two = self.index.min_word_len_two_typos(&self.rtxn)?;
         Ok((one, two))
     }
 }
@@ -267,8 +267,8 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
 #[derive(Clone)]
 pub struct TypoConfig {
     pub max_typos: u8,
-    pub word_len_1_typo: u8,
-    pub word_len_2_typo: u8,
+    pub word_len_one_typo: u8,
+    pub word_len_two_typo: u8,
 }
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
@@ -276,9 +276,9 @@ pub struct TypoConfig {
 fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
     if authorize_typos {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
-        if (0..config.word_len_1_typo).contains(&count) {
+        if (0..config.word_len_one_typo).contains(&count) {
             QueryKind::exact(word)
-        } else if (config.word_len_1_typo..config.word_len_2_typo).contains(&count) {
+        } else if (config.word_len_one_typo..config.word_len_two_typo).contains(&count) {
             QueryKind::tolerant(1.min(config.max_typos), word)
         } else {
             QueryKind::tolerant(2.min(config.max_typos), word)
@@ -332,8 +332,8 @@ fn create_query_tree(
                 if let Some(child) = split_best_frequency(ctx, &word)? {
                     children.push(child);
                 }
-                let (word_len_1_typo, word_len_2_typo) = ctx.min_word_len_for_typo()?;
-                let config = TypoConfig { max_typos: 2, word_len_1_typo, word_len_2_typo };
+                let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
+                let config = TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo };
                 children.push(Operation::Query(Query {
                     prefix,
                     kind: typos(word, authorize_typos, config),
@@ -383,9 +383,10 @@ fn create_query_tree(
                                 .collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
-                            let (word_len_1_typo, word_len_2_typo) = ctx.min_word_len_for_typo()?;
+                            let (word_len_one_typo, word_len_two_typo) =
+                                ctx.min_word_len_for_typo()?;
                             let config =
-                                TypoConfig { max_typos: 1, word_len_1_typo, word_len_2_typo };
+                                TypoConfig { max_typos: 1, word_len_one_typo, word_len_two_typo };
                             let query = Query {
                                 prefix: is_prefix,
                                 kind: typos(concat, authorize_typos, config),
@@ -1223,7 +1224,7 @@ mod test {
 
     #[test]
     fn test_min_word_len_typo() {
-        let config = TypoConfig { max_typos: 2, word_len_1_typo: 5, word_len_2_typo: 7 };
+        let config = TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7 };
 
         assert_eq!(
             typos("hello".to_string(), true, config.clone()),

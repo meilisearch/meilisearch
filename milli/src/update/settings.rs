@@ -90,8 +90,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     synonyms: Setting<HashMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
-    min_2_typos_word_len: Setting<u8>,
-    min_1_typo_word_len: Setting<u8>,
+    min_word_len_two_typos: Setting<u8>,
+    min_word_len_one_typo: Setting<u8>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -114,8 +114,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             indexer_config,
-            min_2_typos_word_len: Setting::Reset,
-            min_1_typo_word_len: Setting::Reset,
+            min_word_len_two_typos: Setting::Reset,
+            min_word_len_one_typo: Setting::Reset,
         }
     }
 
@@ -200,20 +200,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.authorize_typos = Setting::Reset;
     }
 
-    pub fn set_min_2_typos_word_len(&mut self, val: u8) {
-        self.min_2_typos_word_len = Setting::Set(val);
+    pub fn set_min_word_len_two_typos(&mut self, val: u8) {
+        self.min_word_len_two_typos = Setting::Set(val);
     }
 
-    pub fn reset_min_2_typos_word_len(&mut self) {
-        self.min_2_typos_word_len = Setting::Reset;
+    pub fn reset_min_word_len_two_typos(&mut self) {
+        self.min_word_len_two_typos = Setting::Reset;
     }
 
-    pub fn set_min_1_typo_word_len(&mut self, val: u8) {
-        self.min_1_typo_word_len = Setting::Set(val);
+    pub fn set_min_word_len_one_typo(&mut self, val: u8) {
+        self.min_word_len_one_typo = Setting::Set(val);
     }
 
-    pub fn reset_min_1_typos_word_len(&mut self) {
-        self.min_1_typo_word_len = Setting::Reset;
+    pub fn reset_min_word_len_one_typo(&mut self) {
+        self.min_word_len_one_typo = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -495,29 +495,29 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_min_typo_word_len(&mut self) -> Result<()> {
-        match (&self.min_1_typo_word_len, &self.min_2_typos_word_len) {
+        match (&self.min_word_len_one_typo, &self.min_word_len_two_typos) {
             (Setting::Set(one), Setting::Set(two)) => {
                 if one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(*one, *two).into());
                 } else {
-                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
-                    self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, *one)?;
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, *two)?;
                 }
             }
             (Setting::Set(one), _) => {
-                let two = self.index.min_word_len_2_typos(&self.wtxn)?;
+                let two = self.index.min_word_len_two_typos(&self.wtxn)?;
                 if *one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(*one, two).into());
                 } else {
-                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, *one)?;
                 }
             }
             (_, Setting::Set(two)) => {
-                let one = self.index.min_word_len_1_typo(&self.wtxn)?;
+                let one = self.index.min_word_len_one_typo(&self.wtxn)?;
                 if one > *two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(one, *two).into());
                 } else {
-                    self.index.put_min_word_len_2_typos(&mut self.wtxn, *two)?;
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, *two)?;
                 }
             }
             _ => (),
@@ -1295,16 +1295,16 @@ mod tests {
         // Set the genres setting
         let mut txn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut txn, &index, &config);
-        builder.set_min_1_typo_word_len(8);
-        builder.set_min_2_typos_word_len(8);
+        builder.set_min_word_len_one_typo(8);
+        builder.set_min_word_len_two_typos(8);
         builder.execute(|_| ()).unwrap();
 
         txn.commit().unwrap();
 
         let txn = index.read_txn().unwrap();
 
-        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), 8);
-        assert_eq!(index.min_word_len_2_typos(&txn).unwrap(), 8);
+        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 8);
+        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 8);
     }
 
     #[test]
@@ -1315,8 +1315,8 @@ mod tests {
         // Set the genres setting
         let mut txn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut txn, &index, &config);
-        builder.set_min_1_typo_word_len(10);
-        builder.set_min_2_typos_word_len(7);
+        builder.set_min_word_len_one_typo(10);
+        builder.set_min_word_len_two_typos(7);
         assert!(builder.execute(|_| ()).is_err());
     }
 }
