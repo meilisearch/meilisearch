@@ -1,6 +1,5 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
-use itertools::Itertools;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -329,7 +328,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789", expected a documents, or a sequence of documents. at line 1 column 102`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789", expected a documents, or a sequence of documents. at line 1 column 102`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -355,7 +354,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "01234567890123456789012345678901234567890123456789 ... 1234567890123456789012345678901234567890123456789m", expected a documents, or a sequence of documents. at line 1 column 103`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...90123456789m", expected a documents, or a sequence of documents. at line 1 column 103`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
