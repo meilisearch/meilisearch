@@ -497,27 +497,27 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_min_typo_word_len(&mut self) -> Result<()> {
         match (&self.min_1_typo_word_len, &self.min_2_typos_word_len) {
             (Setting::Set(one), Setting::Set(two)) => {
-                if one < two {
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordSetting(*one, *two).into());
+                } else {
                     self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
                     self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
-                } else {
-                    return Err(UserError::InvalidMinTypoWordSetting(*one, *two).into());
                 }
             }
             (Setting::Set(one), _) => {
                 let two = self.index.min_word_len_2_typo(&self.wtxn)?;
-                if *one < two {
-                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
-                } else {
+                if *one > two {
                     return Err(UserError::InvalidMinTypoWordSetting(*one, two).into());
+                } else {
+                    self.index.put_min_word_len_1_typo(&mut self.wtxn, *one)?;
                 }
             }
             (_, Setting::Set(two)) => {
                 let one = self.index.min_word_len_1_typo(&self.wtxn)?;
-                if one < *two {
-                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
-                } else {
+                if one > *two {
                     return Err(UserError::InvalidMinTypoWordSetting(one, *two).into());
+                } else {
+                    self.index.put_min_word_len_2_typo(&mut self.wtxn, *two)?;
                 }
             }
             _ => (),
@@ -1285,5 +1285,38 @@ mod tests {
         builder.set_autorize_typos(false);
         builder.execute(|_| ()).unwrap();
         assert!(!index.authorize_typos(&txn).unwrap());
+    }
+
+    #[test]
+    fn update_min_word_len_for_typo() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_min_1_typo_word_len(8);
+        builder.set_min_2_typos_word_len(8);
+        builder.execute(|_| ()).unwrap();
+
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), 8);
+        assert_eq!(index.min_word_len_2_typo(&txn).unwrap(), 8);
+    }
+
+    #[test]
+    fn update_invalid_min_word_len_for_typo() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_min_1_typo_word_len(10);
+        builder.set_min_2_typos_word_len(7);
+        assert!(builder.execute(|_| ()).is_err());
     }
 }

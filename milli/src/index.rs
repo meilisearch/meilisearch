@@ -937,6 +937,7 @@ pub(crate) mod tests {
     use maplit::btreemap;
     use tempfile::TempDir;
 
+    use crate::index::{DEFAULT_MIN_WORD_LEN_1_TYPO, DEFAULT_MIN_WORD_LEN_2_TYPOS};
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
     use crate::Index;
 
@@ -1063,5 +1064,23 @@ pub(crate) mod tests {
 
         let txn = index.read_txn().unwrap();
         assert!(!index.authorize_typos(&txn).unwrap());
+    }
+
+    #[test]
+    fn set_min_word_len_for_typos() {
+        let index = TempIndex::new();
+        let mut txn = index.write_txn().unwrap();
+
+        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_1_TYPO);
+        assert_eq!(index.min_word_len_2_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_2_TYPOS);
+
+        index.put_min_word_len_1_typo(&mut txn, 3).unwrap();
+        index.put_min_word_len_2_typo(&mut txn, 15).unwrap();
+
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+        assert_eq!(index.min_word_len_1_typo(&txn).unwrap(), 3);
+        assert_eq!(index.min_word_len_2_typo(&txn).unwrap(), 15);
     }
 }

@@ -264,6 +264,7 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
     Ok(best.map(|(_, left, right)| Operation::Phrase(vec![left.to_string(), right.to_string()])))
 }
 
+#[derive(Clone)]
 pub struct TypoConfig {
     pub max_typos: u8,
     pub word_len_1_typo: u8,
@@ -1218,5 +1219,25 @@ mod test {
             TestContext::default().build(false, false, Some(2), tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
+    }
+
+    #[test]
+    fn test_min_word_len_typo() {
+        let config = TypoConfig { max_typos: 2, word_len_1_typo: 5, word_len_2_typo: 7 };
+
+        assert_eq!(
+            typos("hello".to_string(), true, config.clone()),
+            QueryKind::Tolerant { typo: 1, word: "hello".to_string() }
+        );
+
+        assert_eq!(
+            typos("hell".to_string(), true, config.clone()),
+            QueryKind::exact("hell".to_string())
+        );
+
+        assert_eq!(
+            typos("verylongword".to_string(), true, config.clone()),
+            QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
+        );
     }
 }
