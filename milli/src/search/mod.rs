@@ -333,12 +333,12 @@ pub fn word_derivations<'c>(
                         // in the case the typo is on the first letter, we know the number of typo
                         // is two
                         if get_first(found_word) != get_first(word) {
-                            derived_words.push((word.to_string(), 2));
+                            derived_words.push((found_word.to_string(), 2));
                         } else {
                             // Else, we know that it is the second dfa that matched and compute the
                             // correct distance
                             let d = second_dfa.distance((state.1).0);
-                            derived_words.push((word.to_string(), d.to_u8()));
+                            derived_words.push((found_word.to_string(), d.to_u8()));
                         }
                     }
                 }
