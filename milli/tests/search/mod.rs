@@ -16,6 +16,7 @@ mod distinct;
 mod filters;
 mod query_criteria;
 mod sort;
+mod typo_tolerance;
 
 pub const TEST_QUERY: &'static str = "hello world america";
 
