@@ -564,9 +564,8 @@ mod test {
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
 
-    use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-
     use super::*;
+    use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 
     #[derive(Debug)]
     struct TestContext {

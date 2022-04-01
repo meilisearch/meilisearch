@@ -1,7 +1,5 @@
-use milli::{
-    update::{IndexerConfig, Settings},
-    Criterion, Search,
-};
+use milli::update::{IndexerConfig, Settings};
+use milli::{Criterion, Search};
 use Criterion::*;
 
 #[test]
