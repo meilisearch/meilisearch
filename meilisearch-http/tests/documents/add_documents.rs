@@ -321,9 +321,7 @@ async fn error_add_malformed_json_documents() {
         .to_request();
     let res = test::call_service(&app, req).await;
     let body = test::read_body(res).await;
-    dbg!(&body);
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    dbg!(&response);
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
