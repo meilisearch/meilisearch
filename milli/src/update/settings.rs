@@ -14,7 +14,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,
@@ -90,6 +90,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     synonyms: Setting<HashMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
+    min_word_len_two_typos: Setting<u8>,
+    min_word_len_one_typo: Setting<u8>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -112,6 +114,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             indexer_config,
+            min_word_len_two_typos: Setting::Reset,
+            min_word_len_one_typo: Setting::Reset,
         }
     }
 
@@ -194,6 +198,22 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_authorize_typos(&mut self) {
         self.authorize_typos = Setting::Reset;
+    }
+
+    pub fn set_min_word_len_two_typos(&mut self, val: u8) {
+        self.min_word_len_two_typos = Setting::Set(val);
+    }
+
+    pub fn reset_min_word_len_two_typos(&mut self) {
+        self.min_word_len_two_typos = Setting::Reset;
+    }
+
+    pub fn set_min_word_len_one_typo(&mut self, val: u8) {
+        self.min_word_len_one_typo = Setting::Set(val);
+    }
+
+    pub fn reset_min_word_len_one_typo(&mut self) {
+        self.min_word_len_one_typo = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -474,6 +494,38 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    fn update_min_typo_word_len(&mut self) -> Result<()> {
+        match (self.min_word_len_one_typo, self.min_word_len_two_typos) {
+            (Setting::Set(one), Setting::Set(two)) => {
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
+                } else {
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
+                }
+            }
+            (Setting::Set(one), _) => {
+                let two = self.index.min_word_len_two_typos(&self.wtxn)?;
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
+                } else {
+                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
+                }
+            }
+            (_, Setting::Set(two)) => {
+                let one = self.index.min_word_len_one_typo(&self.wtxn)?;
+                if one > two {
+                    return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
+                } else {
+                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
+                }
+            }
+            _ => (),
+        }
+
+        Ok(())
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -490,6 +542,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_criteria()?;
         self.update_primary_key()?;
         self.update_authorize_typos()?;
+        self.update_min_typo_word_len()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
@@ -1232,5 +1285,38 @@ mod tests {
         builder.set_autorize_typos(false);
         builder.execute(|_| ()).unwrap();
         assert!(!index.authorize_typos(&txn).unwrap());
+    }
+
+    #[test]
+    fn update_min_word_len_for_typo() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_min_word_len_one_typo(8);
+        builder.set_min_word_len_two_typos(8);
+        builder.execute(|_| ()).unwrap();
+
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 8);
+        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 8);
+    }
+
+    #[test]
+    fn update_invalid_min_word_len_for_typo() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+        builder.set_min_word_len_one_typo(10);
+        builder.set_min_word_len_two_typos(7);
+        assert!(builder.execute(|_| ()).is_err());
     }
 }

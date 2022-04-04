@@ -155,6 +155,8 @@ trait Context {
             None => Ok(None),
         }
     }
+    /// Returns the minimum word len for 1 and 2 typos.
+    fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -177,6 +179,12 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
         self.index.word_documents_count(self.rtxn, word)
+    }
+
+    fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
+        let one = self.index.min_word_len_one_typo(&self.rtxn)?;
+        let two = self.index.min_word_len_two_typos(&self.rtxn)?;
+        Ok((one, two))
     }
 }
 
@@ -256,14 +264,24 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
     Ok(best.map(|(_, left, right)| Operation::Phrase(vec![left.to_string(), right.to_string()])))
 }
 
+#[derive(Clone)]
+pub struct TypoConfig {
+    pub max_typos: u8,
+    pub word_len_one_typo: u8,
+    pub word_len_two_typo: u8,
+}
+
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
-fn typos(word: String, authorize_typos: bool, max_typos: u8) -> QueryKind {
+fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
     if authorize_typos {
-        match word.chars().count() {
-            0..=4 => QueryKind::exact(word),
-            5..=8 => QueryKind::tolerant(1.min(max_typos), word),
-            _ => QueryKind::tolerant(2.min(max_typos), word),
+        let count = word.chars().count().min(u8::MAX as usize) as u8;
+        if count < config.word_len_one_typo {
+            QueryKind::exact(word)
+        } else if count < config.word_len_two_typo {
+            QueryKind::tolerant(1.min(config.max_typos), word)
+        } else {
+            QueryKind::tolerant(2.min(config.max_typos), word)
         }
     } else {
         QueryKind::exact(word)
@@ -314,9 +332,11 @@ fn create_query_tree(
                 if let Some(child) = split_best_frequency(ctx, &word)? {
                     children.push(child);
                 }
+                let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
+                let config = TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo };
                 children.push(Operation::Query(Query {
                     prefix,
-                    kind: typos(word, authorize_typos, 2),
+                    kind: typos(word, authorize_typos, config),
                 }));
                 Ok(Operation::or(false, children))
             }
@@ -363,9 +383,13 @@ fn create_query_tree(
                                 .collect();
                             let mut operations = synonyms(ctx, &words)?.unwrap_or_default();
                             let concat = words.concat();
+                            let (word_len_one_typo, word_len_two_typo) =
+                                ctx.min_word_len_for_typo()?;
+                            let config =
+                                TypoConfig { max_typos: 1, word_len_one_typo, word_len_two_typo };
                             let query = Query {
                                 prefix: is_prefix,
-                                kind: typos(concat, authorize_typos, 1),
+                                kind: typos(concat, authorize_typos, config),
                             };
                             operations.push(Operation::Query(query));
                             and_op_children.push(Operation::or(false, operations));
@@ -541,6 +565,7 @@ mod test {
     use rand::{Rng, SeedableRng};
 
     use super::*;
+    use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 
     #[derive(Debug)]
     struct TestContext {
@@ -575,6 +600,10 @@ mod test {
         fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
             let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
             Ok(self.synonyms.get(&words).cloned())
+        }
+
+        fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
+            Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
     }
 
@@ -1192,5 +1221,25 @@ mod test {
             TestContext::default().build(false, false, Some(2), tokens).unwrap().unwrap();
 
         assert_eq!(expected, query_tree);
+    }
+
+    #[test]
+    fn test_min_word_len_typo() {
+        let config = TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7 };
+
+        assert_eq!(
+            typos("hello".to_string(), true, config.clone()),
+            QueryKind::Tolerant { typo: 1, word: "hello".to_string() }
+        );
+
+        assert_eq!(
+            typos("hell".to_string(), true, config.clone()),
+            QueryKind::exact("hell".to_string())
+        );
+
+        assert_eq!(
+            typos("verylongword".to_string(), true, config.clone()),
+            QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
+        );
     }
 }
