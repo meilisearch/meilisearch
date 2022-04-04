@@ -387,6 +387,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         field_id_docid_facet_f64s: _,
         field_id_docid_facet_strings: _,
         documents,
+        ..
     } = index;
 
     let main_name = "main";
@@ -968,6 +969,7 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         field_id_docid_facet_f64s,
         field_id_docid_facet_strings,
         documents,
+        ..
     } = index;
 
     let names = if names.is_empty() {
