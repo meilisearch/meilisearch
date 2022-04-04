@@ -8,7 +8,8 @@ use meilisearch_tokenizer::TokenKind;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
-use crate::{Index, Result};
+use crate::search::matches::matching_words::{MatchingWord, PrimitiveWordId};
+use crate::{Index, MatchingWords, Result};
 
 type IsOptionalWord = bool;
 type IsPrefix = bool;
@@ -233,7 +234,10 @@ impl<'a> QueryTreeBuilder<'a> {
     /// - if `authorize_typos` is set to `false` the query tree will be generated
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
-    pub fn build(&self, query: TokenStream) -> Result<Option<(Operation, PrimitiveQuery)>> {
+    pub fn build(
+        &self,
+        query: TokenStream,
+    ) -> Result<Option<(Operation, PrimitiveQuery, MatchingWords)>> {
         let stop_words = self.index.stop_words(self.rtxn)?;
         let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
         if !primitive_query.is_empty() {
@@ -243,7 +247,9 @@ impl<'a> QueryTreeBuilder<'a> {
                 self.authorize_typos,
                 &primitive_query,
             )?;
-            Ok(Some((qt, primitive_query)))
+            let matching_words =
+                create_matching_words(self, self.authorize_typos, &primitive_query)?;
+            Ok(Some((qt, primitive_query, matching_words)))
         } else {
             Ok(None)
         }
@@ -251,7 +257,7 @@ impl<'a> QueryTreeBuilder<'a> {
 }
 
 /// Split the word depending on the frequency of subwords in the database documents.
-fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<Operation>> {
+fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<(String, String)>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
@@ -267,7 +273,7 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
         }
     }
 
-    Ok(best.map(|(_, left, right)| Operation::Phrase(vec![left.to_string(), right.to_string()])))
+    Ok(best.map(|(_, left, right)| (left.to_string(), right.to_string())))
 }
 
 #[derive(Clone)]
@@ -336,8 +342,8 @@ fn create_query_tree(
             // 4. wrap all in an OR operation
             PrimitiveQueryPart::Word(word, prefix) => {
                 let mut children = synonyms(ctx, &[&word])?.unwrap_or_default();
-                if let Some(child) = split_best_frequency(ctx, &word)? {
-                    children.push(child);
+                if let Some((left, right)) = split_best_frequency(ctx, &word)? {
+                    children.push(Operation::Phrase(vec![left, right]));
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
                 let exact_words = ctx.exact_words()?;
@@ -464,6 +470,154 @@ fn create_query_tree(
     }
 }
 
+/// Main function that matchings words used for crop and highlight.
+fn create_matching_words(
+    ctx: &impl Context,
+    authorize_typos: bool,
+    query: &[PrimitiveQueryPart],
+) -> Result<MatchingWords> {
+    /// Matches on the `PrimitiveQueryPart` and create matchings words from it.
+    fn resolve_primitive_part(
+        ctx: &impl Context,
+        authorize_typos: bool,
+        part: PrimitiveQueryPart,
+        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        id: PrimitiveWordId,
+    ) -> Result<()> {
+        match part {
+            // 1. try to split word in 2
+            // 2. try to fetch synonyms
+            PrimitiveQueryPart::Word(word, prefix) => {
+                if let Some(synonyms) = ctx.synonyms(&[word.as_str()])? {
+                    for synonym in synonyms {
+                        let synonym = synonym
+                            .into_iter()
+                            .map(|syn| MatchingWord::new(syn.to_string(), 0, false))
+                            .collect();
+                        matching_words.push((synonym, vec![id]));
+                    }
+                }
+
+                if let Some((left, right)) = split_best_frequency(ctx, &word)? {
+                    let left = MatchingWord::new(left, 0, false);
+                    let right = MatchingWord::new(right, 0, false);
+                    matching_words.push((vec![left, right], vec![id]));
+                }
+
+                let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
+                let exact_words = ctx.exact_words()?;
+                let config =
+                    TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
+
+                let matching_word = match typos(word, authorize_typos, config) {
+                    QueryKind::Exact { word, .. } => MatchingWord::new(word, 0, prefix),
+                    QueryKind::Tolerant { typo, word } => MatchingWord::new(word, typo, prefix),
+                };
+                matching_words.push((vec![matching_word], vec![id]));
+            }
+            // create a CONSECUTIVE matchings words wrapping all word in the phrase
+            PrimitiveQueryPart::Phrase(words) => {
+                let ids: Vec<_> =
+                    (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
+                let words =
+                    words.into_iter().map(|w| MatchingWord::new(w.to_string(), 0, false)).collect();
+                matching_words.push((words, ids));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Create all ngrams 1..=3 generating query tree branches.
+    fn ngrams(
+        ctx: &impl Context,
+        authorize_typos: bool,
+        query: &[PrimitiveQueryPart],
+        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        mut id: PrimitiveWordId,
+    ) -> Result<()> {
+        const MAX_NGRAM: usize = 3;
+
+        for sub_query in query.linear_group_by(|a, b| !(a.is_phrase() || b.is_phrase())) {
+            for ngram in 1..=MAX_NGRAM.min(sub_query.len()) {
+                if let Some(group) = sub_query.get(..ngram) {
+                    let tail = &sub_query[ngram..];
+                    let is_last = tail.is_empty();
+
+                    match group {
+                        [part] => {
+                            resolve_primitive_part(
+                                ctx,
+                                authorize_typos,
+                                part.clone(),
+                                matching_words,
+                                id,
+                            )?;
+                        }
+                        words => {
+                            let is_prefix = words.last().map_or(false, |part| part.is_prefix());
+                            let words: Vec<_> = words
+                                .iter()
+                                .filter_map(|part| {
+                                    if let PrimitiveQueryPart::Word(word, _) = part {
+                                        Some(word.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let ids: Vec<_> = (0..words.len())
+                                .into_iter()
+                                .map(|i| id + i as PrimitiveWordId)
+                                .collect();
+
+                            if let Some(synonyms) = ctx.synonyms(&words)? {
+                                for synonym in synonyms {
+                                    let synonym = synonym
+                                        .into_iter()
+                                        .map(|syn| MatchingWord::new(syn.to_string(), 0, false))
+                                        .collect();
+                                    matching_words.push((synonym, ids.clone()));
+                                }
+                            }
+                            let word = words.concat();
+                            let (word_len_one_typo, word_len_two_typo) =
+                                ctx.min_word_len_for_typo()?;
+                            let exact_words = ctx.exact_words()?;
+                            let config = TypoConfig {
+                                max_typos: 1,
+                                word_len_one_typo,
+                                word_len_two_typo,
+                                exact_words,
+                            };
+                            let matching_word = match typos(word, authorize_typos, config) {
+                                QueryKind::Exact { word, .. } => {
+                                    MatchingWord::new(word, 0, is_prefix)
+                                }
+                                QueryKind::Tolerant { typo, word } => {
+                                    MatchingWord::new(word, typo, is_prefix)
+                                }
+                            };
+                            matching_words.push((vec![matching_word], ids));
+                        }
+                    }
+
+                    if !is_last {
+                        ngrams(ctx, authorize_typos, tail, matching_words, id + 1)?;
+                    }
+                }
+            }
+            id += sub_query.iter().map(|x| x.len() as PrimitiveWordId).sum::<PrimitiveWordId>();
+        }
+
+        Ok(())
+    }
+
+    let mut matching_words = Vec::new();
+    ngrams(ctx, authorize_typos, query, &mut matching_words, 0)?;
+    Ok(MatchingWords::new(matching_words))
+}
+
 pub type PrimitiveQuery = Vec<PrimitiveQueryPart>;
 
 #[derive(Debug, Clone)]
@@ -479,6 +633,13 @@ impl PrimitiveQueryPart {
 
     fn is_prefix(&self) -> bool {
         matches!(self, Self::Word(_, is_prefix) if *is_prefix)
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Phrase(words) => words.len(),
+            Self::Word(_, _) => 1,
+        }
     }
 }
 

@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 
 pub use matching_words::MatchingWords;
+use matching_words::{MatchType, PrimitiveWordId};
 use meilisearch_tokenizer::token::{SeparatorKind, Token};
 
-use crate::search::query_tree::Operation;
-
-mod matching_words;
+pub mod matching_words;
 
 const DEFAULT_CROP_SIZE: usize = 10;
 const DEFAULT_CROP_MARKER: &'static str = "…";
@@ -21,18 +20,6 @@ pub struct MatcherBuilder {
 }
 
 impl MatcherBuilder {
-    pub fn from_query_tree(query_tree: &Operation) -> Self {
-        let matching_words = MatchingWords::from_query_tree(query_tree);
-
-        Self {
-            matching_words,
-            crop_size: DEFAULT_CROP_SIZE,
-            crop_marker: None,
-            highlight_prefix: None,
-            highlight_suffix: None,
-        }
-    }
-
     pub fn from_matching_words(matching_words: MatchingWords) -> Self {
         Self {
             matching_words,
@@ -93,8 +80,8 @@ impl MatcherBuilder {
 #[derive(Clone, Debug)]
 pub struct Match {
     match_len: usize,
-    // id of the query word that matches.
-    id: usize,
+    // ids of the query words that matches.
+    ids: Vec<PrimitiveWordId>,
     // position of the word in the whole text.
     word_position: usize,
     // position of the token in the whole text.
@@ -123,10 +110,72 @@ impl<'t> Matcher<'t, '_> {
         let mut matches = Vec::new();
         let mut word_position = 0;
         let mut token_position = 0;
-        for token in self.tokens {
+        while let Some(token) = self.tokens.get(token_position) {
             if token.is_separator().is_none() {
-                if let Some((match_len, id)) = self.matching_words.matching_bytes_with_id(&token) {
-                    matches.push(Match { match_len, id, word_position, token_position });
+                'matches: for match_type in self.matching_words.match_token(&token) {
+                    match match_type {
+                        MatchType::Full { char_len, ids } => {
+                            matches.push(Match {
+                                match_len: char_len,
+                                ids: ids.to_vec(),
+                                word_position,
+                                token_position,
+                            });
+                            // stop on the first match
+                            break;
+                        }
+                        MatchType::Partial(mut partial) => {
+                            let mut potential_matches =
+                                vec![(token_position, word_position, partial.char_len())];
+                            let mut t_position = 1;
+                            let mut w_position = 1;
+                            'partials: for token in &self.tokens[token_position + 1..] {
+                                if token.is_separator().is_none() {
+                                    partial = match partial.match_token(&token) {
+                                        Some(MatchType::Partial(partial)) => {
+                                            potential_matches.push((
+                                                token_position + t_position,
+                                                word_position + w_position,
+                                                partial.char_len(),
+                                            ));
+                                            partial
+                                        }
+                                        // partial match is now full, we keep this matches and we advance positions
+                                        Some(MatchType::Full { char_len, ids }) => {
+                                            let iter = potential_matches.into_iter().map(
+                                                |(token_position, word_position, match_len)| {
+                                                    Match {
+                                                        match_len,
+                                                        ids: ids.to_vec(),
+                                                        word_position,
+                                                        token_position,
+                                                    }
+                                                },
+                                            );
+
+                                            matches.extend(iter);
+
+                                            word_position += w_position;
+                                            token_position += t_position;
+
+                                            matches.push(Match {
+                                                match_len: char_len,
+                                                ids: ids.to_vec(),
+                                                word_position,
+                                                token_position,
+                                            });
+
+                                            break 'matches;
+                                        }
+                                        // no match, continue to next match.
+                                        None => break 'partials,
+                                    };
+                                    w_position += 1;
+                                }
+                                t_position += 1;
+                            }
+                        }
+                    }
                 }
                 word_position += 1;
             }
@@ -229,7 +278,7 @@ impl<'t> Matcher<'t, '_> {
     }
 
     fn match_interval_score(&self, matches: &[Match]) -> (i16, i16, i16) {
-        let mut ids = Vec::with_capacity(matches.len());
+        let mut ids: Vec<PrimitiveWordId> = Vec::with_capacity(matches.len());
         let mut order_score = 0;
         let mut distance_score = 0;
 
@@ -237,7 +286,7 @@ impl<'t> Matcher<'t, '_> {
         while let Some(m) = iter.next() {
             if let Some(next_match) = iter.peek() {
                 // if matches are ordered
-                if next_match.id > m.id {
+                if next_match.ids.iter().min() > m.ids.iter().min() {
                     order_score += 1;
                 }
 
@@ -245,7 +294,7 @@ impl<'t> Matcher<'t, '_> {
                 distance_score -= (next_match.word_position - m.word_position).min(7) as i16;
             }
 
-            ids.push(m.id);
+            ids.extend(m.ids.iter());
         }
 
         ids.sort_unstable();
@@ -348,7 +397,8 @@ impl<'t> Matcher<'t, '_> {
                                 .char_indices()
                                 .enumerate()
                                 .find(|(i, _)| *i == m.match_len)
-                                .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start);
+                                .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start)
+                                .min(token.byte_end);
                             formatted.push(self.highlight_prefix);
                             formatted.push(&self.text[token.byte_start..highlight_byte_index]);
                             formatted.push(self.highlight_suffix);
@@ -386,33 +436,23 @@ mod tests {
     use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 
     use super::*;
-    use crate::search::query_tree::{Query, QueryKind};
+    use crate::search::matches::matching_words::MatchingWord;
 
-    fn query_tree() -> Operation {
-        Operation::Or(
-            false,
-            vec![Operation::And(vec![
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::exact("split".to_string()),
-                }),
-                Operation::Query(Query {
-                    prefix: false,
-                    kind: QueryKind::exact("the".to_string()),
-                }),
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::tolerant(1, "world".to_string()),
-                }),
-            ])],
-        )
+    fn matching_words() -> MatchingWords {
+        let matching_words = vec![
+            (vec![MatchingWord::new("split".to_string(), 0, false)], vec![0]),
+            (vec![MatchingWord::new("the".to_string(), 0, false)], vec![1]),
+            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![2]),
+        ];
+
+        MatchingWords::new(matching_words)
     }
 
     #[test]
     fn format_identity() {
-        let query_tree = query_tree();
+        let matching_words = matching_words();
 
-        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = false;
@@ -445,9 +485,9 @@ mod tests {
 
     #[test]
     fn format_highlight() {
-        let query_tree = query_tree();
+        let matching_words = matching_words();
 
-        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = true;
@@ -497,21 +537,14 @@ mod tests {
 
     #[test]
     fn highlight_unicode() {
-        let query_tree = Operation::Or(
-            false,
-            vec![Operation::And(vec![
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::tolerant(1, "wessfalia".to_string()),
-                }),
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::tolerant(1, "world".to_string()),
-                }),
-            ])],
-        );
+        let matching_words = vec![
+            (vec![MatchingWord::new("wessfali".to_string(), 1, true)], vec![0]),
+            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![1]),
+        ];
 
-        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let matching_words = MatchingWords::new(matching_words);
+
+        let builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = true;
@@ -539,14 +572,14 @@ mod tests {
         let tokens: Vec<_> = analyzed.tokens().collect();
         let mut matcher = builder.build(&tokens[..], text);
         // no crop should return complete text with highlighted matches.
-        assert_eq!(&matcher.format(highlight, crop), "<em>Westfália</em>");
+        assert_eq!(&matcher.format(highlight, crop), "<em>Westfáli</em>a");
     }
 
     #[test]
     fn format_crop() {
-        let query_tree = query_tree();
+        let matching_words = matching_words();
 
-        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = false;
@@ -657,9 +690,9 @@ mod tests {
 
     #[test]
     fn format_highlight_crop() {
-        let query_tree = query_tree();
+        let matching_words = matching_words();
 
-        let builder = MatcherBuilder::from_query_tree(&query_tree);
+        let builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = true;
@@ -724,9 +757,9 @@ mod tests {
     #[test]
     fn smaller_crop_size() {
         //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
-        let query_tree = query_tree();
+        let matching_words = matching_words();
 
-        let mut builder = MatcherBuilder::from_query_tree(&query_tree);
+        let mut builder = MatcherBuilder::from_matching_words(matching_words);
         let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
 
         let highlight = false;

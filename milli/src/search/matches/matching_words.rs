@@ -1,12 +1,12 @@
 use std::cmp::{min, Reverse};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use std::fmt;
 use std::ops::{Index, IndexMut};
 
 use levenshtein_automata::{Distance, DFA};
 use meilisearch_tokenizer::Token;
 
 use crate::search::build_dfa;
-use crate::search::query_tree::{Operation, Query};
 
 type IsPrefix = bool;
 
@@ -14,83 +14,129 @@ type IsPrefix = bool;
 /// referencing words that match the given query tree.
 #[derive(Default)]
 pub struct MatchingWords {
-    dfas: Vec<(DFA, String, u8, IsPrefix, usize)>,
+    inner: Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
 }
 
 impl MatchingWords {
-    pub fn from_query_tree(tree: &Operation) -> Self {
-        // fetch matchable words from the query tree
-        let mut dfas: Vec<_> = fetch_queries(tree)
-            .into_iter()
-            // create DFAs for each word
-            .map(|((w, t, p), id)| (build_dfa(w, t, p), w.to_string(), t, p, id))
-            .collect();
-        // Sort word by len in DESC order prioritizing the longuest word,
+    pub fn new(mut matching_words: Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>) -> Self {
+        // Sort word by len in DESC order prioritizing the longuest matches,
         // in order to highlight the longuest part of the matched word.
-        dfas.sort_unstable_by_key(|(_dfa, query_word, _typo, _is_prefix, _id)| {
-            Reverse(query_word.len())
-        });
-        Self { dfas }
+        matching_words.sort_unstable_by_key(|(mw, _)| Reverse((mw.len(), mw[0].word.len())));
+
+        Self { inner: matching_words }
     }
 
-    /// Returns the number of matching bytes if the word matches one of the query words.
-    pub fn matching_bytes(&self, word_to_highlight: &Token) -> Option<usize> {
-        self.matching_bytes_with_id(word_to_highlight).map(|(len, _)| len)
-    }
-
-    pub fn matching_bytes_with_id(&self, word_to_highlight: &Token) -> Option<(usize, usize)> {
-        self.dfas.iter().find_map(|(dfa, query_word, typo, is_prefix, id)| {
-            match dfa.eval(word_to_highlight.text()) {
-                Distance::Exact(t) if t <= *typo => {
-                    if *is_prefix {
-                        let len = bytes_to_highlight(word_to_highlight.text(), query_word);
-                        Some((word_to_highlight.num_chars_from_bytes(len), *id))
-                    } else {
-                        Some((
-                            word_to_highlight.num_chars_from_bytes(word_to_highlight.text().len()),
-                            *id,
-                        ))
-                    }
-                }
-                _otherwise => None,
-            }
-        })
+    pub fn match_token<'a, 'b>(&'a self, token: &'b Token<'b>) -> MatchesIter<'a, 'b> {
+        MatchesIter { inner: Box::new(self.inner.iter()), token }
     }
 }
 
-/// Lists all words which can be considered as a match for the query tree.
-fn fetch_queries(tree: &Operation) -> HashMap<(&str, u8, IsPrefix), usize> {
-    fn resolve_ops<'a>(
-        tree: &'a Operation,
-        out: &mut HashMap<(&'a str, u8, IsPrefix), usize>,
-        id: &mut usize,
-    ) {
-        match tree {
-            Operation::Or(_, ops) | Operation::And(ops) => {
-                ops.as_slice().iter().for_each(|op| resolve_ops(op, out, id));
-            }
-            Operation::Query(Query { prefix, kind }) => {
-                let typo = if kind.is_exact() { 0 } else { kind.typo() };
-                out.entry((kind.word(), typo, *prefix)).or_insert_with(|| {
-                    *id += 1;
-                    *id
-                });
-            }
-            Operation::Phrase(words) => {
-                for word in words {
-                    out.entry((word, 0, false)).or_insert_with(|| {
-                        *id += 1;
-                        *id
-                    });
+pub struct MatchesIter<'a, 'b> {
+    inner: Box<dyn Iterator<Item = &'a (Vec<MatchingWord>, Vec<PrimitiveWordId>)> + 'a>,
+    token: &'b Token<'b>,
+}
+
+impl<'a> Iterator for MatchesIter<'a, '_> {
+    type Item = MatchType<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some((matching_words, ids)) => match matching_words[0].match_token(&self.token) {
+                Some(char_len) => {
+                    if matching_words.len() > 1 {
+                        Some(MatchType::Partial(PartialMatch {
+                            matching_words: &matching_words[1..],
+                            ids,
+                            char_len,
+                        }))
+                    } else {
+                        Some(MatchType::Full { char_len, ids })
+                    }
                 }
-            }
+                None => self.next(),
+            },
+            None => None,
         }
     }
+}
 
-    let mut queries = HashMap::new();
-    let mut id = 0;
-    resolve_ops(tree, &mut queries, &mut id);
-    queries
+pub type PrimitiveWordId = u8;
+pub struct MatchingWord {
+    pub dfa: DFA,
+    pub word: String,
+    pub typo: u8,
+    pub prefix: IsPrefix,
+}
+
+impl fmt::Debug for MatchingWord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MatchingWord")
+            .field("word", &self.word)
+            .field("typo", &self.typo)
+            .field("prefix", &self.prefix)
+            .finish()
+    }
+}
+
+impl PartialEq for MatchingWord {
+    fn eq(&self, other: &Self) -> bool {
+        self.prefix == other.prefix && self.typo == other.typo && self.word == other.word
+    }
+}
+
+impl MatchingWord {
+    pub fn new(word: String, typo: u8, prefix: IsPrefix) -> Self {
+        let dfa = build_dfa(&word, typo, prefix);
+
+        Self { dfa, word, typo, prefix }
+    }
+
+    pub fn match_token(&self, token: &Token) -> Option<usize> {
+        match self.dfa.eval(token.text()) {
+            Distance::Exact(t) if t <= self.typo => {
+                if self.prefix {
+                    let len = bytes_to_highlight(token.text(), &self.word);
+                    Some(token.num_chars_from_bytes(len))
+                } else {
+                    Some(token.num_chars_from_bytes(token.text().len()))
+                }
+            }
+            _otherwise => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum MatchType<'a> {
+    Full { char_len: usize, ids: &'a [PrimitiveWordId] },
+    Partial(PartialMatch<'a>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct PartialMatch<'a> {
+    matching_words: &'a [MatchingWord],
+    ids: &'a [PrimitiveWordId],
+    char_len: usize,
+}
+
+impl<'a> PartialMatch<'a> {
+    pub fn match_token(self, token: &Token) -> Option<MatchType<'a>> {
+        self.matching_words[0].match_token(token).map(|char_len| {
+            if self.matching_words.len() > 1 {
+                MatchType::Partial(PartialMatch {
+                    matching_words: &self.matching_words[1..],
+                    ids: self.ids,
+                    char_len,
+                })
+            } else {
+                MatchType::Full { char_len, ids: self.ids }
+            }
+        })
+    }
+
+    pub fn char_len(&self) -> usize {
+        self.char_len
+    }
 }
 
 // A simple wrapper around vec so we can get contiguous but index it like it's 2D array.
@@ -203,7 +249,6 @@ mod tests {
     use meilisearch_tokenizer::TokenKind;
 
     use super::*;
-    use crate::search::query_tree::{Operation, Query, QueryKind};
     use crate::MatchingWords;
 
     #[test]
@@ -271,102 +316,104 @@ mod tests {
 
     #[test]
     fn matching_words() {
-        let query_tree = Operation::Or(
-            false,
-            vec![Operation::And(vec![
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::exact("split".to_string()),
-                }),
-                Operation::Query(Query {
-                    prefix: false,
-                    kind: QueryKind::exact("this".to_string()),
-                }),
-                Operation::Query(Query {
-                    prefix: true,
-                    kind: QueryKind::tolerant(1, "world".to_string()),
-                }),
-            ])],
-        );
+        let matching_words = vec![
+            (vec![MatchingWord::new("split".to_string(), 1, true)], vec![0]),
+            (vec![MatchingWord::new("this".to_string(), 0, false)], vec![1]),
+            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![2]),
+        ];
 
-        let matching_words = MatchingWords::from_query_tree(&query_tree);
+        let matching_words = MatchingWords::new(matching_words);
 
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("word"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "word".len(),
-                char_map: None,
-            }),
-            Some(3)
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("word"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "word".len(),
+                    char_map: None,
+                })
+                .next(),
+            Some(MatchType::Full { char_len: 3, ids: &[2] })
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("nyc"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "nyc".len(),
-                char_map: None,
-            }),
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("nyc"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "nyc".len(),
+                    char_map: None,
+                })
+                .next(),
             None
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("world"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "world".len(),
-                char_map: None,
-            }),
-            Some(5)
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("world"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "world".len(),
+                    char_map: None,
+                })
+                .next(),
+            Some(MatchType::Full { char_len: 5, ids: &[2] })
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("splitted"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "splitted".len(),
-                char_map: None,
-            }),
-            Some(5)
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("splitted"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "splitted".len(),
+                    char_map: None,
+                })
+                .next(),
+            Some(MatchType::Full { char_len: 5, ids: &[0] })
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("thisnew"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "thisnew".len(),
-                char_map: None,
-            }),
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("thisnew"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "thisnew".len(),
+                    char_map: None,
+                })
+                .next(),
             None
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("borld"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "borld".len(),
-                char_map: None,
-            }),
-            Some(5)
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("borld"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "borld".len(),
+                    char_map: None,
+                })
+                .next(),
+            Some(MatchType::Full { char_len: 5, ids: &[2] })
         );
         assert_eq!(
-            matching_words.matching_bytes(&Token {
-                kind: TokenKind::Word,
-                word: Cow::Borrowed("wordsplit"),
-                byte_start: 0,
-                char_index: 0,
-                byte_end: "wordsplit".len(),
-                char_map: None,
-            }),
-            Some(4)
+            matching_words
+                .match_token(&Token {
+                    kind: TokenKind::Word,
+                    word: Cow::Borrowed("wordsplit"),
+                    byte_start: 0,
+                    char_index: 0,
+                    byte_end: "wordsplit".len(),
+                    char_map: None,
+                })
+                .next(),
+            Some(MatchType::Full { char_len: 4, ids: &[2] })
         );
     }
 }
