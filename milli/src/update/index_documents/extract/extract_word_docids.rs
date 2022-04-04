@@ -19,7 +19,7 @@ use crate::{field_id_from_position, FieldId, Result};
 /// Returns a grenad reader with the list of extracted words and
 /// documents ids from the given chunk of docid word positions.
 ///
-/// The first returned reader in the one for normal word_docids, and the second one is for
+/// The first returned reader is the one for normal word_docids, and the second one is for
 /// exact_word_docids
 #[logging_timer::time]
 pub fn extract_word_docids<R: io::Read + io::Seek>(
