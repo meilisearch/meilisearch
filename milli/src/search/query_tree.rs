@@ -280,7 +280,7 @@ pub struct TypoConfig<'a> {
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
 fn typos<'a>(word: String, authorize_typos: bool, config: TypoConfig<'a>) -> QueryKind {
-    if authorize_typos {
+    if authorize_typos && !config.exact_words.contains(&word) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {
             QueryKind::exact(word)
@@ -1278,7 +1278,7 @@ mod test {
         let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
 
         assert!(matches!(
-            query_tree,
+            dbg!(query_tree),
             Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
         ));
     }
