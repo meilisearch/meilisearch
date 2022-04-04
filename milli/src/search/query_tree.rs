@@ -1,4 +1,5 @@
-use std::{borrow::Cow, cmp, fmt, mem};
+use std::borrow::Cow;
+use std::{cmp, fmt, mem};
 
 use fst::Set;
 use meilisearch_tokenizer::token::SeparatorKind;
@@ -1278,7 +1279,7 @@ mod test {
         let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
 
         assert!(matches!(
-            dbg!(query_tree),
+            query_tree,
             Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
         ));
     }
