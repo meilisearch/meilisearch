@@ -333,12 +333,12 @@ pub fn word_derivations<'c>(
                         // in the case the typo is on the first letter, we know the number of typo
                         // is two
                         if get_first(found_word) != get_first(word) {
-                            derived_words.push((word.to_string(), 2));
+                            derived_words.push((found_word.to_string(), 2));
                         } else {
                             // Else, we know that it is the second dfa that matched and compute the
                             // correct distance
                             let d = second_dfa.distance((state.1).0);
-                            derived_words.push((word.to_string(), d.to_u8()));
+                            derived_words.push((found_word.to_string(), d.to_u8()));
                         }
                     }
                 }
@@ -397,5 +397,68 @@ mod test {
 
         search.authorize_typos(true);
         assert!(!search.is_typo_authorized().unwrap());
+    }
+
+    #[test]
+    fn test_one_typos_tolerance() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("zealend", false, 1, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[("zealand".to_string(), 1)]);
+    }
+
+    #[test]
+    fn test_one_typos_first_letter() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("sealand", false, 1, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[]);
+    }
+
+    #[test]
+    fn test_two_typos_tolerance() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("zealemd", false, 2, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[("zealand".to_string(), 2)]);
+    }
+
+    #[test]
+    fn test_two_typos_first_letter() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("sealand", false, 2, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[("zealand".to_string(), 2)]);
+    }
+
+    #[test]
+    fn test_prefix() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("ze", true, 0, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[("zealand".to_string(), 0)]);
+    }
+
+    #[test]
+    fn test_bad_prefix() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("se", true, 0, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[]);
+    }
+
+    #[test]
+    fn test_prefix_with_typo() {
+        let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
+        let mut cache = HashMap::new();
+        let found = word_derivations("zae", true, 1, &fst, &mut cache).unwrap();
+
+        assert_eq!(found, &[("zealand".to_string(), 1)]);
     }
 }
