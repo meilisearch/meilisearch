@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
@@ -33,6 +34,10 @@ pub const DEFAULT_CROP_LENGTH: usize = 200;
 pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
+
+/// The maximimum number of results that the engine
+/// will be able to return in one search call.
+pub const HARD_RESULT_LIMIT: usize = 1000;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -97,8 +102,13 @@ impl Index {
             search.query(query);
         }
 
-        search.limit(query.limit);
-        search.offset(query.offset.unwrap_or_default());
+        // Make sure that a user can't get more documents than the hard limit,
+        // we align that on the offset too.
+        let offset = min(query.offset.unwrap_or(0), HARD_RESULT_LIMIT);
+        let limit = min(query.limit, HARD_RESULT_LIMIT.saturating_sub(offset));
+
+        search.offset(offset);
+        search.limit(limit);
 
         if let Some(ref filter) = query.filter {
             if let Some(facets) = parse_filter(filter)? {

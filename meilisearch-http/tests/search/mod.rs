@@ -267,3 +267,79 @@ async fn displayed_attributes() {
     assert_eq!(code, 200, "{}", response);
     assert!(response["hits"].get("title").is_none());
 }
+
+#[actix_rt::test]
+async fn placeholder_search_is_hard_limited() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents: Vec<_> = (0..1200)
+        .map(|i| json!({ "id": i, "text": "I am unique!" }))
+        .collect();
+    index.add_documents(documents.into(), None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(
+            json!({
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1000);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "offset": 800,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn search_is_hard_limited() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents: Vec<_> = (0..1200)
+        .map(|i| json!({ "id": i, "text": "I am unique!" }))
+        .collect();
+    index.add_documents(documents.into(), None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1000);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "offset": 800,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
+}
