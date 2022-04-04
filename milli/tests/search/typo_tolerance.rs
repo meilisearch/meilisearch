@@ -156,7 +156,7 @@ fn test_typo_disabled_on_word() {
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
     let mut exact_words = BTreeSet::new();
-    // sealand doesn't allow typos anymore
+    // `zealand` doesn't allow typos anymore
     exact_words.insert("zealand".to_string());
     builder.set_exact_words(exact_words);
     builder.execute(|_| ()).unwrap();
