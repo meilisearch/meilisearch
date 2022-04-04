@@ -181,6 +181,7 @@ fn test_disable_typo_on_attribute() {
         let txn = index.read_txn().unwrap();
 
         let mut search = Search::new(&txn, &index);
+        // typo in `antebel(l)um`
         search.query("antebelum");
         search.limit(10);
         search.authorize_typos(true);
@@ -194,10 +195,10 @@ fn test_disable_typo_on_attribute() {
 
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
+    // disable typos on `description`
     builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
     builder.execute(|_| ()).unwrap();
 
-    // typo is now supported for 4 letters words
     let mut search = Search::new(&txn, &index);
     search.query("antebelum");
     search.limit(10);
