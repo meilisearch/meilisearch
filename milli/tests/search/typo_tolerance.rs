@@ -170,3 +170,40 @@ fn test_typo_disabled_on_word() {
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1);
 }
+
+#[test]
+fn test_disable_typo_on_attribute() {
+    let criteria = [Typo];
+    let index = super::setup_search_index_with_criteria(&criteria);
+
+    // basic typo search with default typo settings
+    {
+        let txn = index.read_txn().unwrap();
+
+        let mut search = Search::new(&txn, &index);
+        search.query("antebelum");
+        search.limit(10);
+        search.authorize_typos(true);
+        search.optional_words(true);
+
+        let result = search.execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1);
+    }
+
+    let mut txn = index.write_txn().unwrap();
+
+    let config = IndexerConfig::default();
+    let mut builder = Settings::new(&mut txn, &index, &config);
+    builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
+    builder.execute(|_| ()).unwrap();
+
+    // typo is now supported for 4 letters words
+    let mut search = Search::new(&txn, &index);
+    search.query("antebelum");
+    search.limit(10);
+    search.authorize_typos(true);
+    search.optional_words(true);
+
+    let result = search.execute().unwrap();
+    assert_eq!(result.documents_ids.len(), 0);
+}
