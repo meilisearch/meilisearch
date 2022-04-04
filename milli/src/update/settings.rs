@@ -93,7 +93,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
     exact_words: Setting<BTreeSet<String>>,
-    /// attributes on which typo tolerance is not enabled.
+    /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
 }
 
