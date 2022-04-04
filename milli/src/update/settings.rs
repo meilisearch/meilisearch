@@ -92,6 +92,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     authorize_typos: Setting<bool>,
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
+    exact_words: Setting<BTreeSet<String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -113,9 +114,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
-            indexer_config,
+            exact_words: Setting::NotSet,
             min_word_len_two_typos: Setting::Reset,
             min_word_len_one_typo: Setting::Reset,
+            indexer_config,
         }
     }
 
@@ -214,6 +216,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_min_word_len_one_typo(&mut self) {
         self.min_word_len_one_typo = Setting::Reset;
+    }
+
+    pub fn set_exact_words(&mut self, words: BTreeSet<String>) {
+        self.exact_words = Setting::Set(words);
+    }
+
+    pub fn reset_exact_words(&mut self) {
+        self.exact_words = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -526,6 +536,21 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
+    fn update_exact_words(&mut self) -> Result<()> {
+        match self.exact_words {
+            Setting::Set(ref mut words) => {
+                let words = fst::Set::from_iter(words.iter())?;
+                self.index.put_exact_words(&mut self.wtxn, &words)?;
+            }
+            Setting::Reset => {
+                self.index.put_exact_words(&mut self.wtxn, &fst::Set::default())?;
+            }
+            Setting::NotSet => (),
+        }
+
+        Ok(())
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -543,6 +568,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_primary_key()?;
         self.update_authorize_typos()?;
         self.update_min_typo_word_len()?;
+        self.update_exact_words()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,

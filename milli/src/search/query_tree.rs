@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::{cmp, fmt, mem};
 
 use fst::Set;
@@ -157,6 +158,7 @@ trait Context {
     }
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
+    fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -185,6 +187,10 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         let one = self.index.min_word_len_one_typo(&self.rtxn)?;
         let two = self.index.min_word_len_two_typos(&self.rtxn)?;
         Ok((one, two))
+    }
+
+    fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
+        self.index.exact_words(self.rtxn)
     }
 }
 
@@ -265,16 +271,17 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<O
 }
 
 #[derive(Clone)]
-pub struct TypoConfig {
+pub struct TypoConfig<'a> {
     pub max_typos: u8,
     pub word_len_one_typo: u8,
     pub word_len_two_typo: u8,
+    pub exact_words: fst::Set<Cow<'a, [u8]>>,
 }
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
-fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
-    if authorize_typos {
+fn typos<'a>(word: String, authorize_typos: bool, config: TypoConfig<'a>) -> QueryKind {
+    if authorize_typos && !config.exact_words.contains(&word) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {
             QueryKind::exact(word)
@@ -333,7 +340,9 @@ fn create_query_tree(
                     children.push(child);
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
-                let config = TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo };
+                let exact_words = ctx.exact_words()?;
+                let config =
+                    TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
                 children.push(Operation::Query(Query {
                     prefix,
                     kind: typos(word, authorize_typos, config),
@@ -385,8 +394,13 @@ fn create_query_tree(
                             let concat = words.concat();
                             let (word_len_one_typo, word_len_two_typo) =
                                 ctx.min_word_len_for_typo()?;
-                            let config =
-                                TypoConfig { max_typos: 1, word_len_one_typo, word_len_two_typo };
+                            let exact_words = ctx.exact_words()?;
+                            let config = TypoConfig {
+                                max_typos: 1,
+                                word_len_one_typo,
+                                word_len_two_typo,
+                                exact_words,
+                            };
                             let query = Query {
                                 prefix: is_prefix,
                                 kind: typos(concat, authorize_typos, config),
@@ -571,6 +585,8 @@ mod test {
     struct TestContext {
         synonyms: HashMap<Vec<String>, Vec<Vec<String>>>,
         postings: HashMap<String, RoaringBitmap>,
+        // Raw bytes for the exact word fst Set
+        exact_words: Vec<u8>,
     }
 
     impl TestContext {
@@ -605,6 +621,10 @@ mod test {
         fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
             Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
+
+        fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
+            Ok(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap())
+        }
     }
 
     impl Default for TestContext {
@@ -620,6 +640,8 @@ mod test {
                 values.sort_unstable();
                 RoaringBitmap::from_sorted_iter(values.into_iter()).unwrap()
             }
+
+            let exact_words = fst::SetBuilder::new(Vec::new()).unwrap().into_inner().unwrap();
 
             TestContext {
                 synonyms: hashmap! {
@@ -660,6 +682,7 @@ mod test {
                     String::from("good")       => random_postings(rng,   1250),
                     String::from("morning")    => random_postings(rng,    125),
                 },
+                exact_words,
             }
         }
     }
@@ -1225,7 +1248,9 @@ mod test {
 
     #[test]
     fn test_min_word_len_typo() {
-        let config = TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7 };
+        let exact_words = fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap();
+        let config =
+            TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7, exact_words };
 
         assert_eq!(
             typos("hello".to_string(), true, config.clone()),
@@ -1241,5 +1266,21 @@ mod test {
             typos("verylongword".to_string(), true, config.clone()),
             QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
         );
+    }
+    #[test]
+    fn disable_typo_on_word() {
+        let query = "goodbye";
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+        let result = analyzer.analyze(query);
+
+        let tokens = result.tokens();
+        let exact_words = fst::Set::from_iter(Some("goodbye")).unwrap().into_fst().into_inner();
+        let context = TestContext { exact_words, ..Default::default() };
+        let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
+
+        assert!(matches!(
+            query_tree,
+            Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
+        ));
     }
 }

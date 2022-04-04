@@ -52,6 +52,7 @@ pub mod main_key {
     pub const AUTHORIZE_TYPOS: &str = "authorize-typos";
     pub const ONE_TYPO_WORD_LEN: &str = "one-typo-word-len";
     pub const TWO_TYPOS_WORD_LEN: &str = "two-typos-word-len";
+    pub const EXACT_WORDS: &str = "exact-words";
 }
 
 pub mod db_name {
@@ -925,6 +926,27 @@ impl Index {
         // identify 0 as being false, and anything else as true. The absence of a value is true,
         // because by default, we authorize typos.
         self.main.put::<_, Str, OwnedType<u8>>(txn, main_key::TWO_TYPOS_WORD_LEN, &val)?;
+        Ok(())
+    }
+
+    /// List the words on which typo are not allowed
+    pub fn exact_words<'t>(&self, txn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(txn, main_key::EXACT_WORDS)? {
+            Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
+            None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+        }
+    }
+
+    pub(crate) fn put_exact_words<A: AsRef<[u8]>>(
+        &self,
+        txn: &mut RwTxn,
+        words: &fst::Set<A>,
+    ) -> Result<()> {
+        self.main.put::<_, Str, ByteSlice>(
+            txn,
+            main_key::EXACT_WORDS,
+            words.as_fst().as_bytes(),
+        )?;
         Ok(())
     }
 }

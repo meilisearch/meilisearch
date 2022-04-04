@@ -5,15 +5,15 @@ mod builder;
 /// The `DocumentBatchBuilder` interface allows to write batches of documents to a writer, that can
 /// later be read by milli using the `DocumentBatchReader` interface.
 mod reader;
-mod serde;
+mod serde_impl;
 
 use std::fmt::{self, Debug};
 use std::io;
 
-use ::serde::{Deserialize, Serialize};
 use bimap::BiHashMap;
 pub use builder::DocumentBatchBuilder;
 pub use reader::DocumentBatchReader;
+use serde::{Deserialize, Serialize};
 
 use crate::FieldId;
 
