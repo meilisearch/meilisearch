@@ -6,7 +6,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use serde::Deserializer;
 use serde_json::Value;
 
-use super::serde::DocumentVisitor;
+use super::serde_impl::DocumentVisitor;
 use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
 use crate::FieldId;
 
