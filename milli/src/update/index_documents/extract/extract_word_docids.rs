@@ -34,7 +34,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory,
+        max_memory.map(|x| x / 2),
     );
 
     let mut exact_word_docids_sorter = create_sorter(
@@ -42,7 +42,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory,
+        max_memory.map(|x| x / 2),
     );
 
     let mut value_buffer = Vec::new();

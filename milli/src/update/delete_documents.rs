@@ -502,6 +502,7 @@ fn remove_from_word_docids(
             }
         }
     }
+
     Ok(())
 }
 
