@@ -9,8 +9,8 @@ use heed::{BytesDecode, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, merge_nothing, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, valid_lmdb_key,
-    CursorClonableMmap,
+    self, merge_ignore_values, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap,
+    valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
@@ -226,7 +226,7 @@ fn merge_word_docids_reader_into_fst(
     word_docids_iter: grenad::Reader<io::Cursor<ClonableMmap>>,
     exact_word_docids_iter: grenad::Reader<io::Cursor<ClonableMmap>>,
 ) -> Result<fst::Set<Vec<u8>>> {
-    let mut merger_builder = MergerBuilder::new(merge_nothing as MergeFn);
+    let mut merger_builder = MergerBuilder::new(merge_ignore_values as MergeFn);
     merger_builder.push(word_docids_iter.into_cursor()?);
     merger_builder.push(exact_word_docids_iter.into_cursor()?);
     let mut iter = merger_builder.build().into_stream_merger_iter()?;
