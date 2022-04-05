@@ -473,8 +473,6 @@ fn remove_from_word_prefix_docids(
         }
     }
 
-    drop(iter);
-
     Ok(prefixes_to_delete.into_set())
 }
 
