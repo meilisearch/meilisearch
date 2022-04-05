@@ -53,12 +53,15 @@ pub mod main_key {
     pub const ONE_TYPO_WORD_LEN: &str = "one-typo-word-len";
     pub const TWO_TYPOS_WORD_LEN: &str = "two-typos-word-len";
     pub const EXACT_WORDS: &str = "exact-words";
+    pub const EXACT_ATTRIBUTES: &str = "exact-attributes";
 }
 
 pub mod db_name {
     pub const MAIN: &str = "main";
     pub const WORD_DOCIDS: &str = "word-docids";
+    pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
+    pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
     pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
@@ -82,8 +85,15 @@ pub struct Index {
 
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
+
+    /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
+    pub exact_word_docids: Database<Str, RoaringBitmapCodec>,
+
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
+
+    /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
+    pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
 
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
@@ -118,13 +128,15 @@ impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(14);
+        options.max_dbs(16);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some(MAIN))?;
         let word_docids = env.create_database(Some(WORD_DOCIDS))?;
+        let exact_word_docids = env.create_database(Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(Some(WORD_PREFIX_DOCIDS))?;
+        let exact_word_prefix_docids = env.create_database(Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
@@ -145,7 +157,9 @@ impl Index {
             env,
             main,
             word_docids,
+            exact_word_docids,
             word_prefix_docids,
+            exact_word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
             word_prefix_pair_proximity_docids,
@@ -947,6 +961,33 @@ impl Index {
             main_key::EXACT_WORDS,
             words.as_fst().as_bytes(),
         )?;
+        Ok(())
+    }
+
+    /// Returns the exact attributes: attributes for which typo is disallowed.
+    pub fn exact_attributes<'t>(&self, txn: &'t RoTxn) -> Result<Vec<&'t str>> {
+        Ok(self
+            .main
+            .get::<_, Str, SerdeBincode<Vec<&str>>>(txn, main_key::EXACT_ATTRIBUTES)?
+            .unwrap_or_default())
+    }
+
+    /// Returns the list of exact attributes field ids.
+    pub fn exact_attributes_ids(&self, txn: &RoTxn) -> Result<HashSet<FieldId>> {
+        let attrs = self.exact_attributes(txn)?;
+        let fid_map = self.fields_ids_map(txn)?;
+        Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
+    }
+
+    /// Writes the exact attributes to the database.
+    pub(crate) fn put_exact_attributes(&self, txn: &mut RwTxn, attrs: &[&str]) -> Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(txn, main_key::EXACT_ATTRIBUTES, &attrs)?;
+        Ok(())
+    }
+
+    /// Clears the exact attributes from the store.
+    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> Result<()> {
+        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)?;
         Ok(())
     }
 }

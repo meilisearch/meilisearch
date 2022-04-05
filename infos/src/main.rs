@@ -29,6 +29,8 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     FACET_ID_STRING_DOCIDS,
     FIELD_ID_DOCID_FACET_F64S,
     FIELD_ID_DOCID_FACET_STRINGS,
+    EXACT_WORD_DOCIDS,
+    EXACT_WORD_PREFIX_DOCIDS,
     DOCUMENTS,
 ];
 
@@ -384,6 +386,8 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         field_id_word_count_docids,
         facet_id_f64_docids,
         facet_id_string_docids,
+        exact_word_docids,
+        exact_word_prefix_docids,
         field_id_docid_facet_f64s: _,
         field_id_docid_facet_strings: _,
         documents,
@@ -436,7 +440,23 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             }
         }
 
+        for result in exact_word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let (word, value) = result?;
+            heap.push(Reverse((value.len(), word.to_string(), word_docids_name)));
+            if heap.len() > limit {
+                heap.pop();
+            }
+        }
+
         for result in word_prefix_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let (word, value) = result?;
+            heap.push(Reverse((value.len(), word.to_string(), word_prefix_docids_name)));
+            if heap.len() > limit {
+                heap.pop();
+            }
+        }
+
+        for result in exact_word_prefix_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_prefix_docids_name)));
             if heap.len() > limit {
@@ -967,6 +987,8 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         facet_id_string_docids,
         field_id_docid_facet_f64s,
         field_id_docid_facet_strings,
+        exact_word_prefix_docids,
+        exact_word_docids,
         documents,
     } = index;
 
@@ -991,6 +1013,8 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             FACET_ID_STRING_DOCIDS => facet_id_string_docids.as_polymorph(),
             FIELD_ID_DOCID_FACET_F64S => field_id_docid_facet_f64s.as_polymorph(),
             FIELD_ID_DOCID_FACET_STRINGS => field_id_docid_facet_strings.as_polymorph(),
+            EXACT_WORD_DOCIDS => exact_word_docids.as_polymorph(),
+            EXACT_WORD_PREFIX_DOCIDS => exact_word_prefix_docids.as_polymorph(),
 
             DOCUMENTS => documents.as_polymorph(),
             unknown => anyhow::bail!("unknown database {:?}", unknown),

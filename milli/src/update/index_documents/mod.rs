@@ -4,11 +4,13 @@ mod transform;
 mod typed_chunk;
 
 use std::collections::HashSet;
-use std::io::{Read, Seek};
+use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
 use std::num::{NonZeroU32, NonZeroUsize};
 
 use crossbeam_channel::{Receiver, Sender};
+use heed::types::Str;
+use heed::Database;
 use log::debug;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -28,7 +30,7 @@ use crate::update::{
     self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
     WordPrefixPairProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
-use crate::{Index, Result};
+use crate::{Index, Result, RoaringBitmapCodec};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
@@ -226,6 +228,7 @@ where
         };
 
         let stop_words = self.index.stop_words(self.wtxn)?;
+        let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
@@ -255,6 +258,7 @@ where
                     geo_field_id,
                     stop_words,
                     self.indexer_config.max_positions_per_attributes,
+                    exact_attributes,
                 )
             });
 
@@ -282,6 +286,7 @@ where
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
         let mut word_docids = None;
+        let mut exact_word_docids = None;
 
         let mut databases_seen = 0;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
@@ -291,10 +296,13 @@ where
 
         for result in lmdb_writer_rx {
             let typed_chunk = match result? {
-                TypedChunk::WordDocids(chunk) => {
-                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader } => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&word_docids_reader)? };
                     word_docids = Some(cloneable_chunk);
-                    TypedChunk::WordDocids(chunk)
+                    let cloneable_chunk =
+                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                    exact_word_docids = Some(cloneable_chunk);
+                    TypedChunk::WordDocids { word_docids_reader, exact_word_docids_reader }
                 }
                 TypedChunk::WordPairProximityDocids(chunk) => {
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
@@ -346,6 +354,7 @@ where
 
         self.execute_prefix_databases(
             word_docids,
+            exact_word_docids,
             word_pair_proximity_docids,
             word_position_docids,
         )?;
@@ -357,6 +366,7 @@ where
     pub fn execute_prefix_databases(
         self,
         word_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
@@ -425,14 +435,25 @@ where
         });
 
         if let Some(word_docids) = word_docids {
-            // Run the word prefix docids update operation.
-            let mut builder = WordPrefixDocids::new(self.wtxn, self.index);
-            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
-            builder.max_memory = self.indexer_config.max_memory;
-            builder.execute(
+            execute_word_prefix_docids(
+                self.wtxn,
                 word_docids,
+                self.index.word_docids.clone(),
+                self.index.word_prefix_docids.clone(),
+                &self.indexer_config,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
+        }
+
+        if let Some(exact_word_docids) = exact_word_docids {
+            execute_word_prefix_docids(
+                self.wtxn,
+                exact_word_docids,
+                self.index.exact_word_docids.clone(),
+                self.index.exact_word_prefix_docids.clone(),
+                &self.indexer_config,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
@@ -495,6 +516,32 @@ where
 
         Ok(())
     }
+}
+
+/// Run the word prefix docids update operation.
+fn execute_word_prefix_docids(
+    txn: &mut heed::RwTxn,
+    reader: grenad::Reader<Cursor<ClonableMmap>>,
+    word_docids_db: Database<Str, RoaringBitmapCodec>,
+    word_prefix_docids_db: Database<Str, RoaringBitmapCodec>,
+    indexer_config: &IndexerConfig,
+    new_prefix_fst_words: &[String],
+    common_prefix_fst_words: &[&[String]],
+    del_prefix_fst_words: &HashSet<Vec<u8>>,
+) -> Result<()> {
+    let cursor = reader.into_cursor()?;
+    let mut builder = WordPrefixDocids::new(txn, word_docids_db, word_prefix_docids_db);
+    builder.chunk_compression_type = indexer_config.chunk_compression_type;
+    builder.chunk_compression_level = indexer_config.chunk_compression_level;
+    builder.max_nb_chunks = indexer_config.max_nb_chunks;
+    builder.max_memory = indexer_config.max_memory;
+    builder.execute(
+        cursor,
+        &new_prefix_fst_words,
+        &common_prefix_fst_words,
+        &del_prefix_fst_words,
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

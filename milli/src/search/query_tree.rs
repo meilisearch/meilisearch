@@ -1267,6 +1267,7 @@ mod test {
             QueryKind::Tolerant { typo: 2, word: "verylongword".to_string() }
         );
     }
+
     #[test]
     fn disable_typo_on_word() {
         let query = "goodbye";

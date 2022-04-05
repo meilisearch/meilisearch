@@ -26,7 +26,7 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
     as_cloneable_grenad, keep_first_prefix_value_merge_roaring_bitmaps, merge_cbo_roaring_bitmaps,
-    merge_readers, merge_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn,
+    merge_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
 use crate::{FieldId, Result};
@@ -43,6 +43,7 @@ pub(crate) fn data_from_obkv_documents(
     geo_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
+    exact_attributes: HashSet<FieldId>,
 ) -> Result<()> {
     let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
         .par_bridge()
@@ -66,7 +67,7 @@ pub(crate) fn data_from_obkv_documents(
         (docid_fid_facet_numbers_chunks, docid_fid_facet_strings_chunks),
     ) = result?;
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
@@ -76,7 +77,7 @@ pub(crate) fn data_from_obkv_documents(
         "word-pair-proximity-docids",
     );
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
@@ -86,17 +87,20 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-wordcount-docids",
     );
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<(grenad::Reader<File>, grenad::Reader<File>)>>(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
-        extract_word_docids,
+        move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
         merge_roaring_bitmaps,
-        TypedChunk::WordDocids,
+        |(word_docids_reader, exact_word_docids_reader)| TypedChunk::WordDocids {
+            word_docids_reader,
+            exact_word_docids_reader,
+        },
         "word-docids",
     );
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
@@ -106,7 +110,7 @@ pub(crate) fn data_from_obkv_documents(
         "word-position-docids",
     );
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_fid_facet_strings_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
@@ -116,7 +120,7 @@ pub(crate) fn data_from_obkv_documents(
         "field-id-facet-string-docids",
     );
 
-    spawn_extraction_task(
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_fid_facet_numbers_chunks.clone(),
         indexer.clone(),
         lmdb_writer_sx.clone(),
@@ -133,7 +137,7 @@ pub(crate) fn data_from_obkv_documents(
 /// Generated grenad chunks are merged using the merge_fn.
 /// The result of merged chunks is serialized as TypedChunk using the serialize_fn
 /// and sent into lmdb_writer_sx.
-fn spawn_extraction_task<FE, FS>(
+fn spawn_extraction_task<FE, FS, M>(
     chunks: Vec<grenad::Reader<CursorClonableMmap>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
@@ -142,19 +146,21 @@ fn spawn_extraction_task<FE, FS>(
     serialize_fn: FS,
     name: &'static str,
 ) where
-    FE: Fn(grenad::Reader<CursorClonableMmap>, GrenadParameters) -> Result<grenad::Reader<File>>
+    FE: Fn(grenad::Reader<CursorClonableMmap>, GrenadParameters) -> Result<M::Output>
         + Sync
         + Send
         + 'static,
-    FS: Fn(grenad::Reader<File>) -> TypedChunk + Sync + Send + 'static,
+    FS: Fn(M::Output) -> TypedChunk + Sync + Send + 'static,
+    M: MergeableReader + FromParallelIterator<M::Output> + Send + 'static,
+    M::Output: Send,
 {
     rayon::spawn(move || {
-        let chunks: Result<Vec<_>> =
+        let chunks: Result<M> =
             chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer.clone())).collect();
         rayon::spawn(move || match chunks {
             Ok(chunks) => {
                 debug!("merge {} database", name);
-                let reader = merge_readers(chunks, merge_fn, indexer);
+                let reader = chunks.merge(merge_fn, &indexer);
                 let _ = lmdb_writer_sx.send(reader.map(|r| serialize_fn(r)));
             }
             Err(e) => {
