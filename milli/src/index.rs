@@ -964,6 +964,7 @@ impl Index {
         Ok(())
     }
 
+    /// Returns the exact attributes: attributes for which typo is disallowed.
     pub fn exact_attributes<'t>(&self, txn: &'t RoTxn) -> Result<Vec<&'t str>> {
         Ok(self
             .main
@@ -971,17 +972,20 @@ impl Index {
             .unwrap_or_default())
     }
 
+    /// Returns the list of exact attributes field ids.
     pub fn exact_attributes_ids(&self, txn: &RoTxn) -> Result<HashSet<FieldId>> {
         let attrs = self.exact_attributes(txn)?;
         let fid_map = self.fields_ids_map(txn)?;
         Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
     }
 
+    /// Writes the exact attributes to the database.
     pub(crate) fn put_exact_attributes(&self, txn: &mut RwTxn, attrs: &[&str]) -> Result<()> {
         self.main.put::<_, Str, SerdeBincode<&[&str]>>(txn, main_key::EXACT_ATTRIBUTES, &attrs)?;
         Ok(())
     }
 
+    /// Clears the exact attributes from the store.
     pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> Result<()> {
         self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)?;
         Ok(())
