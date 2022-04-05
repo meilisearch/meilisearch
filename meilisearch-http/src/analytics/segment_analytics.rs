@@ -535,7 +535,7 @@ impl DocumentsAggregator {
             .headers()
             .get(CONTENT_TYPE)
             .map(|s| s.to_str().unwrap_or("unkown"))
-            .unwrap()
+            .unwrap_or("unkown")
             .to_string();
         ret.content_types.insert(content_type);
         ret.index_creation = index_creation;
