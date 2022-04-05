@@ -4,6 +4,8 @@ pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PrimitiveWordId};
 use meilisearch_tokenizer::token::{SeparatorKind, Token};
 
+use crate::search::matches::matching_words::PartialMatch;
+
 pub mod matching_words;
 
 const DEFAULT_CROP_SIZE: usize = 10;
@@ -106,14 +108,80 @@ pub struct Matcher<'t, 'm> {
 }
 
 impl<'t> Matcher<'t, '_> {
+    /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
+        fn compute_partial_match(
+            mut partial: PartialMatch,
+            tokens: &[Token],
+            token_position: &mut usize,
+            word_position: &mut usize,
+            matches: &mut Vec<Match>,
+        ) -> bool {
+            let mut potential_matches = vec![(*token_position, *word_position, partial.char_len())];
+            let mut t_position = 1;
+            let mut w_position = 1;
+            for token in &tokens[*token_position + 1..] {
+                if token.is_separator().is_none() {
+                    partial = match partial.match_token(&token) {
+                        // token matches the partial match, but the match is not full,
+                        // we temporarly save the current token then we try to match the next one.
+                        Some(MatchType::Partial(partial)) => {
+                            potential_matches.push((
+                                *token_position + t_position,
+                                *word_position + w_position,
+                                partial.char_len(),
+                            ));
+                            partial
+                        }
+                        // partial match is now full, we keep this matches and we advance positions
+                        Some(MatchType::Full { char_len, ids }) => {
+                            // save previously matched tokens as matches.
+                            let iter = potential_matches.into_iter().map(
+                                |(token_position, word_position, match_len)| Match {
+                                    match_len,
+                                    ids: ids.to_vec(),
+                                    word_position,
+                                    token_position,
+                                },
+                            );
+                            matches.extend(iter);
+
+                            // move word and token positions after the end of the match.
+                            *word_position += w_position;
+                            *token_position += t_position;
+
+                            // save the token that closes the partial match as a match.
+                            matches.push(Match {
+                                match_len: char_len,
+                                ids: ids.to_vec(),
+                                word_position: *word_position,
+                                token_position: *token_position,
+                            });
+
+                            // the match is complete, we return true.
+                            return true;
+                        }
+                        // no match, continue to next match.
+                        None => break,
+                    };
+                    w_position += 1;
+                }
+                t_position += 1;
+            }
+
+            // the match is not complete, we return false.
+            false
+        }
+
         let mut matches = Vec::new();
         let mut word_position = 0;
         let mut token_position = 0;
         while let Some(token) = self.tokens.get(token_position) {
             if token.is_separator().is_none() {
-                'matches: for match_type in self.matching_words.match_token(&token) {
+                for match_type in self.matching_words.match_token(&token) {
                     match match_type {
+                        // we match, we save the current token as a match,
+                        // then we continue the rest of the tokens.
                         MatchType::Full { char_len, ids } => {
                             matches.push(Match {
                                 match_len: char_len,
@@ -121,58 +189,20 @@ impl<'t> Matcher<'t, '_> {
                                 word_position,
                                 token_position,
                             });
-                            // stop on the first match
                             break;
                         }
-                        MatchType::Partial(mut partial) => {
-                            let mut potential_matches =
-                                vec![(token_position, word_position, partial.char_len())];
-                            let mut t_position = 1;
-                            let mut w_position = 1;
-                            'partials: for token in &self.tokens[token_position + 1..] {
-                                if token.is_separator().is_none() {
-                                    partial = match partial.match_token(&token) {
-                                        Some(MatchType::Partial(partial)) => {
-                                            potential_matches.push((
-                                                token_position + t_position,
-                                                word_position + w_position,
-                                                partial.char_len(),
-                                            ));
-                                            partial
-                                        }
-                                        // partial match is now full, we keep this matches and we advance positions
-                                        Some(MatchType::Full { char_len, ids }) => {
-                                            let iter = potential_matches.into_iter().map(
-                                                |(token_position, word_position, match_len)| {
-                                                    Match {
-                                                        match_len,
-                                                        ids: ids.to_vec(),
-                                                        word_position,
-                                                        token_position,
-                                                    }
-                                                },
-                                            );
-
-                                            matches.extend(iter);
-
-                                            word_position += w_position;
-                                            token_position += t_position;
-
-                                            matches.push(Match {
-                                                match_len: char_len,
-                                                ids: ids.to_vec(),
-                                                word_position,
-                                                token_position,
-                                            });
-
-                                            break 'matches;
-                                        }
-                                        // no match, continue to next match.
-                                        None => break 'partials,
-                                    };
-                                    w_position += 1;
-                                }
-                                t_position += 1;
+                        // we match partially, iterate over next tokens to check if we can complete the match.
+                        MatchType::Partial(partial) => {
+                            // if match is completed, we break the matching loop over the current token,
+                            // then we continue the rest of the tokens.
+                            if compute_partial_match(
+                                partial,
+                                &self.tokens,
+                                &mut token_position,
+                                &mut word_position,
+                                &mut matches,
+                            ) {
+                                break;
                             }
                         }
                     }
@@ -186,6 +216,7 @@ impl<'t> Matcher<'t, '_> {
         self
     }
 
+    /// Returns boundaries of the words that match the query.
     pub fn matches(&mut self) -> Vec<MatchBounds> {
         match &self.matches {
             None => self.compute_matches().matches(),
@@ -199,30 +230,37 @@ impl<'t> Matcher<'t, '_> {
         }
     }
 
+    /// Returns token position of the window to crop around.
     fn token_crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
+        // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
         let last_match_word_position = matches.last().map(|m| m.word_position).unwrap_or(0);
         let last_match_token_position = matches.last().map(|m| m.token_position).unwrap_or(0);
 
-        // TODO: buggy if no match and first token is a sepparator
+        // matches needs to be counted in the crop len.
         let mut remaining_words =
             self.crop_size + first_match_word_position - last_match_word_position;
         // if first token is a word, then remove 1 to remaining_words.
         if let Some(None) = self.tokens.get(first_match_token_position).map(|t| t.is_separator()) {
             remaining_words -= 1;
         }
+
+        // we start from matches positions, then we expand the window in both sides.
         let mut first_token_position = first_match_token_position;
         let mut last_token_position = last_match_token_position;
-
         while remaining_words > 0 {
             match (
+                // try to expand left
                 first_token_position.checked_sub(1).and_then(|i| self.tokens.get(i)),
+                // try to expand right
                 last_token_position.checked_add(1).and_then(|i| self.tokens.get(i)),
             ) {
+                // we can expand both sides.
                 (Some(ft), Some(lt)) => {
                     match (ft.is_separator(), lt.is_separator()) {
-                        // if they are both separators and are the same kind then advance both
+                        // if they are both separators and are the same kind then advance both,
+                        // or expand in the soft separator separator side.
                         (Some(f_kind), Some(s_kind)) => {
                             if f_kind == s_kind {
                                 first_token_position -= 1;
@@ -233,17 +271,18 @@ impl<'t> Matcher<'t, '_> {
                                 first_token_position -= 1;
                             }
                         }
-                        // left is a word, advance left
+                        // if one of the tokens is a word, we expend in the side of the word.
+                        // left is a word, advance left.
                         (None, Some(_)) => {
                             first_token_position -= 1;
                             remaining_words -= 1;
                         }
-                        // right is a word, advance right
+                        // right is a word, advance right.
                         (Some(_), None) => {
                             last_token_position += 1;
                             remaining_words -= 1;
                         }
-                        // both are words, advance left then right if remaining_word > 0
+                        // both are words, advance left then right if remaining_word > 0.
                         (None, None) => {
                             first_token_position -= 1;
                             remaining_words -= 1;
@@ -277,6 +316,10 @@ impl<'t> Matcher<'t, '_> {
         (first_token_position, last_token_position)
     }
 
+    /// Compute the score of a match interval:
+    /// 1) count unique matches
+    /// 2) calculate distance between matches
+    /// 3) count ordered matches
     fn match_interval_score(&self, matches: &[Match]) -> (i16, i16, i16) {
         let mut ids: Vec<PrimitiveWordId> = Vec::with_capacity(matches.len());
         let mut order_score = 0;
@@ -305,14 +348,20 @@ impl<'t> Matcher<'t, '_> {
         (uniq_score, distance_score, order_score)
     }
 
+    /// Returns the matches interval where the score computed by match_interval_score is maximal.
     fn find_best_match_interval<'a>(&self, matches: &'a [Match]) -> &'a [Match] {
+        // we compute the matches interval if we have at least 2 matches.
         if matches.len() > 1 {
+            // positions of the first and the last match of the best matches interval in `matches`.
             let mut best_interval = (0, 0);
             let mut best_interval_score = self.match_interval_score(&matches[0..=0]);
+            // current interval positions.
             let mut interval_first = 0;
             let mut interval_last = 0;
             for (index, next_match) in matches.iter().enumerate().skip(1) {
-                // if next match would make interval gross more than crop_size
+                // if next match would make interval gross more than crop_size,
+                // we compare the current interval with the best one,
+                // then we increase `interval_first` until next match can be added.
                 if next_match.word_position - matches[interval_first].word_position
                     >= self.crop_size
                 {
@@ -325,7 +374,7 @@ impl<'t> Matcher<'t, '_> {
                         best_interval_score = interval_score;
                     }
 
-                    // advance start of the interval while interval is longer than crop_size
+                    // advance start of the interval while interval is longer than crop_size.
                     while next_match.word_position - matches[interval_first].word_position
                         >= self.crop_size
                     {
@@ -335,6 +384,7 @@ impl<'t> Matcher<'t, '_> {
                 interval_last = index;
             }
 
+            // compute the last interval score and compare it to the best one.
             let interval_score =
                 self.match_interval_score(&matches[interval_first..=interval_last]);
             if interval_score > best_interval_score {
@@ -347,6 +397,7 @@ impl<'t> Matcher<'t, '_> {
         }
     }
 
+    /// Returns the bounds in byte index of the crop window.
     fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
         let match_interval = self.find_best_match_interval(matches);
 
@@ -357,12 +408,13 @@ impl<'t> Matcher<'t, '_> {
         (byte_start, byte_end)
     }
 
+    // Returns the formatted version of the original text.
     pub fn format(&mut self, highlight: bool, crop: bool) -> Cow<'t, str> {
         // If 0 it will be considered null and thus not crop the field
         // https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
         let crop = crop && self.crop_size > 0;
         if !highlight && !crop {
-            // compute matches is not needed if no highlight or crop is requested.
+            // compute matches is not needed if no highlight nor crop is requested.
             Cow::Borrowed(self.text)
         } else {
             match &self.matches {
@@ -397,12 +449,14 @@ impl<'t> Matcher<'t, '_> {
                                 .char_indices()
                                 .enumerate()
                                 .find(|(i, _)| *i == m.match_len)
-                                .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start)
-                                .min(token.byte_end);
+                                .map_or(token.byte_end, |(_, (i, _))| i + token.byte_start);
                             formatted.push(self.highlight_prefix);
                             formatted.push(&self.text[token.byte_start..highlight_byte_index]);
                             formatted.push(self.highlight_suffix);
-                            formatted.push(&self.text[highlight_byte_index..token.byte_end]);
+                            // if it's a prefix highlight, we put the end of the word after the highlight marker.
+                            if highlight_byte_index < token.byte_end {
+                                formatted.push(&self.text[highlight_byte_index..token.byte_end]);
+                            }
 
                             byte_index = token.byte_end;
                         }
