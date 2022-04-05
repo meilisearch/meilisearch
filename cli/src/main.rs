@@ -102,7 +102,7 @@ impl Settings {
         let exact_attributes = index.exact_attributes(&txn)?;
 
         println!(
-            "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\nexact attributes:\n{}",
+            "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\nexact attributes:\n{}\n",
             displayed_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
             searchable_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
             filterable_attributes.join("\n\t"),
