@@ -12,7 +12,7 @@ use super::helpers::{
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::index_documents::helpers::read_u32_ne_bytes;
-use crate::{field_id_from_position, FieldId, Result};
+use crate::{relative_from_absolute_position, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
 ///
@@ -67,7 +67,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
                 if added_to_exact && added_to_word_docids {
                     break;
                 }
-                let fid = field_id_from_position(position);
+                let (fid, _) = relative_from_absolute_position(position);
                 if exact_attributes.contains(&fid) && !added_to_exact {
                     exact_word_docids_sorter.insert(word_bytes, &value_buffer)?;
                     added_to_exact = true;

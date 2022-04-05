@@ -74,10 +74,6 @@ pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosi
     (field_id as u32) << 16 | (relative as u32)
 }
 
-pub fn field_id_from_position(position: u32) -> FieldId {
-    (position >> 16 & 0xffff) as u16
-}
-
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
     displayed_fields: &[FieldId],
