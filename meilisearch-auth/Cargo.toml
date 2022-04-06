@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 enum-iterator = "0.7.0"
 meilisearch-error = { path = "../meilisearch-error" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.24.1" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.25.0" }
 rand = "0.8.4"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }

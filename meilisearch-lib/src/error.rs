@@ -41,6 +41,7 @@ impl ErrorCode for MilliError<'_> {
                     UserError::CriterionError(_) => Code::InvalidRankingRule,
                     UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
                     UserError::SortError(_) => Code::Sort,
+                    UserError::InvalidMinTypoWordLenSetting(_, _) => unreachable!(),
                 }
             }
         }
