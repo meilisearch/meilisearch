@@ -182,10 +182,17 @@ impl Index {
             .into_iter()
             .collect();
 
+        let disabled_attributes = self
+            .exact_attributes(txn)?
+            .into_iter()
+            .map(String::from)
+            .collect();
+
         let typo_tolerance = TypoSettings {
             enabled: Setting::Set(self.authorize_typos(txn)?),
             min_word_length_for_typo: Setting::Set(min_typo_word_len),
             disable_on_words: Setting::Set(disabled_words),
+            disable_on_attributes: Setting::Set(disabled_attributes),
         };
 
         Ok(Settings {
