@@ -37,14 +37,33 @@ pub struct Checked;
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Unchecked;
 
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+pub struct MinWordLengthTypoSetting {
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub one_typo: Setting<u8>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub two_typos: Setting<u8>,
+}
+
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct TypoSettings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub enabled: Setting<bool>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub min_word_length_for_typo: Setting<MinWordLengthTypoSetting>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub disable_on_words: Setting<BTreeSet<String>>,
 }
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
@@ -352,14 +371,44 @@ pub fn apply_settings_to_builder(
     }
 
     match settings.typo {
-        Setting::Set(ref value) => match value.enabled {
-            Setting::Set(val) => builder.set_autorize_typos(val),
-            Setting::Reset => builder.reset_authorize_typos(),
-            Setting::NotSet => (),
-        },
+        Setting::Set(ref value) => {
+            match value.enabled {
+                Setting::Set(val) => builder.set_autorize_typos(val),
+                Setting::Reset => builder.reset_authorize_typos(),
+                Setting::NotSet => (),
+            }
+            match value.min_word_length_for_typo {
+                Setting::Set(ref setting) => {
+                    match setting.one_typo {
+                        Setting::Set(val) => builder.set_min_word_len_one_typo(val),
+                        Setting::Reset => builder.reset_min_word_len_one_typo(),
+                        Setting::NotSet => (),
+                    }
+                    match setting.two_typos {
+                        Setting::Set(val) => builder.set_min_word_len_two_typos(val),
+                        Setting::Reset => builder.reset_min_word_len_two_typos(),
+                        Setting::NotSet => (),
+                    }
+                }
+                Setting::Reset => {
+                    builder.reset_min_word_len_one_typo();
+                    builder.reset_min_word_len_two_typos();
+                }
+                Setting::NotSet => (),
+            }
+            match value.disable_on_words {
+                Setting::Set(ref words) => {
+                    builder.set_exact_words(words.clone());
+                }
+                Setting::Reset => builder.reset_exact_words(),
+                Setting::NotSet => (),
+            }
+        }
         Setting::Reset => {
             // all typo settings need to be reset here.
             builder.reset_authorize_typos();
+            builder.reset_min_word_len_one_typo();
+            builder.reset_min_word_len_two_typos();
         }
         Setting::NotSet => (),
     }

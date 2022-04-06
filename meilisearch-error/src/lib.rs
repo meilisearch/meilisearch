@@ -120,6 +120,7 @@ pub enum Code {
     IndexAlreadyExists,
     IndexNotFound,
     InvalidIndexUid,
+    InvalidMinWordLengthForTypo,
 
     // invalid state error
     InvalidState,
@@ -270,6 +271,9 @@ impl Code {
             }
             InvalidApiKeyDescription => {
                 ErrCode::invalid("invalid_api_key_description", StatusCode::BAD_REQUEST)
+            }
+            InvalidMinWordLengthForTypo => {
+                ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
             }
         }
     }
