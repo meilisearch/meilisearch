@@ -230,7 +230,7 @@ impl<'t> Matcher<'t, '_> {
         }
     }
 
-    /// Returns token position of the window to crop around.
+    /// Returns the bounds in byte index of the crop window.
     fn token_crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
@@ -241,70 +241,64 @@ impl<'t> Matcher<'t, '_> {
         // matches needs to be counted in the crop len.
         let mut remaining_words =
             self.crop_size + first_match_word_position - last_match_word_position;
-        // if first token is a word, then remove 1 to remaining_words.
-        if let Some(None) = self.tokens.get(first_match_token_position).map(|t| t.is_separator()) {
-            remaining_words -= 1;
-        }
 
-        // we start from matches positions, then we expand the window in both sides.
-        let mut first_token_position = first_match_token_position;
-        let mut last_token_position = last_match_token_position;
+        let mut before_tokens = self.tokens[..first_match_token_position].iter().rev().peekable();
+        let mut after_tokens = self.tokens[last_match_token_position..].iter().peekable();
+
         while remaining_words > 0 {
-            match (
-                // try to expand left
-                first_token_position.checked_sub(1).and_then(|i| self.tokens.get(i)),
-                // try to expand right
-                last_token_position.checked_add(1).and_then(|i| self.tokens.get(i)),
-            ) {
+            let before_token = before_tokens.peek().map(|t| t.is_separator());
+            let after_token = after_tokens.peek().map(|t| t.is_separator());
+
+            match (before_token, after_token) {
                 // we can expand both sides.
-                (Some(ft), Some(lt)) => {
-                    match (ft.is_separator(), lt.is_separator()) {
+                (Some(before_token), Some(after_token)) => {
+                    match (before_token, after_token) {
                         // if they are both separators and are the same kind then advance both,
                         // or expand in the soft separator separator side.
-                        (Some(f_kind), Some(s_kind)) => {
-                            if f_kind == s_kind {
-                                first_token_position -= 1;
-                                last_token_position += 1;
-                            } else if f_kind == SeparatorKind::Hard {
-                                last_token_position += 1;
+                        (Some(before_token_kind), Some(after_token_kind)) => {
+                            if before_token_kind == after_token_kind {
+                                before_tokens.next();
+                                after_tokens.next();
+                            } else if before_token_kind == SeparatorKind::Hard {
+                                after_tokens.next();
                             } else {
-                                first_token_position -= 1;
+                                before_tokens.next();
                             }
                         }
                         // if one of the tokens is a word, we expend in the side of the word.
                         // left is a word, advance left.
                         (None, Some(_)) => {
-                            first_token_position -= 1;
+                            before_tokens.next();
                             remaining_words -= 1;
                         }
                         // right is a word, advance right.
                         (Some(_), None) => {
-                            last_token_position += 1;
+                            after_tokens.next();
                             remaining_words -= 1;
                         }
                         // both are words, advance left then right if remaining_word > 0.
                         (None, None) => {
-                            first_token_position -= 1;
+                            before_tokens.next();
                             remaining_words -= 1;
 
                             if remaining_words > 0 {
-                                last_token_position += 1;
+                                after_tokens.next();
                                 remaining_words -= 1;
                             }
                         }
                     }
                 }
                 // the end of the text is reached, advance left.
-                (Some(ft), None) => {
-                    first_token_position -= 1;
-                    if ft.is_separator().is_none() {
+                (Some(before_token), None) => {
+                    before_tokens.next();
+                    if before_token.is_none() {
                         remaining_words -= 1;
                     }
                 }
                 // the start of the text is reached, advance right.
-                (None, Some(lt)) => {
-                    last_token_position += 1;
-                    if lt.is_separator().is_none() {
+                (None, Some(after_token)) => {
+                    after_tokens.next();
+                    if after_token.is_none() {
                         remaining_words -= 1;
                     }
                 }
@@ -313,7 +307,10 @@ impl<'t> Matcher<'t, '_> {
             }
         }
 
-        (first_token_position, last_token_position)
+        let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
+        let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
+
+        (crop_byte_start, crop_byte_end)
     }
 
     /// Compute the score of a match interval:
@@ -401,11 +398,7 @@ impl<'t> Matcher<'t, '_> {
     fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
         let match_interval = self.find_best_match_interval(matches);
 
-        let (first_token_position, last_token_position) = self.token_crop_bounds(match_interval);
-
-        let byte_start = self.tokens.get(first_token_position).map_or(0, |t| t.byte_start);
-        let byte_end = self.tokens.get(last_token_position).map_or(byte_start, |t| t.byte_end);
-        (byte_start, byte_end)
+        self.token_crop_bounds(match_interval)
     }
 
     // Returns the formatted version of the original text.
