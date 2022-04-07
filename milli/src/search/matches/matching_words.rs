@@ -26,11 +26,14 @@ impl MatchingWords {
         Self { inner: matching_words }
     }
 
+    /// Returns an iterator over terms that match or partially match the given token.
     pub fn match_token<'a, 'b>(&'a self, token: &'b Token<'b>) -> MatchesIter<'a, 'b> {
         MatchesIter { inner: Box::new(self.inner.iter()), token }
     }
 }
 
+/// Iterator over terms that match the given token,
+/// This allow to lazily evaluate matches.
 pub struct MatchesIter<'a, 'b> {
     inner: Box<dyn Iterator<Item = &'a (Vec<MatchingWord>, Vec<PrimitiveWordId>)> + 'a>,
     token: &'b Token<'b>,
@@ -60,7 +63,10 @@ impl<'a> Iterator for MatchesIter<'a, '_> {
     }
 }
 
+/// Id of a matching term corespounding to a word written by the end user.
 pub type PrimitiveWordId = u8;
+
+/// Structure used to match a specific term.
 pub struct MatchingWord {
     pub dfa: DFA,
     pub word: String,
@@ -91,6 +97,7 @@ impl MatchingWord {
         Self { dfa, word, typo, prefix }
     }
 
+    /// Returns the lenght in chars of the match in case of the token matches the term.
     pub fn match_token(&self, token: &Token) -> Option<usize> {
         match self.dfa.eval(token.text()) {
             Distance::Exact(t) if t <= self.typo => {
@@ -106,12 +113,17 @@ impl MatchingWord {
     }
 }
 
+/// A given token can partially match a query word for several reasons:
+/// - split words
+/// - multi-word synonyms
+/// In these cases we need to match consecutively several tokens to consider that the match is full.
 #[derive(Debug, PartialEq)]
 pub enum MatchType<'a> {
     Full { char_len: usize, ids: &'a [PrimitiveWordId] },
     Partial(PartialMatch<'a>),
 }
 
+/// Structure helper to match several tokens in a row in order to complete a partial match.
 #[derive(Debug, PartialEq)]
 pub struct PartialMatch<'a> {
     matching_words: &'a [MatchingWord],
@@ -120,6 +132,10 @@ pub struct PartialMatch<'a> {
 }
 
 impl<'a> PartialMatch<'a> {
+    /// Returns:
+    /// - None if the given token breaks the partial match
+    /// - Partial if the given token matches the partial match but doesn't complete it
+    /// - Full if the given token completes the partial match
     pub fn match_token(self, token: &Token) -> Option<MatchType<'a>> {
         self.matching_words[0].match_token(token).map(|char_len| {
             if self.matching_words.len() > 1 {
