@@ -30,9 +30,24 @@ const fn default_search_limit() -> usize {
     DEFAULT_SEARCH_LIMIT
 }
 
-pub const DEFAULT_CROP_LENGTH: usize = 200;
+pub const DEFAULT_CROP_LENGTH: usize = 10;
 pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
+}
+
+const DEFAULT_CROP_MARKER: &str = "…";
+pub fn default_crop_marker() -> String {
+    DEFAULT_CROP_MARKER.to_string()
+}
+
+const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
+pub fn default_highlight_pre_tag() -> String {
+    DEFAULT_HIGHLIGHT_PRE_TAG.to_string()
+}
+
+const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
+pub fn default_highlight_post_tag() -> String {
+    DEFAULT_HIGHLIGHT_POST_TAG.to_string()
 }
 
 /// The maximimum number of results that the engine
@@ -57,6 +72,12 @@ pub struct SearchQuery {
     pub filter: Option<Value>,
     pub sort: Option<Vec<String>>,
     pub facets_distribution: Option<Vec<String>>,
+    #[serde(default = "default_highlight_pre_tag")]
+    pub highlight_pre_tag: String,
+    #[serde(default = "default_highlight_post_tag")]
+    pub highlight_post_tag: String,
+    #[serde(default = "default_crop_marker")]
+    pub crop_marker: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -192,7 +213,11 @@ impl Index {
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
 
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (query.highlight_pre_tag, query.highlight_post_tag),
+            query.crop_marker,
+        );
 
         let mut documents = Vec::new();
 
@@ -514,12 +539,21 @@ impl Matcher for MatchingWords {
 
 struct Formatter<'a, A> {
     analyzer: &'a Analyzer<'a, A>,
-    marks: (String, String),
+    highlight_tags: (String, String),
+    crop_marker: String,
 }
 
 impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
-    pub fn new(analyzer: &'a Analyzer<'a, A>, marks: (String, String)) -> Self {
-        Self { analyzer, marks }
+    pub fn new(
+        analyzer: &'a Analyzer<'a, A>,
+        highlight_tags: (String, String),
+        crop_marker: String,
+    ) -> Self {
+        Self {
+            analyzer,
+            highlight_tags,
+            crop_marker,
+        }
     }
 
     fn format_value(
@@ -583,10 +617,13 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     ) -> String {
         let analyzed = self.analyzer.analyze(&s);
 
-        let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
-            Some(crop_len) => {
+        let mut tokens = analyzed.reconstruct();
+        let mut crop_marker_before = false;
+
+        let tokens_interval: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
+            Some(crop_len) if crop_len > 0 => {
                 let mut buffer = Vec::new();
-                let mut tokens = analyzed.reconstruct().peekable();
+                let mut tokens = tokens.by_ref().peekable();
 
                 while let Some((word, token)) =
                     tokens.next_if(|(_, token)| matcher.matches(token).is_none())
@@ -596,16 +633,35 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
                 match tokens.next() {
                     Some(token) => {
-                        let mut total_len: usize = buffer.iter().map(|(word, _)| word.len()).sum();
-                        let before_iter = buffer.into_iter().skip_while(move |(word, _)| {
-                            total_len -= word.len();
-                            total_len >= crop_len
+                        let mut total_count: usize = buffer
+                            .iter()
+                            .filter(|(_, token)| token.is_separator().is_none())
+                            .count();
+
+                        let crop_len_before = crop_len / 2;
+                        // check if start will be cropped.
+                        crop_marker_before = total_count > crop_len_before;
+
+                        let before_iter = buffer.into_iter().skip_while(move |(_, token)| {
+                            if token.is_separator().is_none() {
+                                total_count -= 1;
+                            }
+                            total_count >= crop_len_before
                         });
 
+                        // rebalance remaining word count after the match.
+                        let crop_len_after = if crop_marker_before {
+                            crop_len.saturating_sub(crop_len_before + 1)
+                        } else {
+                            crop_len.saturating_sub(total_count + 1)
+                        };
+
                         let mut taken_after = 0;
-                        let after_iter = tokens.take_while(move |(word, _)| {
-                            let take = taken_after < crop_len;
-                            taken_after += word.chars().count();
+                        let after_iter = tokens.take_while(move |(_, token)| {
+                            let take = taken_after < crop_len_after;
+                            if token.is_separator().is_none() {
+                                taken_after += 1;
+                            }
                             take
                         });
 
@@ -616,38 +672,57 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                     // If no word matches in the attribute
                     None => {
                         let mut count = 0;
-                        let iter = buffer.into_iter().take_while(move |(word, _)| {
-                            let take = count < crop_len;
-                            count += word.len();
-                            take
-                        });
+                        let mut tokens = buffer.into_iter();
+                        let mut out: String = tokens
+                            .by_ref()
+                            .take_while(move |(_, token)| {
+                                let take = count < crop_len;
+                                if token.is_separator().is_none() {
+                                    count += 1;
+                                }
+                                take
+                            })
+                            .map(|(word, _)| word)
+                            .collect();
 
-                        Box::new(iter)
+                        // if there are remaining tokens after formatted interval,
+                        // put a crop marker at the end.
+                        if tokens.next().is_some() {
+                            out.push_str(&self.crop_marker);
+                        }
+
+                        return out;
                     }
                 }
             }
-            None => Box::new(analyzed.reconstruct()),
+            _ => Box::new(tokens.by_ref()),
         };
 
-        tokens.fold(String::new(), |mut out, (word, token)| {
+        let out = if crop_marker_before {
+            self.crop_marker.clone()
+        } else {
+            String::new()
+        };
+
+        let mut out = tokens_interval.fold(out, |mut out, (word, token)| {
             // Check if we need to do highlighting or computed matches before calling
             // Matcher::match since the call is expensive.
             if format_options.highlight && token.is_word() {
                 if let Some(length) = matcher.matches(&token) {
                     match word.get(..length).zip(word.get(length..)) {
                         Some((head, tail)) => {
-                            out.push_str(&self.marks.0);
+                            out.push_str(&self.highlight_tags.0);
                             out.push_str(head);
-                            out.push_str(&self.marks.1);
+                            out.push_str(&self.highlight_tags.1);
                             out.push_str(tail);
                         }
                         // if we are in the middle of a character
                         // or if all the word should be highlighted,
                         // we highlight the complete word.
                         None => {
-                            out.push_str(&self.marks.0);
+                            out.push_str(&self.highlight_tags.0);
                             out.push_str(word);
-                            out.push_str(&self.marks.1);
+                            out.push_str(&self.highlight_tags.1);
                         }
                     }
                     return out;
@@ -655,7 +730,15 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             }
             out.push_str(word);
             out
-        })
+        });
+
+        // if there are remaining tokens after formatted interval,
+        // put a crop marker at the end.
+        if tokens.next().is_some() {
+            out.push_str(&self.crop_marker);
+        }
+
+        out
     }
 }
 
@@ -708,7 +791,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let id = fields.insert("test").unwrap();
@@ -743,7 +830,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -807,7 +898,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -894,7 +989,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -958,7 +1057,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1019,7 +1122,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1062,7 +1169,7 @@ mod test {
         );
 
         let mut matching_words = BTreeMap::new();
-        matching_words.insert("potter", Some(6));
+        matching_words.insert("potter", Some(3));
 
         let value = format_fields(
             &fields,
@@ -1073,17 +1180,21 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and");
+        assert_eq!(value["title"], "Harry Potter…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
     #[test]
-    fn formatted_with_crop_10() {
+    fn formatted_with_crop_5() {
         let stop_words = fst::Set::default();
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1114,7 +1225,7 @@ mod test {
             title,
             FormatOptions {
                 highlight: false,
-                crop: Some(10),
+                crop: Some(5),
             },
         );
         formatted_options.insert(
@@ -1126,7 +1237,7 @@ mod test {
         );
 
         let mut matching_words = BTreeMap::new();
-        matching_words.insert("potter", Some(6));
+        matching_words.insert("potter", Some(5));
 
         let value = format_fields(
             &fields,
@@ -1137,7 +1248,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and the Half");
+        assert_eq!(value["title"], "Harry Potter and the Half…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1147,7 +1258,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1201,7 +1316,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Potter");
+        assert_eq!(value["title"], "Harry Potter and the Half-Blood Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1211,7 +1326,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1242,7 +1361,7 @@ mod test {
             title,
             FormatOptions {
                 highlight: false,
-                crop: Some(6),
+                crop: Some(1),
             },
         );
         formatted_options.insert(
@@ -1265,7 +1384,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry ");
+        assert_eq!(value["title"], "Harry…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1275,7 +1394,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1329,7 +1452,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], " <em>and</em> ");
+        assert_eq!(value["title"], "…<em>and</em>…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1339,7 +1462,11 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
@@ -1370,7 +1497,7 @@ mod test {
             title,
             FormatOptions {
                 highlight: true,
-                crop: Some(9),
+                crop: Some(4),
             },
         );
         formatted_options.insert(
@@ -1393,7 +1520,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
+        assert_eq!(value["title"], "…the Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 

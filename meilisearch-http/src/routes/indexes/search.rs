@@ -2,7 +2,10 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_error::ResponseError;
-use meilisearch_lib::index::{default_crop_length, SearchQuery, DEFAULT_SEARCH_LIMIT};
+use meilisearch_lib::index::{
+    default_crop_length, default_crop_marker, default_highlight_post_tag,
+    default_highlight_pre_tag, SearchQuery, DEFAULT_SEARCH_LIMIT,
+};
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
 use serde_json::Value;
@@ -35,6 +38,12 @@ pub struct SearchQueryGet {
     #[serde(default = "Default::default")]
     matches: bool,
     facets_distribution: Option<String>,
+    #[serde(default = "default_highlight_pre_tag")]
+    highlight_pre_tag: String,
+    #[serde(default = "default_highlight_post_tag")]
+    highlight_post_tag: String,
+    #[serde(default = "default_crop_marker")]
+    crop_marker: String,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -77,6 +86,9 @@ impl From<SearchQueryGet> for SearchQuery {
             sort,
             matches: other.matches,
             facets_distribution,
+            highlight_pre_tag: other.highlight_pre_tag,
+            highlight_post_tag: other.highlight_post_tag,
+            crop_marker: other.crop_marker,
         }
     }
 }

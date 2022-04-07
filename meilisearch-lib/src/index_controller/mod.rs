@@ -651,6 +651,9 @@ mod test {
 
     use crate::index::error::Result as IndexResult;
     use crate::index::Index;
+    use crate::index::{
+        default_crop_marker, default_highlight_post_tag, default_highlight_pre_tag,
+    };
     use crate::index_resolver::index_store::MockIndexStore;
     use crate::index_resolver::meta_store::MockIndexMetaStore;
     use crate::index_resolver::IndexResolver;
@@ -691,6 +694,9 @@ mod test {
             filter: None,
             sort: None,
             facets_distribution: None,
+            highlight_pre_tag: default_highlight_pre_tag(),
+            highlight_post_tag: default_highlight_post_tag(),
+            crop_marker: default_crop_marker(),
         };
 
         let result = SearchResult {
