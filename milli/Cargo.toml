@@ -14,7 +14,7 @@ crossbeam-channel = "0.5.2"
 either = "1.6.1"
 fst = "0.4.7"
 fxhash = "0.2.1"
-flatten-serde-json = "0.1.0"
+flatten-serde-json = { path = "../flatten-serde-json" }
 grenad = { version = "0.4.1", default-features = false, features = ["tempfile"] }
 geoutils = "0.4.1"
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
