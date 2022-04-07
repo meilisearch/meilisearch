@@ -30,7 +30,7 @@ use crate::update::{
     self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
     WordPrefixPairProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
-use crate::{Index, Result, RoaringBitmapCodec};
+use crate::{Index, Result, RoaringBitmapCodec, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
@@ -94,15 +94,16 @@ where
         indexer_config: &'a IndexerConfig,
         config: IndexDocumentsConfig,
         progress: F,
-    ) -> IndexDocuments<'t, 'u, 'i, 'a, F> {
+    ) -> Result<IndexDocuments<'t, 'u, 'i, 'a, F>> {
         let transform = Some(Transform::new(
+            wtxn,
             &index,
             indexer_config,
             config.update_method,
             config.autogenerate_docids,
-        ));
+        )?);
 
-        IndexDocuments {
+        Ok(IndexDocuments {
             transform,
             config,
             indexer_config,
@@ -110,7 +111,7 @@ where
             wtxn,
             index,
             added_documents: 0,
-        }
+        })
     }
 
     /// Adds a batch of documents to the current builder.
@@ -151,6 +152,10 @@ where
             .take()
             .expect("Invalid document addition state")
             .output_from_sorter(self.wtxn, &self.progress)?;
+
+        let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
+        self.index.put_faceted_fields(self.wtxn, &new_facets)?;
+
         let indexed_documents = output.documents_count as u64;
         let number_of_documents = self.execute_raw(output)?;
 
@@ -171,7 +176,8 @@ where
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
-            documents_file,
+            original_documents,
+            flattened_documents,
         } = output;
 
         // The fields_ids_map is put back to the store now so the rest of the transaction sees an
@@ -197,7 +203,8 @@ where
             }
         };
 
-        let documents_file = grenad::Reader::new(documents_file)?;
+        let original_documents = grenad::Reader::new(original_documents)?;
+        let flattened_documents = grenad::Reader::new(flattened_documents)?;
 
         // create LMDB writer channel
         let (lmdb_writer_sx, lmdb_writer_rx): (
@@ -213,13 +220,20 @@ where
             self.index.searchable_fields_ids(self.wtxn)?.map(HashSet::from_iter);
         // get filterable fields for facet databases
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
-        // get the fid of the `_geo` field.
-        let geo_field_id = match self.index.fields_ids_map(self.wtxn)?.id("_geo") {
+        // get the fid of the `_geo.lat` and `_geo.lng` fields.
+        let geo_fields_ids = match self.index.fields_ids_map(self.wtxn)?.id("_geo") {
             Some(gfid) => {
                 let is_sortable = self.index.sortable_fields_ids(self.wtxn)?.contains(&gfid);
                 let is_filterable = self.index.filterable_fields_ids(self.wtxn)?.contains(&gfid);
+                // if `_geo` is faceted then we get the `lat` and `lng`
                 if is_sortable || is_filterable {
-                    Some(gfid)
+                    let field_ids = self
+                        .index
+                        .fields_ids_map(self.wtxn)?
+                        .insert("_geo.lat")
+                        .zip(self.index.fields_ids_map(self.wtxn)?.insert("_geo.lng"))
+                        .ok_or(UserError::AttributeLimitReached)?;
+                    Some(field_ids)
                 } else {
                     None
                 }
@@ -239,28 +253,38 @@ where
                 max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
             };
 
-            // split obkv file into several chuncks
-            let chunk_iter = grenad_obkv_into_chunks(
-                documents_file,
+            // split obkv file into several chunks
+            let original_chunk_iter = grenad_obkv_into_chunks(
+                original_documents,
                 params.clone(),
                 self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
             );
 
-            let result = chunk_iter.map(|chunk_iter| {
-                // extract all databases from the chunked obkv douments
-                extract::data_from_obkv_documents(
-                    chunk_iter,
-                    params,
-                    lmdb_writer_sx.clone(),
-                    searchable_fields,
-                    faceted_fields,
-                    primary_key_id,
-                    geo_field_id,
-                    stop_words,
-                    self.indexer_config.max_positions_per_attributes,
-                    exact_attributes,
-                )
-            });
+            // split obkv file into several chunks
+            let flattened_chunk_iter = grenad_obkv_into_chunks(
+                flattened_documents,
+                params.clone(),
+                self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
+            );
+
+            let result = original_chunk_iter
+                .and_then(|original_chunk_iter| Ok((original_chunk_iter, flattened_chunk_iter?)))
+                .map(|(original_chunk, flattened_chunk)| {
+                    // extract all databases from the chunked obkv douments
+                    extract::data_from_obkv_documents(
+                        original_chunk,
+                        flattened_chunk,
+                        params,
+                        lmdb_writer_sx.clone(),
+                        searchable_fields,
+                        faceted_fields,
+                        primary_key_id,
+                        geo_fields_ids,
+                        stop_words,
+                        self.indexer_config.max_positions_per_attributes,
+                        exact_attributes,
+                    )
+                });
 
             if let Err(e) = result {
                 let _ = lmdb_writer_sx.send(Err(e));
@@ -550,6 +574,7 @@ mod tests {
 
     use big_s::S;
     use heed::EnvOpenOptions;
+    use maplit::hashset;
 
     use super::*;
     use crate::documents::DocumentBatchBuilder;
@@ -574,7 +599,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -589,7 +615,8 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = documents!([ { "id": 1, "name": "updated kevin" } ]);
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -607,7 +634,8 @@ mod tests {
             { "id": 2, "name": "updated kevina" },
             { "id": 3, "name": "updated benoit" }
         ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         wtxn.commit().unwrap();
 
@@ -639,7 +667,8 @@ mod tests {
             ..Default::default()
         };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -665,7 +694,8 @@ mod tests {
         // Second we send 1 document with id 1, to force it to be merged with the previous one.
         let mut wtxn = index.write_txn().unwrap();
         let content = documents!([ { "id": 1, "age": 25 } ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -706,7 +736,8 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         assert!(builder.add_documents(content).is_err());
         wtxn.commit().unwrap();
 
@@ -735,7 +766,8 @@ mod tests {
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -753,7 +785,8 @@ mod tests {
         // Second we send 1 document with the generated uuid, to erase the previous ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = documents!([ { "name": "updated kevin", "id": kevin_uuid } ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -793,7 +826,8 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -809,7 +843,8 @@ mod tests {
         let content = documents!([ { "name": "new kevin" } ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -833,7 +868,8 @@ mod tests {
         let content = documents!([]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -859,7 +895,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         assert!(builder.add_documents(content).is_err());
         wtxn.commit().unwrap();
 
@@ -867,7 +904,8 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         // There is a space in the document id.
         let content = documents!([ { "id": 32, "name": "kevin" } ]);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -895,7 +933,8 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -912,7 +951,7 @@ mod tests {
         assert_eq!(result.documents_ids, vec![1]);
 
         // Search for a sub array sub object key
-        let result = index.search(&rtxn).query(r#""wow""#).execute().unwrap();
+        let result = index.search(&rtxn).query(r#""amazing""#).execute().unwrap();
         assert_eq!(result.documents_ids, vec![2]);
 
         drop(rtxn);
@@ -940,7 +979,8 @@ mod tests {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             ..Default::default()
         };
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(documents).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -950,7 +990,8 @@ mod tests {
             update_method: IndexDocumentsMethod::UpdateDocuments,
             ..Default::default()
         };
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         let documents = documents!([
           {
             "id": 2,
@@ -981,7 +1022,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1000,7 +1042,8 @@ mod tests {
         ]);
 
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
@@ -1011,7 +1054,8 @@ mod tests {
         ]);
 
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1046,7 +1090,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1080,7 +1125,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -1137,11 +1183,331 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
         wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn index_documents_with_nested_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            {
+                "id": 0,
+                "title": "The zeroth document",
+            },
+            {
+                "id": 1,
+                "title": "The first document",
+                "nested": {
+                    "object": "field",
+                    "machin": "bidule",
+                },
+            },
+            {
+                "id": 2,
+                "title": "The second document",
+                "nested": [
+                    "array",
+                    {
+                        "object": "field",
+                    },
+                    {
+                        "prout": "truc",
+                        "machin": "lol",
+                    },
+                ],
+            },
+            {
+                "id": 3,
+                "title": "The third document",
+                "nested": "I lied",
+            },
+        ]);
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        let searchable_fields = vec![S("title"), S("nested.object"), S("nested.machin")];
+        builder.set_searchable_fields(searchable_fields);
+
+        let faceted_fields = hashset!(S("title"), S("nested.object"), S("nested.machin"));
+        builder.set_filterable_fields(faceted_fields);
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let facets = index.faceted_fields(&rtxn).unwrap();
+        assert_eq!(facets, hashset!(S("title"), S("nested.object"), S("nested.machin")));
+
+        // testing the simple query search
+        let mut search = crate::Search::new(&rtxn, &index);
+        search.query("document");
+        search.authorize_typos(true);
+        search.optional_words(true);
+        // all documents should be returned
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids.len(), 4);
+
+        search.query("zeroth");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![0]);
+        search.query("first");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1]);
+        search.query("second");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![2]);
+        search.query("third");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![3]);
+
+        search.query("field");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1, 2]);
+
+        search.query("lol");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![2]);
+
+        search.query("object");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert!(documents_ids.is_empty());
+
+        search.query("array");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert!(documents_ids.is_empty()); // nested is not searchable
+
+        search.query("lied");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert!(documents_ids.is_empty()); // nested is not searchable
+
+        // testing the filters
+        let mut search = crate::Search::new(&rtxn, &index);
+        search.filter(crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap());
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1]);
+
+        search.filter(crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap());
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1, 2]);
+
+        search.filter(crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap());
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1]);
+
+        search.filter(crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap());
+        let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
+        assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
+
+        search.filter(crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap());
+        let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
+        assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
+    }
+
+    #[test]
+    fn index_documents_with_nested_primary_key() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key("nested.id".to_owned());
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            {
+                "nested": {
+                    "id": 0,
+                },
+                "title": "The zeroth document",
+            },
+            {
+                "nested": {
+                    "id": 1,
+                },
+                "title": "The first document",
+            },
+            {
+                "nested": {
+                    "id": 2,
+                },
+                "title": "The second document",
+            },
+            {
+                "nested.id": 3,
+                "title": "The third document",
+            },
+        ]);
+
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        // testing the simple query search
+        let mut search = crate::Search::new(&rtxn, &index);
+        search.query("document");
+        search.authorize_typos(true);
+        search.optional_words(true);
+        // all documents should be returned
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids.len(), 4);
+
+        search.query("zeroth");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![0]);
+        search.query("first");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1]);
+        search.query("second");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![2]);
+        search.query("third");
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![3]);
+    }
+
+    #[test]
+    fn test_facets_generation() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            {
+                "id": 0,
+                "dog": {
+                    "race": {
+                        "bernese mountain": "zeroth",
+                    },
+                },
+            },
+            {
+                "id": 1,
+                "dog.race": {
+                    "bernese mountain": "first",
+                },
+            },
+            {
+                "id": 2,
+                "dog.race.bernese mountain": "second",
+            },
+            {
+                "id": 3,
+                "dog": {
+                    "race.bernese mountain": "third"
+                },
+            },
+        ]);
+
+        // index the documents
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        // ---- ADD THE SETTING TO TEST THE FILTERABLE
+
+        // add the settings
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        builder.set_filterable_fields(hashset!(String::from("dog")));
+
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let hidden = index.faceted_fields(&rtxn).unwrap();
+
+        assert_eq!(hidden, hashset!(S("dog"), S("dog.race"), S("dog.race.bernese mountain")));
+
+        for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
+            let mut search = crate::Search::new(&rtxn, &index);
+            let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
+            search.filter(crate::Filter::from_str(&filter).unwrap().unwrap());
+            let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+            assert_eq!(documents_ids, vec![i]);
+        }
+
+        // ---- RESET THE SETTINGS
+
+        // update the settings
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        builder.reset_filterable_fields();
+
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let facets = index.faceted_fields(&rtxn).unwrap();
+
+        assert_eq!(facets, hashset!());
+
+        // ---- UPDATE THE SETTINGS TO TEST THE SORTABLE
+
+        // update the settings
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        builder.set_sortable_fields(hashset!(S("dog.race")));
+
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let facets = index.faceted_fields(&rtxn).unwrap();
+
+        assert_eq!(facets, hashset!(S("dog.race"), S("dog.race.bernese mountain")));
+
+        let mut search = crate::Search::new(&rtxn, &index);
+        search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
+            "dog.race.bernese mountain",
+        )))]);
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1, 2, 3, 0]);
     }
 
     #[test]
@@ -1162,7 +1528,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1178,7 +1545,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1199,7 +1567,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
@@ -1226,7 +1595,8 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
         let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ());
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();

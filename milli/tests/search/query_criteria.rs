@@ -390,7 +390,8 @@ fn criteria_ascdesc() {
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+    let mut builder =
+        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
 
     let mut cursor = Cursor::new(Vec::new());
     let mut batch_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();

@@ -49,6 +49,24 @@ impl DocumentsBatchIndex {
     pub fn name(&self, id: FieldId) -> Option<&String> {
         self.0.get_by_left(&id)
     }
+
+    pub fn recreate_json(
+        &self,
+        document: &obkv::KvReaderU16,
+    ) -> Result<serde_json::Map<String, serde_json::Value>, crate::Error> {
+        let mut map = serde_json::Map::new();
+
+        for (k, v) in document.iter() {
+            // TODO: TAMO: update the error type
+            let key =
+                self.0.get_by_left(&k).ok_or(crate::error::InternalError::DatabaseClosing)?.clone();
+            let value = serde_json::from_slice::<serde_json::Value>(v)
+                .map_err(crate::error::InternalError::SerdeJson)?;
+            map.insert(key, value);
+        }
+
+        Ok(map)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

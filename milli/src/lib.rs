@@ -183,6 +183,43 @@ pub fn lat_lng_to_xyz(coord: &[f64; 2]) -> [f64; 3] {
     [x, y, z]
 }
 
+/// Returns `true` if the field match one of the faceted fields.
+/// See the function [`is_faceted_by`] below to see what “matching” means.
+pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsRef<str>>) -> bool {
+    faceted_fields.into_iter().find(|facet| is_faceted_by(field, facet.as_ref())).is_some()
+}
+
+/// Returns `true` if the field match the facet.
+/// ```
+/// use milli::is_faceted_by;
+/// // -- the valid basics
+/// assert!(is_faceted_by("animaux", "animaux"));
+/// assert!(is_faceted_by("animaux.chien", "animaux"));
+/// assert!(is_faceted_by("animaux.chien.race.bouvier bernois.fourrure.couleur", "animaux"));
+/// assert!(is_faceted_by("animaux.chien.race.bouvier bernois.fourrure.couleur", "animaux.chien"));
+/// assert!(is_faceted_by("animaux.chien.race.bouvier bernois.fourrure.couleur", "animaux.chien.race.bouvier bernois"));
+/// assert!(is_faceted_by("animaux.chien.race.bouvier bernois.fourrure.couleur", "animaux.chien.race.bouvier bernois.fourrure"));
+/// assert!(is_faceted_by("animaux.chien.race.bouvier bernois.fourrure.couleur", "animaux.chien.race.bouvier bernois.fourrure.couleur"));
+///
+/// // -- the wrongs
+/// assert!(!is_faceted_by("chien", "chat"));
+/// assert!(!is_faceted_by("animaux", "animaux.chien"));
+/// assert!(!is_faceted_by("animaux.chien", "animaux.chat"));
+///
+/// // -- the strange edge cases
+/// assert!(!is_faceted_by("animaux.chien", "anima"));
+/// assert!(!is_faceted_by("animaux.chien", "animau"));
+/// assert!(!is_faceted_by("animaux.chien", "animaux."));
+/// assert!(!is_faceted_by("animaux.chien", "animaux.c"));
+/// assert!(!is_faceted_by("animaux.chien", "animaux.ch"));
+/// assert!(!is_faceted_by("animaux.chien", "animaux.chi"));
+/// assert!(!is_faceted_by("animaux.chien", "animaux.chie"));
+/// ```
+pub fn is_faceted_by(field: &str, facet: &str) -> bool {
+    field.starts_with(facet)
+        && field[facet.len()..].chars().next().map(|c| c == '.').unwrap_or(true)
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

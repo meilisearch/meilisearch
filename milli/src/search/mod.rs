@@ -159,7 +159,7 @@ impl<'a> Search<'a> {
             let sortable_fields = self.index.sortable_fields(self.rtxn)?;
             for asc_desc in sort_criteria {
                 match asc_desc.member() {
-                    Member::Field(ref field) if !sortable_fields.contains(field) => {
+                    Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
                         return Err(UserError::InvalidSortableAttribute {
                             field: field.to_string(),
                             valid_fields: sortable_fields.into_iter().collect(),

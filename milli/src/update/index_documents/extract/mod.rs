@@ -34,28 +34,36 @@ use crate::{FieldId, Result};
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
 pub(crate) fn data_from_obkv_documents(
-    obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
+    original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
+    flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: Option<HashSet<FieldId>>,
     faceted_fields: HashSet<FieldId>,
     primary_key_id: FieldId,
-    geo_field_id: Option<FieldId>,
+    geo_fields_ids: Option<(FieldId, FieldId)>,
     stop_words: Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
 ) -> Result<()> {
-    let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = obkv_chunks
+    original_obkv_chunks
         .par_bridge()
-        .map(|result| {
-            extract_documents_data(
-                result,
+        .map(|original_documents_chunk| {
+            send_original_documents_data(original_documents_chunk, lmdb_writer_sx.clone())
+        })
+        .collect::<Result<()>>()?;
+
+    let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = flattened_obkv_chunks
+        .par_bridge()
+        .map(|flattened_obkv_chunks| {
+            send_and_extract_flattened_documents_data(
+                flattened_obkv_chunks,
                 indexer,
                 lmdb_writer_sx.clone(),
                 &searchable_fields,
                 &faceted_fields,
                 primary_key_id,
-                geo_field_id,
+                geo_fields_ids,
                 &stop_words,
                 max_positions_per_attributes,
             )
@@ -170,36 +178,48 @@ fn spawn_extraction_task<FE, FS, M>(
     });
 }
 
-/// Extract chuncked data and send it into lmdb_writer_sx sender:
+/// Extract chunked data and send it into lmdb_writer_sx sender:
 /// - documents
+fn send_original_documents_data(
+    original_documents_chunk: Result<grenad::Reader<File>>,
+    lmdb_writer_sx: Sender<Result<TypedChunk>>,
+) -> Result<()> {
+    let original_documents_chunk =
+        original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
+
+    // TODO: create a custom internal error
+    lmdb_writer_sx.send(Ok(TypedChunk::Documents(original_documents_chunk))).unwrap();
+    Ok(())
+}
+
+/// Extract chunked data and send it into lmdb_writer_sx sender:
 /// - documents_ids
 /// - docid_word_positions
 /// - docid_fid_facet_numbers
 /// - docid_fid_facet_strings
-fn extract_documents_data(
-    documents_chunk: Result<grenad::Reader<File>>,
+fn send_and_extract_flattened_documents_data(
+    flattened_documents_chunk: Result<grenad::Reader<File>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     searchable_fields: &Option<HashSet<FieldId>>,
     faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
-    geo_field_id: Option<FieldId>,
+    geo_fields_ids: Option<(FieldId, FieldId)>,
     stop_words: &Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
     (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
 )> {
-    let documents_chunk = documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
+    let flattened_documents_chunk =
+        flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    let _ = lmdb_writer_sx.send(Ok(TypedChunk::Documents(documents_chunk.clone())));
-
-    if let Some(geo_field_id) = geo_field_id {
-        let documents_chunk_cloned = documents_chunk.clone();
+    if let Some(geo_fields_ids) = geo_fields_ids {
+        let documents_chunk_cloned = flattened_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
             let result =
-                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_field_id);
+                extract_geo_points(documents_chunk_cloned, indexer, primary_key_id, geo_fields_ids);
             let _ = match result {
                 Ok(geo_points) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoPoints(geo_points))),
                 Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
@@ -211,7 +231,7 @@ fn extract_documents_data(
         rayon::join(
             || {
                 let (documents_ids, docid_word_positions_chunk) = extract_docid_word_positions(
-                    documents_chunk.clone(),
+                    flattened_documents_chunk.clone(),
                     indexer.clone(),
                     searchable_fields,
                     stop_words.as_ref(),
@@ -232,7 +252,7 @@ fn extract_documents_data(
             || {
                 let (docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk) =
                     extract_fid_docid_facet_values(
-                        documents_chunk.clone(),
+                        flattened_documents_chunk.clone(),
                         indexer.clone(),
                         faceted_fields,
                     )?;

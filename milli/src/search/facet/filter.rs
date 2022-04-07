@@ -353,7 +353,8 @@ impl<'a> Filter<'a> {
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
                 let filterable_fields = index.filterable_fields(rtxn)?;
-                if filterable_fields.contains(fid.value()) {
+
+                if crate::is_faceted(fid.value(), &filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
                     if let Some(fid) = field_ids_map.id(fid.value()) {
                         Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
@@ -549,7 +550,6 @@ mod tests {
             Filter::from_str("channel = gotaga AND (timestamp = 44 OR channel != ponce)")
                 .unwrap()
                 .unwrap();
-        println!("\nExpecting: {:#?}\nGot: {:#?}\n", expected, condition);
         assert_eq!(condition, expected);
     }
 

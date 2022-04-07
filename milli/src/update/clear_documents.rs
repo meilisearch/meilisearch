@@ -98,7 +98,8 @@ mod tests {
         ]);
         let indexing_config = IndexDocumentsConfig::default();
         let config = IndexerConfig::default();
-        let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
         builder.add_documents(content).unwrap();
         builder.execute().unwrap();
 
@@ -110,7 +111,8 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 5);
+        // the value is 7 because there is `[id, name, age, country, _geo, _geo.lng, _geo.lat]`
+        assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 7);
 
         assert!(index.words_fst(&rtxn).unwrap().is_empty());
         assert!(index.words_prefixes_fst(&rtxn).unwrap().is_empty());
