@@ -130,7 +130,8 @@ fn test_typo_disabled_on_word() {
     let mut txn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
     let indexing_config = IndexDocumentsConfig::default();
-    let mut builder = IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ());
+    let mut builder =
+        IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
 
     builder.add_documents(documents).unwrap();
 
