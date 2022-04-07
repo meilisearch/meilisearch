@@ -257,7 +257,10 @@ impl<'a> QueryTreeBuilder<'a> {
 }
 
 /// Split the word depending on the frequency of subwords in the database documents.
-fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<(String, String)>> {
+fn split_best_frequency<'a>(
+    ctx: &impl Context,
+    word: &'a str,
+) -> heed::Result<Option<(&'a str, &'a str)>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
@@ -273,7 +276,7 @@ fn split_best_frequency(ctx: &impl Context, word: &str) -> heed::Result<Option<(
         }
     }
 
-    Ok(best.map(|(_, left, right)| (left.to_string(), right.to_string())))
+    Ok(best.map(|(_, left, right)| (left, right)))
 }
 
 #[derive(Clone)]
@@ -343,7 +346,7 @@ fn create_query_tree(
             PrimitiveQueryPart::Word(word, prefix) => {
                 let mut children = synonyms(ctx, &[&word])?.unwrap_or_default();
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    children.push(Operation::Phrase(vec![left, right]));
+                    children.push(Operation::Phrase(vec![left.to_string(), right.to_string()]));
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
                 let exact_words = ctx.exact_words()?;
@@ -499,8 +502,8 @@ fn create_matching_words(
                 }
 
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    let left = MatchingWord::new(left, 0, false);
-                    let right = MatchingWord::new(right, 0, false);
+                    let left = MatchingWord::new(left.to_string(), 0, false);
+                    let right = MatchingWord::new(right.to_string(), 0, false);
                     matching_words.push((vec![left, right], vec![id]));
                 }
 
