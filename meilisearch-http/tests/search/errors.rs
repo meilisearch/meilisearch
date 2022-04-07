@@ -37,6 +37,38 @@ async fn search_unexisting_parameter() {
 }
 
 #[actix_rt::test]
+async fn search_invalid_highlight_and_crop_tags() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let fields = &["cropMarker", "highlightPreTag", "highlightPostTag"];
+
+    for field in fields {
+        // object
+        index
+            .search(
+                json!({field.to_string(): {"marker": "<crop>"}}),
+                |response, code| {
+                    assert_eq!(code, 400, "field {} passing object: {}", &field, response);
+                    assert_eq!(response["code"], "bad_request");
+                },
+            )
+            .await;
+
+        // array
+        index
+            .search(
+                json!({field.to_string(): ["marker", "<crop>"]}),
+                |response, code| {
+                    assert_eq!(code, 400, "field {} passing array: {}", &field, response);
+                    assert_eq!(response["code"], "bad_request");
+                },
+            )
+            .await;
+    }
+}
+
+#[actix_rt::test]
 async fn filter_invalid_syntax_object() {
     let server = Server::new().await;
     let index = server.index("test");
