@@ -243,6 +243,8 @@ impl<'a> Search<'a> {
             excluded_candidates = candidates.into_excluded();
         }
 
+        dbg!(excluded_candidates.len());
+
         Ok(SearchResult { matching_words, candidates: initial_candidates, documents_ids })
     }
 }
