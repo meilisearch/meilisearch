@@ -231,7 +231,7 @@ impl<'t> Matcher<'t, '_> {
     }
 
     /// Returns the bounds in byte index of the crop window.
-    fn token_crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
+    fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
@@ -394,13 +394,6 @@ impl<'t> Matcher<'t, '_> {
         }
     }
 
-    /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(&self, matches: &[Match]) -> (usize, usize) {
-        let match_interval = self.find_best_match_interval(matches);
-
-        self.token_crop_bounds(match_interval)
-    }
-
     // Returns the formatted version of the original text.
     pub fn format(&mut self, highlight: bool, crop: bool) -> Cow<'t, str> {
         // If 0 it will be considered null and thus not crop the field
@@ -412,6 +405,9 @@ impl<'t> Matcher<'t, '_> {
         } else {
             match &self.matches {
                 Some(matches) => {
+                    let matches =
+                        if crop { self.find_best_match_interval(matches) } else { matches };
+
                     let (byte_start, byte_end) =
                         if crop { self.crop_bounds(matches) } else { (0, self.text.len()) };
 
@@ -427,11 +423,7 @@ impl<'t> Matcher<'t, '_> {
                     if highlight {
                         // insert highlight markers around matches.
                         let tokens = self.tokens;
-                        for m in matches
-                            .iter()
-                            .skip_while(|m| tokens[m.token_position].byte_start < byte_start)
-                            .take_while(|m| tokens[m.token_position].byte_start < byte_end)
-                        {
+                        for m in matches {
                             let token = &tokens[m.token_position];
 
                             if byte_index < token.byte_start {
