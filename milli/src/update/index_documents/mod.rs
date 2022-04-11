@@ -1109,8 +1109,11 @@ mod tests {
 
         let mut big_object = HashMap::new();
         big_object.insert(S("id"), "wow");
-        let content: String =
-            (0..=u16::MAX).into_iter().map(|p| p.to_string()).reduce(|a, b| a + " " + &b).unwrap();
+        let content: String = (0..=u16::MAX)
+            .into_iter()
+            .map(|p| p.to_string())
+            .reduce(|a, b| a + " " + b.as_ref())
+            .unwrap();
         big_object.insert("content".to_string(), &content);
 
         let mut cursor = Cursor::new(Vec::new());
