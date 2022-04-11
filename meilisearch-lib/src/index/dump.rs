@@ -146,7 +146,7 @@ impl Index {
                 indexer_config,
                 config,
                 |_| (),
-            );
+            )?;
             builder.add_documents(documents_reader)?;
             builder.execute()?;
         }

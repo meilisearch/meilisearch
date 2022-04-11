@@ -286,7 +286,7 @@ impl Index {
             self.indexer_config.as_ref(),
             config,
             indexing_callback,
-        );
+        )?;
 
         for content_uuid in contents.into_iter() {
             let content_file = file_store.get_update(content_uuid)?;

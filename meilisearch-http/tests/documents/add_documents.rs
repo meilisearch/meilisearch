@@ -1013,7 +1013,7 @@ async fn error_add_documents_invalid_geo_field() {
     assert_eq!(response["status"], "failed");
 
     let expected_error = json!({
-        "message": r#"The document with the id: `11` contains an invalid _geo field: `foobar`."#,
+        "message": r#"The document with the id: `11` contains an invalid `_geo` field."#,
         "code": "invalid_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_geo_field"

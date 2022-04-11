@@ -1087,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.25.0#4ae7aea3b274a86780754dc8bebb36e06501f894"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1109,6 +1109,14 @@ dependencies = [
  "crc32fast",
  "libc",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flatten-serde-json"
+version = "0.1.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -1643,9 +1651,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efaa7b300f3b5fe8eb6bf21ce3895e1751d9665086af2d64b42f19701015ff4f"
+checksum = "ec647867e2bf0772e28c8bcde4f0d19a9216916e890543b5a03ed8ef27b8f259"
 
 [[package]]
 name = "libgit2-sys"
@@ -2062,6 +2070,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "paste",
+ "permissive-json-pointer",
  "proptest",
  "proptest-derive",
  "rand",
@@ -2128,8 +2137,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.25.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.25.0#4ae7aea3b274a86780754dc8bebb36e06501f894"
+version = "0.26.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
 dependencies = [
  "bimap",
  "bincode",
@@ -2140,6 +2149,7 @@ dependencies = [
  "csv",
  "either",
  "filter-parser",
+ "flatten-serde-json",
  "fst",
  "fxhash",
  "geoutils",
@@ -2462,6 +2472,15 @@ name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
+
+[[package]]
+name = "permissive-json-pointer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2125f5fc44a45ffd265ce6ab343842f71df469d173f923f234e3a8df7a8f1ba6"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "phf"
@@ -3797,9 +3816,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.22.2"
+version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552ceb903e957524388c4d3475725ff2c8b7960922063af6ce53c9a43da07449"
+checksum = "44d8de8415c823c8abd270ad483c6feeac771fad964890779f9a8cb24fbbc1bf"
 dependencies = [
  "webpki",
 ]
