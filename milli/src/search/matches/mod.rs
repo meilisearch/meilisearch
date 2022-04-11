@@ -110,63 +110,53 @@ pub struct Matcher<'t, 'm> {
 impl<'t> Matcher<'t, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
-        fn compute_partial_match(
+        fn compute_partial_match<'a>(
             mut partial: PartialMatch,
-            tokens: &[Token],
-            token_position: &mut usize,
-            word_position: &mut usize,
+            token_position: usize,
+            word_position: usize,
+            words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
             matches: &mut Vec<Match>,
         ) -> bool {
-            let mut potential_matches = vec![(*token_position, *word_position, partial.char_len())];
-            let mut t_position = 1;
-            let mut w_position = 1;
-            for token in &tokens[*token_position + 1..] {
-                if token.is_separator().is_none() {
-                    partial = match partial.match_token(&token) {
-                        // token matches the partial match, but the match is not full,
-                        // we temporarly save the current token then we try to match the next one.
-                        Some(MatchType::Partial(partial)) => {
-                            potential_matches.push((
-                                *token_position + t_position,
-                                *word_position + w_position,
-                                partial.char_len(),
-                            ));
-                            partial
-                        }
-                        // partial match is now full, we keep this matches and we advance positions
-                        Some(MatchType::Full { char_len, ids }) => {
-                            // save previously matched tokens as matches.
-                            let iter = potential_matches.into_iter().map(
-                                |(token_position, word_position, match_len)| Match {
-                                    match_len,
-                                    ids: ids.to_vec(),
-                                    word_position,
-                                    token_position,
-                                },
-                            );
-                            matches.extend(iter);
+            let mut potential_matches = Vec::new();
 
-                            // move word and token positions after the end of the match.
-                            *word_position += w_position;
-                            *token_position += t_position;
+            // Add first match to potential matches.
+            potential_matches.push((token_position, word_position, partial.char_len()));
 
-                            // save the token that closes the partial match as a match.
-                            matches.push(Match {
-                                match_len: char_len,
+            for (token_position, word_position, word) in words_positions {
+                partial = match partial.match_token(&word) {
+                    // token matches the partial match, but the match is not full,
+                    // we temporarly save the current token then we try to match the next one.
+                    Some(MatchType::Partial(partial)) => {
+                        potential_matches.push((token_position, word_position, partial.char_len()));
+                        partial
+                    }
+                    // partial match is now full, we keep this matches and we advance positions
+                    Some(MatchType::Full { char_len, ids }) => {
+                        // save previously matched tokens as matches.
+                        let iter = potential_matches.into_iter().map(
+                            |(token_position, word_position, match_len)| Match {
+                                match_len,
                                 ids: ids.to_vec(),
-                                word_position: *word_position,
-                                token_position: *token_position,
-                            });
+                                word_position,
+                                token_position,
+                            },
+                        );
+                        matches.extend(iter);
 
-                            // the match is complete, we return true.
-                            return true;
-                        }
-                        // no match, continue to next match.
-                        None => break,
-                    };
-                    w_position += 1;
-                }
-                t_position += 1;
+                        // save the token that closes the partial match as a match.
+                        matches.push(Match {
+                            match_len: char_len,
+                            ids: ids.to_vec(),
+                            word_position,
+                            token_position,
+                        });
+
+                        // the match is complete, we return true.
+                        return true;
+                    }
+                    // no match, continue to next match.
+                    None => break,
+                };
             }
 
             // the match is not complete, we return false.
@@ -174,42 +164,54 @@ impl<'t> Matcher<'t, '_> {
         }
 
         let mut matches = Vec::new();
-        let mut word_position = 0;
-        let mut token_position = 0;
-        while let Some(token) = self.tokens.get(token_position) {
-            if token.is_separator().is_none() {
-                for match_type in self.matching_words.match_token(&token) {
-                    match match_type {
-                        // we match, we save the current token as a match,
+
+        let mut words_positions = self
+            .tokens
+            .iter()
+            .scan((0, 0), |(token_position, word_position), token| {
+                let current_token_position = *token_position;
+                let current_word_position = *word_position;
+                *token_position += 1;
+                if token.is_separator().is_none() {
+                    *word_position += 1;
+                }
+
+                Some((current_token_position, current_word_position, token))
+            })
+            .filter(|(_, _, token)| token.is_separator().is_none());
+
+        while let Some((token_position, word_position, word)) = words_positions.next() {
+            for match_type in self.matching_words.match_token(word) {
+                match match_type {
+                    // we match, we save the current token as a match,
+                    // then we continue the rest of the tokens.
+                    MatchType::Full { char_len, ids } => {
+                        matches.push(Match {
+                            match_len: char_len,
+                            ids: ids.to_vec(),
+                            word_position,
+                            token_position,
+                        });
+                        break;
+                    }
+                    // we match partially, iterate over next tokens to check if we can complete the match.
+                    MatchType::Partial(partial) => {
+                        // if match is completed, we break the matching loop over the current token,
                         // then we continue the rest of the tokens.
-                        MatchType::Full { char_len, ids } => {
-                            matches.push(Match {
-                                match_len: char_len,
-                                ids: ids.to_vec(),
-                                word_position,
-                                token_position,
-                            });
+                        let mut wp = words_positions.clone();
+                        if compute_partial_match(
+                            partial,
+                            token_position,
+                            word_position,
+                            &mut wp,
+                            &mut matches,
+                        ) {
+                            words_positions = wp;
                             break;
-                        }
-                        // we match partially, iterate over next tokens to check if we can complete the match.
-                        MatchType::Partial(partial) => {
-                            // if match is completed, we break the matching loop over the current token,
-                            // then we continue the rest of the tokens.
-                            if compute_partial_match(
-                                partial,
-                                &self.tokens,
-                                &mut token_position,
-                                &mut word_position,
-                                &mut matches,
-                            ) {
-                                break;
-                            }
                         }
                     }
                 }
-                word_position += 1;
             }
-            token_position += 1;
         }
 
         self.matches = Some(matches);
@@ -825,5 +827,50 @@ mod tests {
         let mut matcher = builder.build(&tokens[..], text);
         // because crop size is 0, crop is ignored.
         assert_eq!(&matcher.format(highlight, crop), "void void split the world void void.");
+    }
+
+    #[test]
+    fn partial_matches() {
+        let matching_words = vec![
+            (vec![MatchingWord::new("the".to_string(), 0, false)], vec![0]),
+            (
+                vec![
+                    MatchingWord::new("t".to_string(), 0, false),
+                    MatchingWord::new("he".to_string(), 0, false),
+                ],
+                vec![0],
+            ),
+            (vec![MatchingWord::new("door".to_string(), 0, false)], vec![1]),
+            (
+                vec![
+                    MatchingWord::new("do".to_string(), 0, false),
+                    MatchingWord::new("or".to_string(), 0, false),
+                ],
+                vec![1],
+            ),
+            (vec![MatchingWord::new("do".to_string(), 0, false)], vec![2]),
+        ];
+
+        let matching_words = MatchingWords::new(matching_words);
+
+        let mut builder = MatcherBuilder::from_matching_words(matching_words);
+        builder.highlight_prefix("_".to_string());
+        builder.highlight_suffix("_".to_string());
+        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
+
+        let highlight = true;
+        let crop = false;
+
+        let text = "the do or die can't be he do and or isn't he";
+        let analyzed = analyzer.analyze(&text);
+        let tokens: Vec<_> = analyzed.tokens().collect();
+
+        let mut matcher = builder.build(&tokens[..], text);
+        assert_eq!(
+            &matcher.format(highlight, crop),
+            "_the_ _do_ _or_ die can't be he _do_ and or isn'_t_ _he_",
+            "matches: {:?}",
+            &matcher.matches
+        );
     }
 }
