@@ -1,18 +1,21 @@
 name-template: 'Milli v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 exclude-labels:
-  - 'skip-changelog'
+  - 'skip changelog'
 version-resolver:
   minor:
     labels:
-      - 'breaking-change'
+      - 'DB breaking'
+      - 'API breaking'
   default: patch
 categories:
-  - title: 'Breaking changes ⚠️'
-    label: 'breaking-change'
+  - title: 'API breaking'
+    label: 'API breaking'
+  - title: 'DB breaking'
+    label: 'DB breaking'
+  - title: 'Changes'
+    label: 'no breaking'
 template: |
-  ## Changes
-
   $CHANGES
 
   Thanks again to $CONTRIBUTORS! 🎉
