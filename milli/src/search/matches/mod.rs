@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 
-pub use matching_words::MatchingWords;
-use matching_words::{MatchType, PrimitiveWordId};
+use matching_words::{MatchType, PartialMatch, PrimitiveWordId};
+pub use matching_words::{MatchingWord, MatchingWords};
 use meilisearch_tokenizer::token::{SeparatorKind, Token};
-
-use crate::search::matches::matching_words::PartialMatch;
 
 pub mod matching_words;
 
