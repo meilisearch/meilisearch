@@ -18,6 +18,7 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 grenad = { version = "0.4.1", default-features = false, features = ["tempfile"] }
 geoutils = "0.4.1"
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
+json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 meilisearch-tokenizer = { git = "https://github.com/meilisearch/tokenizer.git", tag = "v0.2.9" }
 memmap2 = "0.5.3"
