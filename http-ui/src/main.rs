@@ -25,8 +25,8 @@ use milli::update::{
     ClearDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
 };
 use milli::{
-    obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, Index, MatcherBuilder,
-    SearchResult, SortError,
+    obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, FormatOptions, Index,
+    MatcherBuilder, SearchResult, SortError,
 };
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -162,7 +162,9 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed: Vec<_> = analyzed.tokens().collect();
                 let mut matcher = matcher_builder.build(&analyzed[..], &old_string);
 
-                Value::String(matcher.format(true, true).to_string())
+                let format_options = FormatOptions { highlight: true, crop: Some(10) };
+
+                Value::String(matcher.format(format_options).to_string())
             }
             Value::Array(values) => Value::Array(
                 values.into_iter().map(|v| self.highlight_value(v, matcher_builder)).collect(),
