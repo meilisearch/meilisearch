@@ -11,6 +11,7 @@ use itertools::Itertools;
 use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
+use smartstring::SmartString;
 
 use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_obkvs, MergeFn};
 use super::{IndexDocumentsMethod, IndexerConfig};
@@ -55,7 +56,8 @@ pub struct Transform<'a, 'i> {
     flattened_sorter: grenad::Sorter<MergeFn>,
     replaced_documents_ids: RoaringBitmap,
     new_documents_ids: RoaringBitmap,
-    new_external_documents_ids_builder: FxHashMap<Vec<u8>, u64>,
+    // To increase the cache locality and the heap usage we use smartstring.
+    new_external_documents_ids_builder: FxHashMap<SmartString<smartstring::Compact>, u64>,
     documents_count: usize,
 }
 
@@ -254,10 +256,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     None => {
                         // if the document has already been inserted in this
                         // batch we need to get its docid
-                        match self
-                            .new_external_documents_ids_builder
-                            .entry(external_id.as_bytes().to_vec())
-                        {
+                        match self.new_external_documents_ids_builder.entry(external_id.into()) {
                             Entry::Occupied(entry) => (*entry.get() as u32, false),
                             // if the document has never been encountered we give it a new docid
                             // and push this new docid to the external documents ids builder
