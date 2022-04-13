@@ -8,7 +8,10 @@ use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use http::header::CONTENT_TYPE;
 use meilisearch_auth::SearchRules;
-use meilisearch_lib::index::{SearchQuery, SearchResult};
+use meilisearch_lib::index::{
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+};
 use meilisearch_lib::index_controller::Stats;
 use meilisearch_lib::MeiliSearch;
 use once_cell::sync::Lazy;
@@ -355,6 +358,13 @@ pub struct SearchAggregator {
     // pagination
     max_limit: usize,
     max_offset: usize,
+
+    // formatting
+    highlight_pre_tag: bool,
+    highlight_post_tag: bool,
+    crop_marker: bool,
+    matches: bool,
+    crop_length: bool,
 }
 
 impl SearchAggregator {
@@ -405,6 +415,12 @@ impl SearchAggregator {
         ret.max_limit = query.limit;
         ret.max_offset = query.offset.unwrap_or_default();
 
+        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG;
+        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG;
+        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER;
+        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH;
+        ret.matches = query.matches;
+
         ret
     }
 
@@ -452,6 +468,12 @@ impl SearchAggregator {
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
+
+        self.highlight_pre_tag |= other.highlight_pre_tag;
+        self.highlight_post_tag |= other.highlight_post_tag;
+        self.crop_marker |= other.crop_marker;
+        self.matches |= other.matches;
+        self.crop_length |= other.crop_length;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -488,6 +510,13 @@ impl SearchAggregator {
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
+                },
+                "formatting": {
+                    "highlight_pre_tag": self.highlight_pre_tag,
+                    "highlight_post_tag": self.highlight_post_tag,
+                    "crop_marker": self.crop_marker,
+                    "matches": self.matches,
+                    "crop_length": self.crop_length,
                 },
             });
 

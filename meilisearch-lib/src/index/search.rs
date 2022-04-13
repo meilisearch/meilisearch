@@ -34,17 +34,17 @@ pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 
-const DEFAULT_CROP_MARKER: &str = "…";
+pub const DEFAULT_CROP_MARKER: &str = "…";
 pub fn default_crop_marker() -> String {
     DEFAULT_CROP_MARKER.to_string()
 }
 
-const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
+pub const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
 pub fn default_highlight_pre_tag() -> String {
     DEFAULT_HIGHLIGHT_PRE_TAG.to_string()
 }
 
-const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
+pub const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
 pub fn default_highlight_post_tag() -> String {
     DEFAULT_HIGHLIGHT_POST_TAG.to_string()
 }
