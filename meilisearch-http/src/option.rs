@@ -19,6 +19,7 @@ use serde::Serialize;
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
 #[derive(Debug, Clone, Parser, Serialize)]
+#[clap(version)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[clap(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
