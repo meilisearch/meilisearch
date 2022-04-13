@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 pub fn flatten(json: &Map<String, Value>) -> Map<String, Value> {
     let mut obj = Map::new();
@@ -42,7 +42,7 @@ fn insert_value(base_json: &mut Map<String, Value>, key: &str, to_insert: Value)
     debug_assert!(!to_insert.is_object());
     debug_assert!(!to_insert.is_array());
 
-    // does the field aleardy exists?
+    // does the field already exists?
     if let Some(value) = base_json.get_mut(key) {
         // is it already an array
         if let Some(array) = value.as_array_mut() {
@@ -50,16 +50,18 @@ fn insert_value(base_json: &mut Map<String, Value>, key: &str, to_insert: Value)
         // or is there a collision
         } else {
             let value = std::mem::take(value);
-            base_json[key] = json!([value, to_insert]);
+            base_json[key] = Value::Array(vec![value, to_insert]);
         }
         // if it does not exist we can push the value untouched
     } else {
-        base_json.insert(key.to_string(), json!(to_insert));
+        base_json.insert(key.to_string(), to_insert);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
