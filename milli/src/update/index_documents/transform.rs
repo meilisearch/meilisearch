@@ -286,10 +286,9 @@ impl<'a, 'i> Transform<'a, 'i> {
                     })?;
 
                 self.original_sorter.insert(&docid.to_be_bytes(), base_obkv)?;
-                if let Some(buffer) = self.flatten_from_fields_ids_map(KvReader::new(&base_obkv))? {
-                    self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?;
-                } else {
-                    self.flattened_sorter.insert(docid.to_be_bytes(), base_obkv)?;
+                match self.flatten_from_fields_ids_map(KvReader::new(&base_obkv))? {
+                    Some(buffer) => self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?,
+                    None => self.flattened_sorter.insert(docid.to_be_bytes(), base_obkv)?,
                 }
             } else {
                 self.new_documents_ids.insert(docid);
@@ -302,12 +301,11 @@ impl<'a, 'i> Transform<'a, 'i> {
             if let Some(flatten) = flattened_document {
                 self.flattened_sorter.insert(docid.to_be_bytes(), &flatten)?;
             } else {
-                if let Some(buffer) =
-                    self.flatten_from_fields_ids_map(KvReader::new(&obkv_buffer))?
-                {
-                    self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?;
-                } else {
-                    self.flattened_sorter.insert(docid.to_be_bytes(), obkv_buffer.clone())?;
+                match self.flatten_from_fields_ids_map(KvReader::new(&obkv_buffer))? {
+                    Some(buffer) => self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?,
+                    None => {
+                        self.flattened_sorter.insert(docid.to_be_bytes(), obkv_buffer.clone())?
+                    }
                 }
             }
 
