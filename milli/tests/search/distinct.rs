@@ -8,7 +8,7 @@ use Criterion::*;
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 macro_rules! test_distinct {
-    ($func:ident, $distinct:ident, $criteria:expr) => {
+    ($func:ident, $distinct:ident, $criteria:expr, $n_res:expr) => {
         #[test]
         fn $func() {
             let criteria = $criteria;
@@ -30,7 +30,9 @@ macro_rules! test_distinct {
             search.authorize_typos(true);
             search.optional_words(true);
 
-            let SearchResult { documents_ids, .. } = search.execute().unwrap();
+            let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
+
+            assert_eq!(candidates.len(), $n_res);
 
             let mut distinct_values = HashSet::new();
             let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true, &[])
@@ -54,20 +56,22 @@ macro_rules! test_distinct {
 test_distinct!(
     distinct_string_default_criteria,
     tag,
-    vec![Words, Typo, Proximity, Attribute, Exactness]
+    vec![Words, Typo, Proximity, Attribute, Exactness],
+    3
 );
 test_distinct!(
     distinct_number_default_criteria,
     asc_desc_rank,
-    vec![Words, Typo, Proximity, Attribute, Exactness]
+    vec![Words, Typo, Proximity, Attribute, Exactness],
+    7
 );
-test_distinct!(distinct_string_criterion_words, tag, vec![Words]);
-test_distinct!(distinct_number_criterion_words, asc_desc_rank, vec![Words]);
-test_distinct!(distinct_string_criterion_words_typo, tag, vec![Words, Typo]);
-test_distinct!(distinct_number_criterion_words_typo, asc_desc_rank, vec![Words, Typo]);
-test_distinct!(distinct_string_criterion_words_proximity, tag, vec![Words, Proximity]);
-test_distinct!(distinct_number_criterion_words_proximity, asc_desc_rank, vec![Words, Proximity]);
-test_distinct!(distinct_string_criterion_words_attribute, tag, vec![Words, Attribute]);
-test_distinct!(distinct_number_criterion_words_attribute, asc_desc_rank, vec![Words, Attribute]);
-test_distinct!(distinct_string_criterion_words_exactness, tag, vec![Words, Exactness]);
-test_distinct!(distinct_number_criterion_words_exactness, asc_desc_rank, vec![Words, Exactness]);
+test_distinct!(distinct_string_criterion_words, tag, vec![Words], 3);
+test_distinct!(distinct_number_criterion_words, asc_desc_rank, vec![Words], 7);
+test_distinct!(distinct_string_criterion_words_typo, tag, vec![Words, Typo], 3);
+test_distinct!(distinct_number_criterion_words_typo, asc_desc_rank, vec![Words, Typo], 7);
+test_distinct!(distinct_string_criterion_words_proximity, tag, vec![Words, Proximity], 3);
+test_distinct!(distinct_number_criterion_words_proximity, asc_desc_rank, vec![Words, Proximity], 7);
+test_distinct!(distinct_string_criterion_words_attribute, tag, vec![Words, Attribute], 3);
+test_distinct!(distinct_number_criterion_words_attribute, asc_desc_rank, vec![Words, Attribute], 7);
+test_distinct!(distinct_string_criterion_words_exactness, tag, vec![Words, Exactness], 3);
+test_distinct!(distinct_number_criterion_words_exactness, asc_desc_rank, vec![Words, Exactness], 7);

@@ -469,6 +469,8 @@ struct SettingsUpdate {
     criteria: Option<Vec<String>>,
     #[structopt(long)]
     exact_attributes: Option<Vec<String>>,
+    #[structopt(long)]
+    distinct_attribute: Option<String>,
 }
 
 impl Performer for SettingsUpdate {
@@ -500,6 +502,14 @@ impl Performer for SettingsUpdate {
                 update.set_exact_attributes(exact_attributes.into_iter().collect());
             } else {
                 update.reset_exact_attributes();
+            }
+        }
+
+        if let Some(distinct_attr) = self.distinct_attribute {
+            if !distinct_attr.is_empty() {
+                update.set_distinct_field(distinct_attr);
+            } else {
+                update.reset_distinct_field();
             }
         }
 

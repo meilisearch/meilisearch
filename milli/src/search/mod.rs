@@ -243,7 +243,11 @@ impl<'a> Search<'a> {
             excluded_candidates = candidates.into_excluded();
         }
 
-        Ok(SearchResult { matching_words, candidates: initial_candidates, documents_ids })
+        Ok(SearchResult {
+            matching_words,
+            candidates: initial_candidates - excluded_candidates,
+            documents_ids,
+        })
     }
 }
 
