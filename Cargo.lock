@@ -1087,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.1#a68e3a79fbdbb366ab162428884e5879a9af9d5c"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1114,7 +1114,7 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.1#a68e3a79fbdbb366ab162428884e5879a9af9d5c"
 dependencies = [
  "serde_json",
 ]
@@ -1612,6 +1612,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a38fc24e30fd564ce974c02bf1d337caddff65be6cc4735a1f7eab22a7440f04"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-depth-checker"
+version = "0.1.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.1#a68e3a79fbdbb366ab162428884e5879a9af9d5c"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -2137,8 +2145,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.26.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+version = "0.26.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.1#a68e3a79fbdbb366ab162428884e5879a9af9d5c"
 dependencies = [
  "bimap",
  "bincode",
@@ -2156,6 +2164,7 @@ dependencies = [
  "grenad",
  "heed",
  "itertools",
+ "json-depth-checker",
  "levenshtein_automata",
  "log",
  "logging_timer",
@@ -2172,6 +2181,7 @@ dependencies = [
  "slice-group-by",
  "smallstr",
  "smallvec",
+ "smartstring",
  "tempfile",
  "time 0.3.9",
  "uuid",
@@ -3175,6 +3185,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "static_assertions",
+ "version_check",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,6 +3236,12 @@ dependencies = [
  "mime_guess",
  "path-slash",
 ]
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"
