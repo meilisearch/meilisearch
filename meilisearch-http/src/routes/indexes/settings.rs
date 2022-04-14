@@ -162,10 +162,10 @@ make_setting_route!(
 );
 
 make_setting_route!(
-    "/typo",
+    "/typo-tolerance",
     meilisearch_lib::index::updates::TypoSettings,
-    typo,
-    "typo"
+    typo_tolerance,
+    "typoTolerance"
 );
 
 make_setting_route!(
@@ -254,7 +254,7 @@ generate_configure!(
     stop_words,
     synonyms,
     ranking_rules,
-    typo
+    typo_tolerance
 );
 
 pub async fn update_all(

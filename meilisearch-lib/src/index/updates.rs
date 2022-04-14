@@ -113,7 +113,7 @@ pub struct Settings<T> {
     pub distinct_attribute: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
-    pub typo: Setting<TypoSettings>,
+    pub typo_tolerance: Setting<TypoSettings>,
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
@@ -130,7 +130,7 @@ impl Settings<Checked> {
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
             distinct_attribute: Setting::Reset,
-            typo: Setting::Reset,
+            typo_tolerance: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -145,7 +145,7 @@ impl Settings<Checked> {
             stop_words,
             synonyms,
             distinct_attribute,
-            typo: typo_tolerance,
+            typo_tolerance,
             ..
         } = self;
 
@@ -158,7 +158,7 @@ impl Settings<Checked> {
             stop_words,
             synonyms,
             distinct_attribute,
-            typo: typo_tolerance,
+            typo_tolerance,
             _kind: PhantomData,
         }
     }
@@ -197,7 +197,7 @@ impl Settings<Unchecked> {
             stop_words: self.stop_words,
             synonyms: self.synonyms,
             distinct_attribute: self.distinct_attribute,
-            typo: self.typo,
+            typo_tolerance: self.typo_tolerance,
             _kind: PhantomData,
         }
     }
@@ -373,7 +373,7 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
-    match settings.typo {
+    match settings.typo_tolerance {
         Setting::Set(ref value) => {
             match value.enabled {
                 Setting::Set(val) => builder.set_autorize_typos(val),
@@ -455,7 +455,7 @@ pub(crate) mod test {
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
-            typo: Setting::NotSet,
+            typo_tolerance: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -477,7 +477,7 @@ pub(crate) mod test {
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
-            typo: Setting::NotSet,
+            typo_tolerance: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

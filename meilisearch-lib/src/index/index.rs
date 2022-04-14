@@ -213,7 +213,7 @@ impl Index {
                 None => Setting::Reset,
             },
             synonyms: Setting::Set(synonyms),
-            typo: Setting::Set(typo_tolerance),
+            typo_tolerance: Setting::Set(typo_tolerance),
             _kind: PhantomData,
         })
     }
