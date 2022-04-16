@@ -41,7 +41,7 @@ pub struct Unchecked;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-pub struct MinWordLengthTypoSetting {
+pub struct MinWordSizeTyposSetting {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub one_typo: Setting<u8>,
@@ -60,7 +60,7 @@ pub struct TypoSettings {
     pub enabled: Setting<bool>,
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    pub min_word_length_for_typo: Setting<MinWordLengthTypoSetting>,
+    pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub disable_on_words: Setting<BTreeSet<String>>,
@@ -381,7 +381,7 @@ pub fn apply_settings_to_builder(
                 Setting::NotSet => (),
             }
 
-            match value.min_word_length_for_typo {
+            match value.min_word_size_for_typos {
                 Setting::Set(ref setting) => {
                     match setting.one_typo {
                         Setting::Set(val) => builder.set_min_word_len_one_typo(val),
