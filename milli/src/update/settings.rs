@@ -10,6 +10,7 @@ use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
+use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
@@ -45,6 +46,14 @@ impl<T> Setting<T> {
 
     pub const fn is_not_set(&self) -> bool {
         matches!(self, Self::NotSet)
+    }
+
+    /// If `Self` is `Reset`, then map self to `Set` with the provided `val`.
+    pub fn or_reset(self, val: T) -> Self {
+        match self {
+            Self::Reset => Self::Set(val),
+            otherwise => otherwise,
+        }
     }
 }
 
@@ -535,7 +544,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_min_typo_word_len(&mut self) -> Result<()> {
-        match (self.min_word_len_one_typo, self.min_word_len_two_typos) {
+        let one = self.min_word_len_one_typo.or_reset(DEFAULT_MIN_WORD_LEN_ONE_TYPO);
+        let two = self.min_word_len_two_typos.or_reset(DEFAULT_MIN_WORD_LEN_TWO_TYPOS);
+        match (one, two) {
             (Setting::Set(one), Setting::Set(two)) => {
                 if one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
@@ -1422,6 +1433,20 @@ mod tests {
 
         assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 8);
         assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 8);
+
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+
+        builder.reset_min_word_len_one_typo();
+        builder.reset_min_word_len_two_typos();
+        builder.execute(|_| ()).unwrap();
+
+        txn.commit().unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_ONE_TYPO);
+        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_TWO_TYPOS);
     }
 
     #[test]
