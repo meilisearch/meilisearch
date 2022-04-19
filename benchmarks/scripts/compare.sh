@@ -35,10 +35,4 @@ done
 
 path_list=$(echo " $@" | sed 's/ / \/tmp\//g')
 
-if [[ ${#@} -gt 1 ]]; then
-    # Print the diff changes between the old and new benchmarks
-    # by only displaying the lines that have a diff of more than 5%.
-    critcmp --threshold 5 $path_list
-else
-    critcmp $path_list
-fi
+critcmp $path_list
