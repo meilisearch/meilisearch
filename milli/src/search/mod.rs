@@ -17,7 +17,9 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, FacetNumberIter, Filter};
 use self::fst_utils::{Complement, Intersection, StartsWith, Union};
-pub use self::matching_words::MatchingWords;
+pub use self::matches::{
+    FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
+};
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
@@ -32,7 +34,7 @@ mod criteria;
 mod distinct;
 mod facet;
 mod fst_utils;
-mod matching_words;
+mod matches;
 mod query_tree;
 
 pub struct Search<'a> {
@@ -114,7 +116,7 @@ impl<'a> Search<'a> {
     pub fn execute(&self) -> Result<SearchResult> {
         // We create the query tree by spliting the query into tokens.
         let before = Instant::now();
-        let (query_tree, primitive_query) = match self.query.as_ref() {
+        let (query_tree, primitive_query, matching_words) = match self.query.as_ref() {
             Some(query) => {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 builder.optional_words(self.optional_words);
@@ -132,9 +134,11 @@ impl<'a> Search<'a> {
                 let analyzer = Analyzer::new(config);
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
-                builder.build(tokens)?.map_or((None, None), |(qt, pq)| (Some(qt), Some(pq)))
+                builder
+                    .build(tokens)?
+                    .map_or((None, None, None), |(qt, pq, mw)| (Some(qt), Some(pq), Some(mw)))
             }
-            None => (None, None),
+            None => (None, None, None),
         };
 
         debug!("query tree: {:?} took {:.02?}", query_tree, before.elapsed());
@@ -147,11 +151,6 @@ impl<'a> Search<'a> {
         };
 
         debug!("facet candidates: {:?} took {:.02?}", filtered_candidates, before.elapsed());
-
-        let matching_words = match query_tree.as_ref() {
-            Some(query_tree) => MatchingWords::from_query_tree(&query_tree),
-            None => MatchingWords::default(),
-        };
 
         // We check that we are allowed to use the sort criteria, we check
         // that they are declared in the sortable fields.
@@ -193,13 +192,13 @@ impl<'a> Search<'a> {
         )?;
 
         match self.index.distinct_field(self.rtxn)? {
-            None => self.perform_sort(NoopDistinct, matching_words, criteria),
+            None => self.perform_sort(NoopDistinct, matching_words.unwrap_or_default(), criteria),
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 match field_ids_map.id(name) {
                     Some(fid) => {
                         let distinct = FacetDistinct::new(fid, self.index, self.rtxn);
-                        self.perform_sort(distinct, matching_words, criteria)
+                        self.perform_sort(distinct, matching_words.unwrap_or_default(), criteria)
                     }
                     None => Ok(SearchResult::default()),
                 }

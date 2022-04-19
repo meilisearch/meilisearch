@@ -25,8 +25,8 @@ use milli::update::{
     ClearDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
 };
 use milli::{
-    obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, Index, MatchingWords,
-    SearchResult, SortError,
+    obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, FormatOptions, Index,
+    MatcherBuilder, SearchResult, SortError,
 };
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -152,43 +152,27 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         Self { analyzer }
     }
 
-    fn highlight_value(&self, value: Value, matching_words: &MatchingWords) -> Value {
+    fn highlight_value(&self, value: Value, matcher_builder: &MatcherBuilder) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
             Value::Number(number) => Value::Number(number),
             Value::String(old_string) => {
-                let mut string = String::new();
                 let analyzed = self.analyzer.analyze(&old_string);
-                for (word, token) in analyzed.reconstruct() {
-                    if token.is_word() {
-                        match matching_words.matching_bytes(&token) {
-                            Some(chars_to_highlight) => {
-                                let mut chars = word.chars();
+                let analyzed: Vec<_> = analyzed.tokens().collect();
+                let mut matcher = matcher_builder.build(&analyzed[..], &old_string);
 
-                                string.push_str("<mark>");
-                                // push the part to highlight
-                                string.extend(chars.by_ref().take(chars_to_highlight));
-                                string.push_str("</mark>");
-                                // push the suffix after highlight
-                                string.extend(chars);
-                            }
-                            // no highlight
-                            None => string.push_str(word),
-                        }
-                    } else {
-                        string.push_str(word);
-                    }
-                }
-                Value::String(string)
+                let format_options = FormatOptions { highlight: true, crop: Some(10) };
+
+                Value::String(matcher.format(format_options).to_string())
             }
             Value::Array(values) => Value::Array(
-                values.into_iter().map(|v| self.highlight_value(v, matching_words)).collect(),
+                values.into_iter().map(|v| self.highlight_value(v, matcher_builder)).collect(),
             ),
             Value::Object(object) => Value::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, self.highlight_value(v, matching_words)))
+                    .map(|(k, v)| (k, self.highlight_value(v, matcher_builder)))
                     .collect(),
             ),
         }
@@ -197,14 +181,14 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
     fn highlight_record(
         &self,
         object: &mut Map<String, Value>,
-        matching_words: &MatchingWords,
+        matcher_builder: &MatcherBuilder,
         attributes_to_highlight: &HashSet<String>,
     ) {
         // TODO do we need to create a string for element that are not and needs to be highlight?
         for (key, value) in object.iter_mut() {
             if attributes_to_highlight.contains(key) {
                 let old_value = mem::take(value);
-                *value = self.highlight_value(old_value, matching_words);
+                *value = self.highlight_value(old_value, matcher_builder);
             }
         }
     }
@@ -819,12 +803,15 @@ async fn main() -> anyhow::Result<()> {
             let stop_words = fst::Set::default();
             let highlighter = Highlighter::new(&stop_words);
 
+            let mut matcher_builder = MatcherBuilder::from_matching_words(matching_words);
+            matcher_builder.highlight_prefix("<mark>".to_string());
+            matcher_builder.highlight_suffix("</mark>".to_string());
             for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
                 let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
                 if !disable_highlighting {
                     highlighter.highlight_record(
                         &mut object,
-                        &matching_words,
+                        &matcher_builder,
                         &attributes_to_highlight,
                     );
                 }
