@@ -1,0 +1,12 @@
+[package]
+name = "permissive-json-pointer"
+version = "0.2.0"
+edition = "2021"
+description = "A permissive json pointer"
+readme = "README.md"
+
+[dependencies]
+serde_json = "1.0"
+
+[dev-dependencies]
+big_s = "1.0"
