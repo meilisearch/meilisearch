@@ -2,12 +2,13 @@
 // should be tested in its own module to isolate tests and keep the tests readable.
 
 mod errors;
+mod formatted;
 
 use crate::common::Server;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
             "title": "Shazam!",
@@ -32,7 +33,7 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
-static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub(self) static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
             "id": 852,

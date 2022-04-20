@@ -232,14 +232,22 @@ impl Index {
         let documents_iter = self.documents(&rtxn, documents_ids)?;
 
         for (_id, obkv) in documents_iter {
-            let mut document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
+            // First generate a document with all the displayed fields
+            let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+            // select the attributes to retrieve
+            let attributes_to_retrieve = to_retrieve_ids
+                .iter()
+                .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+            let mut document =
+                permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
 
             let matches_info = query
                 .matches
                 .then(|| compute_matches(&matching_words, &document, &analyzer));
 
             let formatted = format_fields(
-                &document,
+                &displayed_document,
                 &fields_ids_map,
                 &formatter,
                 &matching_words,
@@ -475,7 +483,7 @@ fn add_non_formatted_ids_to_formatted_options(
 }
 
 fn make_document(
-    attributes_to_retrieve: &BTreeSet<FieldId>,
+    displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReaderU16,
 ) -> Result<Document> {
@@ -493,11 +501,11 @@ fn make_document(
     }
 
     // select the attributes to retrieve
-    let attributes_to_retrieve = attributes_to_retrieve
+    let displayed_attributes = displayed_attributes
         .iter()
         .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
 
-    let document = permissive_json_pointer::select_values(&document, attributes_to_retrieve);
+    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
 }
 
@@ -514,7 +522,6 @@ fn format_fields<A: AsRef<[u8]>>(
         // before.
         .map(|&fid| field_ids_map.name(fid).unwrap())
         .collect();
-
     let mut document = permissive_json_pointer::select_values(document, selectors.iter().copied());
 
     permissive_json_pointer::map_leaf_values(&mut document, selectors, |key, value| {
