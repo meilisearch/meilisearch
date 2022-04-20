@@ -1,5 +1,5 @@
 [package]
-name = "flatten_serde_json-fuzz"
+name = "flatten-serde-json-fuzz"
 version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
@@ -11,8 +11,9 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary-json = "0.1.1"
+json-depth-checker = { path = "../../json-depth-checker" }
 
-[dependencies.flatten_serde_json]
+[dependencies.flatten-serde-json]
 path = ".."
 
 # Prevent this from interfering with workspaces
