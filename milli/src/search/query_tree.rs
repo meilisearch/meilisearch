@@ -100,20 +100,13 @@ impl QueryKind {
         QueryKind::Exact { original_typo: 0, word }
     }
 
+    #[cfg(test)]
     pub fn exact_with_typo(original_typo: u8, word: String) -> Self {
         QueryKind::Exact { original_typo, word }
     }
 
     pub fn tolerant(typo: u8, word: String) -> Self {
         QueryKind::Tolerant { typo, word }
-    }
-
-    pub fn is_tolerant(&self) -> bool {
-        matches!(self, QueryKind::Tolerant { .. })
-    }
-
-    pub fn is_exact(&self) -> bool {
-        matches!(self, QueryKind::Exact { .. })
     }
 
     pub fn typo(&self) -> u8 {
