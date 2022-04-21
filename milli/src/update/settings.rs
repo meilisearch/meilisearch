@@ -580,6 +580,23 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
+                fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> String {
+                    analyzer.analyze(text).tokens().map(|token| token.text().to_string()).collect()
+                }
+
+                let mut config = AnalyzerConfig::default();
+                let stop_words = self.index.stop_words(self.wtxn)?;
+                if let Some(stop_words) = &stop_words {
+                    config.stop_words(stop_words);
+                }
+                let analyzer = Analyzer::new(config);
+
+                let mut words: Vec<_> =
+                    words.iter().map(|word| normalize(&analyzer, word)).collect();
+
+                // normalization could reorder words
+                words.sort_unstable();
+
                 let words = fst::Set::from_iter(words.iter())?;
                 self.index.put_exact_words(&mut self.wtxn, &words)?;
             }
