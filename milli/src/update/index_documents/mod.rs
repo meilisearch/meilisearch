@@ -1623,4 +1623,30 @@ mod tests {
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 1);
     }
+
+    /// We try to index documents with words that are too long here,
+    /// it should not return any error.
+    #[test]
+    fn text_with_too_long_words() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let content = documents!([
+          {"id": 1, "title": "a".repeat(256) },
+          {"id": 2, "title": "b".repeat(512) },
+          {"id": 3, "title": format!("{} {}", "c".repeat(250), "d".repeat(250)) },
+        ]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+    }
 }
