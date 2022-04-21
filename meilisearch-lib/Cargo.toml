@@ -60,7 +60,7 @@ whoami = { version = "1.2.1", optional = true }
 actix-rt = "2.7.0"
 meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
 mockall = "0.11.0"
-nelson = { git = "https://github.com/MarinPostma/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
+nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
 paste = "1.0.6"
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
