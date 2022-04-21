@@ -1461,4 +1461,22 @@ mod tests {
         builder.set_min_word_len_two_typos(7);
         assert!(builder.execute(|_| ()).is_err());
     }
+
+    #[test]
+    fn update_exact_words_normalization() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+
+        let words = btreeset! { S("Ab"), S("ac") };
+        builder.set_exact_words(words);
+        assert!(builder.execute(|_| ()).is_ok());
+        let exact_words = index.exact_words(&txn).unwrap();
+        for word in exact_words.into_fst().stream().into_str_vec().unwrap() {
+            assert!(word.0 == "ac" || word.0 == "ab");
+        }
+    }
 }
