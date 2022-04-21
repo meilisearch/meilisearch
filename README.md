@@ -33,6 +33,7 @@ For more information about features go to [our documentation](https://docs.meili
 </p>
 
 ## ✨ Features
+
 * Search-as-you-type experience (answers < 50 milliseconds)
 * Full-text search
 * Typo tolerant (understands typos and misspelling)
