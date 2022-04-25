@@ -580,6 +580,23 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
+                fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> String {
+                    analyzer.analyze(text).tokens().map(|token| token.text().to_string()).collect()
+                }
+
+                let mut config = AnalyzerConfig::default();
+                let stop_words = self.index.stop_words(self.wtxn)?;
+                if let Some(stop_words) = &stop_words {
+                    config.stop_words(stop_words);
+                }
+                let analyzer = Analyzer::new(config);
+
+                let mut words: Vec<_> =
+                    words.iter().map(|word| normalize(&analyzer, word)).collect();
+
+                // normalization could reorder words
+                words.sort_unstable();
+
                 let words = fst::Set::from_iter(words.iter())?;
                 self.index.put_exact_words(&mut self.wtxn, &words)?;
             }
@@ -1460,5 +1477,23 @@ mod tests {
         builder.set_min_word_len_one_typo(10);
         builder.set_min_word_len_two_typos(7);
         assert!(builder.execute(|_| ()).is_err());
+    }
+
+    #[test]
+    fn update_exact_words_normalization() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut txn, &index, &config);
+
+        let words = btreeset! { S("Ab"), S("ac") };
+        builder.set_exact_words(words);
+        assert!(builder.execute(|_| ()).is_ok());
+        let exact_words = index.exact_words(&txn).unwrap();
+        for word in exact_words.into_fst().stream().into_str_vec().unwrap() {
+            assert!(word.0 == "ac" || word.0 == "ab");
+        }
     }
 }
