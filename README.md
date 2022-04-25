@@ -19,7 +19,7 @@ This repository contains crates to quickly debug the engine:
  - The `filter-parser` crate contains the parser for the Meilisearch filter syntax.
  - The `flatten-serde-json` crate contains the library that flattens serde-json `Value` objects like Elasticsearch does.
  - The `helpers` crate is only used to do operations on the database.
- - The `http-ui` crate is a simple HTTP dashboard to tests the features like for real!
+ - The `http-ui` crate is a simple HTTP dashboard to test the features like for real!
  - The `infos` crate is used to dump the internal data-structure and ensure correctness.
  - The `json-depth-checker` crate is used to indicate if a JSON must be flattened.
 
