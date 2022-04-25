@@ -4,6 +4,5 @@ status = [
     'Tests on windows-latest with stable',
     'Run Rustfmt',
 ]
-pr_status = ['Specify breaking']
 # 3 hours timeout
 timeout-sec = 10800
