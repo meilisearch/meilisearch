@@ -1337,32 +1337,34 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key("nested.id".to_owned());
+        builder.set_primary_key("complex.nested.id".to_owned());
         builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         let content = documents!([
             {
-                "nested": {
-                    "id": 0,
+                "complex": {
+                    "nested": {
+                        "id": 0,
+                    },
                 },
                 "title": "The zeroth document",
             },
             {
-                "nested": {
+                "complex.nested": {
                     "id": 1,
                 },
                 "title": "The first document",
             },
             {
-                "nested": {
-                    "id": 2,
+                "complex": {
+                    "nested.id": 2,
                 },
                 "title": "The second document",
             },
             {
-                "nested.id": 3,
+                "complex.nested.id": 3,
                 "title": "The third document",
             },
         ]);

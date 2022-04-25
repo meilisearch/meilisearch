@@ -340,35 +340,48 @@ impl<'a, 'i> Transform<'a, 'i> {
             return Ok(None);
         }
 
+        // store the keys and values the original obkv + the flattened json
+        // We first extract all the key+value out of the obkv. If a value is not nested
+        // we keep a reference on its value. If the value is nested we'll get its value
+        // as an owned `Vec<u8>` after flattening it.
+        let mut key_value: Vec<(FieldId, Cow<[u8]>)> = Vec::new();
+
+        // the object we're going to use to store the fields that need to be flattened.
         let mut doc = serde_json::Map::new();
 
-        for (k, v) in obkv.iter() {
-            let key = self.fields_ids_map.name(k).ok_or(FieldIdMapMissingEntry::FieldId {
-                field_id: k,
-                process: "Flatten from fields ids map.",
-            })?;
-            let value = serde_json::from_slice::<serde_json::Value>(v)
-                .map_err(crate::error::InternalError::SerdeJson)?;
-            doc.insert(key.to_string(), value);
+        // we recreate a json containing only the fields that needs to be flattened.
+        // all the raw values get inserted directly in the `key_value` vec.
+        for (key, value) in obkv.iter() {
+            if json_depth_checker::should_flatten_from_unchecked_slice(value) {
+                let key = self.fields_ids_map.name(key).ok_or(FieldIdMapMissingEntry::FieldId {
+                    field_id: key,
+                    process: "Flatten from fields ids map.",
+                })?;
+
+                let value = serde_json::from_slice::<Value>(value)
+                    .map_err(crate::error::InternalError::SerdeJson)?;
+                doc.insert(key.to_string(), value);
+            } else {
+                key_value.push((key, value.into()));
+            }
         }
 
         let flattened = flatten_serde_json::flatten(&doc);
 
-        // Once we have the flattened version we can convert it back to obkv and
-        // insert all the new generated fields_ids (if any) in the fields ids map.
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut writer = KvWriter::new(&mut buffer);
-        let mut flattened: Vec<_> = flattened.into_iter().collect();
-        // we reorder the field to get all the known field first
-        flattened
-            .sort_unstable_by_key(|(key, _)| self.fields_ids_map.id(&key).unwrap_or(FieldId::MAX));
-
-        for (key, value) in flattened {
+        // Once we have the flattened version we insert all the new generated fields_ids
+        // (if any) in the fields ids map and serialize the value.
+        for (key, value) in flattened.into_iter() {
             let fid = self.fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached)?;
             let value = serde_json::to_vec(&value).map_err(InternalError::SerdeJson)?;
-            writer.insert(fid, &value)?;
+            key_value.push((fid, value.into()));
         }
 
+        // we sort the key. If there was a conflict between the obkv and the new generated value the
+        // keys will be consecutive.
+        key_value.sort_unstable_by_key(|(key, _)| *key);
+
+        let mut buffer = Vec::new();
+        Self::create_obkv_from_key_value(&mut key_value, &mut buffer)?;
         Ok(Some(buffer))
     }
 
@@ -380,39 +393,112 @@ impl<'a, 'i> Transform<'a, 'i> {
         output_buffer: &mut Vec<u8>,
         field_buffer_cache: &mut Vec<(u16, Cow<[u8]>)>,
     ) -> Result<()> {
+        // store the keys and values of the json + the original obkv
+        let mut key_value: Vec<(FieldId, Cow<[u8]>)> = Vec::new();
+
         // if the primary_key is nested we need to flatten the document before being able to do anything
         let mut doc = serde_json::Map::new();
 
-        for (k, v) in obkv.iter() {
-            let key =
-                mapping.get(&k).ok_or(InternalError::FieldIdMappingMissingEntry { key: k })?;
-            let key = self.fields_ids_map.name(*key).ok_or(FieldIdMapMissingEntry::FieldId {
-                field_id: *key,
-                process: "Flatten from field mapping.",
-            })?;
-            let value =
-                serde_json::from_slice::<serde_json::Value>(v).map_err(InternalError::SerdeJson)?;
-            doc.insert(key.to_string(), value);
+        // we recreate a json containing only the fields that needs to be flattened.
+        // all the raw values get inserted directly in the `key_value` vec.
+        for (key, value) in obkv.iter() {
+            if json_depth_checker::should_flatten_from_unchecked_slice(value) {
+                let key =
+                    mapping.get(&key).ok_or(InternalError::FieldIdMappingMissingEntry { key })?;
+                let key =
+                    self.fields_ids_map.name(*key).ok_or(FieldIdMapMissingEntry::FieldId {
+                        field_id: *key,
+                        process: "Flatten from field mapping.",
+                    })?;
+                let value = serde_json::from_slice::<serde_json::Value>(value)
+                    .map_err(InternalError::SerdeJson)?;
+                doc.insert(key.to_string(), value);
+            } else {
+                key_value.push((key, value.into()));
+            }
         }
 
         let flattened = flatten_serde_json::flatten(&doc);
 
-        // Once we have the flattened version we can convert it back to obkv and
-        // insert all the new generated fields_ids (if any) in the fields ids map.
-        output_buffer.clear();
-        let mut writer = KvWriter::new(output_buffer);
-        let mut flattened: Vec<_> = flattened.into_iter().collect();
-        // we reorder the field to get all the known field first
-        flattened
-            .sort_unstable_by_key(|(key, _)| self.fields_ids_map.id(&key).unwrap_or(FieldId::MAX));
-
-        for (key, value) in flattened {
+        // Once we have the flattened version we insert all the new generated fields_ids
+        // (if any) in the fields ids map and serialize the value.
+        for (key, value) in flattened.into_iter() {
             let fid = self.fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached)?;
             let value = serde_json::to_vec(&value).map_err(InternalError::SerdeJson)?;
-            writer.insert(fid, &value)?;
+            key_value.push((fid, value.clone().into()));
+
             if field_buffer_cache.iter().find(|(id, _)| *id == fid).is_none() {
                 field_buffer_cache.push((fid, value.into()));
             }
+        }
+
+        // we sort the key. If there was a conflict between the obkv and the new generated value the
+        // keys will be consecutive.
+        key_value.sort_unstable_by_key(|(key, _)| *key);
+
+        Self::create_obkv_from_key_value(&mut key_value, output_buffer)?;
+        Ok(())
+    }
+
+    /// Generate an obkv from a slice of key / value sorted by key.
+    fn create_obkv_from_key_value(
+        key_value: &mut [(FieldId, Cow<[u8]>)],
+        output_buffer: &mut Vec<u8>,
+    ) -> Result<()> {
+        debug_assert!(
+            key_value.windows(2).all(|vec| vec[0].0 <= vec[1].0),
+            "The slice of key / value pair must be sorted."
+        );
+
+        output_buffer.clear();
+        let mut writer = KvWriter::new(output_buffer);
+
+        let mut skip_next_value = false;
+        for things in key_value.windows(2) {
+            if skip_next_value {
+                skip_next_value = false;
+                continue;
+            }
+            let (key1, value1) = &things[0];
+            let (key2, value2) = &things[1];
+
+            // now we're going to look for conflicts between the keys. For example the following documents would cause a conflict:
+            // { "doggo.name": "jean", "doggo": { "name": "paul" } }
+            // we should find a first "doggo.name" from the obkv and a second one from the flattening.
+            // but we must generate the following document:
+            // { "doggo.name": ["jean", "paul"] }
+            // thus we're going to merge the value from the obkv and the flattened document in a single array and skip the next
+            // iteration.
+            if key1 == key2 {
+                skip_next_value = true;
+
+                let value1 = serde_json::from_slice(value1)
+                    .map_err(crate::error::InternalError::SerdeJson)?;
+                let value2 = serde_json::from_slice(value2)
+                    .map_err(crate::error::InternalError::SerdeJson)?;
+                let value = match (value1, value2) {
+                    (Value::Array(mut left), Value::Array(mut right)) => {
+                        left.append(&mut right);
+                        Value::Array(left)
+                    }
+                    (Value::Array(mut array), value) | (value, Value::Array(mut array)) => {
+                        array.push(value);
+                        Value::Array(array)
+                    }
+                    (left, right) => Value::Array(vec![left, right]),
+                };
+
+                let value = serde_json::to_vec(&value).map_err(InternalError::SerdeJson)?;
+                writer.insert(*key1, value)?;
+            } else {
+                writer.insert(*key1, value1)?;
+            }
+        }
+
+        if !skip_next_value {
+            // the unwrap is safe here, we know there was at least one value in the document
+            let (key, value) = key_value.last().unwrap();
+            writer.insert(*key, value)?;
         }
 
         Ok(())
