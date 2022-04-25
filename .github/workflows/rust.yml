@@ -1,10 +1,11 @@
 name: Rust
 
 on:
+  schedule:
+    - cron: '0 5 * * MON' # Every Monday at 5:00am
   push:
-    branches: [ staging, trying ]
+    branches: [ staging, trying ] # For Bors
   pull_request:
-    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,15 +18,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
-        rust:
-          - stable
-          - nightly
     steps:
     - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
+    - name: Run test with Rust nightly
+      if: github.event_name == 'schedule'
+      uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: ${{ matrix.rust }}
+        toolchain: nightly
+        override: true
+    - name: Run test with Rust stable
+      if: github.event_name != 'schedule'
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
         override: true
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v1.3.0
