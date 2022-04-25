@@ -29,7 +29,7 @@ Milli is a library that does search things, it must be embedded in a program.
 You can compute the documentation of it by using `cargo doc --open`.
 
 Here is an example usage of the library where we insert documents into the engine
-and search for one of them just after.
+and search for one of them right after.
 
 ```rust
 let path = tempfile::tempdir().unwrap();
