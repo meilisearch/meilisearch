@@ -1,9 +1,10 @@
 [package]
 name = "http-ui"
 description = "The HTTP user interface of the milli search engine"
-version = "0.26.1"
+version = "0.27.0"
 authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
+publish = false
 
 [dependencies]
 anyhow = "1.0.56"
