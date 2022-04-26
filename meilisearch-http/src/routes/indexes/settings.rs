@@ -165,7 +165,49 @@ make_setting_route!(
     "/typo-tolerance",
     meilisearch_lib::index::updates::TypoSettings,
     typo_tolerance,
-    "typoTolerance"
+    "typoTolerance",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::TypoSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "TypoToleranceUpdated Updated".to_string(),
+            json!({
+                "typo_tolerance": {
+                    "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))).unwrap_or(true),
+                    "disable_on_attributes": setting
+                        .as_ref()
+                        .map(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty()))
+                        .flatten()
+                        .unwrap_or(false),
+                    "disable_on_words": setting
+                        .as_ref()
+                        .map(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty()))
+                        .flatten()
+                        .unwrap_or(false),
+                    "min_word_size_for_one_typo": setting
+                        .as_ref()
+                        .map(|s| s.min_word_size_for_typos
+                            .as_ref()
+                            .set()
+                            .map(|s| s.one_typo.set()))
+                        .flatten()
+                        .flatten()
+                        .unwrap_or(5),
+                    "min_word_size_for_two_typos": setting
+                        .as_ref()
+                        .map(|s| s.min_word_size_for_typos
+                            .as_ref()
+                            .set()
+                            .map(|s| s.two_typos.set()))
+                        .flatten()
+                        .flatten()
+                        .unwrap_or(9),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -282,6 +324,47 @@ pub async fn update_all(
            "filterable_attributes": {
                 "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()).unwrap_or(0),
                 "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")).unwrap_or(false),
+            },
+            "typo_tolerance": {
+                "enabled": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .map(|s| s.enabled.as_ref().set())
+                    .flatten()
+                    .copied()
+                    .unwrap_or(true),
+                "disable_on_attributes": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .map(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty()))
+                    .flatten()
+                    .unwrap_or(false),
+                "disable_on_words": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .map(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty()))
+                    .flatten()
+                    .unwrap_or(false),
+                "min_word_size_for_one_typo": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .map(|s| s.min_word_size_for_typos
+                        .as_ref()
+                        .set()
+                        .map(|s| s.one_typo.set()))
+                    .flatten()
+                    .flatten()
+                    .unwrap_or(5),
+                "min_word_size_for_two_typos": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .map(|s| s.min_word_size_for_typos
+                        .as_ref()
+                        .set()
+                        .map(|s| s.two_typos.set()))
+                    .flatten()
+                    .flatten()
+                    .unwrap_or(9),
             },
         }),
         Some(&req),
