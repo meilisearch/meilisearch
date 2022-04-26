@@ -39,7 +39,7 @@ fn index_documents(
     let mut wtxn = index.write_txn()?;
 
     let indexing_config = IndexDocumentsConfig::default();
-    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ());
+    let mut builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())?;
     builder.add_documents(documents)?;
     builder.execute().unwrap();
 
