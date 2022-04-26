@@ -13,6 +13,7 @@ use serde::Deserialize;
 use slice_group_by::GroupBy;
 
 mod distinct;
+mod facet_distribution;
 mod filters;
 mod query_criteria;
 mod sort;
