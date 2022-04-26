@@ -1,7 +1,7 @@
 status = [
-    'Tests on ubuntu-18.04 with stable',
-    'Tests on macos-latest with stable',
-    'Tests on windows-latest with stable',
+    'Tests on ubuntu-18.04',
+    'Tests on macos-latest',
+    'Tests on windows-latest',
     'Run Rustfmt',
 ]
 # 3 hours timeout

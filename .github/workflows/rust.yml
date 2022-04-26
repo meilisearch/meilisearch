@@ -12,7 +12,7 @@ env:
 
 jobs:
   tests:
-    name: Tests on ${{ matrix.os }} with ${{ matrix.rust }}
+    name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
