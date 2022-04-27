@@ -171,7 +171,7 @@ make_setting_route!(
         use serde_json::json;
 
         analytics.publish(
-            "TypoToleranceUpdated Updated".to_string(),
+            "TypoTolerance Updated".to_string(),
             json!({
                 "typo_tolerance": {
                     "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))).unwrap_or(true),
