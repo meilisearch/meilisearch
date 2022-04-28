@@ -79,6 +79,7 @@ walkdir = "2.3.2"
 [dev-dependencies]
 actix-rt = "2.7.0"
 assert-json-diff = "2.0.1"
+manifest-dir-macros = "0.1.14"
 maplit = "1.0.2"
 paste = "1.0.6"
 serde_url_params = "0.2.1"

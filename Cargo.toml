@@ -7,3 +7,9 @@ members = [
     "meilisearch-auth",
     "permissive-json-pointer",
 ]
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.milli]
+opt-level = 3

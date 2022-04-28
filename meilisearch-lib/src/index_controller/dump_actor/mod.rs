@@ -256,13 +256,8 @@ fn extract_dump(
         .parent()
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| ".".into());
-    if cfg!(windows) {
-        std::env::set_var("TMP", temp_path);
-    } else {
-        std::env::set_var("TMPDIR", temp_path);
-    }
 
-    let tmp_src = tempfile::tempdir()?;
+    let tmp_src = tempfile::tempdir_in(temp_path)?;
     let tmp_src_path = tmp_src.path();
 
     from_tar_gz(&src_path, tmp_src_path)?;
