@@ -243,9 +243,7 @@ impl<'a> FacetDistribution<'a> {
         for (fid, name) in fields_ids_map.iter() {
             if crate::is_faceted(name, &fields) {
                 let values = self.facet_values(fid)?;
-                if !values.is_empty() {
-                    distribution.insert(name.to_string(), values);
-                }
+                distribution.insert(name.to_string(), values);
             }
         }
 
