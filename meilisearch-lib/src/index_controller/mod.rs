@@ -178,15 +178,6 @@ impl IndexControllerBuilder {
             .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
-        let db_exists = db_path.as_ref().exists();
-        if db_exists {
-            // Directory could be pre-created without any database in.
-            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
-            if !db_is_empty {
-                versioning::check_version_file(db_path.as_ref())?;
-            }
-        }
-
         if let Some(ref path) = self.import_snapshot {
             log::info!("Loading from snapshot {:?}", path);
             load_snapshot(
@@ -205,6 +196,15 @@ impl IndexControllerBuilder {
                 task_store_size,
                 &indexer_options,
             )?;
+        }
+
+        let db_exists = db_path.as_ref().exists();
+        if db_exists {
+            // Directory could be pre-created without any database in.
+            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
+            if !db_is_empty {
+                versioning::check_version_file(db_path.as_ref())?;
+            }
         }
 
         std::fs::create_dir_all(db_path.as_ref())?;
