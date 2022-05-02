@@ -35,6 +35,7 @@ smallstr =  { version = "0.3.0", features = ["serde"] }
 smallvec = "1.8.0"
 smartstring = "1.0.1"
 tempfile = "3.3.0"
+thiserror = "1.0.31"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "0.8.2", features = ["v4"] }
 

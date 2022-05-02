@@ -2,53 +2,26 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::error::Error;
-use crate::{AscDesc, Member, UserError};
+use crate::{AscDesc, Member};
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum CriterionError {
+    #[error("`{name}` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules.")]
     InvalidName { name: String },
+    #[error("`{name}` is a reserved keyword and thus can't be used as a ranking rule")]
     ReservedName { name: String },
+    #[error(
+        "`{name}` is a reserved keyword and thus can't be used as a ranking rule. \
+`{name}` can only be used for sorting at search time"
+    )]
     ReservedNameForSort { name: String },
+    #[error(
+        "`{name}` is a reserved keyword and thus can't be used as a ranking rule. \
+`{name}` can only be used for filtering at search time"
+    )]
     ReservedNameForFilter { name: String },
-}
-
-impl fmt::Display for CriterionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidName { name } => write!(f, "`{}` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules.", name),
-            Self::ReservedName { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a ranking rule",
-                    name
-                )
-            }
-            Self::ReservedNameForSort { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a ranking rule. \
-`{}` can only be used for sorting at search time",
-                    name, name
-                )
-            }
-            Self::ReservedNameForFilter { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a ranking rule. \
-`{}` can only be used for filtering at search time",
-                    name, name
-                )
-            }
-        }
-    }
-}
-
-impl From<CriterionError> for Error {
-    fn from(error: CriterionError) -> Self {
-        Self::UserError(UserError::CriterionError(error))
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

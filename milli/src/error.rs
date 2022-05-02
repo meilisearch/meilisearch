@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 use std::convert::Infallible;
-use std::error::Error as StdError;
-use std::{fmt, io, str};
+use std::{io, str};
 
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use serde_json::{Map, Value};
+use thiserror::Error;
 
 use crate::{CriterionError, DocumentId, FieldId, SortError};
 
@@ -15,92 +15,172 @@ pub fn is_reserved_keyword(keyword: &str) -> bool {
     ["_geo", "_geoDistance", "_geoPoint", "_geoRadius"].contains(&keyword)
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    InternalError(InternalError),
-    IoError(io::Error),
-    UserError(UserError),
+    #[error("internal: {0}.")]
+    InternalError(#[from] InternalError),
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    UserError(#[from] UserError),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum InternalError {
+    #[error("{}", HeedError::DatabaseClosing)]
     DatabaseClosing,
+    #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
-    FieldIdMapMissingEntry(FieldIdMapMissingEntry),
+    #[error(transparent)]
+    FieldIdMapMissingEntry(#[from] FieldIdMapMissingEntry),
+    #[error("Missing {key} in the field id mapping.")]
     FieldIdMappingMissingEntry { key: FieldId },
-    Fst(fst::Error),
+    #[error(transparent)]
+    Fst(#[from] fst::Error),
+    #[error("Invalid compression type have been specified to grenad.")]
     GrenadInvalidCompressionType,
+    #[error("Invalid grenad file with an invalid version format.")]
     GrenadInvalidFormatVersion,
+    #[error("Invalid merge while processing {process}.")]
     IndexingMergingKeys { process: &'static str },
+    #[error("{}", HeedError::InvalidDatabaseTyping)]
     InvalidDatabaseTyping,
-    RayonThreadPool(ThreadPoolBuildError),
-    SerdeJson(serde_json::Error),
-    Serialization(SerializationError),
-    Store(MdbError),
-    Utf8(str::Utf8Error),
+    #[error(transparent)]
+    RayonThreadPool(#[from] ThreadPoolBuildError),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    Serialization(#[from] SerializationError),
+    #[error(transparent)]
+    Store(#[from] MdbError),
+    #[error(transparent)]
+    Utf8(#[from] str::Utf8Error),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum SerializationError {
+    #[error("{}", match .db_name {
+        Some(name) => format!("decoding from the {name} database failed"),
+        None => "decoding failed".to_string(),
+    })]
     Decoding { db_name: Option<&'static str> },
+    #[error("{}", match .db_name {
+        Some(name) => format!("encoding into the {name} database failed"),
+        None => "encoding failed".to_string(),
+    })]
     Encoding { db_name: Option<&'static str> },
+    #[error("number is not a valid finite number")]
     InvalidNumberSerialization,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum FieldIdMapMissingEntry {
+    #[error("unknown field id {field_id} coming from the {process} process")]
     FieldId { field_id: FieldId, process: &'static str },
+    #[error("unknown field name {field_name} coming from the {process} process")]
     FieldName { field_name: String, process: &'static str },
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum UserError {
+    #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
-    CriterionError(CriterionError),
+    #[error(transparent)]
+    CriterionError(#[from] CriterionError),
+    #[error("Maximum number of documents reached.")]
     DocumentLimitReached,
+    #[error(
+        "Document identifier `{}` is invalid. \
+A document identifier can be of type integer or string, \
+only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).", .document_id.to_string()
+    )]
     InvalidDocumentId { document_id: Value },
+    #[error("Invalid facet distribution, the fields `{}` are not set as filterable.",
+        .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ")
+     )]
     InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
-    InvalidGeoField(GeoError),
+    #[error(transparent)]
+    InvalidGeoField(#[from] GeoError),
+    #[error("{0}")]
     InvalidFilter(String),
+    #[error("Attribute `{}` is not sortable. {}",
+        .field,
+        match .valid_fields.is_empty() {
+            true => "This index does not have configured sortable attributes.".to_string(),
+            false => format!("Available sortable attributes are: `{}`.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ")
+                ),
+        }
+    )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    #[error("The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.")]
     SortRankingRuleMissing,
+    #[error("The database file is in an invalid state.")]
     InvalidStoreFile,
+    #[error("Maximum database size has been reached.")]
     MaxDatabaseSizeReached,
+    #[error("Document doesn't have a `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
     MissingDocumentId { primary_key: String, document: Object },
+    #[error("The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.")]
     MissingPrimaryKey,
+    #[error("There is no more space left on the device. Consider increasing the size of the disk/partition.")]
     NoSpaceLeftOnDevice,
+    #[error("Index already has a primary key: `{0}`.")]
     PrimaryKeyCannotBeChanged(String),
+    #[error(transparent)]
     SerdeJson(serde_json::Error),
-    SortError(SortError),
+    #[error(transparent)]
+    SortError(#[from] SortError),
+    #[error("An unknown internal document id have been used: `{document_id}`.")]
     UnknownInternalDocumentId { document_id: DocumentId },
+    #[error("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {0}` and twoTypos: {1}`.")]
     InvalidMinTypoWordLenSetting(u8, u8),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum GeoError {
+    #[error("Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")]
     MissingLatitude { document_id: Value },
+    #[error("Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")]
     MissingLongitude { document_id: Value },
+    #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
     BadLatitude { document_id: Value, value: Value },
+    #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
     BadLongitude { document_id: Value, value: Value },
 }
 
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Error {
-        // TODO must be improved and more precise
-        Error::IoError(error)
-    }
+/// A little macro helper to autogenerate From implementation that needs two `Into`.
+/// Given the following parameters: `error_from_sub_error!(FieldIdMapMissingEntry => InternalError)`
+/// the macro will create the following code:
+/// ```ignore
+/// impl From<FieldIdMapMissingEntry> for Error {
+///     fn from(error: FieldIdMapMissingEntry) -> Error {
+///         Error::from(InternalError::from(error))
+///     }
+/// }
+/// ```
+macro_rules! error_from_sub_error {
+    () => {};
+    ($sub:ty => $intermediate:ty) => {
+        impl From<$sub> for Error {
+            fn from(error: $sub) -> Error {
+                Error::from(<$intermediate>::from(error))
+            }
+        }
+    };
+    ($($sub:ty => $intermediate:ty $(,)?),+) => {
+        $(error_from_sub_error!($sub => $intermediate);)+
+    };
 }
 
-impl From<fst::Error> for Error {
-    fn from(error: fst::Error) -> Error {
-        Error::InternalError(InternalError::Fst(error))
-    }
-}
-
-impl From<GeoError> for Error {
-    fn from(error: GeoError) -> Error {
-        Error::UserError(UserError::InvalidGeoField(error))
-    }
+error_from_sub_error! {
+    FieldIdMapMissingEntry => InternalError,
+    fst::Error => InternalError,
+    str::Utf8Error => InternalError,
+    ThreadPoolBuildError => InternalError,
+    SerializationError => InternalError,
+    GeoError => UserError,
+    CriterionError => UserError,
 }
 
 impl<E> From<grenad::Error<E>> for Error
@@ -118,12 +198,6 @@ where
                 Error::InternalError(InternalError::GrenadInvalidFormatVersion)
             }
         }
-    }
-}
-
-impl From<str::Utf8Error> for Error {
-    fn from(error: str::Utf8Error) -> Error {
-        Error::InternalError(InternalError::Utf8(error))
     }
 }
 
@@ -152,216 +226,6 @@ impl From<HeedError> for Error {
         }
     }
 }
-
-impl From<ThreadPoolBuildError> for Error {
-    fn from(error: ThreadPoolBuildError) -> Error {
-        Error::InternalError(InternalError::RayonThreadPool(error))
-    }
-}
-
-impl From<FieldIdMapMissingEntry> for Error {
-    fn from(error: FieldIdMapMissingEntry) -> Error {
-        Error::InternalError(InternalError::FieldIdMapMissingEntry(error))
-    }
-}
-
-impl From<InternalError> for Error {
-    fn from(error: InternalError) -> Error {
-        Error::InternalError(error)
-    }
-}
-
-impl From<UserError> for Error {
-    fn from(error: UserError) -> Error {
-        Error::UserError(error)
-    }
-}
-
-impl From<SerializationError> for Error {
-    fn from(error: SerializationError) -> Error {
-        Error::InternalError(InternalError::Serialization(error))
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InternalError(error) => write!(f, "internal: {}.", error),
-            Self::IoError(error) => error.fmt(f),
-            Self::UserError(error) => error.fmt(f),
-        }
-    }
-}
-
-impl StdError for Error {}
-
-impl fmt::Display for InternalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::DatabaseMissingEntry { db_name, key } => {
-                write!(f, "Missing {} in the {} database.", key.unwrap_or("key"), db_name)
-            }
-            Self::FieldIdMapMissingEntry(error) => error.fmt(f),
-            Self::FieldIdMappingMissingEntry { key } => {
-                write!(f, "Missing {} in the field id mapping.", key)
-            }
-            Self::Fst(error) => error.fmt(f),
-            Self::GrenadInvalidCompressionType => {
-                f.write_str("Invalid compression type have been specified to grenad.")
-            }
-            Self::GrenadInvalidFormatVersion => {
-                f.write_str("Invalid grenad file with an invalid version format.")
-            }
-            Self::IndexingMergingKeys { process } => {
-                write!(f, "Invalid merge while processing {}.", process)
-            }
-            Self::Serialization(error) => error.fmt(f),
-            Self::InvalidDatabaseTyping => HeedError::InvalidDatabaseTyping.fmt(f),
-            Self::RayonThreadPool(error) => error.fmt(f),
-            Self::SerdeJson(error) => error.fmt(f),
-            Self::DatabaseClosing => HeedError::DatabaseClosing.fmt(f),
-            Self::Store(error) => error.fmt(f),
-            Self::Utf8(error) => error.fmt(f),
-        }
-    }
-}
-
-impl StdError for InternalError {}
-
-impl fmt::Display for UserError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidFilter(error) => f.write_str(error),
-            Self::AttributeLimitReached => f.write_str("A document cannot contain more than 65,535 fields."),
-            Self::CriterionError(error) => write!(f, "{}", error),
-            Self::DocumentLimitReached => f.write_str("Maximum number of documents reached."),
-            Self::InvalidFacetsDistribution { invalid_facets_name } => {
-                let name_list =
-                    invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
-                write!(
-                    f,
-                    "Invalid facet distribution, the fields `{}` are not set as filterable.",
-                    name_list
-                )
-            }
-            Self::InvalidGeoField(error) => write!(f, "{error}"),
-            Self::InvalidDocumentId { document_id } => {
-                let document_id = match document_id {
-                    Value::String(id) => id.clone(),
-                    _ => document_id.to_string(),
-                };
-                write!(
-                    f,
-                    "Document identifier `{}` is invalid. \
-A document identifier can be of type integer or string, \
-only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
-                    document_id
-                )
-            }
-            Self::InvalidSortableAttribute { field, valid_fields } => {
-                let valid_names =
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ");
-
-                    if valid_names.is_empty() {
-                        write!(
-                            f,
-                            "Attribute `{}` is not sortable. This index does not have configured sortable attributes.",
-                            field
-                        )
-                    } else {
-                        write!(
-                            f,
-                            "Attribute `{}` is not sortable. Available sortable attributes are: `{}`.",
-                            field, valid_names
-                        )
-                    }
-            }
-            Self::SortRankingRuleMissing => f.write_str(
-                "The sort ranking rule must be specified in the \
-ranking rules settings to use the sort parameter at search time.",
-            ),
-            Self::MissingDocumentId { primary_key, document } => {
-                let json = serde_json::to_string(document).unwrap();
-                write!(f, "Document doesn't have a `{}` attribute: `{}`.", primary_key, json)
-            }
-            Self::MissingPrimaryKey => f.write_str("The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index."),
-            Self::MaxDatabaseSizeReached => f.write_str("Maximum database size has been reached."),
-            Self::NoSpaceLeftOnDevice => f.write_str("There is no more space left on the device. Consider increasing the size of the disk/partition."),
-            Self::InvalidStoreFile => f.write_str("The database file is in an invalid state."),
-            Self::PrimaryKeyCannotBeChanged(primary_key) => {
-                write!(f, "Index already has a primary key: `{}`.", primary_key)
-            }
-            Self::SerdeJson(error) => error.fmt(f),
-            Self::SortError(error) => write!(f, "{}", error),
-            Self::UnknownInternalDocumentId { document_id } => {
-                write!(f, "An unknown internal document id have been used: `{}`.", document_id)
-            }
-            Self::InvalidMinTypoWordLenSetting(one, two) => write!(f, "`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {}` and twoTypos: {}`.", one, two),
-        }
-    }
-}
-
-impl StdError for UserError {}
-
-impl fmt::Display for FieldIdMapMissingEntry {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::FieldId { field_id, process } => {
-                write!(f, "unknown field id {} coming from the {} process", field_id, process)
-            }
-            Self::FieldName { field_name, process } => {
-                write!(f, "unknown field name {} coming from the {} process", field_name, process)
-            }
-        }
-    }
-}
-
-impl StdError for FieldIdMapMissingEntry {}
-
-impl From<GeoError> for UserError {
-    fn from(geo_error: GeoError) -> Self {
-        UserError::InvalidGeoField(geo_error)
-    }
-}
-
-impl fmt::Display for GeoError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GeoError::MissingLatitude { document_id } => {
-                write!(f, "Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")
-            }
-            GeoError::MissingLongitude { document_id } => {
-                write!(f, "Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")
-            }
-            GeoError::BadLatitude { document_id, value } => {
-                write!(f, "Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")
-            }
-            GeoError::BadLongitude { document_id, value } => {
-                write!(f, "Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")
-            }
-        }
-    }
-}
-
-impl StdError for GeoError {}
-
-impl fmt::Display for SerializationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Decoding { db_name: Some(name) } => {
-                write!(f, "decoding from the {} database failed", name)
-            }
-            Self::Decoding { db_name: None } => f.write_str("decoding failed"),
-            Self::Encoding { db_name: Some(name) } => {
-                write!(f, "encoding into the {} database failed", name)
-            }
-            Self::Encoding { db_name: None } => f.write_str("encoding failed"),
-            Self::InvalidNumberSerialization => f.write_str("number is not a valid finite number"),
-        }
-    }
-}
-
-impl StdError for SerializationError {}
 
 #[test]
 fn conditionally_lookup_for_error_message() {

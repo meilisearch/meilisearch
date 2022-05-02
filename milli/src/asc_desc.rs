@@ -4,6 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::error::is_reserved_keyword;
 use crate::{CriterionError, Error, UserError};
@@ -153,14 +154,24 @@ impl FromStr for AscDesc {
     }
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum SortError {
+    #[error("{}", AscDescError::InvalidLatitude)]
     InvalidLatitude,
+    #[error("{}", AscDescError::InvalidLongitude)]
     InvalidLongitude,
+    #[error("Invalid syntax for the geo parameter: expected expression formated like \
+                    `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{name}`.")]
     BadGeoPointUsage { name: String },
+    #[error("Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `{name}`.")]
     InvalidName { name: String },
+    #[error("`{name}` is a reserved keyword and thus can't be used as a sort expression.")]
     ReservedName { name: String },
+    #[error("`{name}` is a reserved keyword and thus can't be used as a sort expression. \
+                    Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.")]
     ReservedNameForSettings { name: String },
+    #[error("`{name}` is a reserved keyword and thus can't be used as a sort expression. \
+                    Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.")]
     ReservedNameForFilter { name: String },
 }
 
@@ -180,41 +191,6 @@ impl From<AscDescError> for SortError {
                 SortError::ReservedNameForFilter { name: String::from("_geoRadius") }
             }
             AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
-        }
-    }
-}
-
-impl fmt::Display for SortError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidLatitude => write!(f, "{}", AscDescError::InvalidLatitude),
-            Self::InvalidLongitude => write!(f, "{}", AscDescError::InvalidLongitude),
-            Self::BadGeoPointUsage { name } => {
-                write!(
-                    f,
-                    "Invalid syntax for the geo parameter: expected expression formated like \
-                    `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{}`.",
-                    name
-                )
-            }
-            Self::InvalidName { name } => {
-                write!(f, "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
-            }
-            Self::ReservedName { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a sort expression.",
-                    name
-                )
-            }
-            Self::ReservedNameForSettings { name } | Self::ReservedNameForFilter { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a sort expression. \
-                    Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
-                    name,
-                )
-            }
         }
     }
 }
