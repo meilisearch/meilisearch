@@ -11,8 +11,8 @@ use crate::error::SerializationError;
 use crate::heed_codec::StrBEU32Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
-    MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
+    CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result};
 
@@ -167,7 +167,9 @@ fn write_prefixes_in_sorter(
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
-            sorter.insert(&key, data)?;
+            if valid_lmdb_key(&key) {
+                sorter.insert(&key, data)?;
+            }
         }
     }
 
