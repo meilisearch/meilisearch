@@ -1651,4 +1651,55 @@ mod tests {
         builder.execute().unwrap();
         wtxn.commit().unwrap();
     }
+
+    #[test]
+    fn text_with_too_long_keys() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let script = "https://bug.example.com/meilisearch/milli.saml2?ROLE=Programmer-1337&SAMLRequest=Cy1ytcZT1Po%2L2IY2y9Unru8rgnW4qWfPiI0EpT7P8xjJV8PeQikRL%2E8D9A4pj9tmbymbQCQwGmGjPMK7qwXFPX4DH52JO2b7n6TXjuR7zkIFuYdzdY2rwRNBPgCL7ihclEm9zyIjKZQ%2JTqiwfXxWjnI0KEYQYHdwd6Q%2Fx%28BDLNsvmL54CCY2F4RWeRs4eqWfn%2EHqxlhreFzax4AiQ2tgOtV5thOaaWqrhZD%2Py70nuyZWNTKwciGI43AoHg6PThANsQ5rAY5amzN%2ufbs1swETUXlLZuOut5YGpYPZfY6STJWNp4QYSUOUXBZpdElYsH7UHZ7VhJycgyt%28aTK0GW6GbKne2tJM0hgSczOqndg6RFa9WsnSBi4zMcaEfYur4WlSsHDYInF9ROousKqVMZ6H8%2gbUissaLh1eXRGo8KEJbyEHbhVVKGD%28kx4cfKjx9fT3pkeDTdvDrVn25jIzi9wHyt9l1lWc8ICnCvXCVUPP%2BjBG4wILR29gMV9Ux2QOieQm2%2Fycybhr8sBGCl30mHC7blvWt%2T3mrCHQoS3VK49PZNPqBZO9C7vOjOWoszNkJx4QckWV%2FZFvbpzUUkiBiehr9F%2FvQSxz9lzv68GwbTu9fr638p%2FQM%3D&RelayState=https%3A%2F%example.bug.com%2Fde&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=AZFpkhFFII7PodiewTovaGnLQKUVZp0qOCCcBIUkJ6P5by3lE3Lldj9pKaFu4wz4j%2B015HEhDvF0LlAmwwES85vdGh%2FpD%2cIQPRUEjdCbQkQDd3dy1mMXbpXxSe4QYcv9Ni7tqNTQxekpO1gE7rtg6zC66EU55uM9aj9abGQ034Vly%2F6IJ08bvAq%2B%2FB9KruLstuiNWnlXTfNGsOxGLK7%2BXr94LTkat8m%2FMan6Qr95%2KeR5TmmqaQIE4N9H6o4TopT7mXr5CF2Z3";
+
+        // Create 200 documents with a long text
+        let content = {
+            let documents: Vec<_> = (0..200i32)
+                .into_iter()
+                .map(|i| serde_json::json!({ "id": i, "script": script }))
+                .collect();
+
+            let mut writer = std::io::Cursor::new(Vec::new());
+            let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
+            let documents = serde_json::to_vec(&documents).unwrap();
+            builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
+            builder.finish().unwrap();
+            writer.set_position(0);
+            crate::documents::DocumentBatchReader::from_reader(writer).unwrap()
+        };
+
+        // Index those 200 long documents
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        // Create one long document
+        let content = documents!([
+          {"id": 400, "script": script },
+        ]);
+
+        // Index this one long document
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+    }
 }
