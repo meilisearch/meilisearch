@@ -7,8 +7,8 @@ use log::debug;
 use slice_group_by::GroupBy;
 
 use crate::update::index_documents::{
-    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, CursorClonableMmap,
-    MergeFn,
+    create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
+    CursorClonableMmap, MergeFn,
 };
 use crate::{Index, Result, StrStrU8Codec};
 
@@ -188,7 +188,9 @@ fn write_prefixes_in_sorter(
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {
-            sorter.insert(&key, data)?;
+            if valid_lmdb_key(&key) {
+                sorter.insert(&key, data)?;
+            }
         }
     }
 
