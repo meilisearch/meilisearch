@@ -126,9 +126,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             exact_words: Setting::NotSet,
-            min_word_len_two_typos: Setting::Reset,
-            min_word_len_one_typo: Setting::Reset,
-            exact_attributes: Setting::Reset,
+            min_word_len_two_typos: Setting::NotSet,
+            min_word_len_one_typo: Setting::NotSet,
+            exact_attributes: Setting::NotSet,
             indexer_config,
         }
     }
@@ -1495,5 +1495,49 @@ mod tests {
         for word in exact_words.into_fst().stream().into_str_vec().unwrap() {
             assert!(word.0 == "ac" || word.0 == "ab");
         }
+    }
+
+    #[test]
+    fn test_correct_settings_init() {
+        let index = TempIndex::new();
+        let config = IndexerConfig::default();
+
+        // Set the genres setting
+        let mut txn = index.write_txn().unwrap();
+        let builder = Settings::new(&mut txn, &index, &config);
+        let Settings {
+            wtxn: _,
+            index: _,
+            indexer_config: _,
+            searchable_fields,
+            displayed_fields,
+            filterable_fields,
+            sortable_fields,
+            criteria,
+            stop_words,
+            distinct_field,
+            synonyms,
+            primary_key,
+            authorize_typos,
+            min_word_len_two_typos,
+            min_word_len_one_typo,
+            exact_words,
+            exact_attributes,
+        } = builder;
+
+        assert!(matches!(searchable_fields, Setting::NotSet));
+        assert!(matches!(displayed_fields, Setting::NotSet));
+        assert!(matches!(filterable_fields, Setting::NotSet));
+        assert!(matches!(sortable_fields, Setting::NotSet));
+        assert!(matches!(criteria, Setting::NotSet));
+        assert!(matches!(stop_words, Setting::NotSet));
+        assert!(matches!(distinct_field, Setting::NotSet));
+        assert!(matches!(synonyms, Setting::NotSet));
+        assert!(matches!(primary_key, Setting::NotSet));
+        assert!(matches!(authorize_typos, Setting::NotSet));
+        assert!(matches!(min_word_len_two_typos, Setting::NotSet));
+        assert!(matches!(min_word_len_one_typo, Setting::NotSet));
+        assert!(matches!(exact_words, Setting::NotSet));
+        assert!(matches!(exact_attributes, Setting::NotSet));
     }
 }
