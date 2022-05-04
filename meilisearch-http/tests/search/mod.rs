@@ -497,7 +497,7 @@ async fn search_facet_distribution() {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetsDistribution"].as_object().unwrap();
                 dbg!(&dist);
-                assert_eq!(dist.len(), 2);
+                assert_eq!(dist.len(), 3);
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
