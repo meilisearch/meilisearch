@@ -177,27 +177,23 @@ make_setting_route!(
                     "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))),
                     "disable_on_attributes": setting
                         .as_ref()
-                        .map(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty()))
-                        .flatten(),
+                        .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
                     "disable_on_words": setting
                         .as_ref()
-                        .map(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty()))
-                        .flatten(),
+                        .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
                     "min_word_size_for_one_typo": setting
                         .as_ref()
-                        .map(|s| s.min_word_size_for_typos
+                        .and_then(|s| s.min_word_size_for_typos
                             .as_ref()
                             .set()
                             .map(|s| s.one_typo.set()))
-                        .flatten()
                         .flatten(),
                     "min_word_size_for_two_typos": setting
                         .as_ref()
-                        .map(|s| s.min_word_size_for_typos
+                        .and_then(|s| s.min_word_size_for_typos
                             .as_ref()
                             .set()
                             .map(|s| s.two_typos.set()))
-                        .flatten()
                         .flatten(),
                 },
             }),
@@ -325,36 +321,31 @@ pub async fn update_all(
                 "enabled": settings.typo_tolerance
                     .as_ref()
                     .set()
-                    .map(|s| s.enabled.as_ref().set())
-                    .flatten()
+                    .and_then(|s| s.enabled.as_ref().set())
                     .copied(),
                 "disable_on_attributes": settings.typo_tolerance
                     .as_ref()
                     .set()
-                    .map(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty()))
-                    .flatten(),
+                    .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
                 "disable_on_words": settings.typo_tolerance
                     .as_ref()
                     .set()
-                    .map(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty()))
-                    .flatten(),
+                    .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
                 "min_word_size_for_one_typo": settings.typo_tolerance
                     .as_ref()
                     .set()
-                    .map(|s| s.min_word_size_for_typos
+                    .and_then(|s| s.min_word_size_for_typos
                         .as_ref()
                         .set()
                         .map(|s| s.one_typo.set()))
-                    .flatten()
                     .flatten(),
                 "min_word_size_for_two_typos": settings.typo_tolerance
                     .as_ref()
                     .set()
-                    .map(|s| s.min_word_size_for_typos
+                    .and_then(|s| s.min_word_size_for_typos
                         .as_ref()
                         .set()
                         .map(|s| s.two_typos.set()))
-                    .flatten()
                     .flatten(),
             },
         }),
