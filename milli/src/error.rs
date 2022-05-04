@@ -60,7 +60,7 @@ pub enum UserError {
     DocumentLimitReached,
     InvalidDocumentId { document_id: Value },
     InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
-    InvalidGeoField { document_id: Value },
+    InvalidGeoField(GeoError),
     InvalidFilter(String),
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     SortRankingRuleMissing,
@@ -76,6 +76,14 @@ pub enum UserError {
     InvalidMinTypoWordLenSetting(u8, u8),
 }
 
+#[derive(Debug)]
+pub enum GeoError {
+    MissingLatitude { document_id: Value },
+    MissingLongitude { document_id: Value },
+    BadLatitude { document_id: Value, value: Value },
+    BadLongitude { document_id: Value, value: Value },
+}
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         // TODO must be improved and more precise
@@ -86,6 +94,12 @@ impl From<io::Error> for Error {
 impl From<fst::Error> for Error {
     fn from(error: fst::Error) -> Error {
         Error::InternalError(InternalError::Fst(error))
+    }
+}
+
+impl From<GeoError> for Error {
+    fn from(error: GeoError) -> Error {
+        Error::UserError(UserError::InvalidGeoField(error))
     }
 }
 
@@ -230,17 +244,7 @@ impl fmt::Display for UserError {
                     name_list
                 )
             }
-            Self::InvalidGeoField { document_id } => {
-                let document_id = match document_id {
-                    Value::String(id) => id.clone(),
-                    _ => document_id.to_string(),
-                };
-                write!(
-                    f,
-                    "The document with the id: `{}` contains an invalid `_geo` field.",
-                    document_id
-                )
-            },
+            Self::InvalidGeoField(error) => write!(f, "{error}"),
             Self::InvalidDocumentId { document_id } => {
                 let document_id = match document_id {
                     Value::String(id) => id.clone(),
@@ -313,6 +317,33 @@ impl fmt::Display for FieldIdMapMissingEntry {
 }
 
 impl StdError for FieldIdMapMissingEntry {}
+
+impl From<GeoError> for UserError {
+    fn from(geo_error: GeoError) -> Self {
+        UserError::InvalidGeoField(geo_error)
+    }
+}
+
+impl fmt::Display for GeoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GeoError::MissingLatitude { document_id } => {
+                write!(f, "Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")
+            }
+            GeoError::MissingLongitude { document_id } => {
+                write!(f, "Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")
+            }
+            GeoError::BadLatitude { document_id, value } => {
+                write!(f, "Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")
+            }
+            GeoError::BadLongitude { document_id, value } => {
+                write!(f, "Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")
+            }
+        }
+    }
+}
+
+impl StdError for GeoError {}
 
 impl fmt::Display for SerializationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
