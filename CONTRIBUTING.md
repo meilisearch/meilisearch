@@ -31,8 +31,6 @@ Remember that there are many ways to contribute other than writing code: writing
 
 ## Development Workflow
 
-_WIP section_
-
 ### Setup and run
 
 ```bash
