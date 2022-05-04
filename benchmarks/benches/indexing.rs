@@ -498,6 +498,132 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
     });
 }
 
+fn indexing_nested_movies_default(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(10);
+    group.bench_function("Indexing nested movies with default settings", |b| {
+        b.iter_with_setup(
+            move || {
+                let index = setup_index();
+
+                let config = IndexerConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
+
+                builder.set_primary_key("id".to_owned());
+                let searchable_fields = [
+                    "title",
+                    "overview",
+                    "provider_names",
+                    "genres",
+                    "crew.name",
+                    "cast.character",
+                    "cast.name",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+                builder.set_searchable_fields(searchable_fields);
+
+                let filterable_fields = [
+                    "popularity",
+                    "release_date",
+                    "runtime",
+                    "vote_average",
+                    "external_ids",
+                    "keywords",
+                    "providers.buy.name",
+                    "providers.rent.name",
+                    "providers.flatrate.name",
+                    "provider_names",
+                    "genres",
+                    "crew.name",
+                    "cast.character",
+                    "cast.name",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+                builder.set_filterable_fields(filterable_fields);
+
+                let sortable_fields = ["popularity", "runtime", "vote_average", "release_date"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                builder.set_sortable_fields(sortable_fields);
+
+                builder.execute(|_| ()).unwrap();
+                wtxn.commit().unwrap();
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
+fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(10);
+    group.bench_function("Indexing nested movies without any facets", |b| {
+        b.iter_with_setup(
+            move || {
+                let index = setup_index();
+
+                let config = IndexerConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder = Settings::new(&mut wtxn, &index, &config);
+
+                builder.set_primary_key("id".to_owned());
+                let searchable_fields = [
+                    "title",
+                    "overview",
+                    "provider_names",
+                    "genres",
+                    "crew.name",
+                    "cast.character",
+                    "cast.name",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+                builder.set_searchable_fields(searchable_fields);
+                builder.execute(|_| ()).unwrap();
+                wtxn.commit().unwrap();
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn indexing_geo(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(10);
@@ -564,6 +690,8 @@ criterion_group!(
     indexing_wiki_in_three_batches,
     indexing_movies_default,
     indexing_movies_in_three_batches,
+    indexing_nested_movies_default,
+    indexing_nested_movies_without_faceted_fields,
     indexing_geo
 );
 criterion_main!(benches);

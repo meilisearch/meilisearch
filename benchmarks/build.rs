@@ -22,6 +22,7 @@ const DATASET_MOVIES: (&str, &str) = ("movies", "json");
 const DATASET_MOVIES_1_2: (&str, &str) = ("movies-1_2", "json");
 const DATASET_MOVIES_3_4: (&str, &str) = ("movies-3_4", "json");
 const DATASET_MOVIES_4_4: (&str, &str) = ("movies-4_4", "json");
+const DATASET_NESTED_MOVIES: (&str, &str) = ("nested_movies", "json");
 const DATASET_GEO: (&str, &str) = ("smol-all-countries", "jsonl");
 
 const ALL_DATASETS: &[(&str, &str)] = &[
@@ -37,6 +38,7 @@ const ALL_DATASETS: &[(&str, &str)] = &[
     DATASET_MOVIES_1_2,
     DATASET_MOVIES_3_4,
     DATASET_MOVIES_4_4,
+    DATASET_NESTED_MOVIES,
     DATASET_GEO,
 ];
 
