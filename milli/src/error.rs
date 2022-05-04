@@ -97,6 +97,12 @@ impl From<fst::Error> for Error {
     }
 }
 
+impl From<GeoError> for Error {
+    fn from(error: GeoError) -> Error {
+        Error::UserError(UserError::InvalidGeoField(error))
+    }
+}
+
 impl<E> From<grenad::Error<E>> for Error
 where
     Error: From<E>,

@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::GeoError;
-use crate::{FieldId, InternalError, Result, UserError};
+use crate::{FieldId, InternalError, Result};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
@@ -35,23 +35,23 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         };
 
         // first we get the two fields
-        let lat = obkv.get(lat_fid).ok_or_else(|| -> UserError {
-            GeoError::MissingLatitude { document_id: primary_key() }.into()
-        })?;
-        let lng = obkv.get(lng_fid).ok_or_else(|| -> UserError {
-            GeoError::MissingLongitude { document_id: primary_key() }.into()
-        })?;
+        let lat = obkv
+            .get(lat_fid)
+            .ok_or_else(|| GeoError::MissingLatitude { document_id: primary_key() })?;
+        let lng = obkv
+            .get(lng_fid)
+            .ok_or_else(|| GeoError::MissingLongitude { document_id: primary_key() })?;
 
         // then we extract the values
-        let lat = extract_value(serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?)
-            .map_err(|lat| -> UserError {
-                GeoError::BadLatitude { document_id: primary_key(), value: lat }.into()
-            })?;
+        let lat = extract_float_from_value(
+            serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
+        )
+        .map_err(|lat| GeoError::BadLatitude { document_id: primary_key(), value: lat })?;
 
-        let lng = extract_value(serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?)
-            .map_err(|lng| -> UserError {
-                GeoError::BadLongitude { document_id: primary_key(), value: lng }.into()
-            })?;
+        let lng = extract_float_from_value(
+            serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
+        )
+        .map_err(|lng| GeoError::BadLongitude { document_id: primary_key(), value: lng })?;
 
         let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
         writer.insert(docid_bytes, bytes)?;
@@ -60,7 +60,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
     Ok(writer_into_reader(writer)?)
 }
 
-fn extract_value(value: Value) -> StdResult<f64, Value> {
+fn extract_float_from_value(value: Value) -> StdResult<f64, Value> {
     match value {
         Value::Number(ref n) => n.as_f64().ok_or(value),
         Value::String(ref s) => s.parse::<f64>().map_err(|_| value),
