@@ -145,8 +145,8 @@ make_setting_route!(
             "SortableAttributes Updated".to_string(),
             json!({
                 "sortable_attributes": {
-                    "total": setting.as_ref().map(|sort| sort.len()).unwrap_or(0),
-                    "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")).unwrap_or(false),
+                    "total": setting.as_ref().map(|sort| sort.len()),
+                    "has_geo": setting.as_ref().map(|sort| sort.contains("_geo")),
                 },
             }),
             Some(req),
@@ -165,7 +165,41 @@ make_setting_route!(
     "/typo-tolerance",
     meilisearch_lib::index::updates::TypoSettings,
     typo_tolerance,
-    "typoTolerance"
+    "typoTolerance",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::TypoSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "TypoTolerance Updated".to_string(),
+            json!({
+                "typo_tolerance": {
+                    "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))),
+                    "disable_on_attributes": setting
+                        .as_ref()
+                        .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
+                    "disable_on_words": setting
+                        .as_ref()
+                        .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
+                    "min_word_size_for_one_typo": setting
+                        .as_ref()
+                        .and_then(|s| s.min_word_size_for_typos
+                            .as_ref()
+                            .set()
+                            .map(|s| s.one_typo.set()))
+                        .flatten(),
+                    "min_word_size_for_two_typos": setting
+                        .as_ref()
+                        .and_then(|s| s.min_word_size_for_typos
+                            .as_ref()
+                            .set()
+                            .map(|s| s.two_typos.set()))
+                        .flatten(),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -181,7 +215,7 @@ make_setting_route!(
             "SearchableAttributes Updated".to_string(),
             json!({
                 "searchable_attributes": {
-                    "total": setting.as_ref().map(|searchable| searchable.len()).unwrap_or(0),
+                    "total": setting.as_ref().map(|searchable| searchable.len()),
                 },
             }),
             Some(req),
@@ -273,15 +307,46 @@ pub async fn update_all(
                 "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
             },
             "searchable_attributes": {
-                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()).unwrap_or(0),
+                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
             },
            "sortable_attributes": {
-                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()).unwrap_or(0),
-                "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")).unwrap_or(false),
+                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
+                "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
             },
            "filterable_attributes": {
-                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()).unwrap_or(0),
-                "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")).unwrap_or(false),
+                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
+                "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
+            },
+            "typo_tolerance": {
+                "enabled": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.enabled.as_ref().set())
+                    .copied(),
+                "disable_on_attributes": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
+                "disable_on_words": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
+                "min_word_size_for_one_typo": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.min_word_size_for_typos
+                        .as_ref()
+                        .set()
+                        .map(|s| s.one_typo.set()))
+                    .flatten(),
+                "min_word_size_for_two_typos": settings.typo_tolerance
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.min_word_size_for_typos
+                        .as_ref()
+                        .set()
+                        .map(|s| s.two_typos.set()))
+                    .flatten(),
             },
         }),
         Some(&req),
