@@ -1,4 +1,5 @@
-use std::fmt;
+use std::borrow::Borrow;
+use std::fmt::{self, Debug, Display};
 use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 
 use meilisearch_error::{internal_error, Code, ErrorCode};
@@ -23,16 +24,39 @@ impl fmt::Display for PayloadType {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug)]
 pub enum DocumentFormatError {
-    #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("The `{1}` payload provided is malformed. `{0}`.")]
-    MalformedPayload(
-        Box<dyn std::error::Error + Send + Sync + 'static>,
-        PayloadType,
-    ),
+    MalformedPayload(Box<milli::documents::Error>, PayloadType),
 }
+
+impl Display for DocumentFormatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
+            Self::MalformedPayload(me, b) => match me.borrow() {
+                milli::documents::Error::JsonError(se) => {
+                    // https://github.com/meilisearch/meilisearch/issues/2107
+                    // The user input maybe insanely long. We need to truncate it.
+                    let mut serde_msg = se.to_string();
+                    let ellipsis = "...";
+                    if serde_msg.len() > 100 + ellipsis.len() {
+                        serde_msg.replace_range(50..serde_msg.len() - 85, ellipsis);
+                    }
+
+                    write!(
+                        f,
+                        "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
+                        b, serde_msg
+                )
+                }
+                _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
+            },
+        }
+    }
+}
+
+impl std::error::Error for DocumentFormatError {}
 
 impl From<(PayloadType, milli::documents::Error)> for DocumentFormatError {
     fn from((ty, error): (PayloadType, milli::documents::Error)) -> Self {

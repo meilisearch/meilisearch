@@ -16,7 +16,7 @@ pub enum TaskError {
 }
 
 internal_error!(
-    TaskError: heed::Error,
+    TaskError: milli::heed::Error,
     JoinError,
     std::io::Error,
     serde_json::Error,

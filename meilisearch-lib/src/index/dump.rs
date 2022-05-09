@@ -3,9 +3,9 @@ use std::io::{BufReader, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use anyhow::Context;
-use heed::{EnvOpenOptions, RoTxn};
 use indexmap::IndexMap;
 use milli::documents::DocumentBatchReader;
+use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexDocumentsConfig, IndexerConfig};
 use serde::{Deserialize, Serialize};
 
@@ -146,7 +146,7 @@ impl Index {
                 indexer_config,
                 config,
                 |_| (),
-            );
+            )?;
             builder.add_documents(documents_reader)?;
             builder.execute()?;
         }

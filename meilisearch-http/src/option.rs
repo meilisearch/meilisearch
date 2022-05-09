@@ -19,6 +19,7 @@ use serde::Serialize;
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
 #[derive(Debug, Clone, Parser, Serialize)]
+#[clap(version)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[clap(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
@@ -145,8 +146,8 @@ pub struct Opt {
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
-    #[serde(skip)]
-    #[clap(skip)]
+    #[serde(flatten)]
+    #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
     #[serde(flatten)]
@@ -257,4 +258,14 @@ fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
     }
 
     Ok(ret)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_valid_opt() {
+        assert!(Opt::try_parse_from(Some("")).is_ok());
+    }
 }

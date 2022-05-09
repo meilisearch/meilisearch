@@ -1,7 +1,9 @@
 [workspace]
+resolver = "2"
 members = [
     "meilisearch-http",
     "meilisearch-error",
     "meilisearch-lib",
     "meilisearch-auth",
+    "permissive-json-pointer",
 ]

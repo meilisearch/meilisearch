@@ -155,7 +155,7 @@ async fn test_get_all_documents_offset() {
         .await;
     assert_eq!(code, 200);
     assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(response.as_array().unwrap()[0]["id"], 13);
+    assert_eq!(response.as_array().unwrap()[0]["id"], 5);
 }
 
 #[actix_rt::test]

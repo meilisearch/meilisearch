@@ -48,8 +48,8 @@ pub type Payload = Box<
     dyn Stream<Item = std::result::Result<Bytes, PayloadError>> + Send + Sync + 'static + Unpin,
 >;
 
-pub fn open_meta_env(path: &Path, size: usize) -> heed::Result<heed::Env> {
-    let mut options = heed::EnvOpenOptions::new();
+pub fn open_meta_env(path: &Path, size: usize) -> milli::heed::Result<milli::heed::Env> {
+    let mut options = milli::heed::EnvOpenOptions::new();
     options.map_size(size);
     options.max_dbs(20);
     options.open(path)
@@ -178,15 +178,6 @@ impl IndexControllerBuilder {
             .max_task_store_size
             .ok_or_else(|| anyhow::anyhow!("Missing update database size"))?;
 
-        let db_exists = db_path.as_ref().exists();
-        if db_exists {
-            // Directory could be pre-created without any database in.
-            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
-            if !db_is_empty {
-                versioning::check_version_file(db_path.as_ref())?;
-            }
-        }
-
         if let Some(ref path) = self.import_snapshot {
             log::info!("Loading from snapshot {:?}", path);
             load_snapshot(
@@ -205,6 +196,15 @@ impl IndexControllerBuilder {
                 task_store_size,
                 &indexer_options,
             )?;
+        }
+
+        let db_exists = db_path.as_ref().exists();
+        if db_exists {
+            // Directory could be pre-created without any database in.
+            let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
+            if !db_is_empty {
+                versioning::check_version_file(db_path.as_ref())?;
+            }
         }
 
         std::fs::create_dir_all(db_path.as_ref())?;
@@ -651,6 +651,9 @@ mod test {
 
     use crate::index::error::Result as IndexResult;
     use crate::index::Index;
+    use crate::index::{
+        default_crop_marker, default_highlight_post_tag, default_highlight_pre_tag,
+    };
     use crate::index_resolver::index_store::MockIndexStore;
     use crate::index_resolver::meta_store::MockIndexMetaStore;
     use crate::index_resolver::IndexResolver;
@@ -691,6 +694,9 @@ mod test {
             filter: None,
             sort: None,
             facets_distribution: None,
+            highlight_pre_tag: default_highlight_pre_tag(),
+            highlight_post_tag: default_highlight_post_tag(),
+            crop_marker: default_crop_marker(),
         };
 
         let result = SearchResult {

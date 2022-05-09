@@ -1,9 +1,9 @@
+use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
-use indexmap::IndexMap;
 use milli::tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{AscDesc, FieldId, FieldsIdsMap, Filter, MatchingWords, SortError};
 use regex::Regex;
@@ -15,7 +15,7 @@ use crate::index::error::FacetError;
 use super::error::{IndexError, Result};
 use super::index::Index;
 
-pub type Document = IndexMap<String, Value>;
+pub type Document = serde_json::Map<String, Value>;
 type MatchesInfo = BTreeMap<String, Vec<MatchInfo>>;
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -29,10 +29,29 @@ const fn default_search_limit() -> usize {
     DEFAULT_SEARCH_LIMIT
 }
 
-pub const DEFAULT_CROP_LENGTH: usize = 200;
+pub const DEFAULT_CROP_LENGTH: usize = 10;
 pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
+
+pub const DEFAULT_CROP_MARKER: &str = "…";
+pub fn default_crop_marker() -> String {
+    DEFAULT_CROP_MARKER.to_string()
+}
+
+pub const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
+pub fn default_highlight_pre_tag() -> String {
+    DEFAULT_HIGHLIGHT_PRE_TAG.to_string()
+}
+
+pub const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
+pub fn default_highlight_post_tag() -> String {
+    DEFAULT_HIGHLIGHT_POST_TAG.to_string()
+}
+
+/// The maximimum number of results that the engine
+/// will be able to return in one search call.
+pub const HARD_RESULT_LIMIT: usize = 1000;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -52,6 +71,12 @@ pub struct SearchQuery {
     pub filter: Option<Value>,
     pub sort: Option<Vec<String>>,
     pub facets_distribution: Option<Vec<String>>,
+    #[serde(default = "default_highlight_pre_tag")]
+    pub highlight_pre_tag: String,
+    #[serde(default = "default_highlight_post_tag")]
+    pub highlight_post_tag: String,
+    #[serde(default = "default_crop_marker")]
+    pub crop_marker: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -80,10 +105,19 @@ pub struct SearchResult {
     pub exhaustive_facets_count: Option<bool>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct FormatOptions {
     highlight: bool,
     crop: Option<usize>,
+}
+
+impl FormatOptions {
+    pub fn merge(self, other: Self) -> Self {
+        Self {
+            highlight: self.highlight || other.highlight,
+            crop: self.crop.or(other.crop),
+        }
+    }
 }
 
 impl Index {
@@ -97,8 +131,13 @@ impl Index {
             search.query(query);
         }
 
-        search.limit(query.limit);
-        search.offset(query.offset.unwrap_or_default());
+        // Make sure that a user can't get more documents than the hard limit,
+        // we align that on the offset too.
+        let offset = min(query.offset.unwrap_or(0), HARD_RESULT_LIMIT);
+        let limit = min(query.limit, HARD_RESULT_LIMIT.saturating_sub(offset));
+
+        search.offset(offset);
+        search.limit(limit);
 
         if let Some(ref filter) = query.filter {
             if let Some(facets) = parse_filter(filter)? {
@@ -182,22 +221,34 @@ impl Index {
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
 
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (query.highlight_pre_tag, query.highlight_post_tag),
+            query.crop_marker,
+        );
 
         let mut documents = Vec::new();
 
         let documents_iter = self.documents(&rtxn, documents_ids)?;
 
         for (_id, obkv) in documents_iter {
-            let mut document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
+            // First generate a document with all the displayed fields
+            let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+            // select the attributes to retrieve
+            let attributes_to_retrieve = to_retrieve_ids
+                .iter()
+                .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+            let mut document =
+                permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
 
             let matches_info = query
                 .matches
                 .then(|| compute_matches(&matching_words, &document, &analyzer));
 
             let formatted = format_fields(
+                &displayed_document,
                 &fields_ids_map,
-                obkv,
                 &formatter,
                 &matching_words,
                 &formatted_options,
@@ -432,54 +483,63 @@ fn add_non_formatted_ids_to_formatted_options(
 }
 
 fn make_document(
-    attributes_to_retrieve: &BTreeSet<FieldId>,
+    displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReaderU16,
 ) -> Result<Document> {
-    let mut document = Document::new();
+    let mut document = serde_json::Map::new();
 
-    for attr in attributes_to_retrieve {
-        if let Some(value) = obkv.get(*attr) {
-            let value = serde_json::from_slice(value)?;
+    // recreate the original json
+    for (key, value) in obkv.iter() {
+        let value = serde_json::from_slice(value)?;
+        let key = field_ids_map
+            .name(key)
+            .expect("Missing field name")
+            .to_string();
 
-            // This unwrap must be safe since we got the ids from the fields_ids_map just
-            // before.
-            let key = field_ids_map
-                .name(*attr)
-                .expect("Missing field name")
-                .to_string();
-
-            document.insert(key, value);
-        }
+        document.insert(key, value);
     }
+
+    // select the attributes to retrieve
+    let displayed_attributes = displayed_attributes
+        .iter()
+        .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
+
+    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
 }
 
 fn format_fields<A: AsRef<[u8]>>(
+    document: &Document,
     field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReaderU16,
     formatter: &Formatter<A>,
     matching_words: &impl Matcher,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
 ) -> Result<Document> {
-    let mut document = Document::new();
+    let selectors: Vec<_> = formatted_options
+        .keys()
+        // This unwrap must be safe since we got the ids from the fields_ids_map just
+        // before.
+        .map(|&fid| field_ids_map.name(fid).unwrap())
+        .collect();
+    let mut document = permissive_json_pointer::select_values(document, selectors.iter().copied());
 
-    for (id, format) in formatted_options {
-        if let Some(value) = obkv.get(*id) {
-            let mut value: Value = serde_json::from_slice(value)?;
-
-            value = formatter.format_value(value, matching_words, *format);
-
-            // This unwrap must be safe since we got the ids from the fields_ids_map just
-            // before.
-            let key = field_ids_map
-                .name(*id)
-                .expect("Missing field name")
-                .to_string();
-
-            document.insert(key, value);
-        }
-    }
+    permissive_json_pointer::map_leaf_values(&mut document, selectors, |key, value| {
+        // To get the formatting option of each key we need to see all the rules that applies
+        // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
+        // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
+        // highlighted.
+        let format = formatted_options
+            .iter()
+            .filter(|(field, _option)| {
+                let name = field_ids_map.name(**field).unwrap();
+                milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
+            })
+            .fold(FormatOptions::default(), |acc, (_, option)| {
+                acc.merge(*option)
+            });
+        *value = formatter.format_value(std::mem::take(value), matching_words, format);
+    });
 
     Ok(document)
 }
@@ -504,12 +564,21 @@ impl Matcher for MatchingWords {
 
 struct Formatter<'a, A> {
     analyzer: &'a Analyzer<'a, A>,
-    marks: (String, String),
+    highlight_tags: (String, String),
+    crop_marker: String,
 }
 
 impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
-    pub fn new(analyzer: &'a Analyzer<'a, A>, marks: (String, String)) -> Self {
-        Self { analyzer, marks }
+    pub fn new(
+        analyzer: &'a Analyzer<'a, A>,
+        highlight_tags: (String, String),
+        crop_marker: String,
+    ) -> Self {
+        Self {
+            analyzer,
+            highlight_tags,
+            crop_marker,
+        }
     }
 
     fn format_value(
@@ -573,10 +642,13 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
     ) -> String {
         let analyzed = self.analyzer.analyze(&s);
 
-        let tokens: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
-            Some(crop_len) => {
+        let mut tokens = analyzed.reconstruct();
+        let mut crop_marker_before = false;
+
+        let tokens_interval: Box<dyn Iterator<Item = (&str, Token)>> = match format_options.crop {
+            Some(crop_len) if crop_len > 0 => {
                 let mut buffer = Vec::new();
-                let mut tokens = analyzed.reconstruct().peekable();
+                let mut tokens = tokens.by_ref().peekable();
 
                 while let Some((word, token)) =
                     tokens.next_if(|(_, token)| matcher.matches(token).is_none())
@@ -586,16 +658,35 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
 
                 match tokens.next() {
                     Some(token) => {
-                        let mut total_len: usize = buffer.iter().map(|(word, _)| word.len()).sum();
-                        let before_iter = buffer.into_iter().skip_while(move |(word, _)| {
-                            total_len -= word.len();
-                            total_len >= crop_len
+                        let mut total_count: usize = buffer
+                            .iter()
+                            .filter(|(_, token)| token.is_separator().is_none())
+                            .count();
+
+                        let crop_len_before = crop_len / 2;
+                        // check if start will be cropped.
+                        crop_marker_before = total_count > crop_len_before;
+
+                        let before_iter = buffer.into_iter().skip_while(move |(_, token)| {
+                            if token.is_separator().is_none() {
+                                total_count -= 1;
+                            }
+                            total_count >= crop_len_before
                         });
 
+                        // rebalance remaining word count after the match.
+                        let crop_len_after = if crop_marker_before {
+                            crop_len.saturating_sub(crop_len_before + 1)
+                        } else {
+                            crop_len.saturating_sub(total_count + 1)
+                        };
+
                         let mut taken_after = 0;
-                        let after_iter = tokens.take_while(move |(word, _)| {
-                            let take = taken_after < crop_len;
-                            taken_after += word.chars().count();
+                        let after_iter = tokens.take_while(move |(_, token)| {
+                            let take = taken_after < crop_len_after;
+                            if token.is_separator().is_none() {
+                                taken_after += 1;
+                            }
                             take
                         });
 
@@ -606,38 +697,57 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
                     // If no word matches in the attribute
                     None => {
                         let mut count = 0;
-                        let iter = buffer.into_iter().take_while(move |(word, _)| {
-                            let take = count < crop_len;
-                            count += word.len();
-                            take
-                        });
+                        let mut tokens = buffer.into_iter();
+                        let mut out: String = tokens
+                            .by_ref()
+                            .take_while(move |(_, token)| {
+                                let take = count < crop_len;
+                                if token.is_separator().is_none() {
+                                    count += 1;
+                                }
+                                take
+                            })
+                            .map(|(word, _)| word)
+                            .collect();
 
-                        Box::new(iter)
+                        // if there are remaining tokens after formatted interval,
+                        // put a crop marker at the end.
+                        if tokens.next().is_some() {
+                            out.push_str(&self.crop_marker);
+                        }
+
+                        return out;
                     }
                 }
             }
-            None => Box::new(analyzed.reconstruct()),
+            _ => Box::new(tokens.by_ref()),
         };
 
-        tokens.fold(String::new(), |mut out, (word, token)| {
+        let out = if crop_marker_before {
+            self.crop_marker.clone()
+        } else {
+            String::new()
+        };
+
+        let mut out = tokens_interval.fold(out, |mut out, (word, token)| {
             // Check if we need to do highlighting or computed matches before calling
             // Matcher::match since the call is expensive.
             if format_options.highlight && token.is_word() {
                 if let Some(length) = matcher.matches(&token) {
                     match word.get(..length).zip(word.get(length..)) {
                         Some((head, tail)) => {
-                            out.push_str(&self.marks.0);
+                            out.push_str(&self.highlight_tags.0);
                             out.push_str(head);
-                            out.push_str(&self.marks.1);
+                            out.push_str(&self.highlight_tags.1);
                             out.push_str(tail);
                         }
                         // if we are in the middle of a character
                         // or if all the word should be highlighted,
                         // we highlight the complete word.
                         None => {
-                            out.push_str(&self.marks.0);
+                            out.push_str(&self.highlight_tags.0);
                             out.push_str(word);
-                            out.push_str(&self.marks.1);
+                            out.push_str(&self.highlight_tags.1);
                         }
                     }
                     return out;
@@ -645,7 +755,15 @@ impl<'a, A: AsRef<[u8]>> Formatter<'a, A> {
             }
             out.push_str(word);
             out
-        })
+        });
+
+        // if there are remaining tokens after formatted interval,
+        // put a crop marker at the end.
+        if tokens.next().is_some() {
+            out.push_str(&self.crop_marker);
+        }
+
+        out
     }
 }
 
@@ -698,26 +816,34 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
-        let id = fields.insert("test").unwrap();
+        fields.insert("test").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(id, Value::String("hello".into()).to_string().as_bytes())
-            .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "test": "hello",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let formatted_options = BTreeMap::new();
 
         let matching_words = MatchingWords::default();
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
@@ -733,31 +859,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("The Hobbit".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. R. R. Tolkien".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "The Hobbit",
+            "author": "J. R. R. Tolkien",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -779,8 +902,8 @@ mod test {
         matching_words.insert("hobbit", Some(3));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
@@ -797,45 +920,30 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
         let publication_year = fields.insert("publication_year").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
+        let document: serde_json::Value = json!({
+            "title": "The Hobbit",
+            "author": "J. R. R. Tolkien",
+            "publication_year": 1937,
+        });
 
-        obkv.insert(
-            title,
-            Value::String("The Hobbit".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-
-        obkv.insert(
-            author,
-            Value::String("J. R. R. Tolkien".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-
-        obkv = obkv::KvWriter::new(&mut buf);
-
-        obkv.insert(
-            publication_year,
-            Value::Number(1937.into()).to_string().as_bytes(),
-        )
-        .unwrap();
-
-        obkv.finish().unwrap();
-
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -864,8 +972,8 @@ mod test {
         matching_words.insert("1937", Some(4));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
@@ -884,29 +992,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Go💼od luck.".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("JacobLey".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Go💼od luck.",
+            "author": "JacobLey",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -930,8 +1037,8 @@ mod test {
         matching_words.insert("gobriefcase od", Some(11));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
@@ -948,28 +1055,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(title, Value::String("étoile".into()).to_string().as_bytes())
-            .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. R. R. Tolkien".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "étoile",
+            "author": "J. R. R. Tolkien",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -991,8 +1098,8 @@ mod test {
         matching_words.insert("etoile", Some(1));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
@@ -1009,31 +1116,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -1052,59 +1156,56 @@ mod test {
         );
 
         let mut matching_words = BTreeMap::new();
-        matching_words.insert("potter", Some(6));
+        matching_words.insert("potter", Some(3));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and");
+        assert_eq!(value["title"], "Harry Potter…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
     #[test]
-    fn formatted_with_crop_10() {
+    fn formatted_with_crop_5() {
         let stop_words = fst::Set::default();
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
             title,
             FormatOptions {
                 highlight: false,
-                crop: Some(10),
+                crop: Some(5),
             },
         );
         formatted_options.insert(
@@ -1116,18 +1217,18 @@ mod test {
         );
 
         let mut matching_words = BTreeMap::new();
-        matching_words.insert("potter", Some(6));
+        matching_words.insert("potter", Some(5));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry Potter and the Half");
+        assert_eq!(value["title"], "Harry Potter and the Half…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1137,31 +1238,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -1183,15 +1281,15 @@ mod test {
         matching_words.insert("potter", Some(6));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Potter");
+        assert_eq!(value["title"], "Harry Potter and the Half-Blood Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1201,38 +1299,35 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
             title,
             FormatOptions {
                 highlight: false,
-                crop: Some(6),
+                crop: Some(1),
             },
         );
         formatted_options.insert(
@@ -1247,15 +1342,15 @@ mod test {
         matching_words.insert("rowling", Some(3));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], "Harry ");
+        assert_eq!(value["title"], "Harry…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1265,31 +1360,28 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
@@ -1311,15 +1403,15 @@ mod test {
         matching_words.insert("and", Some(3));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], " <em>and</em> ");
+        assert_eq!(value["title"], "…<em>and</em>…");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 
@@ -1329,38 +1421,35 @@ mod test {
         let mut config = AnalyzerConfig::default();
         config.stop_words(&stop_words);
         let analyzer = Analyzer::new(config);
-        let formatter = Formatter::new(&analyzer, (String::from("<em>"), String::from("</em>")));
+        let formatter = Formatter::new(
+            &analyzer,
+            (String::from("<em>"), String::from("</em>")),
+            String::from("…"),
+        );
 
         let mut fields = FieldsIdsMap::new();
         let title = fields.insert("title").unwrap();
         let author = fields.insert("author").unwrap();
 
-        let mut buf = Vec::new();
-        let mut obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            title,
-            Value::String("Harry Potter and the Half-Blood Prince".into())
-                .to_string()
-                .as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
-        obkv = obkv::KvWriter::new(&mut buf);
-        obkv.insert(
-            author,
-            Value::String("J. K. Rowling".into()).to_string().as_bytes(),
-        )
-        .unwrap();
-        obkv.finish().unwrap();
+        let document: serde_json::Value = json!({
+            "title": "Harry Potter and the Half-Blood Prince",
+            "author": "J. K. Rowling",
+        });
 
-        let obkv = obkv::KvReader::new(&buf);
+        // we need to convert the `serde_json::Map` into an `IndexMap`.
+        let document = document
+            .as_object()
+            .unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let mut formatted_options = BTreeMap::new();
         formatted_options.insert(
             title,
             FormatOptions {
                 highlight: true,
-                crop: Some(9),
+                crop: Some(4),
             },
         );
         formatted_options.insert(
@@ -1375,15 +1464,15 @@ mod test {
         matching_words.insert("blood", Some(3));
 
         let value = format_fields(
+            &document,
             &fields,
-            obkv,
             &formatter,
             &matching_words,
             &formatted_options,
         )
         .unwrap();
 
-        assert_eq!(value["title"], "the Half-<em>Blo</em>od Prince");
+        assert_eq!(value["title"], "…the Half-<em>Blo</em>od Prince");
         assert_eq!(value["author"], "J. K. Rowling");
     }
 

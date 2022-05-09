@@ -2,8 +2,9 @@ status = [
     'Tests on ubuntu-18.04',
     'Tests on macos-latest',
     'Tests on windows-latest',
-    'Run Clippy',
-    'Run Rustfmt'
+    # 'Run Clippy',
+    'Run Rustfmt',
+    'Run tests in debug',
 ]
 pr_status = ['Milestone Check']
 # 3 hours timeout

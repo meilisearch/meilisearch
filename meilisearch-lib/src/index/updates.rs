@@ -37,6 +37,37 @@ pub struct Checked;
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Unchecked;
 
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct MinWordSizeTyposSetting {
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub one_typo: Setting<u8>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub two_typos: Setting<u8>,
+}
+
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct TypoSettings {
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub enabled: Setting<bool>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub disable_on_words: Setting<BTreeSet<String>>,
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub disable_on_attributes: Setting<BTreeSet<String>>,
+}
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
@@ -80,6 +111,9 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub distinct_attribute: Setting<String>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    pub typo_tolerance: Setting<TypoSettings>,
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
@@ -96,6 +130,7 @@ impl Settings<Checked> {
             stop_words: Setting::Reset,
             synonyms: Setting::Reset,
             distinct_attribute: Setting::Reset,
+            typo_tolerance: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -110,6 +145,7 @@ impl Settings<Checked> {
             stop_words,
             synonyms,
             distinct_attribute,
+            typo_tolerance,
             ..
         } = self;
 
@@ -122,6 +158,7 @@ impl Settings<Checked> {
             stop_words,
             synonyms,
             distinct_attribute,
+            typo_tolerance,
             _kind: PhantomData,
         }
     }
@@ -160,6 +197,7 @@ impl Settings<Unchecked> {
             stop_words: self.stop_words,
             synonyms: self.synonyms,
             distinct_attribute: self.distinct_attribute,
+            typo_tolerance: self.typo_tolerance,
             _kind: PhantomData,
         }
     }
@@ -176,7 +214,7 @@ pub struct Facets {
 impl Index {
     fn update_primary_key_txn<'a, 'b>(
         &'a self,
-        txn: &mut heed::RwTxn<'a, 'b>,
+        txn: &mut milli::heed::RwTxn<'a, 'b>,
         primary_key: String,
     ) -> Result<IndexMeta> {
         let mut builder = milli::update::Settings::new(txn, self, self.indexer_config.as_ref());
@@ -248,7 +286,7 @@ impl Index {
             self.indexer_config.as_ref(),
             config,
             indexing_callback,
-        );
+        )?;
 
         for content_uuid in contents.into_iter() {
             let content_file = file_store.get_update(content_uuid)?;
@@ -334,6 +372,61 @@ pub fn apply_settings_to_builder(
         Setting::Reset => builder.reset_distinct_field(),
         Setting::NotSet => (),
     }
+
+    match settings.typo_tolerance {
+        Setting::Set(ref value) => {
+            match value.enabled {
+                Setting::Set(val) => builder.set_autorize_typos(val),
+                Setting::Reset => builder.reset_authorize_typos(),
+                Setting::NotSet => (),
+            }
+
+            match value.min_word_size_for_typos {
+                Setting::Set(ref setting) => {
+                    match setting.one_typo {
+                        Setting::Set(val) => builder.set_min_word_len_one_typo(val),
+                        Setting::Reset => builder.reset_min_word_len_one_typo(),
+                        Setting::NotSet => (),
+                    }
+                    match setting.two_typos {
+                        Setting::Set(val) => builder.set_min_word_len_two_typos(val),
+                        Setting::Reset => builder.reset_min_word_len_two_typos(),
+                        Setting::NotSet => (),
+                    }
+                }
+                Setting::Reset => {
+                    builder.reset_min_word_len_one_typo();
+                    builder.reset_min_word_len_two_typos();
+                }
+                Setting::NotSet => (),
+            }
+
+            match value.disable_on_words {
+                Setting::Set(ref words) => {
+                    builder.set_exact_words(words.clone());
+                }
+                Setting::Reset => builder.reset_exact_words(),
+                Setting::NotSet => (),
+            }
+
+            match value.disable_on_attributes {
+                Setting::Set(ref words) => {
+                    builder.set_exact_attributes(words.iter().cloned().collect())
+                }
+                Setting::Reset => builder.reset_exact_attributes(),
+                Setting::NotSet => (),
+            }
+        }
+        Setting::Reset => {
+            // all typo settings need to be reset here.
+            builder.reset_authorize_typos();
+            builder.reset_min_word_len_one_typo();
+            builder.reset_min_word_len_two_typos();
+            builder.reset_exact_words();
+            builder.reset_exact_attributes();
+        }
+        Setting::NotSet => (),
+    }
 }
 
 #[cfg(test)]
@@ -362,6 +455,7 @@ pub(crate) mod test {
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
+            typo_tolerance: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -383,6 +477,7 @@ pub(crate) mod test {
             stop_words: Setting::NotSet,
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
+            typo_tolerance: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

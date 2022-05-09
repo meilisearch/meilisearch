@@ -5,7 +5,8 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use heed::{EnvOpenOptions, RoTxn};
+use fst::IntoStreamer;
+use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, FieldId};
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
+use super::updates::{MinWordSizeTyposSetting, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -37,7 +39,7 @@ impl IndexMeta {
         Self::new_txn(index, &txn)
     }
 
-    pub fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
+    pub fn new_txn(index: &Index, txn: &milli::heed::RoTxn) -> Result<Self> {
         let created_at = index.created_at(txn)?;
         let updated_at = index.updated_at(txn)?;
         let primary_key = index.primary_key(txn)?.map(String::from);
@@ -168,6 +170,31 @@ impl Index {
             })
             .collect();
 
+        let min_typo_word_len = MinWordSizeTyposSetting {
+            one_typo: Setting::Set(self.min_word_len_one_typo(txn)?),
+            two_typos: Setting::Set(self.min_word_len_two_typos(txn)?),
+        };
+
+        let disabled_words = self
+            .exact_words(txn)?
+            .into_stream()
+            .into_strs()?
+            .into_iter()
+            .collect();
+
+        let disabled_attributes = self
+            .exact_attributes(txn)?
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        let typo_tolerance = TypoSettings {
+            enabled: Setting::Set(self.authorize_typos(txn)?),
+            min_word_size_for_typos: Setting::Set(min_typo_word_len),
+            disable_on_words: Setting::Set(disabled_words),
+            disable_on_attributes: Setting::Set(disabled_attributes),
+        };
+
         Ok(Settings {
             displayed_attributes: match displayed_attributes {
                 Some(attrs) => Setting::Set(attrs),
@@ -186,6 +213,7 @@ impl Index {
                 None => Setting::Reset,
             },
             synonyms: Setting::Set(synonyms),
+            typo_tolerance: Setting::Set(typo_tolerance),
             _kind: PhantomData,
         })
     }
@@ -250,7 +278,7 @@ impl Index {
 
     fn fields_to_display<S: AsRef<str>>(
         &self,
-        txn: &heed::RoTxn,
+        txn: &milli::heed::RoTxn,
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> Result<Vec<FieldId>> {
@@ -278,7 +306,7 @@ impl Index {
         let _txn = self.write_txn()?;
         self.inner
             .env
-            .copy_to_path(dst, heed::CompactionOption::Enabled)?;
+            .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
         Ok(())
     }
 }

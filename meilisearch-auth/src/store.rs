@@ -8,8 +8,8 @@ use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
-use heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
-use heed::{Database, Env, EnvOpenOptions, RwTxn};
+use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use time::OffsetDateTime;
 
 use super::error::Result;
@@ -39,7 +39,7 @@ impl Drop for HeedAuthStore {
     }
 }
 
-pub fn open_auth_store_env(path: &Path) -> heed::Result<heed::Env> {
+pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env> {
     let mut options = EnvOpenOptions::new();
     options.map_size(AUTH_STORE_SIZE); // 1GB
     options.max_dbs(2);
@@ -203,7 +203,7 @@ impl HeedAuthStore {
 /// optionnally on a spcific index, for a given key.
 pub struct KeyIdActionCodec;
 
-impl<'a> heed::BytesDecode<'a> for KeyIdActionCodec {
+impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
@@ -218,7 +218,7 @@ impl<'a> heed::BytesDecode<'a> for KeyIdActionCodec {
     }
 }
 
-impl<'a> heed::BytesEncode<'a> for KeyIdActionCodec {
+impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
     fn bytes_encode((key_id, action, index): &Self::EItem) -> Option<Cow<[u8]>> {

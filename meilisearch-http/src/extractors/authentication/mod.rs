@@ -70,11 +70,9 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
-        Ok(tokio::task::spawn_blocking(move || {
-            P::authenticate(auth, token.as_ref(), index.as_deref())
-        })
-        .await
-        .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))?)
+        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref()))
+            .await
+            .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))
     }
 }
 
@@ -131,8 +129,7 @@ pub trait Policy {
 }
 
 pub mod policies {
-    use jsonwebtoken::{dangerous_insecure_decode, decode, Algorithm, DecodingKey, Validation};
-    use once_cell::sync::Lazy;
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use serde::{Deserialize, Serialize};
     use time::OffsetDateTime;
 
@@ -141,11 +138,25 @@ pub mod policies {
     // reexport actions in policies in order to be used in routes configuration.
     pub use meilisearch_auth::actions;
 
-    pub static TENANT_TOKEN_VALIDATION: Lazy<Validation> = Lazy::new(|| Validation {
-        validate_exp: false,
-        algorithms: vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512],
-        ..Default::default()
-    });
+    fn tenant_token_validation() -> Validation {
+        let mut validation = Validation::default();
+        validation.validate_exp = false;
+        validation.required_spec_claims.remove("exp");
+        validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
+        validation
+    }
+
+    /// Extracts the key prefix used to sign the payload from the payload, without performing any validation.
+    fn extract_key_prefix(token: &str) -> Option<String> {
+        let mut validation = tenant_token_validation();
+        validation.insecure_disable_signature_validation();
+        let dummy_key = DecodingKey::from_secret(b"secret");
+        let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
+
+        // get token fields without validating it.
+        let Claims { api_key_prefix, .. } = token_data.claims;
+        Some(api_key_prefix)
+    }
 
     pub struct MasterPolicy;
 
@@ -204,27 +215,7 @@ pub mod policies {
                 return None;
             }
 
-            // get token fields without validating it.
-            let Claims {
-                search_rules,
-                exp,
-                api_key_prefix,
-            } = dangerous_insecure_decode::<Claims>(token).ok()?.claims;
-
-            // Check index access if an index restriction is provided.
-            if let Some(index) = index {
-                if !search_rules.is_index_authorized(index) {
-                    return None;
-                }
-            }
-
-            // Check if token is expired.
-            if let Some(exp) = exp {
-                if OffsetDateTime::now_utc().unix_timestamp() > exp {
-                    return None;
-                }
-            }
-
+            let api_key_prefix = extract_key_prefix(token)?;
             // check if parent key is authorized to do the action.
             if auth
                 .is_key_authorized(api_key_prefix.as_bytes(), Action::Search, index)
@@ -232,15 +223,29 @@ pub mod policies {
             {
                 // Check if tenant token is valid.
                 let key = auth.generate_key(&api_key_prefix)?;
-                decode::<Claims>(
+                let data = decode::<Claims>(
                     token,
                     &DecodingKey::from_secret(key.as_bytes()),
-                    &TENANT_TOKEN_VALIDATION,
+                    &tenant_token_validation(),
                 )
                 .ok()?;
 
+                // Check index access if an index restriction is provided.
+                if let Some(index) = index {
+                    if !data.claims.search_rules.is_index_authorized(index) {
+                        return None;
+                    }
+                }
+
+                // Check if token is expired.
+                if let Some(exp) = data.claims.exp {
+                    if OffsetDateTime::now_utc().unix_timestamp() > exp {
+                        return None;
+                    }
+                }
+
                 return auth
-                    .get_key_filters(api_key_prefix, Some(search_rules))
+                    .get_key_filters(api_key_prefix, Some(data.claims.search_rules))
                     .ok();
             }
 
