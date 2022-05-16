@@ -157,6 +157,18 @@ where
         let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
         self.index.put_faceted_fields(self.wtxn, &new_facets)?;
 
+        // in case new fields were introduced we're going to recreate the searchable fields.
+        if let Some(faceted_fields) = self.index.user_defined_searchable_fields(self.wtxn)? {
+            // we can't keep references on the faceted fields while we update the index thus we need to own it.
+            let faceted_fields: Vec<String> =
+                faceted_fields.into_iter().map(str::to_string).collect();
+            self.index.put_all_searchable_fields_from_fields_ids_map(
+                self.wtxn,
+                &faceted_fields.iter().map(String::as_ref).collect::<Vec<_>>(),
+                &output.fields_ids_map,
+            )?;
+        }
+
         let indexed_documents = output.documents_count as u64;
         let number_of_documents = self.execute_raw(output)?;
 

@@ -42,6 +42,7 @@ pub mod main_key {
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
     pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
+    pub const USER_DEFINED_SEARCHABLE_FIELDS_KEY: &str = "user-defined-searchable-fields";
     pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
     pub const STOP_WORDS_KEY: &str = "stop-words";
     pub const STRING_FACETED_DOCUMENTS_IDS_PREFIX: &str = "string-faceted-documents-ids";
@@ -457,12 +458,43 @@ impl Index {
 
     /* searchable fields */
 
-    /// Writes the searchable fields, when this list is specified, only these are indexed.
-    pub(crate) fn put_searchable_fields(
+    /// Write the user defined searchable fields and generate the real searchable fields from the specified fields ids map.
+    pub(crate) fn put_all_searchable_fields_from_fields_ids_map(
         &self,
         wtxn: &mut RwTxn,
-        fields: &[&str],
+        user_fields: &[&str],
+        fields_ids_map: &FieldsIdsMap,
     ) -> heed::Result<()> {
+        // We can write the user defined searchable fields as-is.
+        self.put_user_defined_searchable_fields(wtxn, user_fields)?;
+
+        // Now we generate the real searchable fields:
+        // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
+        // 2. Iterate over the user defined searchable fields.
+        // 3. If a user defined field is a subset of a field defined in the fields_ids_map
+        // (ie doggo.name is a subset of doggo) then we push it at the end of the fields.
+        let mut real_fields = user_fields.to_vec();
+
+        for field_from_map in fields_ids_map.names() {
+            for user_field in user_fields {
+                if crate::is_faceted_by(field_from_map, user_field)
+                    && !user_fields.contains(&field_from_map)
+                {
+                    real_fields.push(field_from_map);
+                }
+            }
+        }
+
+        self.put_searchable_fields(wtxn, &real_fields)
+    }
+
+    pub(crate) fn delete_all_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.delete_searchable_fields(wtxn)?;
+        self.delete_user_defined_searchable_fields(wtxn)
+    }
+
+    /// Writes the searchable fields, when this list is specified, only these are indexed.
+    fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeBincode<&[&str]>>(
             wtxn,
             main_key::SEARCHABLE_FIELDS_KEY,
@@ -471,7 +503,7 @@ impl Index {
     }
 
     /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
-    pub(crate) fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+    fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, main_key::SEARCHABLE_FIELDS_KEY)
     }
 
@@ -496,6 +528,36 @@ impl Index {
             }
             None => Ok(None),
         }
+    }
+
+    /// Writes the searchable fields, when this list is specified, only these are indexed.
+    pub(crate) fn put_user_defined_searchable_fields(
+        &self,
+        wtxn: &mut RwTxn,
+        fields: &[&str],
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<_>>(
+            wtxn,
+            main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY,
+            &fields,
+        )
+    }
+
+    /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
+    pub(crate) fn delete_user_defined_searchable_fields(
+        &self,
+        wtxn: &mut RwTxn,
+    ) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
+    }
+
+    /// Returns the user defined searchable fields.
+    pub fn user_defined_searchable_fields<'t>(
+        &self,
+        rtxn: &'t RoTxn,
+    ) -> heed::Result<Option<Vec<&'t str>>> {
+        self.main
+            .get::<_, Str, SerdeBincode<Vec<_>>>(rtxn, main_key::USER_DEFINED_SEARCHABLE_FIELDS_KEY)
     }
 
     /* filterable fields */
@@ -1031,12 +1093,13 @@ impl Index {
 pub(crate) mod tests {
     use std::ops::Deref;
 
+    use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::btreemap;
     use tempfile::TempDir;
 
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
+    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig};
     use crate::Index;
 
     pub(crate) struct TempIndex {
@@ -1183,5 +1246,95 @@ pub(crate) mod tests {
         let txn = index.read_txn().unwrap();
         assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 3);
         assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 15);
+    }
+
+    #[test]
+    fn add_documents_and_set_searchable_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+            { "id": 3, "name": "jean", "age": 25 },
+        ]);
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        // set searchable fields
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        builder.set_searchable_fields(vec![S("doggo"), S("name")]);
+
+        builder.execute(drop).unwrap();
+        wtxn.commit().unwrap();
+
+        // ensure we get the right real searchable fields + user defined searchable fields
+        let rtxn = index.read_txn().unwrap();
+
+        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
+
+        let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(user_defined, &["doggo", "name"]);
+    }
+
+    #[test]
+    fn set_searchable_fields_and_add_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
+
+        // set searchable fields
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        builder.set_searchable_fields(vec![S("doggo"), S("name")]);
+
+        builder.execute(drop).unwrap();
+        wtxn.commit().unwrap();
+
+        // ensure we get the right real searchable fields + user defined searchable fields
+        let rtxn = index.read_txn().unwrap();
+
+        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(real, &["doggo", "name"]);
+        let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(user_defined, &["doggo", "name"]);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+            { "id": 3, "name": "jean", "age": 25 },
+        ]);
+
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        // ensure we get the right real searchable fields + user defined searchable fields
+        let rtxn = index.read_txn().unwrap();
+
+        let real = index.searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
+
+        let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
+        assert_eq!(user_defined, &["doggo", "name"]);
     }
 }
