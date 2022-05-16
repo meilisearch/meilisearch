@@ -4,7 +4,7 @@ description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch-http"
-version = "0.26.0"
+version = "0.27.0"
 
 [[bin]]
 name = "meilisearch"
@@ -103,5 +103,5 @@ mini-dashboard = [
 tikv-jemallocator = "0.4.3"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.9/build.zip"
-sha1 = "b1833c3e5dc6b5d9d519ae4834935ae6c8a47024"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.10/build.zip"
+sha1 = "1adf96592c267425c110bfefc36b7fc6bfb0f93d"

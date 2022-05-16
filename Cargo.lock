@@ -403,6 +403,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "big_s"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "199edb7b90631283b10c2422e6a0bc8b7d987bf732995ba1de53b576c97e51a8"
+
+[[package]]
 name = "bimap"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1086,8 +1092,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+version = "0.26.4"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.4#6ee67df128b63f40eedfe1cb2edfa1a59492e310"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1113,8 +1119,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+version = "0.26.4"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.4#6ee67df128b63f40eedfe1cb2edfa1a59492e310"
 dependencies = [
  "serde_json",
 ]
@@ -1615,6 +1621,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-depth-checker"
+version = "0.26.4"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.4#6ee67df128b63f40eedfe1cb2edfa1a59492e310"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "jsonwebtoken"
 version = "8.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1936,7 +1950,7 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "enum-iterator",
  "meilisearch-error",
@@ -1951,7 +1965,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "actix-web",
  "proptest",
@@ -1962,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -2034,7 +2048,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -2137,8 +2151,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.26.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.0#9ac2fd1c379d5b91c80471c23079dbba57b9a841"
+version = "0.26.4"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.4#6ee67df128b63f40eedfe1cb2edfa1a59492e310"
 dependencies = [
  "bimap",
  "bincode",
@@ -2156,6 +2170,7 @@ dependencies = [
  "grenad",
  "heed",
  "itertools",
+ "json-depth-checker",
  "levenshtein_automata",
  "log",
  "logging_timer",
@@ -2172,6 +2187,7 @@ dependencies = [
  "slice-group-by",
  "smallstr",
  "smallvec",
+ "smartstring",
  "tempfile",
  "time 0.3.9",
  "uuid",
@@ -2476,9 +2492,8 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 [[package]]
 name = "permissive-json-pointer"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2125f5fc44a45ffd265ce6ab343842f71df469d173f923f234e3a8df7a8f1ba6"
 dependencies = [
+ "big_s",
  "serde_json",
 ]
 
@@ -3175,6 +3190,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "static_assertions",
+ "version_check",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,6 +3241,12 @@ dependencies = [
  "mime_guess",
  "path-slash",
 ]
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"

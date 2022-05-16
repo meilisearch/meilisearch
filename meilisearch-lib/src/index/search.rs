@@ -4,7 +4,6 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
-use indexmap::IndexMap;
 use milli::tokenizer::{Analyzer, AnalyzerConfig, Token};
 use milli::{AscDesc, FieldId, FieldsIdsMap, Filter, MatchingWords, SortError};
 use regex::Regex;
@@ -16,7 +15,7 @@ use crate::index::error::FacetError;
 use super::error::{IndexError, Result};
 use super::index::Index;
 
-pub type Document = IndexMap<String, Value>;
+pub type Document = serde_json::Map<String, Value>;
 type MatchesInfo = BTreeMap<String, Vec<MatchInfo>>;
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -35,17 +34,17 @@ pub const fn default_crop_length() -> usize {
     DEFAULT_CROP_LENGTH
 }
 
-const DEFAULT_CROP_MARKER: &str = "…";
+pub const DEFAULT_CROP_MARKER: &str = "…";
 pub fn default_crop_marker() -> String {
     DEFAULT_CROP_MARKER.to_string()
 }
 
-const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
+pub const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
 pub fn default_highlight_pre_tag() -> String {
     DEFAULT_HIGHLIGHT_PRE_TAG.to_string()
 }
 
-const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
+pub const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
 pub fn default_highlight_post_tag() -> String {
     DEFAULT_HIGHLIGHT_POST_TAG.to_string()
 }
@@ -233,14 +232,22 @@ impl Index {
         let documents_iter = self.documents(&rtxn, documents_ids)?;
 
         for (_id, obkv) in documents_iter {
-            let mut document = make_document(&to_retrieve_ids, &fields_ids_map, obkv)?;
+            // First generate a document with all the displayed fields
+            let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+            // select the attributes to retrieve
+            let attributes_to_retrieve = to_retrieve_ids
+                .iter()
+                .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+            let mut document =
+                permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
 
             let matches_info = query
                 .matches
                 .then(|| compute_matches(&matching_words, &document, &analyzer));
 
             let formatted = format_fields(
-                &document,
+                &displayed_document,
                 &fields_ids_map,
                 &formatter,
                 &matching_words,
@@ -476,7 +483,7 @@ fn add_non_formatted_ids_to_formatted_options(
 }
 
 fn make_document(
-    attributes_to_retrieve: &BTreeSet<FieldId>,
+    displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReaderU16,
 ) -> Result<Document> {
@@ -494,15 +501,11 @@ fn make_document(
     }
 
     // select the attributes to retrieve
-    let attributes_to_retrieve = attributes_to_retrieve
+    let displayed_attributes = displayed_attributes
         .iter()
         .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
 
-    let document = permissive_json_pointer::select_values(&document, attributes_to_retrieve);
-
-    // then we need to convert the `serde_json::Map` into an `IndexMap`.
-    let document = document.into_iter().collect();
-
+    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
 }
 
@@ -513,20 +516,13 @@ fn format_fields<A: AsRef<[u8]>>(
     matching_words: &impl Matcher,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
 ) -> Result<Document> {
-    // Convert the `IndexMap` into a `serde_json::Map`.
-    let document = document
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-
     let selectors: Vec<_> = formatted_options
         .keys()
         // This unwrap must be safe since we got the ids from the fields_ids_map just
         // before.
         .map(|&fid| field_ids_map.name(fid).unwrap())
         .collect();
-
-    let mut document = permissive_json_pointer::select_values(&document, selectors.iter().copied());
+    let mut document = permissive_json_pointer::select_values(document, selectors.iter().copied());
 
     permissive_json_pointer::map_leaf_values(&mut document, selectors, |key, value| {
         // To get the formatting option of each key we need to see all the rules that applies
@@ -542,12 +538,8 @@ fn format_fields<A: AsRef<[u8]>>(
             .fold(FormatOptions::default(), |acc, (_, option)| {
                 acc.merge(*option)
             });
-        // TODO: remove this useless clone
-        *value = formatter.format_value(value.clone(), matching_words, format);
+        *value = formatter.format_value(std::mem::take(value), matching_words, format);
     });
-
-    // we need to convert back the `serde_json::Map` into an `IndexMap`.
-    let document = document.into_iter().collect();
 
     Ok(document)
 }

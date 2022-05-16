@@ -18,7 +18,7 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::updates::{MinWordLengthTypoSetting, TypoSettings};
+use super::updates::{MinWordSizeTyposSetting, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -170,7 +170,7 @@ impl Index {
             })
             .collect();
 
-        let min_typo_word_len = MinWordLengthTypoSetting {
+        let min_typo_word_len = MinWordSizeTyposSetting {
             one_typo: Setting::Set(self.min_word_len_one_typo(txn)?),
             two_typos: Setting::Set(self.min_word_len_two_typos(txn)?),
         };
@@ -190,7 +190,7 @@ impl Index {
 
         let typo_tolerance = TypoSettings {
             enabled: Setting::Set(self.authorize_typos(txn)?),
-            min_word_length_for_typo: Setting::Set(min_typo_word_len),
+            min_word_size_for_typos: Setting::Set(min_typo_word_len),
             disable_on_words: Setting::Set(disabled_words),
             disable_on_attributes: Setting::Set(disabled_attributes),
         };
@@ -213,7 +213,7 @@ impl Index {
                 None => Setting::Reset,
             },
             synonyms: Setting::Set(synonyms),
-            typo: Setting::Set(typo_tolerance),
+            typo_tolerance: Setting::Set(typo_tolerance),
             _kind: PhantomData,
         })
     }
