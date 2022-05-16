@@ -125,7 +125,8 @@ struct TaskQueue {
 
 impl TaskQueue {
     fn insert(&mut self, task: Task) {
-        let uid = task.index_uid.into_inner();
+        // TODO(marin): The index uid should be remaped to a task queue identifier here
+        let uid = task.index_uid.unwrap().into_inner();
         let id = task.id;
         let kind = match task.content {
             TaskContent::DocumentAddition {
@@ -443,7 +444,7 @@ mod test {
     fn gen_task(id: TaskId, index_uid: &str, content: TaskContent) -> Task {
         Task {
             id,
-            index_uid: IndexUid::new_unchecked(index_uid),
+            index_uid: Some(IndexUid::new_unchecked(index_uid)),
             content,
             events: vec![],
         }

@@ -137,7 +137,7 @@ fn serialize_duration<S: Serializer>(
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     uid: TaskId,
-    index_uid: String,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -313,7 +313,7 @@ impl From<Task> for TaskView {
 
         Self {
             uid: id,
-            index_uid: index_uid.into_inner(),
+            index_uid: index_uid.map(|u| u.into_inner()),
             status,
             task_type,
             details,
@@ -342,7 +342,7 @@ impl From<Vec<TaskView>> for TaskListView {
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
     uid: TaskId,
-    index_uid: String,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -365,7 +365,7 @@ impl From<Task> for SummarizedTaskView {
 
         Self {
             uid: other.id,
-            index_uid: other.index_uid.to_string(),
+            index_uid: other.index_uid.map(|u| u.into_inner()),
             status: TaskStatus::Enqueued,
             task_type: other.content.into(),
             enqueued_at,

@@ -204,7 +204,7 @@ where
 
         match batch.tasks.first() {
             Some(Task {
-                index_uid,
+                index_uid: Some(ref index_uid),
                 id,
                 content:
                     TaskContent::DocumentAddition {
@@ -285,7 +285,7 @@ where
             TaskContent::DocumentAddition { .. } => panic!("updates should be handled by batch"),
             TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
                 let ids = ids.clone();
-                let index = self.get_index(index_uid.into_inner()).await?;
+                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
 
                 let DocumentDeletionResult {
                     deleted_documents, ..
@@ -294,7 +294,7 @@ where
                 Ok(TaskResult::DocumentDeletion { deleted_documents })
             }
             TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                let index = self.get_index(index_uid.into_inner()).await?;
+                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
                 let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
                     let number_documents = index.stats()?.number_of_documents;
                     index.clear_documents()?;
@@ -310,9 +310,10 @@ where
                 allow_index_creation,
             } => {
                 let index = if *is_deletion || !*allow_index_creation {
-                    self.get_index(index_uid.into_inner()).await?
+                    self.get_index(index_uid.unwrap().into_inner()).await?
                 } else {
-                    self.get_or_create_index(index_uid, task.id).await?
+                    self.get_or_create_index(index_uid.unwrap(), task.id)
+                        .await?
                 };
 
                 let settings = settings.clone();
@@ -321,7 +322,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::IndexDeletion => {
-                let index = self.delete_index(index_uid.into_inner()).await?;
+                let index = self.delete_index(index_uid.unwrap().into_inner()).await?;
 
                 let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
                     Ok(index.stats()?.number_of_documents)
@@ -331,7 +332,7 @@ where
                 Ok(TaskResult::ClearAll { deleted_documents })
             }
             TaskContent::IndexCreation { primary_key } => {
-                let index = self.create_index(index_uid, task.id).await?;
+                let index = self.create_index(index_uid.unwrap(), task.id).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -341,7 +342,7 @@ where
                 Ok(TaskResult::Other)
             }
             TaskContent::IndexUpdate { primary_key } => {
-                let index = self.get_index(index_uid.into_inner()).await?;
+                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -503,7 +504,7 @@ mod test {
     proptest! {
         #[test]
         fn test_process_task(
-            task in any::<Task>(),
+            task in any::<Task>().prop_filter("uid must be Some", |t| t.index_uid.is_some()),
             index_exists in any::<bool>(),
             index_op_fails in any::<bool>(),
             any_int in any::<u64>(),

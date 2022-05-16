@@ -30,10 +30,14 @@ pub struct TaskFilter {
 
 impl TaskFilter {
     fn pass(&self, task: &Task) -> bool {
-        self.indexes
-            .as_ref()
-            .map(|indexes| indexes.contains(&*task.index_uid))
-            .unwrap_or(true)
+        match task.index_uid {
+            Some(ref index_uid) => self
+                .indexes
+                .as_ref()
+                .map(|indexes| indexes.contains(index_uid.as_str()))
+                .unwrap_or(true),
+            None => false,
+        }
     }
 
     /// Adds an index to the filter, so the filter must match this index.
@@ -66,7 +70,11 @@ impl TaskStore {
         Ok(Self { store })
     }
 
-    pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
+    pub async fn register(
+        &self,
+        index_uid: Option<IndexUid>,
+        content: TaskContent,
+    ) -> Result<Task> {
         debug!("registering update: {:?}", content);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
@@ -305,7 +313,11 @@ pub mod test {
             }
         }
 
-        pub async fn register(&self, index_uid: IndexUid, content: TaskContent) -> Result<Task> {
+        pub async fn register(
+            &self,
+            index_uid: Option<IndexUid>,
+            content: TaskContent,
+        ) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(index_uid, content).await,
                 Self::Mock(_m) => todo!(),
@@ -335,7 +347,7 @@ pub mod test {
 
         let gen_task = |id: TaskId| Task {
             id,
-            index_uid: IndexUid::new_unchecked("test"),
+            index_uid: Some(IndexUid::new_unchecked("test")),
             content: TaskContent::IndexCreation { primary_key: None },
             events: Vec::new(),
         };

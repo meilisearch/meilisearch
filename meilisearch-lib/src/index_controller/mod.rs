@@ -419,7 +419,7 @@ where
             Update::UpdateIndex { primary_key } => TaskContent::IndexUpdate { primary_key },
         };
 
-        let task = self.task_store.register(uid, content).await?;
+        let task = self.task_store.register(Some(uid), content).await?;
         self.scheduler.read().await.notify();
 
         Ok(task)
@@ -569,7 +569,12 @@ where
         // Check if the currently indexing update is from our index.
         let is_indexing = processing_tasks
             .first()
-            .map(|task| task.index_uid.as_str() == uid)
+            .map(|task| {
+                task.index_uid
+                    .as_ref()
+                    .map(|u| u.as_str() == uid)
+                    .unwrap_or(false)
+            })
             .unwrap_or_default();
 
         let index = self.index_resolver.get_index(uid).await?;
@@ -605,7 +610,7 @@ where
             // Check if the currently indexing update is from our index.
             stats.is_indexing = processing_tasks
                 .first()
-                .map(|p| p.index_uid.as_str() == index_uid)
+                .and_then(|p| p.index_uid.as_ref().map(|u| u.as_str() == index_uid))
                 .or(Some(false));
 
             indexes.insert(index_uid, stats);

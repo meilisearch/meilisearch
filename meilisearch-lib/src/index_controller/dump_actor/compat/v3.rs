@@ -187,7 +187,7 @@ impl From<(UpdateStatus, String, TaskId)> for Task {
         // Dummy task
         let mut task = Task {
             id: task_id,
-            index_uid: IndexUid::new(uid).unwrap(),
+            index_uid: Some(IndexUid::new(uid).unwrap()),
             content: TaskContent::IndexDeletion,
             events: Vec::new(),
         };

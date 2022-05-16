@@ -74,7 +74,11 @@ pub enum TaskEvent {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
-    pub index_uid: IndexUid,
+    /// The name of the index the task is targeting. If it isn't targeting any idex (i.e Dump task)
+    /// then this is None
+    // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
+    // the TaskContent.
+    pub index_uid: Option<IndexUid>,
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
 }
