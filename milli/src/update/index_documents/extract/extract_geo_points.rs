@@ -35,26 +35,28 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         };
 
         // first we get the two fields
-        let lat = obkv
-            .get(lat_fid)
-            .ok_or_else(|| GeoError::MissingLatitude { document_id: primary_key() })?;
-        let lng = obkv
-            .get(lng_fid)
-            .ok_or_else(|| GeoError::MissingLongitude { document_id: primary_key() })?;
+        let lat = obkv.get(lat_fid);
+        let lng = obkv.get(lng_fid);
 
-        // then we extract the values
-        let lat = extract_float_from_value(
-            serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
-        )
-        .map_err(|lat| GeoError::BadLatitude { document_id: primary_key(), value: lat })?;
+        if let Some((lat, lng)) = lat.zip(lng) {
+            // then we extract the values
+            let lat = extract_float_from_value(
+                serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
+            )
+            .map_err(|lat| GeoError::BadLatitude { document_id: primary_key(), value: lat })?;
 
-        let lng = extract_float_from_value(
-            serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
-        )
-        .map_err(|lng| GeoError::BadLongitude { document_id: primary_key(), value: lng })?;
+            let lng = extract_float_from_value(
+                serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
+            )
+            .map_err(|lng| GeoError::BadLongitude { document_id: primary_key(), value: lng })?;
 
-        let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
-        writer.insert(docid_bytes, bytes)?;
+            let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
+            writer.insert(docid_bytes, bytes)?;
+        } else if lat.is_none() && lng.is_some() {
+            return Err(GeoError::MissingLatitude { document_id: primary_key() })?;
+        } else if lat.is_some() && lng.is_none() {
+            return Err(GeoError::MissingLongitude { document_id: primary_key() })?;
+        }
     }
 
     Ok(writer_into_reader(writer)?)

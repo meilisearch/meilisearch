@@ -1007,6 +1007,43 @@ mod tests {
     }
 
     #[test]
+    fn mixed_geo_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // We send 6 documents and mix the ones that have _geo and those that don't have it.
+        let mut wtxn = index.write_txn().unwrap();
+        let documents = documents!([
+          { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+          { "id": 456 },
+          { "id": 1 },
+          { "id": 1344 },
+          { "id": 4 },
+          { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
+        ]);
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig {
+            update_method: IndexDocumentsMethod::ReplaceDocuments,
+            ..Default::default()
+        };
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+        builder.add_documents(documents).unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        let faceted_fields = hashset!(S("_geo"));
+        builder.set_filterable_fields(faceted_fields);
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
     fn index_all_flavour_of_geo() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
