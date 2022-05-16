@@ -1502,7 +1502,6 @@ mod tests {
         let index = TempIndex::new();
         let config = IndexerConfig::default();
 
-        // Set the genres setting
         let mut txn = index.write_txn().unwrap();
         let builder = Settings::new(&mut txn, &index, &config);
         let Settings {
