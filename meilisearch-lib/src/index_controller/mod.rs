@@ -196,10 +196,7 @@ impl IndexControllerBuilder {
                 task_store_size,
                 &indexer_options,
             )?;
-        }
-
-        let db_exists = db_path.as_ref().exists();
-        if db_exists {
+        } else if db_path.as_ref().exists() {
             // Directory could be pre-created without any database in.
             let db_is_empty = db_path.as_ref().read_dir()?.next().is_none();
             if !db_is_empty {
