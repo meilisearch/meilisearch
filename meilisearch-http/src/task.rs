@@ -216,6 +216,7 @@ impl From<Task> for TaskView {
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
+            TaskContent::Dump { path: _ } => todo!(),
         };
 
         // An event always has at least one event: "Created"

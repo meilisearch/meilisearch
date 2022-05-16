@@ -21,8 +21,13 @@ use super::{TaskFilter, TaskPerformer, TaskStore};
 
 #[derive(Eq, Debug, Clone, Copy)]
 enum TaskType {
-    DocumentAddition { number: usize },
-    DocumentUpdate { number: usize },
+    DocumentAddition {
+        number: usize,
+    },
+    DocumentUpdate {
+        number: usize,
+    },
+    /// Any other kind of task, including Dumps
     Other,
 }
 
@@ -63,7 +68,7 @@ impl Ord for PendingTask {
 
 #[derive(Debug)]
 struct TaskList {
-    index: String,
+    id: TaskListIdentifier,
     tasks: BinaryHeap<PendingTask>,
 }
 
@@ -82,9 +87,9 @@ impl DerefMut for TaskList {
 }
 
 impl TaskList {
-    fn new(index: String) -> Self {
+    fn new(id: TaskListIdentifier) -> Self {
         Self {
-            index,
+            id,
             tasks: Default::default(),
         }
     }
@@ -92,7 +97,7 @@ impl TaskList {
 
 impl PartialEq for TaskList {
     fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
+        self.id == other.id
     }
 }
 
@@ -100,11 +105,20 @@ impl Eq for TaskList {}
 
 impl Ord for TaskList {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.peek(), other.peek()) {
-            (None, None) => Ordering::Equal,
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-            (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
+        match (&self.id, &other.id) {
+            (TaskListIdentifier::Index(_), TaskListIdentifier::Index(_)) => {
+                match (self.peek(), other.peek()) {
+                    (None, None) => Ordering::Equal,
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
+                }
+            }
+            (TaskListIdentifier::Index(_), TaskListIdentifier::Dump) => Ordering::Greater,
+            (TaskListIdentifier::Dump, TaskListIdentifier::Index(_)) => Ordering::Less,
+            (TaskListIdentifier::Dump, TaskListIdentifier::Dump) => {
+                unreachable!("There should be only one Dump task list")
+            }
         }
     }
 }
@@ -115,19 +129,27 @@ impl PartialOrd for TaskList {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+enum TaskListIdentifier {
+    Index(String),
+    Dump,
+}
+
 #[derive(Default)]
 struct TaskQueue {
     /// Maps index uids to their TaskList, for quick access
-    index_tasks: HashMap<String, Arc<AtomicRefCell<TaskList>>>,
+    index_tasks: HashMap<TaskListIdentifier, Arc<AtomicRefCell<TaskList>>>,
     /// A queue that orders TaskList by the priority of their fist update
     queue: BinaryHeap<Arc<AtomicRefCell<TaskList>>>,
 }
 
 impl TaskQueue {
     fn insert(&mut self, task: Task) {
-        // TODO(marin): The index uid should be remaped to a task queue identifier here
-        let uid = task.index_uid.unwrap().into_inner();
         let id = task.id;
+        let uid = match task.index_uid {
+            Some(uid) => TaskListIdentifier::Index(uid.into_inner()),
+            None => unreachable!(),
+        };
         let kind = match task.content {
             TaskContent::DocumentAddition {
                 documents_count,
@@ -161,7 +183,7 @@ impl TaskQueue {
                 list.push(task);
             }
             Entry::Vacant(entry) => {
-                let mut task_list = TaskList::new(entry.key().to_owned());
+                let mut task_list = TaskList::new(entry.key().clone());
                 task_list.push(task);
                 let task_list = Arc::new(AtomicRefCell::new(task_list));
                 entry.insert(task_list.clone());
@@ -182,7 +204,7 @@ impl TaskQueue {
             // After being mutated, the head is reinserted to the correct position.
             self.queue.push(head);
         } else {
-            self.index_tasks.remove(&head.borrow().index);
+            self.index_tasks.remove(&head.borrow().id);
         }
 
         Some(result)

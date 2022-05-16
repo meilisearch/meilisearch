@@ -78,6 +78,12 @@ pub struct Task {
     /// then this is None
     // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
     // the TaskContent.
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::weighted(proptest::option::Probability::new(0.99), IndexUid::arbitrary())"
+        )
+    )]
     pub index_uid: Option<IndexUid>,
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
@@ -164,6 +170,10 @@ pub enum TaskContent {
     },
     IndexUpdate {
         primary_key: Option<String>,
+    },
+    Dump {
+        #[cfg_attr(test, proptest(value = "PathBuf::from(\".\")"))]
+        path: PathBuf,
     },
 }
 

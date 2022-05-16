@@ -351,6 +351,7 @@ where
 
                 Ok(TaskResult::Other)
             }
+            TaskContent::Dump { path: _ } => Ok(TaskResult::Other),
         }
     }
 
@@ -504,7 +505,7 @@ mod test {
     proptest! {
         #[test]
         fn test_process_task(
-            task in any::<Task>().prop_filter("uid must be Some", |t| t.index_uid.is_some()),
+            task in any::<Task>().prop_filter("IndexUid should be Some", |s| s.index_uid.is_some()),
             index_exists in any::<bool>(),
             index_op_fails in any::<bool>(),
             any_int in any::<u64>(),
@@ -580,6 +581,7 @@ mod test {
                                 .then(move |_| result());
                             }
                     }
+                    TaskContent::Dump { path: _ } => { }
                 }
 
                 mocker.when::<(), IndexResult<IndexStats>>("stats")
@@ -608,6 +610,7 @@ mod test {
                     }
                     // if index already exists, create index will return an error
                     TaskContent::IndexCreation { .. } if index_exists => (),
+                    TaskContent::Dump { .. } => (),
                     // The index exists and get should be called
                     _ if index_exists => {
                         index_store
@@ -648,7 +651,7 @@ mod test {
                 // Test for some expected output scenarios:
                 // Index creation and deletion cannot fail because of a failed index op, since they
                 // don't perform index ops.
-                if index_op_fails && !matches!(task.content, TaskContent::IndexDeletion | TaskContent::IndexCreation { primary_key: None } | TaskContent::IndexUpdate { primary_key: None })
+                if index_op_fails && !matches!(task.content, TaskContent::IndexDeletion | TaskContent::IndexCreation { primary_key: None } | TaskContent::IndexUpdate { primary_key: None } | TaskContent::Dump { .. })
                     || (index_exists && matches!(task.content, TaskContent::IndexCreation { .. }))
                     || (!index_exists && matches!(task.content, TaskContent::IndexDeletion
                                                                 | TaskContent::DocumentDeletion(_)
