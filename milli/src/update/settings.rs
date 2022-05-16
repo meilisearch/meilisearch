@@ -343,11 +343,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     new_fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
-                self.index.put_searchable_fields(self.wtxn, &names)?;
+                self.index.put_all_searchable_fields_from_fields_ids_map(
+                    self.wtxn,
+                    &names,
+                    &new_fields_ids_map,
+                )?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
             }
             Setting::Reset => {
-                self.index.delete_searchable_fields(self.wtxn)?;
+                self.index.delete_all_searchable_fields(self.wtxn)?;
             }
             Setting::NotSet => return Ok(false),
         }
