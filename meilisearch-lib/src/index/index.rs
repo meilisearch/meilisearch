@@ -135,7 +135,7 @@ impl Index {
             .map(|fields| fields.into_iter().map(String::from).collect());
 
         let searchable_attributes = self
-            .searchable_fields(txn)?
+            .user_defined_searchable_fields(txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
         let filterable_attributes = self.filterable_fields(txn)?.into_iter().collect();
