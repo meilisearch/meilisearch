@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use matching_words::{MatchType, PartialMatch, PrimitiveWordId};
 pub use matching_words::{MatchingWord, MatchingWords};
 use meilisearch_tokenizer::token::{SeparatorKind, Token};
+use serde::Serialize;
 
 pub mod matching_words;
 
@@ -86,7 +87,7 @@ pub struct Match {
     token_position: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,
