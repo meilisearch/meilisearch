@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-lib"
-version = "0.27.0"
+version = "0.27.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -30,7 +30,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-error = { path = "../meilisearch-error" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.26.4" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.26.5" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
