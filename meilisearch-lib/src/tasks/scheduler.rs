@@ -148,7 +148,8 @@ impl TaskQueue {
         let id = task.id;
         let uid = match task.index_uid {
             Some(uid) => TaskListIdentifier::Index(uid.into_inner()),
-            None => unreachable!(),
+            None if matches!(task.content, TaskContent::Dump { .. }) => TaskListIdentifier::Dump,
+            None => unreachable!("invalid task state"),
         };
         let kind = match task.content {
             TaskContent::DocumentAddition {
