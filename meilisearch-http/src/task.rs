@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::str::FromStr;
 use std::write;
 
 use meilisearch_error::ResponseError;
@@ -8,14 +9,14 @@ use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 
 use crate::AUTOBATCHING_ENABLED;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum TaskType {
+pub enum TaskType {
     IndexCreation,
     IndexUpdate,
     IndexDeletion,
@@ -48,13 +49,45 @@ impl From<TaskContent> for TaskType {
     }
 }
 
-#[derive(Debug, Serialize)]
+impl FromStr for TaskType {
+    type Err = &'static str;
+
+    fn from_str(status: &str) -> Result<Self, &'static str> {
+        match status {
+            "indexCreation" => Ok(TaskType::IndexCreation),
+            "indexUpdate" => Ok(TaskType::IndexUpdate),
+            "indexDeletion" => Ok(TaskType::IndexDeletion),
+            "documentAddition" => Ok(TaskType::DocumentAddition),
+            "documentPartial" => Ok(TaskType::DocumentPartial),
+            "documentDeletion" => Ok(TaskType::DocumentDeletion),
+            "settingsUpdate" => Ok(TaskType::SettingsUpdate),
+            "clearAll" => Ok(TaskType::ClearAll),
+            _ => Err("invalid task type value"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum TaskStatus {
+pub enum TaskStatus {
     Enqueued,
     Processing,
     Succeeded,
     Failed,
+}
+
+impl FromStr for TaskStatus {
+    type Err = &'static str;
+
+    fn from_str(status: &str) -> Result<Self, &'static str> {
+        match status {
+            "enqueued" => Ok(TaskStatus::Enqueued),
+            "processing" => Ok(TaskStatus::Processing),
+            "succeeded" => Ok(TaskStatus::Succeeded),
+            "failed" => Ok(TaskStatus::Failed),
+            _ => Err("invalid task status value"),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

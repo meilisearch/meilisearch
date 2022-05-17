@@ -4,6 +4,7 @@ pub mod meta_store;
 
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use error::{IndexResolverError, Result};
@@ -88,6 +89,14 @@ impl TryInto<IndexUid> for String {
 
     fn try_into(self) -> Result<IndexUid> {
         IndexUid::new(self)
+    }
+}
+
+impl FromStr for IndexUid {
+    type Err = IndexResolverError;
+
+    fn from_str(s: &str) -> Result<IndexUid> {
+        IndexUid::new(s.to_string())
     }
 }
 

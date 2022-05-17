@@ -34,7 +34,8 @@ use self::dump_actor::{DumpActorHandle, DumpInfo};
 use self::error::IndexControllerError;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
-use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
+pub use crate::index_resolver::IndexUid;
+use crate::index_resolver::{create_index_resolver, IndexResolver};
 use crate::update_file_store::UpdateFileStore;
 
 mod dump_actor;

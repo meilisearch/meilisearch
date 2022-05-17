@@ -12,7 +12,7 @@ mod update_file_store;
 
 use std::path::Path;
 
-pub use index_controller::MeiliSearch;
+pub use index_controller::{IndexUid, MeiliSearch};
 pub use milli;
 pub use milli::heed;
 

@@ -2024,6 +2024,7 @@ dependencies = [
  "rustls-pemfile",
  "segment",
  "serde",
+ "serde-cs",
  "serde_json",
  "serde_url_params",
  "sha-1",
@@ -3065,6 +3066,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce31e24b01e1e524df96f1c2fdd054405f8d7376249a5110886fb4b658484789"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-cs"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18d5b0435c9139761fbe5abeb1283234bcfbde88fadc2ae432579648fbce72ad"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
