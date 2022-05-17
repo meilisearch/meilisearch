@@ -46,7 +46,7 @@ impl Index<'_> {
             .post_str(url, include_str!("../assets/test_set.json"))
             .await;
         assert_eq!(code, 202);
-        let update_id = response["uid"].as_i64().unwrap();
+        let update_id = response["taskUid"].as_i64().unwrap();
         self.wait_task(update_id as u64).await;
         update_id as u64
     }

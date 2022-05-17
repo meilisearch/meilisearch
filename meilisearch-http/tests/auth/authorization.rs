@@ -523,7 +523,7 @@ async fn error_creating_index_without_action() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "{:?}", response);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
     assert_eq!(response["status"], "failed");
@@ -534,7 +534,7 @@ async fn error_creating_index_without_action() {
 
     let (response, code) = index.update_settings(settings).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
 
@@ -544,7 +544,7 @@ async fn error_creating_index_without_action() {
     // try to create a index via add specialized settings route
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
 
@@ -583,7 +583,7 @@ async fn lazy_create_index() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "{:?}", response);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 
@@ -597,7 +597,7 @@ async fn lazy_create_index() {
 
     let (response, code) = index.update_settings(settings).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 
@@ -609,7 +609,7 @@ async fn lazy_create_index() {
     let index = server.index("test2");
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 

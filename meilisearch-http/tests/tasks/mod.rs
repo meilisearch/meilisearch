@@ -94,7 +94,7 @@ async fn list_tasks() {
 macro_rules! assert_valid_summarized_task {
     ($response:expr, $task_type:literal, $index:literal) => {{
         assert_eq!($response.as_object().unwrap().len(), 5);
-        assert!($response["uid"].as_u64().is_some());
+        assert!($response["taskUid"].as_u64().is_some());
         assert_eq!($response["indexUid"], $index);
         assert_eq!($response["status"], "enqueued");
         assert_eq!($response["type"], $task_type);

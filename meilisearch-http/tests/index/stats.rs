@@ -35,7 +35,7 @@ async fn stats() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["uid"], 1);
+    assert_eq!(response["taskUid"], 1);
 
     index.wait_task(1).await;
 
