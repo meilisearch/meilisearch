@@ -3,7 +3,7 @@ pub mod index_store;
 pub mod meta_store;
 
 use std::convert::{TryFrom, TryInto};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use error::{IndexResolverError, Result};
@@ -351,8 +351,12 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::Dump { path: _ } => Ok(TaskResult::Other),
+            TaskContent::Dump { path } => self.perform_dump(path).await,
         }
+    }
+
+    async fn perform_dump(&self, path: &PathBuf) -> Result<TaskResult> {
+        todo!()
     }
 
     async fn process_job(&self, job: Job) {
