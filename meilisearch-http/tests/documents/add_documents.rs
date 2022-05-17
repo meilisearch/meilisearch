@@ -35,7 +35,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
 
     // put
     let req = test::TestRequest::put()
@@ -48,7 +48,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response["uid"], 1);
+    assert_eq!(response["taskUid"], 1);
 }
 
 /// any other content-type is must be refused
@@ -599,7 +599,7 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
     /*
      * currently we don’t check these field to stay ISO with meilisearch
      * assert_eq!(response["status"], "pending");
