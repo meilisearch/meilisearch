@@ -341,7 +341,7 @@ impl From<Vec<TaskView>> for TaskListView {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
-    uid: TaskId,
+    task_uid: TaskId,
     index_uid: String,
     status: TaskStatus,
     #[serde(rename = "type")]
@@ -364,7 +364,7 @@ impl From<Task> for SummarizedTaskView {
         };
 
         Self {
-            uid: other.id,
+            task_uid: other.id,
             index_uid: other.index_uid.to_string(),
             status: TaskStatus::Enqueued,
             task_type: other.content.into(),
