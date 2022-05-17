@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::task::SummarizedTaskView;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(create_dump))))
@@ -23,7 +24,7 @@ pub async fn create_dump(
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
 
-    let res = meilisearch.create_dump().await?;
+    let res: SummarizedTaskView = meilisearch.register_dump_task().await?.into();
 
     debug!("returns: {:?}", res);
     Ok(HttpResponse::Accepted().json(res))

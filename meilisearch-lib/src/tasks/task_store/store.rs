@@ -108,9 +108,10 @@ impl Store {
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
         self.tasks.put(txn, &BEU64::new(task.id), task)?;
-        self.uids_task_ids
-            // TODO(marin): The index uid should be remaped to a task queue identifier here
-            .put(txn, &(&task.index_uid.as_ref().unwrap(), task.id), &())?;
+        // only add the task to the indexes index if it has an index_uid
+        if let Some(ref index_uid) = task.index_uid {
+            self.uids_task_ids.put(txn, &(&index_uid, task.id), &())?;
+        }
 
         Ok(())
     }

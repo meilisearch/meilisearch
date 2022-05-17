@@ -24,6 +24,7 @@ enum TaskType {
     DocumentDeletion,
     SettingsUpdate,
     ClearAll,
+    Dump,
 }
 
 impl From<TaskContent> for TaskType {
@@ -43,6 +44,7 @@ impl From<TaskContent> for TaskType {
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
+            TaskContent::Dump { path } => TaskType::Dump,
             _ => unreachable!("unexpected task type"),
         }
     }
@@ -216,7 +218,7 @@ impl From<Task> for TaskView {
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
-            TaskContent::Dump { path: _ } => todo!(),
+            TaskContent::Dump { path: _ } => (TaskType::Dump, None),
         };
 
         // An event always has at least one event: "Created"
