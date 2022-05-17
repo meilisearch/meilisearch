@@ -991,7 +991,7 @@ async fn error_document_field_limit_reached() {
 }
 
 #[actix_rt::test]
-async fn error_add_documents_invalid_geo_field() {
+async fn add_documents_invalid_geo_field() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("id")).await;
@@ -1010,16 +1010,7 @@ async fn error_add_documents_invalid_geo_field() {
     index.wait_task(2).await;
     let (response, code) = index.get_task(2).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
-
-    let expected_error = json!({
-        "message": r#"The document with the id: `11` contains an invalid `_geo` field."#,
-        "code": "invalid_geo_field",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_geo_field"
-    });
-
-    assert_eq!(response["error"], expected_error);
+    assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]
