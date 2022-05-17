@@ -15,7 +15,6 @@ use crate::task::SummarizedTaskView;
 pub mod documents;
 pub mod search;
 pub mod settings;
-pub mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -34,7 +33,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
-            .service(web::scope("/tasks").configure(tasks::configure))
             .service(web::scope("/settings").configure(settings::configure)),
     );
 }
