@@ -122,12 +122,12 @@ impl Index<'_> {
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/tasks/{}", self.uid, update_id);
+        let url = format!("/tasks/{}", update_id);
         self.service.get(url).await
     }
 
     pub async fn list_tasks(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/tasks", self.uid);
+        let url = format!("/tasks?indexUid={}", self.uid);
         self.service.get(url).await
     }
 
