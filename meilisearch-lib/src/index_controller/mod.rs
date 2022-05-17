@@ -76,6 +76,7 @@ pub struct IndexController<U, I> {
     index_resolver: Arc<IndexResolver<U, I>>,
     scheduler: Arc<RwLock<Scheduler>>,
     task_store: TaskStore,
+    dump_path: PathBuf,
     dump_handle: dump_actor::DumpActorHandleImpl,
     update_file_store: UpdateFileStore,
 }
@@ -89,6 +90,7 @@ impl<U, I> Clone for IndexController<U, I> {
             dump_handle: self.dump_handle.clone(),
             update_file_store: self.update_file_store.clone(),
             task_store: self.task_store.clone(),
+            dump_path: self.dump_path.clone(),
         }
     }
 }
@@ -234,7 +236,7 @@ impl IndexControllerBuilder {
                 receiver,
                 update_file_store.clone(),
                 scheduler.clone(),
-                dump_path,
+                dump_path.clone(),
                 analytics_path,
                 index_size,
                 task_store_size,
@@ -269,6 +271,7 @@ impl IndexControllerBuilder {
             index_resolver,
             scheduler,
             dump_handle,
+            dump_path,
             update_file_store,
             task_store,
         })
@@ -422,6 +425,15 @@ where
         let task = self.task_store.register(Some(uid), content).await?;
         self.scheduler.read().await.notify();
 
+        Ok(task)
+    }
+
+    pub async fn register_dump_task(&self) -> Result<Task> {
+        let content = TaskContent::Dump {
+            path: self.dump_path.clone(),
+        };
+        let task = self.task_store.register(None, content).await?;
+        self.scheduler.read().await.notify();
         Ok(task)
     }
 
