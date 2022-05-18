@@ -868,7 +868,12 @@ async fn error_add_documents_bad_document_id() {
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(
+        response["error"]["message"],
+        json!(
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
+        )
+    );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
@@ -891,7 +896,12 @@ async fn error_update_documents_bad_document_id() {
     index.update_documents(documents, None).await;
     let response = index.wait_task(1).await;
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(
+        response["error"]["message"],
+        json!(
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
+        )
+    );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
