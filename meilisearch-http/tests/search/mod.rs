@@ -420,11 +420,11 @@ async fn search_facet_distribution() {
     index
         .search(
             json!({
-                "facetsDistribution": ["title"]
+                "facets": ["title"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
-                let dist = response["facetsDistribution"].as_object().unwrap();
+                let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert!(dist.get("title").is_some());
             },
@@ -445,12 +445,12 @@ async fn search_facet_distribution() {
     index
         .search(
             json!({
-                // "facetsDistribution": ["father", "doggos.name"]
-                "facetsDistribution": ["father"]
+                // "facets": ["father", "doggos.name"]
+                "facets": ["father"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
-                let dist = response["facetsDistribution"].as_object().unwrap();
+                let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert_eq!(
                     dist["father"],
@@ -474,11 +474,11 @@ async fn search_facet_distribution() {
     index
         .search(
             json!({
-                "facetsDistribution": ["doggos.name"]
+                "facets": ["doggos.name"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
-                let dist = response["facetsDistribution"].as_object().unwrap();
+                let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert_eq!(
                     dist["doggos.name"],
@@ -491,11 +491,11 @@ async fn search_facet_distribution() {
     index
         .search(
             json!({
-                "facetsDistribution": ["doggos"]
+                "facets": ["doggos"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
-                let dist = response["facetsDistribution"].as_object().unwrap();
+                let dist = response["facetDistribution"].as_object().unwrap();
                 dbg!(&dist);
                 assert_eq!(dist.len(), 3);
                 assert_eq!(

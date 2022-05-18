@@ -16,7 +16,7 @@ async fn formatted_contain_wildcard() {
     index.wait_task(1).await;
 
     let (response, code) = index
-        .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "matches": true }))
+        .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }))
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(
@@ -26,7 +26,7 @@ async fn formatted_contain_wildcard() {
                 "id": "852",
                 "cattos": "<em>pesti</em>",
             },
-            "_matchesInfo": {"cattos": [{"start": 0, "length": 5}]},
+            "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
         })
     );
 
@@ -44,7 +44,7 @@ async fn formatted_contain_wildcard() {
 
     let (response, code) = index
         .search_post(
-            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "matches": true }),
+            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "showMatchesPosition": true }),
         )
         .await;
     assert_eq!(code, 200, "{}", response);
@@ -57,7 +57,7 @@ async fn formatted_contain_wildcard() {
                 "id": "852",
                 "cattos": "pesti",
             },
-            "_matchesInfo": {"cattos": [{"start": 0, "length": 5}]},
+            "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
         })
     );
 
@@ -145,7 +145,7 @@ async fn format_nested() {
 
     let (response, code) = index
         .search_post(
-            json!({ "q": "bobby", "attributesToRetrieve": ["doggos.name"], "matches": true }),
+            json!({ "q": "bobby", "attributesToRetrieve": ["doggos.name"], "showMatchesPosition": true }),
         )
         .await;
     assert_eq!(code, 200, "{}", response);
@@ -160,7 +160,7 @@ async fn format_nested() {
                     "name": "buddy",
                 },
             ],
-            "_matchesInfo": {"doggos.name": [{"start": 0, "length": 5}]},
+            "_matchesPosition": {"doggos.name": [{"start": 0, "length": 5}]},
         })
     );
 

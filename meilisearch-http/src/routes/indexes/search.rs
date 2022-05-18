@@ -36,8 +36,8 @@ pub struct SearchQueryGet {
     filter: Option<String>,
     sort: Option<String>,
     #[serde(default = "Default::default")]
-    matches: bool,
-    facets_distribution: Option<String>,
+    show_matches_position: bool,
+    facets: Option<String>,
     #[serde(default = "default_highlight_pre_tag")]
     highlight_pre_tag: String,
     #[serde(default = "default_highlight_post_tag")]
@@ -60,8 +60,8 @@ impl From<SearchQueryGet> for SearchQuery {
             .attributes_to_highlight
             .map(|attrs| attrs.split(',').map(String::from).collect());
 
-        let facets_distribution = other
-            .facets_distribution
+        let facets = other
+            .facets
             .map(|attrs| attrs.split(',').map(String::from).collect());
 
         let filter = match other.filter {
@@ -84,8 +84,8 @@ impl From<SearchQueryGet> for SearchQuery {
             attributes_to_highlight,
             filter,
             sort,
-            matches: other.matches,
-            facets_distribution,
+            show_matches_position: other.show_matches_position,
+            facets,
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
@@ -169,10 +169,6 @@ pub async fn search_with_url_query(
 
     let search_result = search_result?;
 
-    // Tests that the nb_hits is always set to false
-    #[cfg(test)]
-    assert!(!search_result.exhaustive_nb_hits);
-
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }
@@ -206,10 +202,6 @@ pub async fn search_with_post(
     analytics.post_search(aggregate);
 
     let search_result = search_result?;
-
-    // Tests that the nb_hits is always set to false
-    #[cfg(test)]
-    assert!(!search_result.exhaustive_nb_hits);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

@@ -363,7 +363,7 @@ pub struct SearchAggregator {
     highlight_pre_tag: bool,
     highlight_post_tag: bool,
     crop_marker: bool,
-    matches: bool,
+    show_matches_position: bool,
     crop_length: bool,
 }
 
@@ -419,7 +419,7 @@ impl SearchAggregator {
         ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG;
         ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER;
         ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH;
-        ret.matches = query.matches;
+        ret.show_matches_position = query.show_matches_position;
 
         ret
     }
@@ -472,7 +472,7 @@ impl SearchAggregator {
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
         self.crop_marker |= other.crop_marker;
-        self.matches |= other.matches;
+        self.show_matches_position |= other.show_matches_position;
         self.crop_length |= other.crop_length;
     }
 
@@ -515,7 +515,7 @@ impl SearchAggregator {
                     "highlight_pre_tag": self.highlight_pre_tag,
                     "highlight_post_tag": self.highlight_post_tag,
                     "crop_marker": self.crop_marker,
-                    "matches": self.matches,
+                    "show_matches_position": self.show_matches_position,
                     "crop_length": self.crop_length,
                 },
             });

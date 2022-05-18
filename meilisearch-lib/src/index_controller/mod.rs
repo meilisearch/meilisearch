@@ -687,10 +687,10 @@ mod test {
             attributes_to_crop: None,
             crop_length: 18,
             attributes_to_highlight: None,
-            matches: true,
+            show_matches_position: true,
             filter: None,
             sort: None,
-            facets_distribution: None,
+            facets: None,
             highlight_pre_tag: default_highlight_pre_tag(),
             highlight_post_tag: default_highlight_post_tag(),
             crop_marker: default_crop_marker(),
@@ -698,14 +698,12 @@ mod test {
 
         let result = SearchResult {
             hits: vec![],
-            nb_hits: 29,
-            exhaustive_nb_hits: true,
+            estimated_total_hits: 29,
             query: "hello world".to_string(),
             limit: 24,
             offset: 0,
             processing_time_ms: 50,
-            facets_distribution: None,
-            exhaustive_facets_count: Some(true),
+            facet_distribution: None,
         };
 
         let mut uuid_store = MockIndexMetaStore::new();

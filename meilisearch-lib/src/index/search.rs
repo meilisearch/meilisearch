@@ -18,7 +18,7 @@ use super::error::{IndexError, Result};
 use super::index::Index;
 
 pub type Document = serde_json::Map<String, Value>;
-type MatchesInfo = BTreeMap<String, Vec<MatchBounds>>;
+type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
 pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 const fn default_search_limit() -> usize {
@@ -63,10 +63,10 @@ pub struct SearchQuery {
     pub attributes_to_highlight: Option<HashSet<String>>,
     // Default to false
     #[serde(default = "Default::default")]
-    pub matches: bool,
+    pub show_matches_position: bool,
     pub filter: Option<Value>,
     pub sort: Option<Vec<String>>,
-    pub facets_distribution: Option<Vec<String>>,
+    pub facets: Option<Vec<String>>,
     #[serde(default = "default_highlight_pre_tag")]
     pub highlight_pre_tag: String,
     #[serde(default = "default_highlight_post_tag")]
@@ -81,24 +81,21 @@ pub struct SearchHit {
     pub document: Document,
     #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     pub formatted: Document,
-    #[serde(rename = "_matchesInfo", skip_serializing_if = "Option::is_none")]
-    pub matches_info: Option<MatchesInfo>,
+    #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
+    pub matches_position: Option<MatchesPosition>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
-    pub nb_hits: u64,
-    pub exhaustive_nb_hits: bool,
+    pub estimated_total_hits: u64,
     pub query: String,
     pub limit: usize,
     pub offset: usize,
     pub processing_time_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facets_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exhaustive_facets_count: Option<bool>,
+    pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
 impl Index {
@@ -222,13 +219,13 @@ impl Index {
             let mut document =
                 permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
 
-            let (matches_info, formatted) = format_fields(
+            let (matches_position, formatted) = format_fields(
                 &displayed_document,
                 &fields_ids_map,
                 &formatter_builder,
                 &analyzer,
                 &formatted_options,
-                query.matches,
+                query.show_matches_position,
                 &displayed_ids,
             )?;
 
@@ -239,38 +236,34 @@ impl Index {
             let hit = SearchHit {
                 document,
                 formatted,
-                matches_info,
+                matches_position,
             };
             documents.push(hit);
         }
 
-        let nb_hits = candidates.len();
+        let estimated_total_hits = candidates.len();
 
-        let facets_distribution = match query.facets_distribution {
+        let facet_distribution = match query.facets {
             Some(ref fields) => {
-                let mut facets_distribution = self.facets_distribution(&rtxn);
+                let mut facet_distribution = self.facets_distribution(&rtxn);
                 if fields.iter().all(|f| f != "*") {
-                    facets_distribution.facets(fields);
+                    facet_distribution.facets(fields);
                 }
-                let distribution = facets_distribution.candidates(candidates).execute()?;
+                let distribution = facet_distribution.candidates(candidates).execute()?;
 
                 Some(distribution)
             }
             None => None,
         };
 
-        let exhaustive_facets_count = facets_distribution.as_ref().map(|_| false); // not implemented yet
-
         let result = SearchResult {
-            exhaustive_nb_hits: false, // not implemented yet
             hits: documents,
-            nb_hits,
+            estimated_total_hits,
             query: query.q.clone().unwrap_or_default(),
             limit: query.limit,
             offset: query.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
-            facets_distribution,
-            exhaustive_facets_count,
+            facet_distribution,
         };
         Ok(result)
     }
@@ -445,8 +438,8 @@ fn format_fields<'a, A: AsRef<[u8]>>(
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
-) -> Result<(Option<MatchesInfo>, Document)> {
-    let mut matches = compute_matches.then(BTreeMap::new);
+) -> Result<(Option<MatchesPosition>, Document)> {
+    let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
     // select the attributes to retrieve
@@ -477,7 +470,7 @@ fn format_fields<'a, A: AsRef<[u8]>>(
             compute_matches,
         );
 
-        if let Some(matches) = matches.as_mut() {
+        if let Some(matches) = matches_position.as_mut() {
             if !infos.is_empty() {
                 matches.insert(key.to_owned(), infos);
             }
@@ -491,7 +484,7 @@ fn format_fields<'a, A: AsRef<[u8]>>(
         .map(|&fid| field_ids_map.name(fid).unwrap());
     let document = permissive_json_pointer::select_values(&document, selectors);
 
-    Ok((matches, document))
+    Ok((matches_position, document))
 }
 
 fn format_value<'a, A: AsRef<[u8]>>(
