@@ -16,7 +16,7 @@ async fn formatted_contain_wildcard() {
     index.wait_task(1).await;
 
     let (response, code) = index
-        .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"] }))
+        .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "matches": true }))
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(
@@ -25,7 +25,8 @@ async fn formatted_contain_wildcard() {
             "_formatted": {
                 "id": "852",
                 "cattos": "<em>pesti</em>",
-            }
+            },
+            "_matchesInfo": {"cattos": [{"start": 0, "length": 5}]},
         })
     );
 
@@ -43,7 +44,7 @@ async fn formatted_contain_wildcard() {
 
     let (response, code) = index
         .search_post(
-            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"] }),
+            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "matches": true }),
         )
         .await;
     assert_eq!(code, 200, "{}", response);
@@ -55,7 +56,8 @@ async fn formatted_contain_wildcard() {
             "_formatted": {
                 "id": "852",
                 "cattos": "pesti",
-            }
+            },
+            "_matchesInfo": {"cattos": [{"start": 0, "length": 5}]},
         })
     );
 
@@ -138,6 +140,27 @@ async fn format_nested() {
                     "name": "buddy",
                 },
             ],
+        })
+    );
+
+    let (response, code) = index
+        .search_post(
+            json!({ "q": "bobby", "attributesToRetrieve": ["doggos.name"], "matches": true }),
+        )
+        .await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(
+        response["hits"][0],
+        json!({
+            "doggos": [
+                {
+                    "name": "bobby",
+                },
+                {
+                    "name": "buddy",
+                },
+            ],
+            "_matchesInfo": {"doggos.name": [{"start": 0, "length": 5}]},
         })
     );
 

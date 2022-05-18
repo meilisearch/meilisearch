@@ -1092,8 +1092,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.26.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.5#1f6dc31e2f8ee02cdda255a856d15f253daf17ec"
+version = "0.28.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1119,8 +1119,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.26.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.5#1f6dc31e2f8ee02cdda255a856d15f253daf17ec"
+version = "0.28.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
 dependencies = [
  "serde_json",
 ]
@@ -1622,8 +1622,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.26.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.5#1f6dc31e2f8ee02cdda255a856d15f253daf17ec"
+version = "0.28.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
 dependencies = [
  "serde_json",
 ]
@@ -2151,8 +2151,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.26.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.26.5#1f6dc31e2f8ee02cdda255a856d15f253daf17ec"
+version = "0.28.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
 dependencies = [
  "bimap",
  "bincode",
@@ -2189,6 +2189,7 @@ dependencies = [
  "smallvec",
  "smartstring",
  "tempfile",
+ "thiserror",
  "time 0.3.9",
  "uuid",
 ]
@@ -3360,18 +3361,18 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"
-version = "1.0.30"
+version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
+checksum = "bd829fe32373d27f76265620b5309d0340cb8550f523c1dda251d6298069069a"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.30"
+version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
+checksum = "0396bc89e626244658bef819e22d0cc459e795a5ebe878e6ec336d1674a8d79a"
 dependencies = [
  "proc-macro2 1.0.37",
  "quote 1.0.17",
