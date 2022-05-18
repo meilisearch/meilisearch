@@ -59,6 +59,85 @@ async fn list_tasks() {
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
+#[actix_rt::test]
+async fn list_tasks_status_filtered() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+    index.wait_task(0).await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+
+    let (response, code) = index.filtered_tasks(&[], &["succeeded"]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+
+    let (response, code) = index.filtered_tasks(&[], &["processing"]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+
+    index.wait_task(1).await;
+
+    let (response, code) = index.filtered_tasks(&[], &["succeeded"]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn list_tasks_type_filtered() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+    index.wait_task(0).await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+
+    let (response, code) = index.filtered_tasks(&["indexCreation"], &[]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+
+    let (response, code) = index
+        .filtered_tasks(&["indexCreation", "documentAddition"], &[])
+        .await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn list_tasks_status_and_type_filtered() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+    index.wait_task(0).await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+
+    let (response, code) = index.filtered_tasks(&["indexCreation"], &["failed"]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 0);
+
+    let (response, code) = index
+        .filtered_tasks(
+            &["indexCreation", "documentAddition"],
+            &["succeeded", "processing"],
+        )
+        .await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
 macro_rules! assert_valid_summarized_task {
     ($response:expr, $task_type:literal, $index:literal) => {{
         assert_eq!($response.as_object().unwrap().len(), 5);

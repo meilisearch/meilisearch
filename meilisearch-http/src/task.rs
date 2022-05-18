@@ -52,9 +52,9 @@ impl From<TaskContent> for TaskType {
 }
 
 impl FromStr for TaskType {
-    type Err = &'static str;
+    type Err = String;
 
-    fn from_str(status: &str) -> Result<Self, &'static str> {
+    fn from_str(status: &str) -> Result<Self, String> {
         match status {
             "indexCreation" => Ok(TaskType::IndexCreation),
             "indexUpdate" => Ok(TaskType::IndexUpdate),
@@ -64,7 +64,12 @@ impl FromStr for TaskType {
             "documentDeletion" => Ok(TaskType::DocumentDeletion),
             "settingsUpdate" => Ok(TaskType::SettingsUpdate),
             "clearAll" => Ok(TaskType::ClearAll),
-            _ => Err("invalid task type value"),
+            unknown => Err(format!(
+                "invalid task type `{}` value, expecting one of: \
+                indexCreation, indexUpdate, indexDeletion, documentAddition, \
+                documentPartial, documentDeletion, settingsUpdate, or clearAll",
+                unknown
+            )),
         }
     }
 }
@@ -79,15 +84,19 @@ pub enum TaskStatus {
 }
 
 impl FromStr for TaskStatus {
-    type Err = &'static str;
+    type Err = String;
 
-    fn from_str(status: &str) -> Result<Self, &'static str> {
+    fn from_str(status: &str) -> Result<Self, String> {
         match status {
             "enqueued" => Ok(TaskStatus::Enqueued),
             "processing" => Ok(TaskStatus::Processing),
             "succeeded" => Ok(TaskStatus::Succeeded),
             "failed" => Ok(TaskStatus::Failed),
-            _ => Err("invalid task status value"),
+            unknown => Err(format!(
+                "invalid task status `{}` value, expecting one of: \
+                enqueued, processing, succeeded, or failed",
+                unknown
+            )),
         }
     }
 }

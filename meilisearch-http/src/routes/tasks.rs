@@ -1,6 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_error::ResponseError;
-use meilisearch_lib::tasks::task::TaskId;
+use meilisearch_lib::milli::update::IndexDocumentsMethod;
+use meilisearch_lib::tasks::task::{DocumentDeletion, TaskContent, TaskEvent, TaskId};
 use meilisearch_lib::tasks::TaskFilter;
 use meilisearch_lib::{IndexUid, MeiliSearch};
 use serde::Deserialize;
@@ -19,16 +20,51 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TasksFilter {
+pub struct TaskFilterQuery {
     #[serde(rename = "type")]
     type_: Option<CS<TaskType>>,
     status: Option<CS<TaskStatus>>,
     index_uid: Option<CS<IndexUid>>,
 }
 
+#[rustfmt::skip]
+fn task_type_matches_content(type_: &TaskType, content: &TaskContent) -> bool {
+    matches!((type_, content),
+        (TaskType::IndexCreation, TaskContent::IndexCreation { .. })
+        | (TaskType::IndexUpdate, TaskContent::IndexUpdate { .. })
+        | (TaskType::IndexDeletion, TaskContent::IndexDeletion)
+        | (TaskType::DocumentAddition, TaskContent::DocumentAddition {
+              merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+              ..
+          })
+        | (TaskType::DocumentPartial, TaskContent::DocumentAddition {
+              merge_strategy: IndexDocumentsMethod::UpdateDocuments,
+              ..
+          })
+        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)))
+        | (TaskType::SettingsUpdate, TaskContent::SettingsUpdate { .. })
+        | (TaskType::ClearAll, TaskContent::DocumentDeletion(DocumentDeletion::Clear))
+    )
+}
+
+fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool {
+    events.last().map_or(false, |event| {
+        matches!(
+            (status, event),
+            (TaskStatus::Enqueued, TaskEvent::Created(_))
+                | (
+                    TaskStatus::Processing,
+                    TaskEvent::Processing(_) | TaskEvent::Batched { .. }
+                )
+                | (TaskStatus::Succeeded, TaskEvent::Succeded { .. })
+                | (TaskStatus::Failed, TaskEvent::Failed { .. }),
+        )
+    })
+}
+
 async fn get_tasks(
     meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
-    params: web::Query<TasksFilter>,
+    params: web::Query<TaskFilterQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -38,14 +74,17 @@ async fn get_tasks(
         Some(&req),
     );
 
-    let TasksFilter {
+    let TaskFilterQuery {
         type_,
         status,
         index_uid,
     } = params.into_inner();
 
     let search_rules = &meilisearch.filters().search_rules;
-    let filters = match index_uid {
+
+    // We first filter on potential indexes and make sure
+    // that the search filter restrictions are also applied.
+    let indexes_filters = match index_uid {
         Some(indexes) => {
             let mut filters = TaskFilter::default();
             for name in indexes.into_inner() {
@@ -66,6 +105,42 @@ async fn get_tasks(
                 Some(filters)
             }
         }
+    };
+
+    // Then we complete the task filter with other potential status and types filters.
+    let filters = match (type_, status) {
+        (Some(CS(types)), Some(CS(statuses))) => {
+            let mut filters = indexes_filters.unwrap_or_default();
+            filters.filter_fn(move |task| {
+                let matches_type = types
+                    .iter()
+                    .any(|t| task_type_matches_content(&t, &task.content));
+                let matches_status = statuses
+                    .iter()
+                    .any(|s| task_status_matches_events(&s, &task.events));
+                matches_type && matches_status
+            });
+            Some(filters)
+        }
+        (Some(CS(types)), None) => {
+            let mut filters = indexes_filters.unwrap_or_default();
+            filters.filter_fn(move |task| {
+                types
+                    .iter()
+                    .any(|t| task_type_matches_content(&t, &task.content))
+            });
+            Some(filters)
+        }
+        (None, Some(CS(statuses))) => {
+            let mut filters = indexes_filters.unwrap_or_default();
+            filters.filter_fn(move |task| {
+                statuses
+                    .iter()
+                    .any(|s| task_status_matches_events(&s, &task.events))
+            });
+            Some(filters)
+        }
+        (None, None) => indexes_filters,
     };
 
     let tasks: TaskListView = meilisearch

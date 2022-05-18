@@ -131,6 +131,17 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
+    pub async fn filtered_tasks(&self, type_: &[&str], status: &[&str]) -> (Value, StatusCode) {
+        let mut url = format!("/tasks?indexUid={}", self.uid);
+        if !type_.is_empty() {
+            url += &format!("&type={}", type_.join(","));
+        }
+        if !status.is_empty() {
+            url += &format!("&status={}", status.join(","));
+        }
+        self.service.get(url).await
+    }
+
     pub async fn get_document(
         &self,
         id: u64,
