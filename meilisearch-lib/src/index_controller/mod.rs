@@ -228,6 +228,7 @@ impl IndexControllerBuilder {
             db_path.as_ref().clone(),
             index_size,
             task_store_size,
+            index_resolver.clone(),
         ));
         let task_store = TaskStore::new(meta_env)?;
 

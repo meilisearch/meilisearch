@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::bail;
 use log::{info, trace};
@@ -13,6 +14,9 @@ use tokio::fs::create_dir_all;
 use crate::analytics;
 use crate::compression::{from_tar_gz, to_tar_gz};
 use crate::dump::error::DumpError;
+use crate::index_resolver::index_store::IndexStore;
+use crate::index_resolver::meta_store::IndexMetaStore;
+use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
 use crate::update_file_store::UpdateFileStore;
 use error::Result;
@@ -255,16 +259,21 @@ fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<
     Ok(())
 }
 
-pub struct DumpJob {
+pub struct DumpJob<U, I> {
     pub dump_path: PathBuf,
     pub db_path: PathBuf,
     pub update_file_store: UpdateFileStore,
     pub uid: String,
     pub update_db_size: usize,
     pub index_db_size: usize,
+    pub index_resolver: Arc<IndexResolver<U, I>>,
 }
 
-impl DumpJob {
+impl<U, I> DumpJob<U, I>
+where
+    U: IndexMetaStore,
+    I: IndexStore,
+{
     pub async fn run(self) -> Result<()> {
         trace!("Performing dump.");
 
@@ -281,8 +290,9 @@ impl DumpJob {
 
         create_dir_all(&temp_dump_path.join("indexes")).await?;
 
+        // TODO: this is blocking!!
         AuthController::dump(&self.db_path, &temp_dump_path)?;
-        // TODO: Dump indexes and updates
+        self.index_resolver.dump(&self.dump_path).await?;
 
         //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
         // self.scheduler

@@ -1,15 +1,20 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use log::{error, trace};
 use time::{macros::format_description, OffsetDateTime};
 
 use crate::dump::DumpJob;
+use crate::index_resolver::index_store::IndexStore;
+use crate::index_resolver::meta_store::IndexMetaStore;
+use crate::index_resolver::IndexResolver;
 use crate::tasks::batch::{Batch, BatchContent};
 use crate::tasks::BatchHandler;
 use crate::update_file_store::UpdateFileStore;
 
-pub struct DumpHandler {
+pub struct DumpHandler<U, I> {
     update_file_store: UpdateFileStore,
+    index_resolver: Arc<IndexResolver<U, I>>,
     dump_path: PathBuf,
     db_path: PathBuf,
     update_db_size: usize,
@@ -25,13 +30,18 @@ fn generate_uid() -> String {
         .unwrap()
 }
 
-impl DumpHandler {
+impl<U, I> DumpHandler<U, I>
+where
+    U: IndexMetaStore + Send + Sync + 'static,
+    I: IndexStore + Send + Sync + 'static,
+{
     pub fn new(
         update_file_store: UpdateFileStore,
         dump_path: impl AsRef<Path>,
         db_path: impl AsRef<Path>,
         index_db_size: usize,
         update_db_size: usize,
+        index_resolver: Arc<IndexResolver<U, I>>,
     ) -> Self {
         Self {
             update_file_store,
@@ -39,6 +49,7 @@ impl DumpHandler {
             db_path: db_path.as_ref().into(),
             index_db_size,
             update_db_size,
+            index_resolver,
         }
     }
 
@@ -52,6 +63,7 @@ impl DumpHandler {
             uid: uid.clone(),
             update_db_size: self.update_db_size,
             index_db_size: self.index_db_size,
+            index_resolver: self.index_resolver.clone(),
         };
 
         let task_result = tokio::task::spawn_local(task.run()).await;
@@ -71,7 +83,11 @@ impl DumpHandler {
 }
 
 #[async_trait::async_trait]
-impl BatchHandler for DumpHandler {
+impl<U, I> BatchHandler for DumpHandler<U, I>
+where
+    U: IndexMetaStore + Send + Sync + 'static,
+    I: IndexStore + Send + Sync + 'static,
+{
     fn accept(&self, batch: &Batch) -> bool {
         matches!(batch.content, BatchContent::Dump { .. })
     }
