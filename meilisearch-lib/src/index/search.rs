@@ -446,7 +446,7 @@ fn format_fields<'a, A: AsRef<[u8]>>(
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
 ) -> Result<(Option<MatchesInfo>, Document)> {
-    let mut matches = compute_matches.then(|| BTreeMap::new());
+    let mut matches = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
     // select the attributes to retrieve
