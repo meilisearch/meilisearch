@@ -3,27 +3,23 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::bail;
-use log::{info, trace};
+use log::info;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 pub use actor::DumpActor;
 pub use handle_impl::*;
-use meilisearch_auth::AuthController;
 pub use message::DumpMsg;
 use tempfile::TempDir;
-use tokio::fs::create_dir_all;
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::RwLock;
 
-use crate::analytics;
-use crate::compression::{from_tar_gz, to_tar_gz};
-use crate::index_controller::dump_actor::error::DumpActorError;
-use crate::index_controller::dump_actor::loaders::{v2, v3, v4};
+use crate::compression::from_tar_gz;
 use crate::options::IndexerOpts;
-use crate::tasks::task::Job;
 use crate::tasks::Scheduler;
 use crate::update_file_store::UpdateFileStore;
 use error::Result;
+
+use self::loaders::{v2, v3, v4};
 
 mod actor;
 mod compat;
@@ -316,7 +312,7 @@ fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<
     Ok(())
 }
 
-struct DumpJob {
+pub struct DumpJob {
     dump_path: PathBuf,
     db_path: PathBuf,
     update_file_store: UpdateFileStore,
@@ -328,65 +324,65 @@ struct DumpJob {
 
 impl DumpJob {
     async fn run(self) -> Result<()> {
-        trace!("Performing dump.");
-
-        create_dir_all(&self.dump_path).await?;
-
-        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
-        let temp_dump_path = temp_dump_dir.path().to_owned();
-
-        let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
-        let meta_path = temp_dump_path.join(META_FILE_NAME);
-        let mut meta_file = File::create(&meta_path)?;
-        serde_json::to_writer(&mut meta_file, &meta)?;
-        analytics::copy_user_id(&self.db_path, &temp_dump_path);
-
-        create_dir_all(&temp_dump_path.join("indexes")).await?;
-
-        let (sender, receiver) = oneshot::channel();
-
-        self.scheduler
-            .write()
-            .await
-            .schedule_job(Job::Dump {
-                ret: sender,
-                path: temp_dump_path.clone(),
-            })
-            .await;
-
-        // wait until the job has started performing before finishing the dump process
-        let sender = receiver.await??;
-
-        AuthController::dump(&self.db_path, &temp_dump_path)?;
-
-        //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
-        self.scheduler
-            .read()
-            .await
-            .dump(&temp_dump_path, self.update_file_store.clone())
-            .await?;
-
-        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            // for now we simply copy the updates/updates_files
-            // FIXME: We may copy more files than necessary, if new files are added while we are
-            // performing the dump. We need a way to filter them out.
-
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
-            to_tar_gz(temp_dump_path, temp_dump_file.path())
-                .map_err(|e| DumpActorError::Internal(e.into()))?;
-
-            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
-            temp_dump_file.persist(&dump_path)?;
-
-            Ok(dump_path)
-        })
-        .await??;
-
-        // notify the update loop that we are finished performing the dump.
-        let _ = sender.send(());
-
-        info!("Created dump in {:?}.", dump_path);
-
+        // trace!("Performing dump.");
+        //
+        // create_dir_all(&self.dump_path).await?;
+        //
+        // let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
+        // let temp_dump_path = temp_dump_dir.path().to_owned();
+        //
+        // let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
+        // let meta_path = temp_dump_path.join(META_FILE_NAME);
+        // let mut meta_file = File::create(&meta_path)?;
+        // serde_json::to_writer(&mut meta_file, &meta)?;
+        // analytics::copy_user_id(&self.db_path, &temp_dump_path);
+        //
+        // create_dir_all(&temp_dump_path.join("indexes")).await?;
+        //
+        // let (sender, receiver) = oneshot::channel();
+        //
+        // self.scheduler
+        //     .write()
+        //     .await
+        //     .schedule_job(Job::Dump {
+        //         ret: sender,
+        //         path: temp_dump_path.clone(),
+        //     })
+        //     .await;
+        //
+        // // wait until the job has started performing before finishing the dump process
+        // let sender = receiver.await??;
+        //
+        // AuthController::dump(&self.db_path, &temp_dump_path)?;
+        //
+        // //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
+        // self.scheduler
+        //     .read()
+        //     .await
+        //     .dump(&temp_dump_path, self.update_file_store.clone())
+        //     .await?;
+        //
+        // let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+        //     // for now we simply copy the updates/updates_files
+        //     // FIXME: We may copy more files than necessary, if new files are added while we are
+        //     // performing the dump. We need a way to filter them out.
+        //
+        //     let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
+        //     to_tar_gz(temp_dump_path, temp_dump_file.path())
+        //         .map_err(|e| DumpActorError::Internal(e.into()))?;
+        //
+        //     let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+        //     temp_dump_file.persist(&dump_path)?;
+        //
+        //     Ok(dump_path)
+        // })
+        // .await??;
+        //
+        // // notify the update loop that we are finished performing the dump.
+        // let _ = sender.send(());
+        //
+        // info!("Created dump in {:?}.", dump_path);
+        //
         Ok(())
     }
 }
@@ -401,7 +397,7 @@ mod test {
     use crate::options::SchedulerConfig;
     use crate::tasks::error::Result as TaskResult;
     use crate::tasks::task::{Task, TaskId};
-    use crate::tasks::{MockTaskPerformer, TaskFilter, TaskStore};
+    use crate::tasks::{BatchHandler, TaskFilter, TaskStore};
     use crate::update_file_store::UpdateFileStore;
 
     fn setup() {
@@ -426,7 +422,7 @@ mod test {
         let mocker = Mocker::default();
         let update_file_store = UpdateFileStore::mock(mocker);
 
-        let mut performer = MockTaskPerformer::new();
+        let mut performer = BatchHandler::new();
         performer
             .expect_process_job()
             .once()
@@ -480,7 +476,7 @@ mod test {
             )
             .then(|_| Ok(Vec::new()));
         let task_store = TaskStore::mock(mocker);
-        let mut performer = MockTaskPerformer::new();
+        let mut performer = BatchHandler::new();
         performer
             .expect_process_job()
             .once()

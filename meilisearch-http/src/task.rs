@@ -44,7 +44,7 @@ impl From<TaskContent> for TaskType {
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            TaskContent::Dump { path } => TaskType::Dump,
+            TaskContent::Dump { .. } => TaskType::Dump,
             _ => unreachable!("unexpected task type"),
         }
     }

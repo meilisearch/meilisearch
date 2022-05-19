@@ -9,7 +9,9 @@ use log::debug;
 use milli::heed::{Env, RwTxn};
 use time::OffsetDateTime;
 
+use super::batch::BatchContent;
 use super::error::TaskError;
+use super::scheduler::Processing;
 use super::task::{Task, TaskContent, TaskId};
 use super::Result;
 use crate::index_resolver::IndexUid;
@@ -122,19 +124,44 @@ impl TaskStore {
         }
     }
 
-    pub async fn get_pending_tasks(&self, ids: Vec<TaskId>) -> Result<(Vec<TaskId>, Vec<Task>)> {
+    /// This methods takes a `Processing` which contains the next task ids to process, and returns
+    /// the coresponding tasks along with the ownership to the passed processing.
+    ///
+    /// We need get_processing_tasks to take ownership over `Processing` because we need it to be
+    /// valid for 'static.
+    pub async fn get_processing_tasks(
+        &self,
+        processing: Processing,
+    ) -> Result<(Processing, BatchContent)> {
         let store = self.store.clone();
         let tasks = tokio::task::spawn_blocking(move || -> Result<_> {
-            let mut tasks = Vec::new();
             let txn = store.rtxn()?;
 
-            for id in ids.iter() {
-                let task = store
-                    .get(&txn, *id)?
-                    .ok_or(TaskError::UnexistingTask(*id))?;
-                tasks.push(task);
-            }
-            Ok((ids, tasks))
+            let content = match processing {
+                Processing::DocumentAdditions(ref ids) => {
+                    let mut tasks = Vec::new();
+
+                    for id in ids.iter() {
+                        let task = store
+                            .get(&txn, *id)?
+                            .ok_or(TaskError::UnexistingTask(*id))?;
+                        tasks.push(task);
+                    }
+                    BatchContent::DocumentAddtitionBatch(tasks)
+                }
+                Processing::IndexUpdate(id) => {
+                    let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
+                    BatchContent::IndexUpdate(task)
+                }
+                Processing::Dump(id) => {
+                    let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
+                    debug_assert!(matches!(task.content, TaskContent::Dump { .. }));
+                    BatchContent::Dump(task)
+                }
+                Processing::Nothing => unreachable!(),
+            };
+
+            Ok((processing, content))
         })
         .await??;
 
@@ -231,7 +258,7 @@ impl TaskStore {
 
 #[cfg(test)]
 pub mod test {
-    use crate::tasks::task_store::store::test::tmp_env;
+    use crate::tasks::{scheduler::Processing, task_store::store::test::tmp_env};
 
     use super::*;
 
@@ -280,12 +307,12 @@ pub mod test {
             }
         }
 
-        pub async fn get_pending_tasks(
+        pub async fn get_processing_tasks(
             &self,
-            tasks: Vec<TaskId>,
-        ) -> Result<(Vec<TaskId>, Vec<Task>)> {
+            tasks: Processing,
+        ) -> Result<(Processing, BatchContent)> {
             match self {
-                Self::Real(s) => s.get_pending_tasks(tasks).await,
+                Self::Real(s) => s.get_processing_tasks(tasks).await,
                 Self::Mock(m) => unsafe { m.get("get_pending_task").call(tasks) },
             }
         }

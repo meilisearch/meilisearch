@@ -14,7 +14,6 @@ use walkdir::WalkDir;
 use crate::compression::from_tar_gz;
 use crate::index_controller::open_meta_env;
 use crate::index_controller::versioning::VERSION_FILE_NAME;
-use crate::tasks::task::Job;
 use crate::tasks::Scheduler;
 
 pub struct SnapshotService {
@@ -39,8 +38,7 @@ impl SnapshotService {
                 meta_env_size: self.meta_env_size,
                 index_size: self.index_size,
             };
-            let job = Job::Snapshot(snapshot_job);
-            self.scheduler.write().await.schedule_job(job).await;
+            self.scheduler.write().await.register_snapshot(snapshot_job);
             sleep(self.snapshot_period).await;
         }
     }

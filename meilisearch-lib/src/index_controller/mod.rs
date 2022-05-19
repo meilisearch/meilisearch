@@ -19,25 +19,23 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
+use crate::dump::{self, load_dump, DumpActor, DumpActorHandle, DumpActorHandleImpl, DumpInfo};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
-use crate::index_controller::dump_actor::{load_dump, DumpActor, DumpActorHandleImpl};
 use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::{Scheduler, TaskFilter, TaskStore};
+use crate::tasks::{BatchHandler, EmptyBatchHandler, Scheduler, TaskFilter, TaskStore};
 use error::Result;
 
-use self::dump_actor::{DumpActorHandle, DumpInfo};
 use self::error::IndexControllerError;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
 use crate::index_resolver::{create_index_resolver, IndexResolver, IndexUid};
 use crate::update_file_store::UpdateFileStore;
 
-mod dump_actor;
 pub mod error;
 pub mod versioning;
 
@@ -73,12 +71,12 @@ pub struct IndexSettings {
 }
 
 pub struct IndexController<U, I> {
-    index_resolver: Arc<IndexResolver<U, I>>,
+    pub index_resolver: Arc<IndexResolver<U, I>>,
     scheduler: Arc<RwLock<Scheduler>>,
     task_store: TaskStore,
     dump_path: PathBuf,
-    dump_handle: dump_actor::DumpActorHandleImpl,
-    update_file_store: UpdateFileStore,
+    dump_handle: dump::DumpActorHandleImpl,
+    pub update_file_store: UpdateFileStore,
 }
 
 /// Need a custom implementation for clone because deriving require that U and I are clone.
@@ -223,8 +221,9 @@ impl IndexControllerBuilder {
         )?);
 
         let task_store = TaskStore::new(meta_env)?;
-        let scheduler =
-            Scheduler::new(task_store.clone(), index_resolver.clone(), scheduler_config)?;
+        let handlers: Vec<Arc<dyn BatchHandler + Sync + Send + 'static>> =
+            vec![index_resolver.clone(), Arc::new(EmptyBatchHandler)];
+        let scheduler = Scheduler::new(task_store.clone(), handlers, scheduler_config)?;
 
         let dump_path = self
             .dump_dst

@@ -6,11 +6,11 @@ use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
+use crate::dump::error::DumpActorError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
 use crate::update_file_store::UpdateFileStoreError;
 
-use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;

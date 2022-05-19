@@ -4,14 +4,12 @@ use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::batch::BatchId;
 use crate::{
     index::{Settings, Unchecked},
-    index_resolver::{error::IndexResolverError, IndexUid},
-    snapshot::SnapshotJob,
+    index_resolver::IndexUid,
 };
 
 pub type TaskId = u64;
@@ -107,33 +105,6 @@ impl Task {
             } => Some(*content_uuid),
             _ => None,
         }
-    }
-}
-
-/// A job is like a volatile priority `Task`.
-/// It should be processed as fast as possible and is not stored on disk.
-/// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
-#[derive(Debug, derivative::Derivative)]
-#[derivative(PartialEq)]
-pub enum Job {
-    Dump {
-        #[derivative(PartialEq = "ignore")]
-        ret: oneshot::Sender<Result<oneshot::Sender<()>, IndexResolverError>>,
-        path: PathBuf,
-    },
-    Snapshot(#[derivative(PartialEq = "ignore")] SnapshotJob),
-    Empty,
-}
-
-impl Default for Job {
-    fn default() -> Self {
-        Self::Empty
-    }
-}
-
-impl Job {
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
     }
 }
 

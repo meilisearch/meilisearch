@@ -6,7 +6,7 @@ use meilisearch_auth::AuthController;
 use milli::heed::EnvOpenOptions;
 
 use crate::analytics;
-use crate::index_controller::dump_actor::Metadata;
+use crate::dump::Metadata;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
 use crate::tasks::TaskStore;

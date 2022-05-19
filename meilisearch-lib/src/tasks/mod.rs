@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 
+pub use batch_handlers::empty_handler::EmptyBatchHandler;
 pub use scheduler::Scheduler;
 pub use task_store::TaskFilter;
 
@@ -11,9 +12,8 @@ pub use task_store::TaskStore;
 use batch::Batch;
 use error::Result;
 
-use self::task::Job;
-
 pub mod batch;
+mod batch_handlers;
 pub mod error;
 mod scheduler;
 pub mod task;
@@ -22,11 +22,12 @@ pub mod update_loop;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]
-pub trait TaskPerformer: Sync + Send + 'static {
+pub trait BatchHandler: Sync + Send + 'static {
+    /// return whether this handler can accept this batch
+    fn accept(&self, batch: &Batch) -> bool;
+
     /// Processes the `Task` batch returning the batch with the `Task` updated.
     async fn process_batch(&self, batch: Batch) -> Batch;
-
-    async fn process_job(&self, job: Job);
 
     /// `finish` is called when the result of `process` has been commited to the task store. This
     /// method can be used to perform cleanup after the update has been completed for example.

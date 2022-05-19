@@ -3,6 +3,7 @@ pub mod error;
 pub mod options;
 
 mod analytics;
+mod dump;
 pub mod index;
 pub mod index_controller;
 mod index_resolver;

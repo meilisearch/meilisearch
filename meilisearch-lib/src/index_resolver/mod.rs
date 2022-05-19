@@ -3,7 +3,7 @@ pub mod index_store;
 pub mod meta_store;
 
 use std::convert::{TryFrom, TryInto};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use error::{IndexResolverError, Result};
@@ -14,15 +14,12 @@ use milli::heed::Env;
 use milli::update::{DocumentDeletionResult, IndexerConfig};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::oneshot;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 use crate::index::{error::Result as IndexResult, Index};
 use crate::options::IndexerOpts;
-use crate::tasks::batch::Batch;
-use crate::tasks::task::{DocumentDeletion, Job, Task, TaskContent, TaskEvent, TaskId, TaskResult};
-use crate::tasks::TaskPerformer;
+use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
 use crate::update_file_store::UpdateFileStore;
 
 use self::meta_store::IndexMeta;
@@ -91,69 +88,10 @@ impl TryInto<IndexUid> for String {
     }
 }
 
-#[async_trait::async_trait]
-impl<U, I> TaskPerformer for IndexResolver<U, I>
-where
-    U: IndexMetaStore + Send + Sync + 'static,
-    I: IndexStore + Send + Sync + 'static,
-{
-    async fn process_batch(&self, mut batch: Batch) -> Batch {
-        // If a batch contains multiple tasks, then it must be a document addition batch
-        if let Some(Task {
-            content: TaskContent::DocumentAddition { .. },
-            ..
-        }) = batch.tasks.first()
-        {
-            debug_assert!(batch.tasks.iter().all(|t| matches!(
-                t,
-                Task {
-                    content: TaskContent::DocumentAddition { .. },
-                    ..
-                }
-            )));
-
-            self.process_document_addition_batch(batch).await
-        } else {
-            if let Some(task) = batch.tasks.first_mut() {
-                task.events
-                    .push(TaskEvent::Processing(OffsetDateTime::now_utc()));
-
-                match self.process_task(task).await {
-                    Ok(success) => {
-                        task.events.push(TaskEvent::Succeded {
-                            result: success,
-                            timestamp: OffsetDateTime::now_utc(),
-                        });
-                    }
-                    Err(err) => task.events.push(TaskEvent::Failed {
-                        error: err.into(),
-                        timestamp: OffsetDateTime::now_utc(),
-                    }),
-                }
-            }
-            batch
-        }
-    }
-
-    async fn process_job(&self, job: Job) {
-        self.process_job(job).await;
-    }
-
-    async fn finish(&self, batch: &Batch) {
-        for task in &batch.tasks {
-            if let Some(content_uuid) = task.get_content_uuid() {
-                if let Err(e) = self.file_store.delete(content_uuid).await {
-                    log::error!("error deleting update file: {}", e);
-                }
-            }
-        }
-    }
-}
-
 pub struct IndexResolver<U, I> {
     index_uuid_store: U,
     index_store: I,
-    file_store: UpdateFileStore,
+    pub file_store: UpdateFileStore,
 }
 
 impl IndexResolver<HeedMetaStore, MapIndexStore> {
@@ -189,7 +127,7 @@ where
         }
     }
 
-    async fn process_document_addition_batch(&self, mut batch: Batch) -> Batch {
+    pub async fn process_document_addition_batch(&self, mut tasks: Vec<Task>) -> Vec<Task> {
         fn get_content_uuid(task: &Task) -> Uuid {
             match task {
                 Task {
@@ -200,9 +138,9 @@ where
             }
         }
 
-        let content_uuids = batch.tasks.iter().map(get_content_uuid).collect::<Vec<_>>();
+        let content_uuids = tasks.iter().map(get_content_uuid).collect::<Vec<_>>();
 
-        match batch.tasks.first() {
+        match tasks.first() {
             Some(Task {
                 index_uid: Some(ref index_uid),
                 id,
@@ -231,13 +169,13 @@ where
                     Ok(index) => index,
                     Err(e) => {
                         let error = ResponseError::from(e);
-                        for task in batch.tasks.iter_mut() {
+                        for task in tasks.iter_mut() {
                             task.events.push(TaskEvent::Failed {
                                 error: error.clone(),
                                 timestamp: now,
                             });
                         }
-                        return batch;
+                        return tasks;
                     }
                 };
 
@@ -269,17 +207,17 @@ where
                     },
                 };
 
-                for task in batch.tasks.iter_mut() {
+                for task in tasks.iter_mut() {
                     task.events.push(event.clone());
                 }
 
-                batch
+                tasks
             }
             _ => panic!("invalid batch!"),
         }
     }
 
-    async fn process_task(&self, task: &Task) -> Result<TaskResult> {
+    pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
         let index_uid = task.index_uid.clone();
         match &task.content {
             TaskContent::DocumentAddition { .. } => panic!("updates should be handled by batch"),
@@ -351,33 +289,7 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::Dump { path } => self.perform_dump(path).await,
-        }
-    }
-
-    async fn perform_dump(&self, path: &PathBuf) -> Result<TaskResult> {
-        todo!()
-    }
-
-    async fn process_job(&self, job: Job) {
-        match job {
-            Job::Dump { ret, path } => {
-                log::trace!("The Dump task is getting executed");
-
-                let (sender, receiver) = oneshot::channel();
-                if ret.send(self.dump(path).await.map(|_| sender)).is_err() {
-                    log::error!("The dump actor died.");
-                }
-
-                // wait until the dump has finished performing.
-                let _ = receiver.await;
-            }
-            Job::Empty => log::error!("Tried to process an empty task."),
-            Job::Snapshot(job) => {
-                if let Err(e) = job.run().await {
-                    log::error!("Error performing snapshot: {}", e);
-                }
-            }
+            _ => unreachable!("Invalid task for index resolver"),
         }
     }
 
