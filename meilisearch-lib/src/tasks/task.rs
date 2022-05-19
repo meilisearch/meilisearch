@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
@@ -142,10 +140,7 @@ pub enum TaskContent {
     IndexUpdate {
         primary_key: Option<String>,
     },
-    Dump {
-        #[cfg_attr(test, proptest(value = "PathBuf::from(\".\")"))]
-        path: PathBuf,
-    },
+    Dump,
 }
 
 #[cfg(test)]
