@@ -5,10 +5,12 @@ use std::sync::Arc;
 use anyhow::bail;
 use log::{info, trace};
 use meilisearch_auth::AuthController;
+use milli::heed::Env;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use tempfile::TempDir;
+use time::macros::format_description;
 use tokio::fs::create_dir_all;
 
 use crate::analytics;
@@ -18,6 +20,7 @@ use crate::index_resolver::index_store::IndexStore;
 use crate::index_resolver::meta_store::IndexMetaStore;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
+use crate::tasks::TaskStore;
 use crate::update_file_store::UpdateFileStore;
 use error::Result;
 
@@ -259,22 +262,31 @@ fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<
     Ok(())
 }
 
-pub struct DumpJob<U, I> {
+/// Generate uid from creation date
+pub fn generate_uid() -> String {
+    OffsetDateTime::now_utc()
+        .format(format_description!(
+            "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+        ))
+        .unwrap()
+}
+
+pub struct DumpHandler<U, I> {
     pub dump_path: PathBuf,
     pub db_path: PathBuf,
     pub update_file_store: UpdateFileStore,
-    pub uid: String,
-    pub update_db_size: usize,
+    pub task_store_size: usize,
     pub index_db_size: usize,
+    pub env: Arc<Env>,
     pub index_resolver: Arc<IndexResolver<U, I>>,
 }
 
-impl<U, I> DumpJob<U, I>
+impl<U, I> DumpHandler<U, I>
 where
-    U: IndexMetaStore,
-    I: IndexStore,
+    U: IndexMetaStore + Sync + Send + 'static,
+    I: IndexStore + Sync + Send + 'static,
 {
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(&self, uid: String) -> Result<()> {
         trace!("Performing dump.");
 
         create_dir_all(&self.dump_path).await?;
@@ -282,7 +294,7 @@ where
         let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
+        let meta = MetadataVersion::new_v4(self.index_db_size, self.task_store_size);
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
@@ -292,25 +304,25 @@ where
 
         // TODO: this is blocking!!
         AuthController::dump(&self.db_path, &temp_dump_path)?;
+        TaskStore::dump(
+            self.env.clone(),
+            &self.dump_path,
+            self.update_file_store.clone(),
+        )
+        .await?;
         self.index_resolver.dump(&self.dump_path).await?;
 
-        //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
-        // self.scheduler
-        //     .read()
-        //     .await
-        //     .dump(&temp_dump_path, self.update_file_store.clone())
-        //     .await?;
-
+        let dump_path = self.dump_path.clone();
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
             // for now we simply copy the updates/updates_files
             // FIXME: We may copy more files than necessary, if new files are added while we are
             // performing the dump. We need a way to filter them out.
 
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&dump_path)?;
             to_tar_gz(temp_dump_path, temp_dump_file.path())
                 .map_err(|e| DumpError::Internal(e.into()))?;
 
-            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+            let dump_path = dump_path.join(uid).with_extension("dump");
             temp_dump_file.persist(&dump_path)?;
 
             Ok(dump_path)

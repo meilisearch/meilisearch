@@ -62,6 +62,22 @@ pub enum TaskEvent {
     },
 }
 
+impl TaskEvent {
+    pub fn succeeded(result: TaskResult) -> Self {
+        Self::Succeded {
+            result,
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+
+    pub fn failed(error: ResponseError) -> Self {
+        Self::Failed {
+            error,
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 /// A task represents an operation that Meilisearch must do.
 /// It's stored on disk and executed from the lowest to highest Task id.
 /// Everytime a new task is created it has a higher Task id than the previous one.
@@ -140,7 +156,9 @@ pub enum TaskContent {
     IndexUpdate {
         primary_key: Option<String>,
     },
-    Dump,
+    Dump {
+        uid: String,
+    },
 }
 
 #[cfg(test)]

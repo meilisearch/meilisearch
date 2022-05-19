@@ -19,7 +19,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
-use crate::dump::load_dump;
+use crate::dump::{self, load_dump, DumpHandler};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
@@ -27,9 +27,7 @@ use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::{
-    BatchHandler, DumpHandler, EmptyBatchHandler, Scheduler, TaskFilter, TaskStore,
-};
+use crate::tasks::{BatchHandler, EmptyBatchHandler, Scheduler, TaskFilter, TaskStore};
 use error::Result;
 
 use self::error::IndexControllerError;
@@ -222,14 +220,15 @@ impl IndexControllerBuilder {
             .dump_dst
             .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
 
-        let dump_handler = Arc::new(DumpHandler::new(
-            update_file_store.clone(),
+        let dump_handler = Arc::new(DumpHandler {
             dump_path,
-            db_path.as_ref().clone(),
-            index_size,
+            db_path: db_path.as_ref().into(),
+            update_file_store: update_file_store.clone(),
             task_store_size,
-            index_resolver.clone(),
-        ));
+            index_db_size: index_size,
+            env: meta_env.clone(),
+            index_resolver: index_resolver.clone(),
+        });
         let task_store = TaskStore::new(meta_env)?;
 
         // register all the batch handlers for use with the scheduler.
@@ -421,7 +420,8 @@ where
     }
 
     pub async fn register_dump_task(&self) -> Result<Task> {
-        let content = TaskContent::Dump;
+        let uid = dump::generate_uid();
+        let content = TaskContent::Dump { uid };
         let task = self.task_store.register(None, content).await?;
         self.scheduler.read().await.notify();
         Ok(task)

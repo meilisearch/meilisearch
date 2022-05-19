@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, BinaryHeap, HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
 use std::slice;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,7 +12,6 @@ use tokio::sync::{watch, RwLock};
 
 use crate::options::SchedulerConfig;
 use crate::snapshot::SnapshotJob;
-use crate::update_file_store::UpdateFileStore;
 
 use super::batch::{Batch, BatchContent};
 use super::error::Result;
@@ -274,10 +272,6 @@ impl Scheduler {
         tokio::task::spawn_local(update_loop.run());
 
         Ok(this)
-    }
-
-    pub async fn dump(&self, path: &Path, file_store: UpdateFileStore) -> Result<()> {
-        self.store.dump(path, file_store).await
     }
 
     fn register_task(&mut self, task: Task) {

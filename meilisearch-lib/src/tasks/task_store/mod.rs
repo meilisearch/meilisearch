@@ -204,13 +204,14 @@ impl TaskStore {
     }
 
     pub async fn dump(
-        &self,
+        env: Arc<Env>,
         dir_path: impl AsRef<Path>,
         update_file_store: UpdateFileStore,
     ) -> Result<()> {
+        let store = Self::new(env)?;
         let update_dir = dir_path.as_ref().join("updates");
         let updates_file = update_dir.join("data.jsonl");
-        let tasks = self.list_tasks(None, None, None).await?;
+        let tasks = store.list_tasks(None, None, None).await?;
 
         let dir_path = dir_path.as_ref().to_path_buf();
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -287,6 +288,14 @@ pub mod test {
             Ok(Self::Real(TaskStore::new(env)?))
         }
 
+        pub async fn dump(
+            env: Arc<milli::heed::Env>,
+            path: impl AsRef<Path>,
+            update_file_store: UpdateFileStore,
+        ) -> Result<()> {
+            TaskStore::dump(env, path, update_file_store).await
+        }
+
         pub fn mock(mocker: Mocker) -> Self {
             Self::Mock(Arc::new(mocker))
         }
@@ -326,17 +335,6 @@ pub mod test {
             match self {
                 Self::Real(s) => s.list_tasks(from, filter, limit).await,
                 Self::Mock(m) => unsafe { m.get("list_tasks").call((from, filter, limit)) },
-            }
-        }
-
-        pub async fn dump(
-            &self,
-            path: impl AsRef<Path>,
-            update_file_store: UpdateFileStore,
-        ) -> Result<()> {
-            match self {
-                Self::Real(s) => s.dump(path, update_file_store).await,
-                Self::Mock(m) => unsafe { m.get("dump").call((path, update_file_store)) },
             }
         }
 

@@ -82,6 +82,8 @@ enum TaskDetails {
     },
     #[serde(rename_all = "camelCase")]
     ClearAll { deleted_documents: Option<u64> },
+    #[serde(rename_all = "camelCase")]
+    Dump { dump_uid: String },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -218,7 +220,9 @@ impl From<Task> for TaskView {
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
-            TaskContent::Dump => (TaskType::Dump, None),
+            TaskContent::Dump { uid } => {
+                (TaskType::Dump, Some(TaskDetails::Dump { dump_uid: uid }))
+            }
         };
 
         // An event always has at least one event: "Created"

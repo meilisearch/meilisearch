@@ -1,7 +1,6 @@
 use tokio::sync::oneshot;
 
 use super::error::Result;
-use super::DumpInfo;
 
 pub enum DumpMsg {
     CreateDump {
