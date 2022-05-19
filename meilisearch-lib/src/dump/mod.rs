@@ -1,32 +1,30 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::bail;
-use log::info;
+use log::{info, trace};
+use meilisearch_auth::AuthController;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-pub use actor::DumpActor;
-pub use handle_impl::*;
-pub use message::DumpMsg;
 use tempfile::TempDir;
-use tokio::sync::RwLock;
+use tokio::fs::create_dir_all;
 
-use crate::compression::from_tar_gz;
+use crate::analytics;
+use crate::compression::{from_tar_gz, to_tar_gz};
+use crate::dump::error::DumpError;
 use crate::options::IndexerOpts;
-use crate::tasks::Scheduler;
 use crate::update_file_store::UpdateFileStore;
 use error::Result;
 
 use self::loaders::{v2, v3, v4};
 
-mod actor;
+// mod actor;
 mod compat;
 pub mod error;
-mod handle_impl;
+// mod handle_impl;
 mod loaders;
-mod message;
+// mod message;
 
 const META_FILE_NAME: &str = "metadata.json";
 
@@ -49,18 +47,6 @@ impl Metadata {
             dump_date: OffsetDateTime::now_utc(),
         }
     }
-}
-
-#[async_trait::async_trait]
-#[cfg_attr(test, mockall::automock)]
-pub trait DumpActorHandle {
-    /// Start the creation of a dump
-    /// Implementation: [handle_impl::DumpActorHandleImpl::create_dump]
-    async fn create_dump(&self) -> Result<DumpInfo>;
-
-    /// Return the status of an already created dump
-    /// Implementation: [handle_impl::DumpActorHandleImpl::dump_info]
-    async fn dump_info(&self, uid: String) -> Result<DumpInfo>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -157,49 +143,6 @@ pub enum DumpStatus {
     Done,
     InProgress,
     Failed,
-}
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct DumpInfo {
-    pub uid: String,
-    pub status: DumpStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(with = "time::serde::rfc3339")]
-    started_at: OffsetDateTime,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        with = "time::serde::rfc3339::option"
-    )]
-    finished_at: Option<OffsetDateTime>,
-}
-
-impl DumpInfo {
-    pub fn new(uid: String, status: DumpStatus) -> Self {
-        Self {
-            uid,
-            status,
-            error: None,
-            started_at: OffsetDateTime::now_utc(),
-            finished_at: None,
-        }
-    }
-
-    pub fn with_error(&mut self, error: String) {
-        self.status = DumpStatus::Failed;
-        self.finished_at = Some(OffsetDateTime::now_utc());
-        self.error = Some(error);
-    }
-
-    pub fn done(&mut self) {
-        self.finished_at = Some(OffsetDateTime::now_utc());
-        self.status = DumpStatus::Done;
-    }
-
-    pub fn dump_already_in_progress(&self) -> bool {
-        self.status == DumpStatus::InProgress
-    }
 }
 
 pub fn load_dump(
@@ -313,76 +256,59 @@ fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<
 }
 
 pub struct DumpJob {
-    dump_path: PathBuf,
-    db_path: PathBuf,
-    update_file_store: UpdateFileStore,
-    scheduler: Arc<RwLock<Scheduler>>,
-    uid: String,
-    update_db_size: usize,
-    index_db_size: usize,
+    pub dump_path: PathBuf,
+    pub db_path: PathBuf,
+    pub update_file_store: UpdateFileStore,
+    pub uid: String,
+    pub update_db_size: usize,
+    pub index_db_size: usize,
 }
 
 impl DumpJob {
-    async fn run(self) -> Result<()> {
-        // trace!("Performing dump.");
-        //
-        // create_dir_all(&self.dump_path).await?;
-        //
-        // let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
-        // let temp_dump_path = temp_dump_dir.path().to_owned();
-        //
-        // let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
-        // let meta_path = temp_dump_path.join(META_FILE_NAME);
-        // let mut meta_file = File::create(&meta_path)?;
-        // serde_json::to_writer(&mut meta_file, &meta)?;
-        // analytics::copy_user_id(&self.db_path, &temp_dump_path);
-        //
-        // create_dir_all(&temp_dump_path.join("indexes")).await?;
-        //
-        // let (sender, receiver) = oneshot::channel();
-        //
-        // self.scheduler
-        //     .write()
-        //     .await
-        //     .schedule_job(Job::Dump {
-        //         ret: sender,
-        //         path: temp_dump_path.clone(),
-        //     })
-        //     .await;
-        //
-        // // wait until the job has started performing before finishing the dump process
-        // let sender = receiver.await??;
-        //
-        // AuthController::dump(&self.db_path, &temp_dump_path)?;
-        //
-        // //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
+    pub async fn run(self) -> Result<()> {
+        trace!("Performing dump.");
+
+        create_dir_all(&self.dump_path).await?;
+
+        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
+        let temp_dump_path = temp_dump_dir.path().to_owned();
+
+        let meta = MetadataVersion::new_v4(self.index_db_size, self.update_db_size);
+        let meta_path = temp_dump_path.join(META_FILE_NAME);
+        let mut meta_file = File::create(&meta_path)?;
+        serde_json::to_writer(&mut meta_file, &meta)?;
+        analytics::copy_user_id(&self.db_path, &temp_dump_path);
+
+        create_dir_all(&temp_dump_path.join("indexes")).await?;
+
+        AuthController::dump(&self.db_path, &temp_dump_path)?;
+        // TODO: Dump indexes and updates
+
+        //TODO(marin): this is not right, the scheduler should dump itself, not do it here...
         // self.scheduler
         //     .read()
         //     .await
         //     .dump(&temp_dump_path, self.update_file_store.clone())
         //     .await?;
-        //
-        // let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-        //     // for now we simply copy the updates/updates_files
-        //     // FIXME: We may copy more files than necessary, if new files are added while we are
-        //     // performing the dump. We need a way to filter them out.
-        //
-        //     let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
-        //     to_tar_gz(temp_dump_path, temp_dump_file.path())
-        //         .map_err(|e| DumpActorError::Internal(e.into()))?;
-        //
-        //     let dump_path = self.dump_path.join(self.uid).with_extension("dump");
-        //     temp_dump_file.persist(&dump_path)?;
-        //
-        //     Ok(dump_path)
-        // })
-        // .await??;
-        //
-        // // notify the update loop that we are finished performing the dump.
-        // let _ = sender.send(());
-        //
-        // info!("Created dump in {:?}.", dump_path);
-        //
+
+        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
+            // for now we simply copy the updates/updates_files
+            // FIXME: We may copy more files than necessary, if new files are added while we are
+            // performing the dump. We need a way to filter them out.
+
+            let temp_dump_file = tempfile::NamedTempFile::new_in(&self.dump_path)?;
+            to_tar_gz(temp_dump_path, temp_dump_file.path())
+                .map_err(|e| DumpError::Internal(e.into()))?;
+
+            let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+            temp_dump_file.persist(&dump_path)?;
+
+            Ok(dump_path)
+        })
+        .await??;
+
+        info!("Created dump in {:?}.", dump_path);
+
         Ok(())
     }
 }

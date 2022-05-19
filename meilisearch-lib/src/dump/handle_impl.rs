@@ -1,7 +1,7 @@
 use tokio::sync::{mpsc, oneshot};
 
 use super::error::Result;
-use super::{DumpActorHandle, DumpInfo, DumpMsg};
+use super::{DumpActorHandle, DumpMsg};
 
 #[derive(Clone)]
 pub struct DumpActorHandleImpl {

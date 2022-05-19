@@ -13,13 +13,13 @@ use futures::StreamExt;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
-use crate::dump::{self, load_dump, DumpActor, DumpActorHandle, DumpActorHandleImpl, DumpInfo};
+use crate::dump::load_dump;
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
@@ -75,7 +75,6 @@ pub struct IndexController<U, I> {
     scheduler: Arc<RwLock<Scheduler>>,
     task_store: TaskStore,
     dump_path: PathBuf,
-    dump_handle: dump::DumpActorHandleImpl,
     pub update_file_store: UpdateFileStore,
 }
 
@@ -85,7 +84,6 @@ impl<U, I> Clone for IndexController<U, I> {
         Self {
             index_resolver: self.index_resolver.clone(),
             scheduler: self.scheduler.clone(),
-            dump_handle: self.dump_handle.clone(),
             update_file_store: self.update_file_store.clone(),
             task_store: self.task_store.clone(),
             dump_path: self.dump_path.clone(),
@@ -228,23 +226,6 @@ impl IndexControllerBuilder {
         let dump_path = self
             .dump_dst
             .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
-        let dump_handle = {
-            let analytics_path = &db_path;
-            let (sender, receiver) = mpsc::channel(10);
-            let actor = DumpActor::new(
-                receiver,
-                update_file_store.clone(),
-                scheduler.clone(),
-                dump_path.clone(),
-                analytics_path,
-                index_size,
-                task_store_size,
-            );
-
-            tokio::task::spawn_local(actor.run());
-
-            DumpActorHandleImpl { sender }
-        };
 
         if self.schedule_snapshot {
             let snapshot_period = self
@@ -269,7 +250,6 @@ impl IndexControllerBuilder {
         Ok(IndexController {
             index_resolver,
             scheduler,
-            dump_handle,
             dump_path,
             update_file_store,
             task_store,
@@ -632,14 +612,6 @@ where
             last_update: last_task,
             indexes,
         })
-    }
-
-    pub async fn create_dump(&self) -> Result<DumpInfo> {
-        Ok(self.dump_handle.create_dump().await?)
-    }
-
-    pub async fn dump_info(&self, uid: String) -> Result<DumpInfo> {
-        Ok(self.dump_handle.dump_info(uid).await?)
     }
 }
 

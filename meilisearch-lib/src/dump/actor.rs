@@ -9,7 +9,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
-use super::error::{DumpActorError, Result};
+use super::error::{DumpError, Result};
 use super::{DumpInfo, DumpJob, DumpMsg, DumpStatus};
 use crate::tasks::Scheduler;
 use crate::update_file_store::UpdateFileStore;
@@ -106,7 +106,7 @@ impl DumpActor {
         let _lock = match self.lock.try_lock() {
             Some(lock) => lock,
             None => {
-                ret.send(Err(DumpActorError::DumpAlreadyRunning))
+                ret.send(Err(DumpError::DumpAlreadyRunning))
                     .expect("Dump actor is dead");
                 return;
             }
@@ -123,7 +123,6 @@ impl DumpActor {
             dump_path: self.dump_path.clone(),
             db_path: self.analytics_path.clone(),
             update_file_store: self.update_file_store.clone(),
-            scheduler: self.scheduler.clone(),
             uid: uid.clone(),
             update_db_size: self.update_db_size,
             index_db_size: self.index_db_size,
@@ -155,7 +154,7 @@ impl DumpActor {
     async fn handle_dump_info(&self, uid: String) -> Result<DumpInfo> {
         match self.dump_infos.read().await.get(&uid) {
             Some(info) => Ok(info.clone()),
-            _ => Err(DumpActorError::DumpDoesNotExist(uid)),
+            _ => Err(DumpError::DumpDoesNotExist(uid)),
         }
     }
 }

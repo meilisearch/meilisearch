@@ -45,8 +45,8 @@ async fn get_dump_status(
     meilisearch: GuardedData<ActionPolicy<{ actions::DUMPS_GET }>, MeiliSearch>,
     path: web::Path<DumpParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let res = meilisearch.dump_info(path.dump_uid.clone()).await?;
+    todo!();
 
-    debug!("returns: {:?}", res);
-    Ok(HttpResponse::Ok().json(res))
+    // debug!("returns: {:?}", res);
+    // Ok(HttpResponse::Ok().json(res))
 }
