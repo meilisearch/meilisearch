@@ -283,7 +283,7 @@ async fn error_set_invalid_ranking_rules() {
     assert_eq!(response["status"], "failed");
 
     let expected_error = json!({
-        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules."#,
+        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules."#,
         "code": "invalid_ranking_rule",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_ranking_rule"
