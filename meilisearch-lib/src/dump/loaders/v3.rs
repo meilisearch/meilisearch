@@ -66,6 +66,7 @@ pub fn load_dump(
         index_db_size,
         meta_env_size,
         indexing_options,
+        "V5",
     )
 }
 

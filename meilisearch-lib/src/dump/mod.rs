@@ -69,6 +69,8 @@ pub enum MetadataVersion {
     V2(Metadata),
     V3(Metadata),
     V4(Metadata),
+    // V5 is forward compatible with V4 but not backward compatible.
+    V5(Metadata),
 }
 
 impl MetadataVersion {
@@ -80,6 +82,7 @@ impl MetadataVersion {
         meta_env_size: usize,
         indexing_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
+        let version = self.version();
         match self {
             MetadataVersion::V1(_meta) => {
                 anyhow::bail!("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")
@@ -100,46 +103,49 @@ impl MetadataVersion {
                 meta_env_size,
                 indexing_options,
             )?,
-            MetadataVersion::V4(meta) => v4::load_dump(
+            MetadataVersion::V4(meta) | MetadataVersion::V5(meta) => v4::load_dump(
                 meta,
                 src,
                 dst,
                 index_db_size,
                 meta_env_size,
                 indexing_options,
+                version,
             )?,
         }
 
         Ok(())
     }
 
-    pub fn new_v4(index_db_size: usize, update_db_size: usize) -> Self {
+    pub fn new_v5(index_db_size: usize, update_db_size: usize) -> Self {
         let meta = Metadata::new(index_db_size, update_db_size);
-        Self::V4(meta)
+        Self::V5(meta)
     }
 
     pub fn db_version(&self) -> &str {
         match self {
             Self::V1(meta) => &meta.db_version,
-            Self::V2(meta) | Self::V3(meta) | Self::V4(meta) => &meta.db_version,
+            Self::V2(meta) | Self::V3(meta) | Self::V4(meta) | Self::V5(meta) => &meta.db_version,
         }
     }
 
-    pub fn version(&self) -> &str {
+    pub fn version(&self) -> &'static str {
         match self {
             MetadataVersion::V1(_) => "V1",
             MetadataVersion::V2(_) => "V2",
             MetadataVersion::V3(_) => "V3",
             MetadataVersion::V4(_) => "V4",
+            MetadataVersion::V5(_) => "V5",
         }
     }
 
     pub fn dump_date(&self) -> Option<&OffsetDateTime> {
         match self {
             MetadataVersion::V1(_) => None,
-            MetadataVersion::V2(meta) | MetadataVersion::V3(meta) | MetadataVersion::V4(meta) => {
-                Some(&meta.dump_date)
-            }
+            MetadataVersion::V2(meta)
+            | MetadataVersion::V3(meta)
+            | MetadataVersion::V4(meta)
+            | MetadataVersion::V5(meta) => Some(&meta.dump_date),
         }
     }
 }
@@ -294,7 +300,7 @@ where
         let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
         let temp_dump_path = temp_dump_dir.path().to_owned();
 
-        let meta = MetadataVersion::new_v4(self.index_db_size, self.task_store_size);
+        let meta = MetadataVersion::new_v5(self.index_db_size, self.task_store_size);
         let meta_path = temp_dump_path.join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_path)?;
         serde_json::to_writer(&mut meta_file, &meta)?;
@@ -306,11 +312,11 @@ where
         AuthController::dump(&self.db_path, &temp_dump_path)?;
         TaskStore::dump(
             self.env.clone(),
-            &self.dump_path,
+            &temp_dump_path,
             self.update_file_store.clone(),
         )
         .await?;
-        self.index_resolver.dump(&self.dump_path).await?;
+        self.index_resolver.dump(&temp_dump_path).await?;
 
         let dump_path = self.dump_path.clone();
         let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
