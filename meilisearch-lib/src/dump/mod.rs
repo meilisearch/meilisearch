@@ -1,37 +1,24 @@
 use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 
 use anyhow::bail;
-use log::{info, trace};
-use meilisearch_auth::AuthController;
-use milli::heed::Env;
+use log::info;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use tempfile::TempDir;
-use time::macros::format_description;
-use tokio::fs::create_dir_all;
 
-use crate::analytics;
-use crate::compression::{from_tar_gz, to_tar_gz};
-use crate::dump::error::DumpError;
-use crate::index_resolver::index_store::IndexStore;
-use crate::index_resolver::meta_store::IndexMetaStore;
-use crate::index_resolver::IndexResolver;
+use crate::compression::from_tar_gz;
 use crate::options::IndexerOpts;
-use crate::tasks::TaskStore;
-use crate::update_file_store::UpdateFileStore;
-use error::Result;
 
 use self::loaders::{v2, v3, v4};
 
-// mod actor;
+pub use handler::{generate_uid, DumpHandler};
+
 mod compat;
 pub mod error;
-// mod handle_impl;
+mod handler;
 mod loaders;
-// mod message;
 
 const META_FILE_NAME: &str = "metadata.json";
 
@@ -266,79 +253,6 @@ fn persist_dump(dst_path: impl AsRef<Path>, tmp_dst: TempDir) -> anyhow::Result<
     std::fs::remove_dir_all(&persisted_dump)?;
 
     Ok(())
-}
-
-/// Generate uid from creation date
-pub fn generate_uid() -> String {
-    OffsetDateTime::now_utc()
-        .format(format_description!(
-            "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
-        ))
-        .unwrap()
-}
-
-pub struct DumpHandler<U, I> {
-    pub dump_path: PathBuf,
-    pub db_path: PathBuf,
-    pub update_file_store: UpdateFileStore,
-    pub task_store_size: usize,
-    pub index_db_size: usize,
-    pub env: Arc<Env>,
-    pub index_resolver: Arc<IndexResolver<U, I>>,
-}
-
-impl<U, I> DumpHandler<U, I>
-where
-    U: IndexMetaStore + Sync + Send + 'static,
-    I: IndexStore + Sync + Send + 'static,
-{
-    pub async fn run(&self, uid: String) -> Result<()> {
-        trace!("Performing dump.");
-
-        create_dir_all(&self.dump_path).await?;
-
-        let temp_dump_dir = tokio::task::spawn_blocking(tempfile::TempDir::new).await??;
-        let temp_dump_path = temp_dump_dir.path().to_owned();
-
-        let meta = MetadataVersion::new_v5(self.index_db_size, self.task_store_size);
-        let meta_path = temp_dump_path.join(META_FILE_NAME);
-        let mut meta_file = File::create(&meta_path)?;
-        serde_json::to_writer(&mut meta_file, &meta)?;
-        analytics::copy_user_id(&self.db_path, &temp_dump_path);
-
-        create_dir_all(&temp_dump_path.join("indexes")).await?;
-
-        // TODO: this is blocking!!
-        AuthController::dump(&self.db_path, &temp_dump_path)?;
-        TaskStore::dump(
-            self.env.clone(),
-            &temp_dump_path,
-            self.update_file_store.clone(),
-        )
-        .await?;
-        self.index_resolver.dump(&temp_dump_path).await?;
-
-        let dump_path = self.dump_path.clone();
-        let dump_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-            // for now we simply copy the updates/updates_files
-            // FIXME: We may copy more files than necessary, if new files are added while we are
-            // performing the dump. We need a way to filter them out.
-
-            let temp_dump_file = tempfile::NamedTempFile::new_in(&dump_path)?;
-            to_tar_gz(temp_dump_path, temp_dump_file.path())
-                .map_err(|e| DumpError::Internal(e.into()))?;
-
-            let dump_path = dump_path.join(uid).with_extension("dump");
-            temp_dump_file.persist(&dump_path)?;
-
-            Ok(dump_path)
-        })
-        .await??;
-
-        info!("Created dump in {:?}.", dump_path);
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
