@@ -27,7 +27,9 @@ use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::error::TaskError;
 use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskId};
-use crate::tasks::{BatchHandler, EmptyBatchHandler, Scheduler, TaskFilter, TaskStore};
+use crate::tasks::{
+    BatchHandler, EmptyBatchHandler, Scheduler, SnapshotHandler, TaskFilter, TaskStore,
+};
 use error::Result;
 
 use self::error::IndexControllerError;
@@ -235,6 +237,7 @@ impl IndexControllerBuilder {
         let handlers: Vec<Arc<dyn BatchHandler + Sync + Send + 'static>> = vec![
             index_resolver.clone(),
             dump_handler,
+            Arc::new(SnapshotHandler),
             // dummy handler to catch all empty batches
             Arc::new(EmptyBatchHandler),
         ];

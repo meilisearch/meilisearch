@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 
 pub use batch_handlers::empty_handler::EmptyBatchHandler;
+pub use batch_handlers::snapshot_handler::SnapshotHandler;
 pub use scheduler::Scheduler;
 pub use task_store::TaskFilter;
 

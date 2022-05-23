@@ -38,7 +38,7 @@ impl SnapshotService {
                 meta_env_size: self.meta_env_size,
                 index_size: self.index_size,
             };
-            self.scheduler.write().await.register_snapshot(snapshot_job);
+            self.scheduler.write().await.schedule_snapshot(snapshot_job);
             sleep(self.snapshot_period).await;
         }
     }

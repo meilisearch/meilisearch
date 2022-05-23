@@ -279,10 +279,6 @@ impl Scheduler {
         self.tasks.insert(task);
     }
 
-    pub fn register_snapshot(&mut self, job: SnapshotJob) {
-        self.snapshots.push_back(job);
-    }
-
     /// Clears the processing list, this method should be called when the processing of a batch is finished.
     pub fn finish(&mut self) {
         self.processing = Processing::Nothing;
@@ -340,7 +336,7 @@ impl Scheduler {
         Ok(tasks)
     }
 
-    pub async fn schedule_snapshot(&mut self, job: SnapshotJob) {
+    pub fn schedule_snapshot(&mut self, job: SnapshotJob) {
         self.snapshots.push_back(job);
         self.notify();
     }
