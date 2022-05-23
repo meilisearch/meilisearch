@@ -110,7 +110,7 @@ impl Index<'_> {
         let url = format!("/tasks/{}", update_id);
         for _ in 0..10 {
             let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(status_code, 200, "response: {}", response);
+            assert_eq!(200, status_code, "response: {}", response);
 
             if response["status"] == "succeeded" || response["status"] == "failed" {
                 return response;

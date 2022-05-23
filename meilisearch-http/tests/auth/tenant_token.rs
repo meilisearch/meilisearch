@@ -8,11 +8,15 @@ use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
 
-fn generate_tenant_token(parent_key: impl AsRef<str>, mut body: HashMap<&str, Value>) -> String {
+fn generate_tenant_token(
+    parent_uid: impl AsRef<str>,
+    parent_key: impl AsRef<str>,
+    mut body: HashMap<&str, Value>,
+) -> String {
     use jsonwebtoken::{encode, EncodingKey, Header};
 
-    let key_id = &parent_key.as_ref()[..8];
-    body.insert("apiKeyPrefix", json!(key_id));
+    let parent_uid = parent_uid.as_ref();
+    body.insert("apiKeyUid", json!(parent_uid));
     encode(
         &Header::default(),
         &body,
@@ -114,7 +118,7 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
 macro_rules! compute_autorized_search {
     ($tenant_tokens:expr, $filter:expr, $expected_count:expr) => {
         let mut server = Server::new_auth().await;
-        server.use_api_key("MASTER_KEY");
+        server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         index.add_documents(documents, None).await;
@@ -130,9 +134,10 @@ macro_rules! compute_autorized_search {
             let (response, code) = server.add_api_key(key_content.clone()).await;
             assert_eq!(code, 201);
             let key = response["key"].as_str().unwrap();
+            let uid = response["uid"].as_str().unwrap();
 
             for tenant_token in $tenant_tokens.iter() {
-                let web_token = generate_tenant_token(&key, tenant_token.clone());
+                let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
                 let index = server.index("sales");
                 index
@@ -160,7 +165,7 @@ macro_rules! compute_autorized_search {
 macro_rules! compute_forbidden_search {
     ($tenant_tokens:expr, $parent_keys:expr) => {
         let mut server = Server::new_auth().await;
-        server.use_api_key("MASTER_KEY");
+        server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         index.add_documents(documents, None).await;
@@ -172,9 +177,10 @@ macro_rules! compute_forbidden_search {
             let (response, code) = server.add_api_key(key_content.clone()).await;
             assert_eq!(code, 201, "{:?}", response);
             let key = response["key"].as_str().unwrap();
+            let uid = response["uid"].as_str().unwrap();
 
             for tenant_token in $tenant_tokens.iter() {
-                let web_token = generate_tenant_token(&key, tenant_token.clone());
+                let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
                 let index = server.index("sales");
                 index
@@ -461,12 +467,13 @@ async fn error_access_forbidden_routes() {
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
+    let uid = response["uid"].as_str().unwrap();
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&key, tenant_token);
+    let web_token = generate_tenant_token(&uid, &key, tenant_token);
     server.use_api_key(&web_token);
 
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
@@ -496,12 +503,13 @@ async fn error_access_expired_parent_key() {
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
+    let uid = response["uid"].as_str().unwrap();
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&key, tenant_token);
+    let web_token = generate_tenant_token(&uid, &key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
@@ -538,12 +546,13 @@ async fn error_access_modified_token() {
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
+    let uid = response["uid"].as_str().unwrap();
 
     let tenant_token = hashmap! {
         "searchRules" => json!(["products"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&key, tenant_token);
+    let web_token = generate_tenant_token(&uid, &key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while web_token is valid
@@ -558,7 +567,7 @@ async fn error_access_modified_token() {
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
 
-    let alt = generate_tenant_token(&key, tenant_token);
+    let alt = generate_tenant_token(&uid, &key, tenant_token);
     let altered_token = [
         web_token.split('.').next().unwrap(),
         alt.split('.').nth(1).unwrap(),
