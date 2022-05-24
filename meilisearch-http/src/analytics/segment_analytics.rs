@@ -31,6 +31,8 @@ use crate::Opt;
 
 use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 
+const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
+
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &str) {
     let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
@@ -48,7 +50,8 @@ const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
     request
         .headers()
-        .get(USER_AGENT)
+        .get(ANALYTICS_HEADER)
+        .or_else(|| request.headers().get(USER_AGENT))
         .map(|header| header.to_str().ok())
         .flatten()
         .unwrap_or("unknown")
@@ -130,11 +133,7 @@ impl SegmentAnalytics {
 
 impl super::Analytics for SegmentAnalytics {
     fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
-        let user_agent = request
-            .map(|req| req.headers().get(USER_AGENT))
-            .flatten()
-            .map(|header| header.to_str().unwrap_or("unknown"))
-            .map(|s| s.split(';').map(str::trim).collect::<Vec<&str>>());
+        let user_agent = request.map(|req| extract_user_agents(req));
 
         send["user-agent"] = json!(user_agent);
         let event = Track {
