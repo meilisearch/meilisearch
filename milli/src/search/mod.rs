@@ -118,7 +118,7 @@ impl<'a> Search<'a> {
         let before = Instant::now();
         let (query_tree, primitive_query, matching_words) = match self.query.as_ref() {
             Some(query) => {
-                let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
+                let mut builder = QueryTreeBuilder::new(self.rtxn, self.index)?;
                 builder.optional_words(self.optional_words);
 
                 builder.authorize_typos(self.is_typo_authorized()?);

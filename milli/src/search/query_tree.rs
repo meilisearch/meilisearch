@@ -152,7 +152,7 @@ trait Context {
     }
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
-    fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>>;
+    fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -162,6 +162,7 @@ pub struct QueryTreeBuilder<'a> {
     optional_words: bool,
     authorize_typos: bool,
     words_limit: Option<usize>,
+    exact_words: Option<fst::Set<Cow<'a, [u8]>>>,
 }
 
 impl<'a> Context for QueryTreeBuilder<'a> {
@@ -183,16 +184,24 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         Ok((one, two))
     }
 
-    fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>> {
-        self.index.exact_words(self.rtxn)
+    fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>> {
+        &self.exact_words
     }
 }
 
 impl<'a> QueryTreeBuilder<'a> {
     /// Create a `QueryTreeBuilder` from a heed ReadOnly transaction `rtxn`
     /// and an Index `index`.
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Self {
-        Self { rtxn, index, optional_words: true, authorize_typos: true, words_limit: None }
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Result<Self> {
+        let exact_words = index.exact_words(rtxn)?;
+        Ok(Self {
+            rtxn,
+            index,
+            optional_words: true,
+            authorize_typos: true,
+            words_limit: None,
+            exact_words,
+        })
     }
 
     /// if `optional_words` is set to `false` the query tree will be
@@ -277,13 +286,13 @@ pub struct TypoConfig<'a> {
     pub max_typos: u8,
     pub word_len_one_typo: u8,
     pub word_len_two_typo: u8,
-    pub exact_words: Option<fst::Set<Cow<'a, [u8]>>>,
+    pub exact_words: &'a Option<fst::Set<Cow<'a, [u8]>>>,
 }
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
 fn typos<'a>(word: String, authorize_typos: bool, config: TypoConfig<'a>) -> QueryKind {
-    if authorize_typos && !config.exact_words.map(|s| s.contains(&word)).unwrap_or(false) {
+    if authorize_typos && !config.exact_words.as_ref().map(|s| s.contains(&word)).unwrap_or(false) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {
             QueryKind::exact(word)
@@ -342,7 +351,7 @@ fn create_query_tree(
                     children.push(Operation::Phrase(vec![left.to_string(), right.to_string()]));
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
-                let exact_words = ctx.exact_words()?;
+                let exact_words = ctx.exact_words();
                 let config =
                     TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
                 children.push(Operation::Query(Query {
@@ -396,7 +405,7 @@ fn create_query_tree(
                             let concat = words.concat();
                             let (word_len_one_typo, word_len_two_typo) =
                                 ctx.min_word_len_for_typo()?;
-                            let exact_words = ctx.exact_words()?;
+                            let exact_words = ctx.exact_words();
                             let config = TypoConfig {
                                 max_typos: 1,
                                 word_len_one_typo,
@@ -501,7 +510,7 @@ fn create_matching_words(
                 }
 
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
-                let exact_words = ctx.exact_words()?;
+                let exact_words = ctx.exact_words();
                 let config =
                     TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
 
@@ -579,7 +588,7 @@ fn create_matching_words(
                             let word = words.concat();
                             let (word_len_one_typo, word_len_two_typo) =
                                 ctx.min_word_len_for_typo()?;
-                            let exact_words = ctx.exact_words()?;
+                            let exact_words = ctx.exact_words();
                             let config = TypoConfig {
                                 max_typos: 1,
                                 word_len_one_typo,
@@ -742,8 +751,7 @@ mod test {
     struct TestContext {
         synonyms: HashMap<Vec<String>, Vec<Vec<String>>>,
         postings: HashMap<String, RoaringBitmap>,
-        // Raw bytes for the exact word fst Set
-        exact_words: Vec<u8>,
+        exact_words: Option<fst::Set<Cow<'static, [u8]>>>,
     }
 
     impl TestContext {
@@ -779,8 +787,8 @@ mod test {
             Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
 
-        fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>> {
-            Ok(Some(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap()))
+        fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>> {
+            &self.exact_words
         }
     }
 
@@ -799,6 +807,8 @@ mod test {
             }
 
             let exact_words = fst::SetBuilder::new(Vec::new()).unwrap().into_inner().unwrap();
+            let exact_words =
+                Some(fst::Set::new(exact_words).unwrap().map_data(Cow::Owned).unwrap());
 
             TestContext {
                 synonyms: hashmap! {
@@ -1406,8 +1416,12 @@ mod test {
     #[test]
     fn test_min_word_len_typo() {
         let exact_words = Some(fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap());
-        let config =
-            TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7, exact_words };
+        let config = TypoConfig {
+            max_typos: 2,
+            word_len_one_typo: 5,
+            word_len_two_typo: 7,
+            exact_words: &exact_words,
+        };
 
         assert_eq!(
             typos("hello".to_string(), true, config.clone()),
@@ -1433,6 +1447,7 @@ mod test {
 
         let tokens = result.tokens();
         let exact_words = fst::Set::from_iter(Some("goodbye")).unwrap().into_fst().into_inner();
+        let exact_words = Some(fst::Set::new(exact_words).unwrap().map_data(Cow::Owned).unwrap());
         let context = TestContext { exact_words, ..Default::default() };
         let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
 
