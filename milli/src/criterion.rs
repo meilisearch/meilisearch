@@ -8,7 +8,7 @@ use crate::{AscDesc, Member};
 
 #[derive(Error, Debug)]
 pub enum CriterionError {
-    #[error("`{name}` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules.")]
+    #[error("`{name}` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.")]
     InvalidName { name: String },
     #[error("`{name}` is a reserved keyword and thus can't be used as a ranking rule")]
     ReservedName { name: String },
