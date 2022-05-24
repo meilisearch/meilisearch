@@ -664,13 +664,11 @@ mod test {
             index_resolver: Arc<IndexResolver<MockIndexMetaStore, MockIndexStore>>,
             task_store: TaskStore,
             update_file_store: UpdateFileStore,
-            dump_handle: DumpActorHandleImpl,
             scheduler: Arc<RwLock<Scheduler>>,
         ) -> Self {
             IndexController {
                 index_resolver,
                 task_store,
-                dump_handle,
                 update_file_store,
                 scheduler,
             }
@@ -754,19 +752,12 @@ mod test {
         let task_store = TaskStore::mock(task_store_mocker);
         let scheduler = Scheduler::new(
             task_store.clone(),
-            index_resolver.clone(),
+            vec![index_resolver.clone()],
             SchedulerConfig::default(),
         )
         .unwrap();
-        let (sender, _) = mpsc::channel(1);
-        let dump_handle = DumpActorHandleImpl { sender };
-        let index_controller = IndexController::mock(
-            index_resolver,
-            task_store,
-            update_file_store,
-            dump_handle,
-            scheduler,
-        );
+        let index_controller =
+            IndexController::mock(index_resolver, task_store, update_file_store, scheduler);
 
         let r = index_controller
             .search(index_uid.to_owned(), query.clone())

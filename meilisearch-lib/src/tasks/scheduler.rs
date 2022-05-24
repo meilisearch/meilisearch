@@ -411,7 +411,7 @@ impl Scheduler {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum Processing {
     DocumentAdditions(Vec<TaskId>),
     IndexUpdate(TaskId),
@@ -586,31 +586,24 @@ mod test {
         queue.insert(gen_task(6, "test2", content.clone()));
         queue.insert(gen_task(7, "test1", content));
 
-        let mut batch = Vec::new();
-
         let config = SchedulerConfig::default();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[0, 4]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![0, 4]));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[1]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![1]));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[2]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::IndexUpdate(2));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[3, 6]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![3, 6]));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[5]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::IndexUpdate(5));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[7]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![7]));
 
         assert!(queue.is_empty());
     }
