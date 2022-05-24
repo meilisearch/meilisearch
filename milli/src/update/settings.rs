@@ -1495,7 +1495,7 @@ mod tests {
         let words = btreeset! { S("Ab"), S("ac") };
         builder.set_exact_words(words);
         assert!(builder.execute(|_| ()).is_ok());
-        let exact_words = index.exact_words(&txn).unwrap();
+        let exact_words = index.exact_words(&txn).unwrap().unwrap();
         for word in exact_words.into_fst().stream().into_str_vec().unwrap() {
             assert!(word.0 == "ac" || word.0 == "ab");
         }

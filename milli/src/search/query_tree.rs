@@ -152,7 +152,7 @@ trait Context {
     }
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
-    fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>>;
+    fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -183,7 +183,7 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         Ok((one, two))
     }
 
-    fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
+    fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>> {
         self.index.exact_words(self.rtxn)
     }
 }
@@ -277,13 +277,13 @@ pub struct TypoConfig<'a> {
     pub max_typos: u8,
     pub word_len_one_typo: u8,
     pub word_len_two_typo: u8,
-    pub exact_words: fst::Set<Cow<'a, [u8]>>,
+    pub exact_words: Option<fst::Set<Cow<'a, [u8]>>>,
 }
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
 fn typos<'a>(word: String, authorize_typos: bool, config: TypoConfig<'a>) -> QueryKind {
-    if authorize_typos && !config.exact_words.contains(&word) {
+    if authorize_typos && !config.exact_words.map(|s| s.contains(&word)).unwrap_or(false) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {
             QueryKind::exact(word)
@@ -779,8 +779,8 @@ mod test {
             Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
 
-        fn exact_words(&self) -> crate::Result<fst::Set<Cow<[u8]>>> {
-            Ok(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap())
+        fn exact_words(&self) -> crate::Result<Option<fst::Set<Cow<[u8]>>>> {
+            Ok(Some(fst::Set::new(Cow::Borrowed(self.exact_words.as_slice())).unwrap()))
         }
     }
 
@@ -1405,7 +1405,7 @@ mod test {
 
     #[test]
     fn test_min_word_len_typo() {
-        let exact_words = fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap();
+        let exact_words = Some(fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap());
         let config =
             TypoConfig { max_typos: 2, word_len_one_typo: 5, word_len_two_typo: 7, exact_words };
 
