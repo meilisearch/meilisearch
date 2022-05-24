@@ -37,19 +37,38 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Paginate {
+    #[serde(default)]
+    offset: usize,
+    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    limit: usize,
+}
+
 pub async fn list_indexes(
     data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
+    paginate: web::Query<Paginate>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &data.filters().search_rules;
-    let indexes: Vec<_> = data
-        .list_indexes()
-        .await?
+    let indexes: Vec<_> = data.list_indexes().await?;
+    let nb_indexes = indexes.len();
+    let indexes: Vec<_> = indexes
         .into_iter()
         .filter(|i| search_rules.is_index_authorized(&i.uid))
+        .skip(paginate.offset)
+        .take(paginate.limit)
         .collect();
 
     debug!("returns: {:?}", indexes);
-    Ok(HttpResponse::Ok().json(indexes))
+    Ok(HttpResponse::Ok().json(json!({
+        "results": indexes,
+        "offset": paginate.offset,
+        "limit": paginate.limit,
+        "total": nb_indexes,
+    })))
 }
 
 #[derive(Debug, Deserialize)]

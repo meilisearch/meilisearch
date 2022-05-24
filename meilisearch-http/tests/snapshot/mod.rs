@@ -70,7 +70,7 @@ async fn perform_snapshot() {
     let snapshot_server = Server::new_with_options(options).await.unwrap();
 
     verify_snapshot!(server, snapshot_server, |server| =>
-        server.list_indexes(),
+        server.list_indexes(None, None),
         // for some reason the db sizes differ. this may be due to the compaction options we have
         // set when performing the snapshot
         //server.stats(),

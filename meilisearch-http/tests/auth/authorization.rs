@@ -353,10 +353,10 @@ async fn list_authorized_indexes_restricted_index() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(&key);
 
-    let (response, code) = server.list_indexes().await;
+    let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
 
-    let response = response.as_array().unwrap();
+    let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
     assert!(response.iter().any(|index| index["uid"] == "products"));
 
@@ -394,10 +394,10 @@ async fn list_authorized_indexes_no_index_restriction() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(&key);
 
-    let (response, code) = server.list_indexes().await;
+    let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
 
-    let response = response.as_array().unwrap();
+    let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
     assert!(response.iter().any(|index| index["uid"] == "products"));
 
