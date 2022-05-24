@@ -3,7 +3,7 @@ pub mod server;
 pub mod service;
 
 pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
-pub use server::Server;
+pub use server::{default_settings, Server};
 
 /// Performs a search test on both post and get routes
 #[macro_export]

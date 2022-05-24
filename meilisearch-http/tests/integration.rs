@@ -2,6 +2,7 @@ mod auth;
 mod common;
 mod dashboard;
 mod documents;
+mod dumps;
 mod index;
 mod search;
 mod settings;

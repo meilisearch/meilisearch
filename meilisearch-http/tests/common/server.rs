@@ -79,9 +79,9 @@ impl Server {
         }
     }
 
-    pub async fn new_with_options(options: Opt) -> Self {
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
+    pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
+        let meilisearch = setup_meilisearch(&options)?;
+        let auth = AuthController::new(&options.db_path, &options.master_key)?;
         let service = Service {
             meilisearch,
             auth,
@@ -89,10 +89,10 @@ impl Server {
             api_key: None,
         };
 
-        Server {
+        Ok(Server {
             service,
             _dir: None,
-        }
+        })
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
