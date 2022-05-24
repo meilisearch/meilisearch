@@ -152,7 +152,7 @@ trait Context {
     }
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
-    fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>>;
+    fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -184,8 +184,8 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         Ok((one, two))
     }
 
-    fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>> {
-        &self.exact_words
+    fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>> {
+        self.exact_words.as_ref()
     }
 }
 
@@ -286,7 +286,7 @@ pub struct TypoConfig<'a> {
     pub max_typos: u8,
     pub word_len_one_typo: u8,
     pub word_len_two_typo: u8,
-    pub exact_words: &'a Option<fst::Set<Cow<'a, [u8]>>>,
+    pub exact_words: Option<&'a fst::Set<Cow<'a, [u8]>>>,
 }
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
@@ -787,8 +787,8 @@ mod test {
             Ok((DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS))
         }
 
-        fn exact_words(&self) -> &Option<fst::Set<Cow<[u8]>>> {
-            &self.exact_words
+        fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>> {
+            self.exact_words.as_ref()
         }
     }
 
@@ -1415,12 +1415,12 @@ mod test {
 
     #[test]
     fn test_min_word_len_typo() {
-        let exact_words = Some(fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap());
+        let exact_words = fst::Set::from_iter([b""]).unwrap().map_data(Cow::Owned).unwrap();
         let config = TypoConfig {
             max_typos: 2,
             word_len_one_typo: 5,
             word_len_two_typo: 7,
-            exact_words: &exact_words,
+            exact_words: Some(&exact_words),
         };
 
         assert_eq!(
