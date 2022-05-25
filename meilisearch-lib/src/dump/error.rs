@@ -7,10 +7,6 @@ pub type Result<T> = std::result::Result<T, DumpError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DumpError {
-    #[error("A dump is already processing. You must wait until the current process is finished before requesting another dump.")]
-    DumpAlreadyRunning,
-    #[error("Dump `{0}` not found.")]
-    DumpDoesNotExist(String),
     #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
@@ -32,8 +28,6 @@ internal_error!(
 impl ErrorCode for DumpError {
     fn error_code(&self) -> Code {
         match self {
-            DumpError::DumpAlreadyRunning => Code::DumpAlreadyInProgress,
-            DumpError::DumpDoesNotExist(_) => Code::DumpNotFound,
             DumpError::Internal(_) => Code::Internal,
             DumpError::IndexResolver(e) => e.error_code(),
         }
