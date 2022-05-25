@@ -536,10 +536,10 @@ mod test {
 
     use super::*;
 
-    fn gen_task(id: TaskId, index_uid: &str, content: TaskContent) -> Task {
+    fn gen_task(id: TaskId, index_uid: Option<&str>, content: TaskContent) -> Task {
         Task {
             id,
-            index_uid: Some(IndexUid::new_unchecked(index_uid)),
+            index_uid: index_uid.map(IndexUid::new_unchecked),
             content,
             events: vec![],
         }
@@ -548,13 +548,13 @@ mod test {
     #[test]
     fn register_updates_multiples_indexes() {
         let mut queue = TaskQueue::default();
-        queue.insert(gen_task(0, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(1, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(2, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(4, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(5, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, "test2", TaskContent::IndexDeletion));
+        queue.insert(gen_task(0, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(1, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(3, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(4, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(6, Some("test2"), TaskContent::IndexDeletion));
 
         let test1_tasks = queue
             .head_mut(|tasks| tasks.drain().map(|t| t.id).collect::<Vec<_>>())
@@ -582,16 +582,28 @@ mod test {
             documents_count: 0,
             allow_index_creation: true,
         };
-        queue.insert(gen_task(0, "test1", content.clone()));
-        queue.insert(gen_task(1, "test2", content.clone()));
-        queue.insert(gen_task(2, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, "test2", content.clone()));
-        queue.insert(gen_task(4, "test1", content.clone()));
-        queue.insert(gen_task(5, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, "test2", content.clone()));
-        queue.insert(gen_task(7, "test1", content));
+        queue.insert(gen_task(0, Some("test1"), content.clone()));
+        queue.insert(gen_task(1, Some("test2"), content.clone()));
+        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(3, Some("test2"), content.clone()));
+        queue.insert(gen_task(4, Some("test1"), content.clone()));
+        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(6, Some("test2"), content.clone()));
+        queue.insert(gen_task(7, Some("test1"), content));
+        queue.insert(gen_task(
+            8,
+            None,
+            TaskContent::Dump {
+                uid: "adump".to_owned(),
+            },
+        ));
 
         let config = SchedulerConfig::default();
+
+        // Make sure that the dump is processed before everybody else.
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::Dump(8));
+
         let batch = make_batch(&mut queue, &config);
         assert_eq!(batch, Processing::DocumentAdditions(vec![0, 4]));
 
