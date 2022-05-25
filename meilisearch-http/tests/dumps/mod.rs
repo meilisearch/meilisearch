@@ -6,23 +6,6 @@ use serde_json::json;
 
 use self::data::GetDump;
 
-#[actix_rt::test]
-async fn get_unexisting_dump_status() {
-    let server = Server::new().await;
-
-    let (response, code) = server.get_dump_status("foobar").await;
-    assert_eq!(code, 404);
-
-    let expected_response = json!({
-    "message": "Dump `foobar` not found.",
-    "code": "dump_not_found",
-    "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#dump_not_found"
-    });
-
-    assert_eq!(response, expected_response);
-}
-
 // all the following test are ignored on windows. See #2364
 #[actix_rt::test]
 #[cfg_attr(target_os = "windows", ignore)]
