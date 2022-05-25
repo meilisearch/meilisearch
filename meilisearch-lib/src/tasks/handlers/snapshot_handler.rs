@@ -6,10 +6,7 @@ pub struct SnapshotHandler;
 #[async_trait::async_trait]
 impl BatchHandler for SnapshotHandler {
     fn accept(&self, batch: &Batch) -> bool {
-        match batch.content {
-            BatchContent::Snapshot(_) => true,
-            _ => false,
-        }
+        matches!(batch.content, BatchContent::Snapshot(_))
     }
 
     async fn process_batch(&self, batch: Batch) -> Batch {
@@ -25,7 +22,5 @@ impl BatchHandler for SnapshotHandler {
         Batch::empty()
     }
 
-    async fn finish(&self, _: &Batch) {
-        ()
-    }
+    async fn finish(&self, _: &Batch) {}
 }

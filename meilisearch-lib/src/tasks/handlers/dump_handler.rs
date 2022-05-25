@@ -35,9 +35,7 @@ where
         }
     }
 
-    async fn finish(&self, _: &Batch) {
-        ()
-    }
+    async fn finish(&self, _: &Batch) {}
 }
 
 #[cfg(test)]

@@ -13,10 +13,10 @@ where
     I: IndexStore + Send + Sync + 'static,
 {
     fn accept(&self, batch: &Batch) -> bool {
-        match batch.content {
-            BatchContent::DocumentsAdditionBatch(_) | BatchContent::IndexUpdate(_) => true,
-            _ => false,
-        }
+        matches!(
+            batch.content,
+            BatchContent::DocumentsAdditionBatch(_) | BatchContent::IndexUpdate(_)
+        )
     }
 
     async fn process_batch(&self, mut batch: Batch) -> Batch {
@@ -26,7 +26,7 @@ where
                     .process_document_addition_batch(std::mem::take(tasks))
                     .await;
             }
-            BatchContent::IndexUpdate(ref mut task) => match self.process_task(&task).await {
+            BatchContent::IndexUpdate(ref mut task) => match self.process_task(task).await {
                 Ok(success) => {
                     task.events.push(TaskEvent::Succeded {
                         result: success,

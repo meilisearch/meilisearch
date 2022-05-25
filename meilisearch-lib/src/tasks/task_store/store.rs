@@ -110,7 +110,7 @@ impl Store {
         self.tasks.put(txn, &BEU64::new(task.id), task)?;
         // only add the task to the indexes index if it has an index_uid
         if let Some(ref index_uid) = task.index_uid {
-            self.uids_task_ids.put(txn, &(&index_uid, task.id), &())?;
+            self.uids_task_ids.put(txn, &(index_uid, task.id), &())?;
         }
 
         Ok(())

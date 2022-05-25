@@ -14,7 +14,5 @@ impl BatchHandler for EmptyBatchHandler {
         batch
     }
 
-    async fn finish(&self, _: &Batch) {
-        ()
-    }
+    async fn finish(&self, _: &Batch) {}
 }
