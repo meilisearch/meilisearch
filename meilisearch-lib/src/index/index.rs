@@ -8,7 +8,7 @@ use std::sync::Arc;
 use fst::IntoStreamer;
 use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
-use milli::{obkv_to_json, FieldDistribution, FieldId};
+use milli::{obkv_to_json, FieldDistribution};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
@@ -228,7 +228,7 @@ impl Index {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display = self.fields_to_display(&attributes_to_retrieve, &fields_ids_map)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -236,8 +236,15 @@ impl Index {
 
         for entry in iter {
             let (_id, obkv) = entry?;
-            let object = obkv_to_json(&fields_to_display, &fields_ids_map, obkv)?;
-            documents.push(object);
+            let document = obkv_to_json(&all_fields, &fields_ids_map, obkv)?;
+            let document = match &attributes_to_retrieve {
+                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                    &document,
+                    attributes_to_retrieve.iter().map(|s| s.as_ref()),
+                ),
+                None => document,
+            };
+            documents.push(document);
         }
 
         let number_of_documents = self.number_of_documents(&txn)?;
@@ -253,7 +260,7 @@ impl Index {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display = self.fields_to_display(&attributes_to_retrieve, &fields_ids_map)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -267,29 +274,20 @@ impl Index {
             .map(|(_, d)| d)
             .ok_or(IndexError::DocumentNotFound(doc_id))?;
 
-        let document = obkv_to_json(&fields_to_display, &fields_ids_map, document)?;
+        let document = obkv_to_json(&all_fields, &fields_ids_map, document)?;
+        let document = match &attributes_to_retrieve {
+            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                &document,
+                attributes_to_retrieve.iter().map(|s| s.as_ref()),
+            ),
+            None => document,
+        };
 
         Ok(document)
     }
 
     pub fn size(&self) -> u64 {
         self.env.size()
-    }
-
-    fn fields_to_display<S: AsRef<str>>(
-        &self,
-        attributes_to_retrieve: &Option<Vec<S>>,
-        fields_ids_map: &milli::FieldsIdsMap,
-    ) -> Result<Vec<FieldId>> {
-        let attributes_to_retrieve_ids = match attributes_to_retrieve {
-            Some(attrs) => attrs
-                .iter()
-                .filter_map(|f| fields_ids_map.id(f.as_ref()))
-                .collect(),
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
-
-        Ok(attributes_to_retrieve_ids)
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
