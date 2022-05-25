@@ -28,6 +28,9 @@ pub trait BatchHandler: Sync + Send + 'static {
     fn accept(&self, batch: &Batch) -> bool;
 
     /// Processes the `Task` batch returning the batch with the `Task` updated.
+    ///
+    /// It is ok for this function to panic if a batch is handed that hasn't been verified by
+    /// `accept` beforehand.
     async fn process_batch(&self, batch: Batch) -> Batch;
 
     /// `finish` is called when the result of `process` has been commited to the task store. This
