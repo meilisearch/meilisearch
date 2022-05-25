@@ -102,10 +102,10 @@ async fn get_tasks(
             filters.filter_fn(move |task| {
                 let matches_type = types
                     .iter()
-                    .any(|t| task_type_matches_content(&t, &task.content));
+                    .any(|t| task_type_matches_content(t, &task.content));
                 let matches_status = statuses
                     .iter()
-                    .any(|s| task_status_matches_events(&s, &task.events));
+                    .any(|s| task_status_matches_events(s, &task.events));
                 matches_type && matches_status
             });
             Some(filters)
@@ -115,7 +115,7 @@ async fn get_tasks(
             filters.filter_fn(move |task| {
                 types
                     .iter()
-                    .any(|t| task_type_matches_content(&t, &task.content))
+                    .any(|t| task_type_matches_content(t, &task.content))
             });
             Some(filters)
         }
@@ -124,7 +124,7 @@ async fn get_tasks(
             filters.filter_fn(move |task| {
                 statuses
                     .iter()
-                    .any(|s| task_status_matches_events(&s, &task.events))
+                    .any(|s| task_status_matches_events(s, &task.events))
             });
             Some(filters)
         }
