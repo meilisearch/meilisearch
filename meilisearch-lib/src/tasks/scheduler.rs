@@ -110,8 +110,8 @@ impl Ord for TaskList {
                     (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
                 }
             }
-            (TaskListIdentifier::Index(_), TaskListIdentifier::Dump) => Ordering::Greater,
-            (TaskListIdentifier::Dump, TaskListIdentifier::Index(_)) => Ordering::Less,
+            (TaskListIdentifier::Index(_), TaskListIdentifier::Dump) => Ordering::Less,
+            (TaskListIdentifier::Dump, TaskListIdentifier::Index(_)) => Ordering::Greater,
             (TaskListIdentifier::Dump, TaskListIdentifier::Dump) => {
                 unreachable!("There should be only one Dump task list")
             }
