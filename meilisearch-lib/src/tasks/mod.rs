@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
-pub use batch_handlers::empty_handler::EmptyBatchHandler;
-pub use batch_handlers::snapshot_handler::SnapshotHandler;
+pub use handlers::empty_handler::EmptyBatchHandler;
+pub use handlers::snapshot_handler::SnapshotHandler;
 pub use scheduler::Scheduler;
 pub use task_store::TaskFilter;
 
@@ -14,8 +14,8 @@ use batch::Batch;
 use error::Result;
 
 pub mod batch;
-mod batch_handlers;
 pub mod error;
+mod handlers;
 mod scheduler;
 pub mod task;
 mod task_store;
