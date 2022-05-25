@@ -56,3 +56,101 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::index_resolver::{index_store::MockIndexStore, meta_store::MockIndexMetaStore};
+    use crate::tasks::{
+        handlers::test::task_to_batch,
+        task::{Task, TaskContent},
+    };
+    use crate::update_file_store::{Result as FileStoreResult, UpdateFileStore};
+
+    use super::*;
+    use milli::update::IndexDocumentsMethod;
+    use nelson::Mocker;
+    use proptest::prelude::*;
+    use uuid::Uuid;
+
+    proptest! {
+        #[test]
+        fn test_accept_task(
+            task in any::<Task>(),
+        ) {
+            let batch = task_to_batch(task);
+
+            let index_store = MockIndexStore::new();
+            let meta_store = MockIndexMetaStore::new();
+            let mocker = Mocker::default();
+            let update_file_store = UpdateFileStore::mock(mocker);
+            let index_resolver = IndexResolver::new(meta_store, index_store, update_file_store);
+
+            match batch.content {
+                BatchContent::DocumentAddtitionBatch(_)
+                    | BatchContent::IndexUpdate(_) => assert!(index_resolver.accept(&batch)),
+                BatchContent::Dump(_)
+                    | BatchContent::Snapshot(_)
+                    | BatchContent::Empty => assert!(!index_resolver.accept(&batch)),
+            }
+        }
+    }
+
+    #[actix_rt::test]
+    async fn finisher_called_on_document_update() {
+        let index_store = MockIndexStore::new();
+        let meta_store = MockIndexMetaStore::new();
+        let mocker = Mocker::default();
+        let content_uuid = Uuid::new_v4();
+        mocker
+            .when::<Uuid, FileStoreResult<()>>("delete")
+            .once()
+            .then(move |uuid| {
+                assert_eq!(uuid, content_uuid);
+                Ok(())
+            });
+        let update_file_store = UpdateFileStore::mock(mocker);
+        let index_resolver = IndexResolver::new(meta_store, index_store, update_file_store);
+
+        let task = Task {
+            id: 1,
+            index_uid: None,
+            content: TaskContent::DocumentAddition {
+                content_uuid,
+                merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+                primary_key: None,
+                documents_count: 100,
+                allow_index_creation: true,
+            },
+            events: Vec::new(),
+        };
+
+        let batch = task_to_batch(task);
+
+        index_resolver.finish(&batch).await;
+    }
+
+    #[actix_rt::test]
+    #[should_panic]
+    async fn panic_when_passed_unsupported_batch() {
+        let index_store = MockIndexStore::new();
+        let meta_store = MockIndexMetaStore::new();
+        let mocker = Mocker::default();
+        let update_file_store = UpdateFileStore::mock(mocker);
+        let index_resolver = IndexResolver::new(meta_store, index_store, update_file_store);
+
+        let task = Task {
+            id: 1,
+            index_uid: None,
+            content: TaskContent::Dump {
+                uid: String::from("hello"),
+            },
+            events: Vec::new(),
+        };
+
+        let batch = task_to_batch(task);
+
+        index_resolver.process_batch(batch).await;
+    }
+
+    // TODO: test perform_batch. We need a Mocker for IndexResolver.
+}
