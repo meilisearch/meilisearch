@@ -1982,6 +1982,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time 0.3.9",
+ "uuid",
 ]
 
 [[package]]

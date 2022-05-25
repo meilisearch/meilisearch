@@ -18,8 +18,16 @@ pub enum AuthControllerError {
     InvalidApiKeyExpiresAt(Value),
     #[error("`description` field value `{0}` is invalid. It should be a string or specified as a null value.")]
     InvalidApiKeyDescription(Value),
+    #[error(
+        "`name` field value `{0}` is invalid. It should be a string or specified as a null value."
+    )]
+    InvalidApiKeyName(Value),
+    #[error("`uid` field value `{0}` is invalid. It should be a valid uuidv4 string or ommited.")]
+    InvalidApiKeyUid(Value),
     #[error("API key `{0}` not found.")]
     ApiKeyNotFound(String),
+    #[error("`uid` field value `{0}` already exists for an API key.")]
+    ApiKeyAlreadyExists(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -39,7 +47,10 @@ impl ErrorCode for AuthControllerError {
             Self::InvalidApiKeyIndexes(_) => Code::InvalidApiKeyIndexes,
             Self::InvalidApiKeyExpiresAt(_) => Code::InvalidApiKeyExpiresAt,
             Self::InvalidApiKeyDescription(_) => Code::InvalidApiKeyDescription,
+            Self::InvalidApiKeyName(_) => Code::InvalidApiKeyName,
             Self::ApiKeyNotFound(_) => Code::ApiKeyNotFound,
+            Self::InvalidApiKeyUid(_) => Code::InvalidApiKeyUid,
+            Self::ApiKeyAlreadyExists(_) => Code::ApiKeyAlreadyExists,
             Self::Internal(_) => Code::Internal,
         }
     }

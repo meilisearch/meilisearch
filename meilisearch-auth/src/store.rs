@@ -1,4 +1,3 @@
-use enum_iterator::IntoEnumIterator;
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::convert::TryFrom;
@@ -8,20 +7,22 @@ use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
+use enum_iterator::IntoEnumIterator;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use super::error::Result;
 use super::{Action, Key};
 
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
-pub const KEY_ID_LENGTH: usize = 8;
 const AUTH_DB_PATH: &str = "auth";
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
 
-pub type KeyId = [u8; KEY_ID_LENGTH];
+pub type KeyId = Uuid;
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
@@ -73,12 +74,13 @@ impl HeedAuthStore {
     }
 
     pub fn put_api_key(&self, key: Key) -> Result<Key> {
+        let uid = key.uid;
         let mut wtxn = self.env.write_txn()?;
-        self.keys.put(&mut wtxn, &key.id, &key)?;
 
-        let id = key.id;
+        self.keys.put(&mut wtxn, uid.as_bytes(), &key)?;
+
         // delete key from inverted database before refilling it.
-        self.delete_key_from_inverted_db(&mut wtxn, &id)?;
+        self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
         // create inverted database.
         let db = self.action_keyid_index_expiration;
 
@@ -93,13 +95,13 @@ impl HeedAuthStore {
         for action in actions {
             if no_index_restriction {
                 // If there is no index restriction we put None.
-                db.put(&mut wtxn, &(&id, &action, None), &key.expires_at)?;
+                db.put(&mut wtxn, &(&uid, &action, None), &key.expires_at)?;
             } else {
                 // else we create a key for each index.
                 for index in key.indexes.iter() {
                     db.put(
                         &mut wtxn,
-                        &(&id, &action, Some(index.as_bytes())),
+                        &(&uid, &action, Some(index.as_bytes())),
                         &key.expires_at,
                     )?;
                 }
@@ -111,24 +113,33 @@ impl HeedAuthStore {
         Ok(key)
     }
 
-    pub fn get_api_key(&self, key: impl AsRef<str>) -> Result<Option<Key>> {
+    pub fn get_api_key(&self, uid: Uuid) -> Result<Option<Key>> {
         let rtxn = self.env.read_txn()?;
-        match self.get_key_id(key.as_ref().as_bytes()) {
-            Some(id) => self.keys.get(&rtxn, &id).map_err(|e| e.into()),
-            None => Ok(None),
-        }
+        self.keys.get(&rtxn, uid.as_bytes()).map_err(|e| e.into())
     }
 
-    pub fn delete_api_key(&self, key: impl AsRef<str>) -> Result<bool> {
+    pub fn get_uid_from_sha(&self, key_sha: &[u8], master_key: &[u8]) -> Result<Option<Uuid>> {
+        let rtxn = self.env.read_txn()?;
+        let uid = self
+            .keys
+            .remap_data_type::<DecodeIgnore>()
+            .iter(&rtxn)?
+            .filter_map(|res| match res {
+                Ok((uid, _)) if generate_key(uid, master_key).as_bytes() == key_sha => {
+                    let (uid, _) = try_split_array_at(uid)?;
+                    Some(Uuid::from_bytes(*uid))
+                }
+                _ => None,
+            })
+            .next();
+
+        Ok(uid)
+    }
+
+    pub fn delete_api_key(&self, uid: Uuid) -> Result<bool> {
         let mut wtxn = self.env.write_txn()?;
-        let existing = match self.get_key_id(key.as_ref().as_bytes()) {
-            Some(id) => {
-                let existing = self.keys.delete(&mut wtxn, &id)?;
-                self.delete_key_from_inverted_db(&mut wtxn, &id)?;
-                existing
-            }
-            None => false,
-        };
+        let existing = self.keys.delete(&mut wtxn, uid.as_bytes())?;
+        self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
         wtxn.commit()?;
 
         Ok(existing)
@@ -147,49 +158,37 @@ impl HeedAuthStore {
 
     pub fn get_expiration_date(
         &self,
-        key: &[u8],
+        uid: Uuid,
         action: Action,
         index: Option<&[u8]>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        match self.get_key_id(key) {
-            Some(id) => {
-                let tuple = (&id, &action, index);
-                Ok(self.action_keyid_index_expiration.get(&rtxn, &tuple)?)
-            }
-            None => Ok(None),
-        }
+        let tuple = (&uid, &action, index);
+        Ok(self.action_keyid_index_expiration.get(&rtxn, &tuple)?)
     }
 
     pub fn prefix_first_expiration_date(
         &self,
-        key: &[u8],
+        uid: Uuid,
         action: Action,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        match self.get_key_id(key) {
-            Some(id) => {
-                let tuple = (&id, &action, None);
-                Ok(self
-                    .action_keyid_index_expiration
-                    .prefix_iter(&rtxn, &tuple)?
-                    .next()
-                    .transpose()?
-                    .map(|(_, expiration)| expiration))
-            }
-            None => Ok(None),
-        }
-    }
+        let tuple = (&uid, &action, None);
+        let exp = self
+            .action_keyid_index_expiration
+            .prefix_iter(&rtxn, &tuple)?
+            .next()
+            .transpose()?
+            .map(|(_, expiration)| expiration);
 
-    pub fn get_key_id(&self, key: &[u8]) -> Option<KeyId> {
-        try_split_array_at::<_, KEY_ID_LENGTH>(key).map(|(id, _)| *id)
+        Ok(exp)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
         let mut iter = self
             .action_keyid_index_expiration
             .remap_types::<ByteSlice, DecodeIgnore>()
-            .prefix_iter_mut(wtxn, key)?;
+            .prefix_iter_mut(wtxn, key.as_bytes())?;
         while iter.next().transpose()?.is_some() {
             // safety: we don't keep references from inside the LMDB database.
             unsafe { iter.del_current()? };
@@ -207,14 +206,15 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let (key_id, action_bytes) = try_split_array_at(bytes)?;
+        let (key_id_bytes, action_bytes) = try_split_array_at(bytes)?;
         let (action_bytes, index) = match try_split_array_at(action_bytes)? {
             (action, []) => (action, None),
             (action, index) => (action, Some(index)),
         };
+        let key_id = Uuid::from_bytes(*key_id_bytes);
         let action = Action::from_repr(u8::from_be_bytes(*action_bytes))?;
 
-        Some((*key_id, action, index))
+        Some((key_id, action, index))
     }
 }
 
@@ -224,7 +224,7 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     fn bytes_encode((key_id, action, index): &Self::EItem) -> Option<Cow<[u8]>> {
         let mut bytes = Vec::new();
 
-        bytes.extend_from_slice(*key_id);
+        bytes.extend_from_slice(key_id.as_bytes());
         let action_bytes = u8::to_be_bytes(action.repr());
         bytes.extend_from_slice(&action_bytes);
         if let Some(index) = index {
@@ -233,6 +233,12 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 
         Some(Cow::Owned(bytes))
     }
+}
+
+pub fn generate_key(uid: &[u8], master_key: &[u8]) -> String {
+    let key = [uid, master_key].concat();
+    let sha = Sha256::digest(&key);
+    format!("{:x}", sha)
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.

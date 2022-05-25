@@ -132,6 +132,7 @@ pub mod policies {
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use serde::{Deserialize, Serialize};
     use time::OffsetDateTime;
+    use uuid::Uuid;
 
     use crate::extractors::authentication::Policy;
     use meilisearch_auth::{Action, AuthController, AuthFilter, SearchRules};
@@ -146,16 +147,16 @@ pub mod policies {
         validation
     }
 
-    /// Extracts the key prefix used to sign the payload from the payload, without performing any validation.
-    fn extract_key_prefix(token: &str) -> Option<String> {
+    /// Extracts the key id used to sign the payload from the payload, without performing any validation.
+    fn extract_key_id(token: &str) -> Option<Uuid> {
         let mut validation = tenant_token_validation();
         validation.insecure_disable_signature_validation();
         let dummy_key = DecodingKey::from_secret(b"secret");
         let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
 
         // get token fields without validating it.
-        let Claims { api_key_prefix, .. } = token_data.claims;
-        Some(api_key_prefix)
+        let Claims { uid, .. } = token_data.claims;
+        Some(uid)
     }
 
     pub struct MasterPolicy;
@@ -195,8 +196,10 @@ pub mod policies {
                 return Some(filters);
             } else if let Some(action) = Action::from_repr(A) {
                 // API key
-                if let Ok(true) = auth.authenticate(token.as_bytes(), action, index) {
-                    return auth.get_key_filters(token, None).ok();
+                if let Ok(Some(uid)) = auth.get_uid_from_sha(token.as_bytes()) {
+                    if let Ok(true) = auth.is_key_authorized(uid, action, index) {
+                        return auth.get_key_filters(uid, None).ok();
+                    }
                 }
             }
 
@@ -215,14 +218,11 @@ pub mod policies {
                 return None;
             }
 
-            let api_key_prefix = extract_key_prefix(token)?;
+            let uid = extract_key_id(token)?;
             // check if parent key is authorized to do the action.
-            if auth
-                .is_key_authorized(api_key_prefix.as_bytes(), Action::Search, index)
-                .ok()?
-            {
+            if auth.is_key_authorized(uid, Action::Search, index).ok()? {
                 // Check if tenant token is valid.
-                let key = auth.generate_key(&api_key_prefix)?;
+                let key = auth.generate_key(uid)?;
                 let data = decode::<Claims>(
                     token,
                     &DecodingKey::from_secret(key.as_bytes()),
@@ -245,7 +245,7 @@ pub mod policies {
                 }
 
                 return auth
-                    .get_key_filters(api_key_prefix, Some(data.claims.search_rules))
+                    .get_key_filters(uid, Some(data.claims.search_rules))
                     .ok();
             }
 
@@ -258,6 +258,6 @@ pub mod policies {
     struct Claims {
         search_rules: SearchRules,
         exp: Option<i64>,
-        api_key_prefix: String,
+        uid: Uuid,
     }
 }

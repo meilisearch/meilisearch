@@ -1,18 +1,21 @@
 use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
-use crate::store::{KeyId, KEY_ID_LENGTH};
-use rand::Rng;
+use crate::store::KeyId;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Key {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub id: KeyId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub uid: KeyId,
     pub actions: Vec<Action>,
     pub indexes: Vec<String>,
     #[serde(with = "time::serde::rfc3339::option")]
@@ -25,6 +28,15 @@ pub struct Key {
 
 impl Key {
     pub fn create_from_value(value: Value) -> Result<Self> {
+        let name = match value.get("name") {
+            Some(Value::Null) => None,
+            Some(des) => Some(
+                from_value(des.clone())
+                    .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()))?,
+            ),
+            None => None,
+        };
+
         let description = match value.get("description") {
             Some(Value::Null) => None,
             Some(des) => Some(
@@ -34,7 +46,13 @@ impl Key {
             None => None,
         };
 
-        let id = generate_id();
+        let uid = value.get("uid").map_or_else(
+            || Ok(Uuid::new_v4()),
+            |uid| {
+                from_value(uid.clone())
+                    .map_err(|_| AuthControllerError::InvalidApiKeyUid(uid.clone()))
+            },
+        )?;
 
         let actions = value
             .get("actions")
@@ -61,8 +79,9 @@ impl Key {
         let updated_at = created_at;
 
         Ok(Self {
+            name,
             description,
-            id,
+            uid,
             actions,
             indexes,
             expires_at,
@@ -101,9 +120,11 @@ impl Key {
 
     pub(crate) fn default_admin() -> Self {
         let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
         Self {
+            name: Some("admin".to_string()),
             description: Some("Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)".to_string()),
-            id: generate_id(),
+            uid,
             actions: vec![Action::All],
             indexes: vec!["*".to_string()],
             expires_at: None,
@@ -114,11 +135,13 @@ impl Key {
 
     pub(crate) fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
         Self {
+            name: Some("search".to_string()),
             description: Some(
                 "Default Search API Key (Use it to search from the frontend)".to_string(),
             ),
-            id: generate_id(),
+            uid,
             actions: vec![Action::Search],
             indexes: vec!["*".to_string()],
             expires_at: None,
@@ -126,19 +149,6 @@ impl Key {
             updated_at: now,
         }
     }
-}
-
-/// Generate a printable key of 64 characters using thread_rng.
-fn generate_id() -> [u8; KEY_ID_LENGTH] {
-    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    let mut rng = rand::thread_rng();
-    let mut bytes = [0; KEY_ID_LENGTH];
-    for byte in bytes.iter_mut() {
-        *byte = CHARSET[rng.gen_range(0..CHARSET.len())];
-    }
-
-    bytes
 }
 
 fn parse_expiration_date(value: &Value) -> Result<Option<OffsetDateTime>> {

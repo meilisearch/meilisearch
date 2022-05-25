@@ -166,6 +166,9 @@ pub enum Code {
     InvalidApiKeyIndexes,
     InvalidApiKeyExpiresAt,
     InvalidApiKeyDescription,
+    InvalidApiKeyName,
+    InvalidApiKeyUid,
+    ApiKeyAlreadyExists,
 }
 
 impl Code {
@@ -272,6 +275,9 @@ impl Code {
             InvalidApiKeyDescription => {
                 ErrCode::invalid("invalid_api_key_description", StatusCode::BAD_REQUEST)
             }
+            InvalidApiKeyName => ErrCode::invalid("invalid_api_key_name", StatusCode::BAD_REQUEST),
+            InvalidApiKeyUid => ErrCode::invalid("invalid_api_key_uid", StatusCode::BAD_REQUEST),
+            ApiKeyAlreadyExists => ErrCode::invalid("api_key_already_exists", StatusCode::CONFLICT),
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
             }
