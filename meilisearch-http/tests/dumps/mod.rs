@@ -69,7 +69,7 @@ async fn import_dump_v2_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
+        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -134,7 +134,7 @@ async fn import_dump_v2_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
+        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -199,7 +199,7 @@ async fn import_dump_v2_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks["results"][0],
-        json!({"uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAddition", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
+        json!({"uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
     );
     assert_eq!(
         tasks["results"][92],
@@ -268,7 +268,7 @@ async fn import_dump_v3_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
+        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -333,7 +333,7 @@ async fn import_dump_v3_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
+        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -398,7 +398,7 @@ async fn import_dump_v3_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks["results"][0],
-        json!({"uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAddition", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
+        json!({"uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
     );
     assert_eq!(
         tasks["results"][92],
@@ -467,7 +467,7 @@ async fn import_dump_v4_movie_raw() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
+        json!({ "results": [{"uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT41.751156S", "enqueuedAt": "2021-09-08T08:30:30.550282Z", "startedAt": "2021-09-08T08:30:30.553012Z", "finishedAt": "2021-09-08T08:31:12.304168Z"}]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -532,7 +532,7 @@ async fn import_dump_v4_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAddition", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
+        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "details": { "displayedAttributes": ["title", "genres", "overview", "poster", "release_date"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "duration": "PT37.488777S", "enqueuedAt": "2021-09-08T08:24:02.323444Z", "startedAt": "2021-09-08T08:24:02.324145Z", "finishedAt": "2021-09-08T08:24:39.812922Z" }, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": { "receivedDocuments": 0, "indexedDocuments": 31944 }, "duration": "PT39.941318S", "enqueuedAt": "2021-09-08T08:21:14.742672Z", "startedAt": "2021-09-08T08:21:14.750166Z", "finishedAt": "2021-09-08T08:21:54.691484Z" }]})
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -597,7 +597,7 @@ async fn import_dump_v4_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         tasks["results"][0],
-        json!({ "uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAddition", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
+        json!({ "uid": 92, "indexUid": "rubygems", "status": "succeeded", "type": "documentAdditionOrUpdate", "details": {"receivedDocuments": 0, "indexedDocuments": 1042}, "duration": "PT14.034672S", "enqueuedAt": "2021-09-08T08:40:31.390775Z", "startedAt": "2021-09-08T08:51:39.060642Z", "finishedAt": "2021-09-08T08:51:53.095314Z"})
     );
     assert_eq!(
         tasks["results"][92],

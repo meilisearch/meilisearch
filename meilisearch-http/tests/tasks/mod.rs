@@ -76,9 +76,10 @@ async fn list_tasks_status_filtered() {
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
-    let (response, code) = index.filtered_tasks(&[], &["processing"]).await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+    // We can't be sure that the update isn't already processed so we can't test this
+    // let (response, code) = index.filtered_tasks(&[], &["processing"]).await;
+    // assert_eq!(code, 200, "{}", response);
+    // assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     index.wait_task(1).await;
 
@@ -105,7 +106,7 @@ async fn list_tasks_type_filtered() {
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) = index
-        .filtered_tasks(&["indexCreation", "documentAddition"], &[])
+        .filtered_tasks(&["indexCreation", "documentAdditionOrUpdate"], &[])
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -130,7 +131,7 @@ async fn list_tasks_status_and_type_filtered() {
 
     let (response, code) = index
         .filtered_tasks(
-            &["indexCreation", "documentAddition"],
+            &["indexCreation", "documentAdditionOrUpdate"],
             &["succeeded", "processing"],
         )
         .await;
@@ -166,16 +167,16 @@ async fn test_summarized_task_view() {
     assert_valid_summarized_task!(response, "settingsUpdate", "test");
 
     let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentPartial", "test");
+    assert_valid_summarized_task!(response, "documentAdditionOrUpdate", "test");
 
     let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentAddition", "test");
+    assert_valid_summarized_task!(response, "documentAdditionOrUpdate", "test");
 
     let (response, _) = index.delete_document(1).await;
     assert_valid_summarized_task!(response, "documentDeletion", "test");
 
     let (response, _) = index.clear_all_documents().await;
-    assert_valid_summarized_task!(response, "clearAll", "test");
+    assert_valid_summarized_task!(response, "documentDeletion", "test");
 
     let (response, _) = index.delete().await;
     assert_valid_summarized_task!(response, "indexDeletion", "test");

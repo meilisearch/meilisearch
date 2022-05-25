@@ -1,7 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_error::ResponseError;
-use meilisearch_lib::milli::update::IndexDocumentsMethod;
-use meilisearch_lib::tasks::task::{DocumentDeletion, TaskContent, TaskEvent, TaskId};
+use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
 use meilisearch_lib::tasks::TaskFilter;
 use meilisearch_lib::{IndexUid, MeiliSearch};
 use serde::Deserialize;
@@ -30,34 +29,23 @@ pub struct TaskFilterQuery {
 #[rustfmt::skip]
 fn task_type_matches_content(type_: &TaskType, content: &TaskContent) -> bool {
     matches!((type_, content),
-        (TaskType::IndexCreation, TaskContent::IndexCreation { .. })
+          (TaskType::IndexCreation, TaskContent::IndexCreation { .. })
         | (TaskType::IndexUpdate, TaskContent::IndexUpdate { .. })
         | (TaskType::IndexDeletion, TaskContent::IndexDeletion)
-        | (TaskType::DocumentAddition, TaskContent::DocumentAddition {
-              merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
-              ..
-          })
-        | (TaskType::DocumentPartial, TaskContent::DocumentAddition {
-              merge_strategy: IndexDocumentsMethod::UpdateDocuments,
-              ..
-          })
-        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)))
+        | (TaskType::DocumentAdditionOrUpdate, TaskContent::DocumentAddition { .. })
+        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion(_))
         | (TaskType::SettingsUpdate, TaskContent::SettingsUpdate { .. })
-        | (TaskType::ClearAll, TaskContent::DocumentDeletion(DocumentDeletion::Clear))
     )
 }
 
+#[rustfmt::skip]
 fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool {
     events.last().map_or(false, |event| {
-        matches!(
-            (status, event),
-            (TaskStatus::Enqueued, TaskEvent::Created(_))
-                | (
-                    TaskStatus::Processing,
-                    TaskEvent::Processing(_) | TaskEvent::Batched { .. }
-                )
-                | (TaskStatus::Succeeded, TaskEvent::Succeded { .. })
-                | (TaskStatus::Failed, TaskEvent::Failed { .. }),
+        matches!((status, event),
+              (TaskStatus::Enqueued, TaskEvent::Created(_))
+            | (TaskStatus::Processing, TaskEvent::Processing(_) | TaskEvent::Batched { .. })
+            | (TaskStatus::Succeeded, TaskEvent::Succeded { .. })
+            | (TaskStatus::Failed, TaskEvent::Failed { .. }),
         )
     })
 }
