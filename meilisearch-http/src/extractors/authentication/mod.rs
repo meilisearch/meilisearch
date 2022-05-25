@@ -159,22 +159,9 @@ pub mod policies {
         Some(uid)
     }
 
-    pub struct MasterPolicy;
-
-    impl Policy for MasterPolicy {
-        fn authenticate(
-            auth: AuthController,
-            token: &str,
-            _index: Option<&str>,
-        ) -> Option<AuthFilter> {
-            if let Some(master_key) = auth.get_master_key() {
-                if master_key == token {
-                    return Some(AuthFilter::default());
-                }
-            }
-
-            None
-        }
+    fn is_keys_action(action: u8) -> bool {
+        use actions::*;
+        matches!(action, KEYS_GET | KEYS_CREATE | KEYS_UPDATE | KEYS_DELETE)
     }
 
     pub struct ActionPolicy<const A: u8>;
@@ -186,7 +173,12 @@ pub mod policies {
             index: Option<&str>,
         ) -> Option<AuthFilter> {
             // authenticate if token is the master key.
-            if auth.get_master_key().map_or(true, |mk| mk == token) {
+            // master key can only have access to keys routes.
+            // if master key is None only keys routes are inaccessible.
+            if auth
+                .get_master_key()
+                .map_or_else(|| !is_keys_action(A), |mk| mk == token && is_keys_action(A))
+            {
                 return Some(AuthFilter::default());
             }
 
