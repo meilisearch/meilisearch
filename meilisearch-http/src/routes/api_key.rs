@@ -29,7 +29,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn create_api_key(
-    auth_controller: GuardedData<MasterPolicy, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, AuthController>,
     body: web::Json<Value>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
@@ -45,7 +45,7 @@ pub async fn create_api_key(
 }
 
 pub async fn list_api_keys(
-    auth_controller: GuardedData<MasterPolicy, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
@@ -63,7 +63,7 @@ pub async fn list_api_keys(
 }
 
 pub async fn get_api_key(
-    auth_controller: GuardedData<MasterPolicy, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
@@ -81,7 +81,7 @@ pub async fn get_api_key(
 }
 
 pub async fn patch_api_key(
-    auth_controller: GuardedData<MasterPolicy, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, AuthController>,
     body: web::Json<Value>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -100,7 +100,7 @@ pub async fn patch_api_key(
 }
 
 pub async fn delete_api_key(
-    auth_controller: GuardedData<MasterPolicy, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_DELETE }>, AuthController>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
