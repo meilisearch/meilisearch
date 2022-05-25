@@ -128,10 +128,10 @@ impl<'a> Display for Error<'a> {
                 writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
             }
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` but instead got nothing.")?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` but instead got nothing.")?
             }
             ErrorKind::InvalidPrimary => {
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `{}`.", escaped_input)?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` at `{}`.", escaped_input)?
             }
             ErrorKind::ExpectedEof => {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?

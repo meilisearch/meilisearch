@@ -280,6 +280,25 @@ impl<'a> Filter<'a> {
             Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.parse()?)),
             Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(val.parse()?)),
             Condition::Between { from, to } => (Included(from.parse()?), Included(to.parse()?)),
+            Condition::Exist => {
+                let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
+                return Ok(exist);
+            }
+            Condition::NotExist => {
+                let all_ids = index.documents_ids(rtxn)?;
+
+                let exist = Self::evaluate_operator(
+                    rtxn,
+                    index,
+                    numbers_db,
+                    strings_db,
+                    field_id,
+                    &Condition::Exist,
+                )?;
+
+                let notexist = all_ids - exist;
+                return Ok(notexist);
+            }
             Condition::Equal(val) => {
                 let (_original_value, string_docids) = strings_db
                     .get(rtxn, &(field_id, &val.value().to_lowercase()))?
