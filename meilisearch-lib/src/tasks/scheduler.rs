@@ -296,9 +296,9 @@ impl Scheduler {
 
     pub async fn update_tasks(&self, content: BatchContent) -> Result<BatchContent> {
         match content {
-            BatchContent::DocumentAddtitionBatch(tasks) => {
+            BatchContent::DocumentsAdditionBatch(tasks) => {
                 let tasks = self.store.update_tasks(tasks).await?;
-                Ok(BatchContent::DocumentAddtitionBatch(tasks))
+                Ok(BatchContent::DocumentsAdditionBatch(tasks))
             }
             BatchContent::IndexUpdate(t) => {
                 let mut tasks = self.store.update_tasks(vec![t]).await?;

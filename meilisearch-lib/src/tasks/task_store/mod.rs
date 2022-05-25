@@ -147,7 +147,7 @@ impl TaskStore {
                             .ok_or(TaskError::UnexistingTask(*id))?;
                         tasks.push(task);
                     }
-                    BatchContent::DocumentAddtitionBatch(tasks)
+                    BatchContent::DocumentsAdditionBatch(tasks)
                 }
                 Processing::IndexUpdate(id) => {
                     let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;

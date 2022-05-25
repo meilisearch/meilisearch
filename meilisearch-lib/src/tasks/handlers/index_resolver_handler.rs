@@ -14,14 +14,14 @@ where
 {
     fn accept(&self, batch: &Batch) -> bool {
         match batch.content {
-            BatchContent::DocumentAddtitionBatch(_) | BatchContent::IndexUpdate(_) => true,
+            BatchContent::DocumentsAdditionBatch(_) | BatchContent::IndexUpdate(_) => true,
             _ => false,
         }
     }
 
     async fn process_batch(&self, mut batch: Batch) -> Batch {
         match batch.content {
-            BatchContent::DocumentAddtitionBatch(ref mut tasks) => {
+            BatchContent::DocumentsAdditionBatch(ref mut tasks) => {
                 *tasks = self
                     .process_document_addition_batch(std::mem::take(tasks))
                     .await;
@@ -45,7 +45,7 @@ where
     }
 
     async fn finish(&self, batch: &Batch) {
-        if let BatchContent::DocumentAddtitionBatch(ref tasks) = batch.content {
+        if let BatchContent::DocumentsAdditionBatch(ref tasks) = batch.content {
             for task in tasks {
                 if let Some(content_uuid) = task.get_content_uuid() {
                     if let Err(e) = self.file_store.delete(content_uuid).await {
@@ -86,7 +86,7 @@ mod test {
             let index_resolver = IndexResolver::new(meta_store, index_store, update_file_store);
 
             match batch.content {
-                BatchContent::DocumentAddtitionBatch(_)
+                BatchContent::DocumentsAdditionBatch(_)
                     | BatchContent::IndexUpdate(_) => assert!(index_resolver.accept(&batch)),
                 BatchContent::Dump(_)
                     | BatchContent::Snapshot(_)

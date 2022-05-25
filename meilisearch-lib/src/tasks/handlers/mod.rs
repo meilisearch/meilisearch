@@ -15,7 +15,7 @@ mod test {
     pub fn task_to_batch(task: Task) -> Batch {
         let content = match task.content {
             TaskContent::DocumentAddition { .. } => {
-                BatchContent::DocumentAddtitionBatch(vec![task])
+                BatchContent::DocumentsAdditionBatch(vec![task])
             }
             TaskContent::DocumentDeletion(_)
             | TaskContent::SettingsUpdate { .. }

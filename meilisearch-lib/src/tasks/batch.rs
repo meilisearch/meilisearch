@@ -8,7 +8,7 @@ pub type BatchId = u64;
 
 #[derive(Debug)]
 pub enum BatchContent {
-    DocumentAddtitionBatch(Vec<Task>),
+    DocumentsAdditionBatch(Vec<Task>),
     IndexUpdate(Task),
     Dump(Task),
     Snapshot(SnapshotJob),
@@ -19,7 +19,7 @@ pub enum BatchContent {
 impl BatchContent {
     pub fn first(&self) -> Option<&Task> {
         match self {
-            BatchContent::DocumentAddtitionBatch(ts) => ts.first(),
+            BatchContent::DocumentsAdditionBatch(ts) => ts.first(),
             BatchContent::Dump(t) | BatchContent::IndexUpdate(t) => Some(t),
             BatchContent::Snapshot(_) | BatchContent::Empty => None,
         }
@@ -27,7 +27,7 @@ impl BatchContent {
 
     pub fn push_event(&mut self, event: TaskEvent) {
         match self {
-            BatchContent::DocumentAddtitionBatch(ts) => {
+            BatchContent::DocumentsAdditionBatch(ts) => {
                 ts.iter_mut().for_each(|t| t.events.push(event.clone()))
             }
             BatchContent::IndexUpdate(t) | BatchContent::Dump(t) => t.events.push(event),
@@ -55,7 +55,7 @@ impl Batch {
     }
     pub fn len(&self) -> usize {
         match self.content {
-            BatchContent::DocumentAddtitionBatch(ref ts) => ts.len(),
+            BatchContent::DocumentsAdditionBatch(ref ts) => ts.len(),
             BatchContent::IndexUpdate(_) | BatchContent::Dump(_) | BatchContent::Snapshot(_) => 1,
             BatchContent::Empty => 0,
         }
