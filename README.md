@@ -109,7 +109,7 @@ cargo run --release
 Let's create an index! If you need a sample dataset, use [this movie database](https://www.notion.so/meilisearch/A-movies-dataset-to-test-Meili-1cbf7c9cfa4247249c40edfa22d7ca87#b5ae399b81834705ba5420ac70358a65). You can also find it in the `datasets/` directory.
 
 ```bash
-curl -L 'https://bit.ly/2PAcw9l' -o movies.json
+curl -L https://docs.meilisearch.com/movies.json -o movies.json
 ```
 
 Now, you're ready to index some data.
