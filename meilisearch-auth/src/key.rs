@@ -97,20 +97,10 @@ impl Key {
             self.description = des?;
         }
 
-        if let Some(act) = value.get("actions") {
-            let act = from_value(act.clone())
-                .map_err(|_| AuthControllerError::InvalidApiKeyActions(act.clone()));
-            self.actions = act?;
-        }
-
-        if let Some(ind) = value.get("indexes") {
-            let ind = from_value(ind.clone())
-                .map_err(|_| AuthControllerError::InvalidApiKeyIndexes(ind.clone()));
-            self.indexes = ind?;
-        }
-
-        if let Some(exp) = value.get("expiresAt") {
-            self.expires_at = parse_expiration_date(exp)?;
+        if let Some(des) = value.get("name") {
+            let des = from_value(des.clone())
+                .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()));
+            self.name = des?;
         }
 
         self.updated_at = OffsetDateTime::now_utc();
