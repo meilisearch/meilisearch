@@ -222,15 +222,15 @@ impl IndexControllerBuilder {
             .dump_dst
             .ok_or_else(|| anyhow::anyhow!("Missing dump directory path"))?;
 
-        let dump_handler = Arc::new(DumpHandler {
+        let dump_handler = Arc::new(DumpHandler::new(
             dump_path,
-            db_path: db_path.as_ref().into(),
-            update_file_store: update_file_store.clone(),
+            db_path.as_ref().into(),
+            update_file_store.clone(),
             task_store_size,
-            index_db_size: index_size,
-            env: meta_env.clone(),
-            index_resolver: index_resolver.clone(),
-        });
+            index_size,
+            meta_env.clone(),
+            index_resolver.clone(),
+        ));
         let task_store = TaskStore::new(meta_env)?;
 
         // register all the batch handlers for use with the scheduler.

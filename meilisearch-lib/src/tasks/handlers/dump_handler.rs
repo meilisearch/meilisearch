@@ -39,3 +39,96 @@ where
         ()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::dump::error::{DumpError, Result as DumpResult};
+    use crate::index_resolver::{index_store::MockIndexStore, meta_store::MockIndexMetaStore};
+    use crate::tasks::handlers::test::task_to_batch;
+
+    use super::*;
+
+    use nelson::Mocker;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn finish_does_nothing(
+            task in any::<Task>(),
+        ) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let handle = rt.spawn(async {
+                let batch = task_to_batch(task);
+
+                let mocker = Mocker::default();
+                let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+
+                dump_handler.finish(&batch).await;
+            });
+
+            rt.block_on(handle).unwrap();
+        }
+
+        #[test]
+        fn test_handle_dump_success(
+            task in any::<Task>(),
+        ) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let handle = rt.spawn(async {
+                let batch = task_to_batch(task);
+                let should_accept = matches!(batch.content, BatchContent::Dump { .. });
+
+                let mocker = Mocker::default();
+                if should_accept {
+                    mocker.when::<String, DumpResult<()>>("run")
+                    .once()
+                    .then(|_| Ok(()));
+                }
+
+                let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+
+                let accept = dump_handler.accept(&batch);
+                assert_eq!(accept, should_accept);
+
+                if accept {
+                    let batch = dump_handler.process_batch(batch).await;
+                    let last_event = batch.content.first().unwrap().events.last().unwrap();
+                    assert!(matches!(last_event, TaskEvent::Succeded { .. }));
+                }
+            });
+
+            rt.block_on(handle).unwrap();
+        }
+
+        #[test]
+        fn test_handle_dump_error(
+            task in any::<Task>(),
+        ) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let handle = rt.spawn(async {
+                let batch = task_to_batch(task);
+                let should_accept = matches!(batch.content, BatchContent::Dump { .. });
+
+                let mocker = Mocker::default();
+                if should_accept {
+                    mocker.when::<String, DumpResult<()>>("run")
+                    .once()
+                    .then(|_| Err(DumpError::Internal("error".into())));
+                }
+
+                let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+
+                let accept = dump_handler.accept(&batch);
+                assert_eq!(accept, should_accept);
+
+                if accept {
+                    let batch = dump_handler.process_batch(batch).await;
+                    let last_event = batch.content.first().unwrap().events.last().unwrap();
+                    assert!(matches!(last_event, TaskEvent::Failed { .. }));
+                }
+            });
+
+            rt.block_on(handle).unwrap();
+        }
+    }
+}
