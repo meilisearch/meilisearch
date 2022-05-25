@@ -1,5 +1,5 @@
-use crate::common::GetAllDocumentsOptions;
 use crate::common::Server;
+use crate::common::{GetAllDocumentsOptions, GetDocumentOptions};
 
 use serde_json::json;
 
@@ -39,7 +39,7 @@ async fn get_document() {
     let documents = serde_json::json!([
         {
             "id": 0,
-            "content": "foobar",
+            "nested": { "content": "foobar" },
         }
     ]);
     let (_, code) = index.add_documents(documents, None).await;
@@ -49,11 +49,45 @@ async fn get_document() {
     assert_eq!(code, 200);
     assert_eq!(
         response,
-        serde_json::json!(        {
+        serde_json::json!({
             "id": 0,
-            "content": "foobar",
+            "nested": { "content": "foobar" },
         })
     );
+
+    let (response, code) = index
+        .get_document(
+            0,
+            Some(GetDocumentOptions {
+                fields: Some(vec!["id"]),
+            }),
+        )
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(
+        response,
+        serde_json::json!({
+            "id": 0,
+        })
+    );
+
+    /* This currently doesn't work but should be fixed by #2433
+    let (response, code) = index
+        .get_document(
+            0,
+            Some(GetDocumentOptions {
+                fields: Some(vec!["nested.content"]),
+            }),
+        )
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(
+        response,
+        serde_json::json!({
+            "nested": { "content": "foobar" },
+        })
+    );
+    */
 }
 
 #[actix_rt::test]
@@ -88,7 +122,7 @@ async fn get_no_document() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert!(response.as_array().unwrap().is_empty());
+    assert!(response["results"].as_array().unwrap().is_empty());
 }
 
 #[actix_rt::test]
@@ -101,7 +135,7 @@ async fn get_all_documents_no_options() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    let arr = response.as_array().unwrap();
+    let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 20);
     let first = serde_json::json!({
         "id":0,
@@ -137,8 +171,11 @@ async fn test_get_all_documents_limit() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 5);
-    assert_eq!(response.as_array().unwrap()[0]["id"], 0);
+    assert_eq!(response["results"].as_array().unwrap().len(), 5);
+    assert_eq!(response["results"][0]["id"], json!(0));
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(5));
+    assert_eq!(response["total"], json!(77));
 }
 
 #[actix_rt::test]
@@ -154,8 +191,11 @@ async fn test_get_all_documents_offset() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(response.as_array().unwrap()[0]["id"], 5);
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    assert_eq!(response["results"][0]["id"], json!(5));
+    assert_eq!(response["offset"], json!(5));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
 }
 
 #[actix_rt::test]
@@ -171,20 +211,14 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        1
-    );
-    assert!(response.as_array().unwrap()[0]
-        .as_object()
-        .unwrap()
-        .get("name")
-        .is_some());
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 1);
+        assert!(results["name"] != json!(null));
+    }
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -193,15 +227,13 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        0
-    );
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 0);
+    }
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -210,15 +242,13 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        0
-    );
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 0);
+    }
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -227,15 +257,12 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        2
-    );
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 2);
+        assert!(results["name"] != json!(null));
+        assert!(results["tags"] != json!(null));
+    }
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -244,15 +271,10 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        16
-    );
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 16);
+    }
 
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -261,19 +283,14 @@ async fn test_get_all_documents_attributes_to_retrieve() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
-    assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        16
-    );
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
+    for results in response["results"].as_array().unwrap() {
+        assert_eq!(results.as_object().unwrap().keys().count(), 16);
+    }
 }
 
 #[actix_rt::test]
-async fn get_documents_displayed_attributes() {
+async fn get_documents_displayed_attributes_is_ignored() {
     let server = Server::new().await;
     let index = server.index("test");
     index
@@ -285,23 +302,19 @@ async fn get_documents_displayed_attributes() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 20);
+    assert_eq!(response["results"].as_array().unwrap().len(), 20);
     assert_eq!(
-        response.as_array().unwrap()[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .count(),
-        1
+        response["results"][0].as_object().unwrap().keys().count(),
+        16
     );
-    assert!(response.as_array().unwrap()[0]
-        .as_object()
-        .unwrap()
-        .get("gender")
-        .is_some());
+    assert!(response["results"][0]["gender"] != json!(null));
+
+    assert_eq!(response["offset"], json!(0));
+    assert_eq!(response["limit"], json!(20));
+    assert_eq!(response["total"], json!(77));
 
     let (response, code) = index.get_document(0, None).await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_object().unwrap().keys().count(), 1);
+    assert_eq!(response.as_object().unwrap().keys().count(), 16);
     assert!(response.as_object().unwrap().get("gender").is_some());
 }

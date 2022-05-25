@@ -32,11 +32,11 @@ pub mod test {
     use milli::update::IndexerConfig;
     use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
     use nelson::Mocker;
-    use serde_json::{Map, Value};
     use uuid::Uuid;
 
     use super::error::Result;
     use super::index::Index;
+    use super::Document;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
     use crate::update_file_store::UpdateFileStore;
 
@@ -102,7 +102,7 @@ pub mod test {
             offset: usize,
             limit: usize,
             attributes_to_retrieve: Option<Vec<S>>,
-        ) -> Result<Vec<Map<String, Value>>> {
+        ) -> Result<(u64, Vec<Document>)> {
             match self {
                 MockIndex::Real(index) => {
                     index.retrieve_documents(offset, limit, attributes_to_retrieve)
@@ -115,7 +115,7 @@ pub mod test {
             &self,
             doc_id: String,
             attributes_to_retrieve: Option<Vec<S>>,
-        ) -> Result<Map<String, Value>> {
+        ) -> Result<Document> {
             match self {
                 MockIndex::Real(index) => index.retrieve_document(doc_id, attributes_to_retrieve),
                 MockIndex::Mock(_) => todo!(),

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use actix_web::{web, HttpResponse};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,38 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure));
+}
+
+/// A type that tries to match either a star (*) or
+/// any other thing that implements `FromStr`.
+#[derive(Debug)]
+pub enum StarOr<T> {
+    Star,
+    Other(T),
+}
+
+impl<T: FromStr> FromStr for StarOr<T> {
+    type Err = T::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.trim() == "*" {
+            Ok(StarOr::Star)
+        } else {
+            T::from_str(s).map(StarOr::Other)
+        }
+    }
+}
+
+/// Extracts the raw values from the `StarOr` types and
+/// return None if a `StarOr::Star` is encountered.
+pub fn fold_star_or<T>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<Vec<T>> {
+    content
+        .into_iter()
+        .map(|value| match value {
+            StarOr::Star => None,
+            StarOr::Other(val) => Some(val),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

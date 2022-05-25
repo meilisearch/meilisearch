@@ -142,21 +142,21 @@ async fn import_dump_v2_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
+        json!({ "id": 100, "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
     );
 
     let (document, code) = index.get_document(500, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
+        json!({ "id": 500, "title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
     );
 
     let (document, code) = index.get_document(10006, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
+        json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
 }
 
@@ -211,21 +211,21 @@ async fn import_dump_v2_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "version": "0.15.2", "total_downloads": "7465"})
+        json!({ "name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "id": "188040", "version": "0.15.2", "total_downloads": "7465"})
     );
 
     let (document, code) = index.get_document(191940, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "version": "1.1.0", "total_downloads": "9394"})
+        json!({ "name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "id": "191940", "version": "1.1.0", "total_downloads": "9394"})
     );
 
     let (document, code) = index.get_document(159227, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "version": "0.1.0", "total_downloads": "1007"})
+        json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
 }
 
@@ -341,21 +341,21 @@ async fn import_dump_v3_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
+        json!({ "id": 100, "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
     );
 
     let (document, code) = index.get_document(500, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
+        json!({ "id": 500, "title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
     );
 
     let (document, code) = index.get_document(10006, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
+        json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
 }
 
@@ -410,21 +410,21 @@ async fn import_dump_v3_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "version": "0.15.2", "total_downloads": "7465"})
+        json!({ "name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "id": "188040", "version": "0.15.2", "total_downloads": "7465"})
     );
 
     let (document, code) = index.get_document(191940, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "version": "1.1.0", "total_downloads": "9394"})
+        json!({ "name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "id": "191940", "version": "1.1.0", "total_downloads": "9394"})
     );
 
     let (document, code) = index.get_document(159227, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({"name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "version": "0.1.0", "total_downloads": "1007"})
+        json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
 }
 
@@ -540,21 +540,21 @@ async fn import_dump_v4_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
+        json!({ "id": 100, "title": "Lock, Stock and Two Smoking Barrels", "genres": ["Comedy", "Crime"], "overview": "A card shark and his unwillingly-enlisted friends need to make a lot of cash quick after losing a sketchy poker match. To do this they decide to pull a heist on a small-time gang who happen to be operating out of the flat next door.", "poster": "https://image.tmdb.org/t/p/w500/8kSerJrhrJWKLk1LViesGcnrUPE.jpg", "release_date": 889056000 })
     );
 
     let (document, code) = index.get_document(500, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
+        json!({ "id": 500, "title": "Reservoir Dogs", "genres": ["Crime", "Thriller"], "overview": "A botched robbery indicates a police informant, and the pressure mounts in the aftermath at a warehouse. Crime begets violence as the survivors -- veteran Mr. White, newcomer Mr. Orange, psychopathic parolee Mr. Blonde, bickering weasel Mr. Pink and Nice Guy Eddie -- unravel.", "poster": "https://image.tmdb.org/t/p/w500/AjTtJNumZyUDz33VtMlF1K8JPsE.jpg", "release_date": 715392000})
     );
 
     let (document, code) = index.get_document(10006, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
+        json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
 }
 
@@ -609,20 +609,20 @@ async fn import_dump_v4_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "version": "0.15.2", "total_downloads": "7465"})
+        json!({ "name": "meilisearch", "summary": "An easy-to-use ruby client for Meilisearch API", "description": "An easy-to-use ruby client for Meilisearch API. See https://github.com/meilisearch/MeiliSearch", "id": "188040", "version": "0.15.2", "total_downloads": "7465"})
     );
 
     let (document, code) = index.get_document(191940, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "version": "1.1.0", "total_downloads": "9394"})
+        json!({ "name": "doggo", "summary": "RSpec 3 formatter - documentation, with progress indication", "description": "Similar to \"rspec -f d\", but also indicates progress by showing the current test number and total test count on each line.", "id": "191940", "version": "1.1.0", "total_downloads": "9394"})
     );
 
     let (document, code) = index.get_document(159227, None).await;
     assert_eq!(code, 200);
     assert_eq!(
         document,
-        json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "version": "0.1.0", "total_downloads": "1007"})
+        json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
 }

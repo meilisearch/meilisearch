@@ -524,18 +524,19 @@ where
         Ok(settings)
     }
 
+    /// Return the total number of documents contained in the index + the selected documents.
     pub async fn documents(
         &self,
         uid: String,
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
-    ) -> Result<Vec<Document>> {
+    ) -> Result<(u64, Vec<Document>)> {
         let index = self.index_resolver.get_index(uid).await?;
-        let documents =
+        let result =
             spawn_blocking(move || index.retrieve_documents(offset, limit, attributes_to_retrieve))
                 .await??;
-        Ok(documents)
+        Ok(result)
     }
 
     pub async fn document(
