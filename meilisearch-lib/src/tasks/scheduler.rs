@@ -411,14 +411,19 @@ impl Scheduler {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Processing {
     DocumentAdditions(Vec<TaskId>),
     IndexUpdate(TaskId),
     Dump(TaskId),
     /// Variant used when there is nothing to process.
-    #[default]
     Nothing,
+}
+
+impl Default for Processing {
+    fn default() -> Self {
+        Self::Nothing
+    }
 }
 
 enum ProcessingIter<'a> {
