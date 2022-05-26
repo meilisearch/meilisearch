@@ -158,7 +158,7 @@ impl TaskStore {
                     debug_assert!(matches!(task.content, TaskContent::Dump { .. }));
                     BatchContent::Dump(task)
                 }
-                Processing::Nothing => unreachable!(),
+                Processing::Nothing => BatchContent::Empty,
             };
 
             Ok((processing, content))
