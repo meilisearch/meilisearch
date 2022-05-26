@@ -1,5 +1,3 @@
-use time::OffsetDateTime;
-
 use crate::index_resolver::IndexResolver;
 use crate::index_resolver::{index_store::IndexStore, meta_store::IndexMetaStore};
 use crate::tasks::batch::{Batch, BatchContent};
@@ -27,16 +25,8 @@ where
                     .await;
             }
             BatchContent::IndexUpdate(ref mut task) => match self.process_task(task).await {
-                Ok(success) => {
-                    task.events.push(TaskEvent::Succeded {
-                        result: success,
-                        timestamp: OffsetDateTime::now_utc(),
-                    });
-                }
-                Err(err) => task.events.push(TaskEvent::Failed {
-                    error: err.into(),
-                    timestamp: OffsetDateTime::now_utc(),
-                }),
+                Ok(success) => task.events.push(TaskEvent::succeeded(success)),
+                Err(err) => task.events.push(TaskEvent::failed(err.into())),
             },
             _ => unreachable!(),
         }
