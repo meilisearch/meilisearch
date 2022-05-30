@@ -36,8 +36,7 @@ impl TaskFilter {
             Some(ref index_uid) => self
                 .indexes
                 .as_ref()
-                .map(|indexes| indexes.contains(index_uid.as_str()))
-                .unwrap_or(true),
+                .map_or(true, |indexes| indexes.contains(index_uid.as_str())),
             None => false,
         }
     }
