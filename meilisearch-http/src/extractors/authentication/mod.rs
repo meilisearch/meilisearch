@@ -155,8 +155,8 @@ pub mod policies {
         let token_data = decode::<Claims>(token, &dummy_key, &validation).ok()?;
 
         // get token fields without validating it.
-        let Claims { uid, .. } = token_data.claims;
-        Some(uid)
+        let Claims { api_key_uid, .. } = token_data.claims;
+        Some(api_key_uid)
     }
 
     fn is_keys_action(action: u8) -> bool {
@@ -250,6 +250,6 @@ pub mod policies {
     struct Claims {
         search_rules: SearchRules,
         exp: Option<i64>,
-        uid: Uuid,
+        api_key_uid: Uuid,
     }
 }
