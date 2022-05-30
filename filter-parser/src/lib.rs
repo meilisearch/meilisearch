@@ -6,12 +6,14 @@
 //! or             = and ("OR" WS+ and)*
 //! and            = not ("AND" WS+ not)*
 //! not            = ("NOT" WS+ not) | primary
-//! primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
+//! primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | in | condition | exists | not_exists | to
+//! in             = value "IN" WS* "[" value_list "]"
 //! condition      = value ("=" | "!=" | ">" | ">=" | "<" | "<=") value
 //! exists         = value "EXISTS"
 //! not_exists     = value "NOT" WS+ "EXISTS"
 //! to             = value value "TO" WS+ value
 //! value          = WS* ( word | singleQuoted | doubleQuoted) WS+
+//! value_list     = (value ("," value)* ","?)?
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
@@ -51,7 +53,7 @@ pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0, multispace1};
-use nom::combinator::{cut, eof, map};
+use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
@@ -114,6 +116,7 @@ impl<'a> From<Span<'a>> for Token<'a> {
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
     Condition { fid: Token<'a>, op: Condition<'a> },
+    In { fid: Token<'a>, els: Vec<Token<'a>> },
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
@@ -161,7 +164,36 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
     delimited(multispace0, inner, multispace0)
 }
 
-/// or             = and ("OR" WS+ and)*
+
+/// value_list = (value ("," value)* ","?)?
+fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
+    let (input, first_value) = opt(parse_value)(input)?;
+    if let Some(first_value) = first_value {
+        let value_list_el_parser = preceded(ws(tag(",")), parse_value);
+
+        let (input, mut values) = many0(value_list_el_parser)(input)?;
+        let (input, _) = opt(ws(tag(",")))(input)?;
+        values.insert(0, first_value);
+
+        Ok((input, values))
+    } else {
+        Ok((input, vec![]))
+    }
+}
+
+/// in = value "IN" "[" value_list "]"
+fn parse_in(input: Span) -> IResult<FilterCondition> {
+    let (input, value) = parse_value(input)?;
+    let (input, _) = ws(tag("IN"))(input)?;
+
+    let mut els_parser = delimited(tag("["), parse_value_list, tag("]"));
+
+    let (input, content) = els_parser(input)?;
+    let filter = FilterCondition::In { fid: value, els: content };
+    Ok((input, filter))
+}
+
+/// or             = and ("OR" and)
 fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, first_filter) = parse_and(input)?;
     // if we found a `OR` then we MUST find something next
@@ -257,6 +289,7 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
             }),
         ),
         parse_geo_radius,
+        parse_in,
         parse_condition,
         parse_exists,
         parse_not_exists,
@@ -297,6 +330,47 @@ pub mod tests {
 
         let test_case = [
             // simple test
+            (
+                "colour IN[]",
+                Fc::In { 
+                    fid: rtok("", "colour"), 
+                    els: vec![] 
+                }
+            ),
+            (
+                "colour IN[green]",
+                Fc::In { 
+                    fid: rtok("", "colour"), 
+                    els: vec![rtok("colour IN[", "green")] 
+                }
+            ),
+            (
+                "colour IN[green,]",
+                Fc::In { 
+                    fid: rtok("", "colour"), 
+                    els: vec![rtok("colour IN[", "green")] 
+                }
+            ),
+            (
+                "colour IN[green,blue]",
+                Fc::In { 
+                    fid: rtok("", "colour"), 
+                    els: vec![
+                        rtok("colour IN[", "green"),
+                        rtok("colour IN[green, ", "blue"),
+                    ] 
+                }
+            ),
+            (
+                " colour IN [  green , blue , ]",
+                Fc::In { 
+                    fid: rtok(" ", "colour"), 
+                    els: vec![
+                        rtok("colour IN [  ", "green"),
+                        rtok("colour IN [  green , ", "blue"),
+                    ] 
+                }
+            ),
             (
                 "channel = Ponce",
                 Fc::Condition {
