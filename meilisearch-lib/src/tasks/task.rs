@@ -86,7 +86,7 @@ impl TaskEvent {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
-    /// The name of the index the task is targeting. If it isn't targeting any idex (i.e Dump task)
+    /// The name of the index the task is targeting. If it isn't targeting any index (i.e Dump task)
     /// then this is None
     // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
     // the TaskContent.
