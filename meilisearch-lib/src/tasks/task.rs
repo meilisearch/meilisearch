@@ -48,7 +48,7 @@ pub enum TaskEvent {
         #[serde(with = "time::serde::rfc3339")]
         OffsetDateTime,
     ),
-    Succeded {
+    Succeeded {
         result: TaskResult,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
         #[serde(with = "time::serde::rfc3339")]
@@ -64,7 +64,7 @@ pub enum TaskEvent {
 
 impl TaskEvent {
     pub fn succeeded(result: TaskResult) -> Self {
-        Self::Succeded {
+        Self::Succeeded {
             result,
             timestamp: OffsetDateTime::now_utc(),
         }
@@ -106,7 +106,10 @@ impl Task {
     /// A task is finished when its last state is either `Succeeded` or `Failed`.
     pub fn is_finished(&self) -> bool {
         self.events.last().map_or(false, |event| {
-            matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
+            matches!(
+                event,
+                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
+            )
         })
     }
 

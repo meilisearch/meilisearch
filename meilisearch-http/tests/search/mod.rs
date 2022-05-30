@@ -496,7 +496,6 @@ async fn search_facet_distribution() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetDistribution"].as_object().unwrap();
-                dbg!(&dist);
                 assert_eq!(dist.len(), 3);
                 assert_eq!(
                     dist["doggos.name"],

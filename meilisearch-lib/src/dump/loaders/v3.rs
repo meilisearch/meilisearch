@@ -9,11 +9,11 @@ use log::info;
 use tempfile::tempdir;
 use uuid::Uuid;
 
-use crate::dump::compat::v3;
+use crate::dump::compat::{self, v3};
 use crate::dump::Metadata;
 use crate::index_resolver::meta_store::{DumpEntry, IndexMeta};
 use crate::options::IndexerOpts;
-use crate::tasks::task::{Task, TaskId};
+use crate::tasks::task::TaskId;
 
 /// dump structure for V3:
 /// .
@@ -124,7 +124,7 @@ fn patch_updates(
                 .clone();
             serde_json::to_writer(
                 &mut dst_file,
-                &Task::from((entry.update, name, task_id as TaskId)),
+                &compat::v4::Task::from((entry.update, name, task_id as TaskId)),
             )?;
             dst_file.write_all(b"\n")?;
             Ok(())

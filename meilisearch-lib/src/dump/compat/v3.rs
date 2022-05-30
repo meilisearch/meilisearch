@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::v4::{Task, TaskEvent};
 use crate::index::{Settings, Unchecked};
 use crate::index_resolver::IndexUid;
-use crate::tasks::task::{DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::task::{DocumentDeletion, TaskContent, TaskId, TaskResult};
 
 use super::v2;
 
@@ -187,7 +188,7 @@ impl From<(UpdateStatus, String, TaskId)> for Task {
         // Dummy task
         let mut task = Task {
             id: task_id,
-            index_uid: Some(IndexUid::new(uid).unwrap()),
+            index_uid: IndexUid::new(uid).unwrap(),
             content: TaskContent::IndexDeletion,
             events: Vec::new(),
         };

@@ -91,7 +91,7 @@ mod test {
                 if accept {
                     let batch = dump_handler.process_batch(batch).await;
                     let last_event = batch.content.first().unwrap().events.last().unwrap();
-                    assert!(matches!(last_event, TaskEvent::Succeded { .. }));
+                    assert!(matches!(last_event, TaskEvent::Succeeded { .. }));
                 }
             });
 

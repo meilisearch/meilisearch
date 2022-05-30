@@ -79,7 +79,7 @@ fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool
         matches!((status, event),
               (TaskStatus::Enqueued, TaskEvent::Created(_))
             | (TaskStatus::Processing, TaskEvent::Processing(_) | TaskEvent::Batched { .. })
-            | (TaskStatus::Succeeded, TaskEvent::Succeded { .. })
+            | (TaskStatus::Succeeded, TaskEvent::Succeeded { .. })
             | (TaskStatus::Failed, TaskEvent::Failed { .. }),
         )
     })
