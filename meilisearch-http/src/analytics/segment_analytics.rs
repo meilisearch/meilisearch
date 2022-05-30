@@ -81,7 +81,19 @@ impl SegmentAnalytics {
         let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         write_user_id(&opt.db_path, &user_id);
 
-        let client = HttpClient::default();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .build();
+
+        // if reqwest throws an error we won't be able to send analytics
+        if client.is_err() {
+            return super::MockAnalytics::new(opt);
+        }
+
+        let client = HttpClient::new(
+            client.unwrap(),
+            "https://telemetry.meilisearch.com".to_string(),
+        );
         let user = User::UserId { user_id };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
