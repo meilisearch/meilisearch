@@ -137,39 +137,28 @@ async fn get_tasks(
     };
 
     // Then we complete the task filter with other potential status and types filters.
-    let filters = match (type_, status) {
-        (Some(types), Some(statuses)) => {
-            let mut filters = indexes_filters.unwrap_or_default();
-            filters.filter_fn(move |task| {
-                let matches_type = types
+    let filters = if type_.is_some() || status.is_some() {
+        let mut filters = indexes_filters.unwrap_or_default();
+        filters.filter_fn(move |task| {
+            let matches_type = match &type_ {
+                Some(types) => types
                     .iter()
-                    .any(|t| task_type_matches_content(t, &task.content));
-                let matches_status = statuses
+                    .any(|t| task_type_matches_content(t, &task.content)),
+                None => true,
+            };
+
+            let matches_status = match &status {
+                Some(statuses) => statuses
                     .iter()
-                    .any(|s| task_status_matches_events(s, &task.events));
-                matches_type && matches_status
-            });
-            Some(filters)
-        }
-        (Some(types), None) => {
-            let mut filters = indexes_filters.unwrap_or_default();
-            filters.filter_fn(move |task| {
-                types
-                    .iter()
-                    .any(|t| task_type_matches_content(t, &task.content))
-            });
-            Some(filters)
-        }
-        (None, Some(statuses)) => {
-            let mut filters = indexes_filters.unwrap_or_default();
-            filters.filter_fn(move |task| {
-                statuses
-                    .iter()
-                    .any(|s| task_status_matches_events(s, &task.events))
-            });
-            Some(filters)
-        }
-        (None, None) => indexes_filters,
+                    .any(|t| task_status_matches_events(t, &task.events)),
+                None => true,
+            };
+
+            matches_type && matches_status
+        });
+        Some(filters)
+    } else {
+        indexes_filters
     };
 
     let tasks: TaskListView = meilisearch
