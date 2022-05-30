@@ -1041,10 +1041,10 @@ impl Index {
     }
 
     /// List the words on which typo are not allowed
-    pub fn exact_words<'t>(&self, txn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
+    pub fn exact_words<'t>(&self, txn: &'t RoTxn) -> Result<Option<fst::Set<Cow<'t, [u8]>>>> {
         match self.main.get::<_, Str, ByteSlice>(txn, main_key::EXACT_WORDS)? {
-            Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
-            None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+            Some(bytes) => Ok(Some(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?)),
+            None => Ok(None),
         }
     }
 
