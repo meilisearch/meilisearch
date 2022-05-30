@@ -22,8 +22,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskFilterQuery {
     #[serde(rename = "type")]
-    type_: Option<CS<TaskType>>,
-    status: Option<CS<TaskStatus>>,
+    type_: Option<CS<StarOr<TaskType>>>,
+    status: Option<CS<StarOr<TaskStatus>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
 }
 
@@ -45,6 +45,20 @@ impl<T: FromStr> FromStr for StarOr<T> {
             T::from_str(s).map(StarOr::Other)
         }
     }
+}
+
+/// Extracts the raw values from the `StarOr` types and
+/// return None if a `StarOr::Star` is encountered.
+fn fold_star_or<T>(content: Vec<StarOr<T>>) -> Option<Vec<T>> {
+    content
+        .into_iter()
+        .fold(Some(Vec::new()), |acc, val| match (acc, val) {
+            (None, _) | (_, StarOr::Star) => None,
+            (Some(mut acc), StarOr::Other(uid)) => {
+                acc.push(uid);
+                Some(acc)
+            }
+        })
 }
 
 #[rustfmt::skip]
@@ -91,25 +105,14 @@ async fn get_tasks(
 
     let search_rules = &meilisearch.filters().search_rules;
 
-    // We first tranform a potential indexUid=* into a
-    // "not specified indexUid filter".
-    let index_uid =
-        match index_uid {
-            Some(indexes) => indexes
-                .into_inner()
-                .into_iter()
-                .fold(Some(Vec::new()), |acc, val| match (acc, val) {
-                    (None, _) | (_, StarOr::Star) => None,
-                    (Some(mut acc), StarOr::Other(uid)) => {
-                        acc.push(uid);
-                        Some(acc)
-                    }
-                }),
-            None => None,
-        };
+    // We first tranform a potential indexUid=* into a "not specified indexUid filter"
+    // for every one of the filters: type, status, and indexUid.
+    let type_ = type_.map(CS::into_inner).and_then(fold_star_or);
+    let status = status.map(CS::into_inner).and_then(fold_star_or);
+    let index_uid = index_uid.map(CS::into_inner).and_then(fold_star_or);
 
-    // Then we filter on potential indexes and make sure
-    // that the search filter restrictions are also applied.
+    // Then we filter on potential indexes and make sure that the search filter
+    // restrictions are also applied.
     let indexes_filters = match index_uid {
         Some(indexes) => {
             let mut filters = TaskFilter::default();
@@ -135,7 +138,7 @@ async fn get_tasks(
 
     // Then we complete the task filter with other potential status and types filters.
     let filters = match (type_, status) {
-        (Some(CS(types)), Some(CS(statuses))) => {
+        (Some(types), Some(statuses)) => {
             let mut filters = indexes_filters.unwrap_or_default();
             filters.filter_fn(move |task| {
                 let matches_type = types
@@ -148,7 +151,7 @@ async fn get_tasks(
             });
             Some(filters)
         }
-        (Some(CS(types)), None) => {
+        (Some(types), None) => {
             let mut filters = indexes_filters.unwrap_or_default();
             filters.filter_fn(move |task| {
                 types
@@ -157,7 +160,7 @@ async fn get_tasks(
             });
             Some(filters)
         }
-        (None, Some(CS(statuses))) => {
+        (None, Some(statuses)) => {
             let mut filters = indexes_filters.unwrap_or_default();
             filters.filter_fn(move |task| {
                 statuses

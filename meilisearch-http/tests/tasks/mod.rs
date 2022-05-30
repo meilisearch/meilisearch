@@ -60,7 +60,7 @@ async fn list_tasks() {
 }
 
 #[actix_rt::test]
-async fn list_tasks_with_index_filter() {
+async fn list_tasks_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
@@ -81,6 +81,31 @@ async fn list_tasks_with_index_filter() {
 
     let (response, code) = index.service.get("/tasks?indexUid=*,pasteque").await;
     assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index.service.get("/tasks?type=*").await;
+    assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index
+        .service
+        .get("/tasks?type=*,documentAdditionOrUpdate&status=*")
+        .await;
+    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index
+        .service
+        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test")
+        .await;
+    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index
+        .service
+        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test,*")
+        .await;
+    assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
