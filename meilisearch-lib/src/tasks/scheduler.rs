@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, BinaryHeap, HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
+use std::slice;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,19 +11,20 @@ use time::OffsetDateTime;
 use tokio::sync::{watch, RwLock};
 
 use crate::options::SchedulerConfig;
-use crate::update_file_store::UpdateFileStore;
+use crate::snapshot::SnapshotJob;
 
-use super::batch::Batch;
+use super::batch::{Batch, BatchContent};
 use super::error::Result;
-use super::task::{Job, Task, TaskContent, TaskEvent, TaskId};
+use super::task::{Task, TaskContent, TaskEvent, TaskId};
 use super::update_loop::UpdateLoop;
-use super::{TaskFilter, TaskPerformer, TaskStore};
+use super::{BatchHandler, TaskFilter, TaskStore};
 
 #[derive(Eq, Debug, Clone, Copy)]
 enum TaskType {
     DocumentAddition { number: usize },
     DocumentUpdate { number: usize },
-    Other,
+    IndexUpdate,
+    Dump,
 }
 
 /// Two tasks are equal if they have the same type.
@@ -63,7 +64,7 @@ impl Ord for PendingTask {
 
 #[derive(Debug)]
 struct TaskList {
-    index: String,
+    id: TaskListIdentifier,
     tasks: BinaryHeap<PendingTask>,
 }
 
@@ -82,9 +83,9 @@ impl DerefMut for TaskList {
 }
 
 impl TaskList {
-    fn new(index: String) -> Self {
+    fn new(id: TaskListIdentifier) -> Self {
         Self {
-            index,
+            id,
             tasks: Default::default(),
         }
     }
@@ -92,7 +93,7 @@ impl TaskList {
 
 impl PartialEq for TaskList {
     fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
+        self.id == other.id
     }
 }
 
@@ -100,11 +101,20 @@ impl Eq for TaskList {}
 
 impl Ord for TaskList {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.peek(), other.peek()) {
-            (None, None) => Ordering::Equal,
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-            (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
+        match (&self.id, &other.id) {
+            (TaskListIdentifier::Index(_), TaskListIdentifier::Index(_)) => {
+                match (self.peek(), other.peek()) {
+                    (None, None) => Ordering::Equal,
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
+                }
+            }
+            (TaskListIdentifier::Index(_), TaskListIdentifier::Dump) => Ordering::Less,
+            (TaskListIdentifier::Dump, TaskListIdentifier::Index(_)) => Ordering::Greater,
+            (TaskListIdentifier::Dump, TaskListIdentifier::Dump) => {
+                unreachable!("There should be only one Dump task list")
+            }
         }
     }
 }
@@ -115,18 +125,28 @@ impl PartialOrd for TaskList {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+enum TaskListIdentifier {
+    Index(String),
+    Dump,
+}
+
 #[derive(Default)]
 struct TaskQueue {
     /// Maps index uids to their TaskList, for quick access
-    index_tasks: HashMap<String, Arc<AtomicRefCell<TaskList>>>,
+    index_tasks: HashMap<TaskListIdentifier, Arc<AtomicRefCell<TaskList>>>,
     /// A queue that orders TaskList by the priority of their fist update
     queue: BinaryHeap<Arc<AtomicRefCell<TaskList>>>,
 }
 
 impl TaskQueue {
     fn insert(&mut self, task: Task) {
-        let uid = task.index_uid.into_inner();
         let id = task.id;
+        let uid = match task.index_uid {
+            Some(uid) => TaskListIdentifier::Index(uid.into_inner()),
+            None if matches!(task.content, TaskContent::Dump { .. }) => TaskListIdentifier::Dump,
+            None => unreachable!("invalid task state"),
+        };
         let kind = match task.content {
             TaskContent::DocumentAddition {
                 documents_count,
@@ -142,7 +162,13 @@ impl TaskQueue {
             } => TaskType::DocumentUpdate {
                 number: documents_count,
             },
-            _ => TaskType::Other,
+            TaskContent::Dump { .. } => TaskType::Dump,
+            TaskContent::DocumentDeletion(_)
+            | TaskContent::SettingsUpdate { .. }
+            | TaskContent::IndexDeletion
+            | TaskContent::IndexCreation { .. }
+            | TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
+            _ => unreachable!("unhandled task type"),
         };
         let task = PendingTask { kind, id };
 
@@ -160,7 +186,7 @@ impl TaskQueue {
                 list.push(task);
             }
             Entry::Vacant(entry) => {
-                let mut task_list = TaskList::new(entry.key().to_owned());
+                let mut task_list = TaskList::new(entry.key().clone());
                 task_list.push(task);
                 let task_list = Arc::new(AtomicRefCell::new(task_list));
                 entry.insert(task_list.clone());
@@ -181,7 +207,7 @@ impl TaskQueue {
             // After being mutated, the head is reinserted to the correct position.
             self.queue.push(head);
         } else {
-            self.index_tasks.remove(&head.borrow().index);
+            self.index_tasks.remove(&head.borrow().id);
         }
 
         Some(result)
@@ -193,11 +219,12 @@ impl TaskQueue {
 }
 
 pub struct Scheduler {
-    jobs: VecDeque<Job>,
+    // TODO: currently snapshots are non persistent tasks, and are treated differently.
+    snapshots: VecDeque<SnapshotJob>,
     tasks: TaskQueue,
 
     store: TaskStore,
-    processing: Vec<TaskId>,
+    processing: Processing,
     next_fetched_task_id: TaskId,
     config: SchedulerConfig,
     /// Notifies the update loop that a new task was received
@@ -205,14 +232,11 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn new<P>(
+    pub fn new(
         store: TaskStore,
-        performer: Arc<P>,
+        performers: Vec<Arc<dyn BatchHandler + Sync + Send + 'static>>,
         mut config: SchedulerConfig,
-    ) -> Result<Arc<RwLock<Self>>>
-    where
-        P: TaskPerformer,
-    {
+    ) -> Result<Arc<RwLock<Self>>> {
         let (notifier, rcv) = watch::channel(());
 
         let debounce_time = config.debounce_duration_sec;
@@ -223,11 +247,11 @@ impl Scheduler {
         }
 
         let this = Self {
-            jobs: VecDeque::new(),
+            snapshots: VecDeque::new(),
             tasks: TaskQueue::default(),
 
             store,
-            processing: Vec::new(),
+            processing: Processing::Nothing,
             next_fetched_task_id: 0,
             config,
             notifier,
@@ -240,7 +264,7 @@ impl Scheduler {
 
         let update_loop = UpdateLoop::new(
             this.clone(),
-            performer,
+            performers,
             debounce_time.filter(|&v| v > 0).map(Duration::from_secs),
             rcv,
         );
@@ -250,10 +274,6 @@ impl Scheduler {
         Ok(this)
     }
 
-    pub async fn dump(&self, path: &Path, file_store: UpdateFileStore) -> Result<()> {
-        self.store.dump(path, file_store).await
-    }
-
     fn register_task(&mut self, task: Task) {
         assert!(!task.is_finished());
         self.tasks.insert(task);
@@ -261,7 +281,7 @@ impl Scheduler {
 
     /// Clears the processing list, this method should be called when the processing of a batch is finished.
     pub fn finish(&mut self) {
-        self.processing.clear();
+        self.processing = Processing::Nothing;
     }
 
     pub fn notify(&self) {
@@ -269,13 +289,27 @@ impl Scheduler {
     }
 
     fn notify_if_not_empty(&self) {
-        if !self.jobs.is_empty() || !self.tasks.is_empty() {
+        if !self.snapshots.is_empty() || !self.tasks.is_empty() {
             self.notify();
         }
     }
 
-    pub async fn update_tasks(&self, tasks: Vec<Task>) -> Result<Vec<Task>> {
-        self.store.update_tasks(tasks).await
+    pub async fn update_tasks(&self, content: BatchContent) -> Result<BatchContent> {
+        match content {
+            BatchContent::DocumentsAdditionBatch(tasks) => {
+                let tasks = self.store.update_tasks(tasks).await?;
+                Ok(BatchContent::DocumentsAdditionBatch(tasks))
+            }
+            BatchContent::IndexUpdate(t) => {
+                let mut tasks = self.store.update_tasks(vec![t]).await?;
+                Ok(BatchContent::IndexUpdate(tasks.remove(0)))
+            }
+            BatchContent::Dump(t) => {
+                let mut tasks = self.store.update_tasks(vec![t]).await?;
+                Ok(BatchContent::Dump(tasks.remove(0)))
+            }
+            other => Ok(other),
+        }
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
@@ -294,16 +328,16 @@ impl Scheduler {
     pub async fn get_processing_tasks(&self) -> Result<Vec<Task>> {
         let mut tasks = Vec::new();
 
-        for id in self.processing.iter() {
-            let task = self.store.get_task(*id, None).await?;
+        for id in self.processing.ids() {
+            let task = self.store.get_task(id, None).await?;
             tasks.push(task);
         }
 
         Ok(tasks)
     }
 
-    pub async fn schedule_job(&mut self, job: Job) {
-        self.jobs.push_back(job);
+    pub fn schedule_snapshot(&mut self, job: SnapshotJob) {
+        self.snapshots.push_back(job);
         self.notify();
     }
 
@@ -329,106 +363,168 @@ impl Scheduler {
     }
 
     /// Prepare the next batch, and set `processing` to the ids in that batch.
-    pub async fn prepare(&mut self) -> Result<Pending> {
+    pub async fn prepare(&mut self) -> Result<Batch> {
         // If there is a job to process, do it first.
-        if let Some(job) = self.jobs.pop_front() {
+        if let Some(job) = self.snapshots.pop_front() {
             // There is more work to do, notify the update loop
             self.notify_if_not_empty();
-            return Ok(Pending::Job(job));
+            let batch = Batch::new(None, BatchContent::Snapshot(job));
+            return Ok(batch);
         }
+
         // Try to fill the queue with pending tasks.
         self.fetch_pending_tasks().await?;
 
-        make_batch(&mut self.tasks, &mut self.processing, &self.config);
+        self.processing = make_batch(&mut self.tasks, &self.config);
 
         log::debug!("prepared batch with {} tasks", self.processing.len());
 
-        if !self.processing.is_empty() {
-            let ids = std::mem::take(&mut self.processing);
+        if !self.processing.is_nothing() {
+            let (processing, mut content) = self
+                .store
+                .get_processing_tasks(std::mem::take(&mut self.processing))
+                .await?;
 
-            let (ids, mut tasks) = self.store.get_pending_tasks(ids).await?;
-
-            // The batch id is the id of the first update it contains
-            let id = match tasks.first() {
+            // The batch id is the id of the first update it contains. At this point we must have a
+            // valid batch that contains at least 1 task.
+            let id = match content.first() {
                 Some(Task { id, .. }) => *id,
                 _ => panic!("invalid batch"),
             };
 
-            tasks.iter_mut().for_each(|t| {
-                t.events.push(TaskEvent::Batched {
-                    batch_id: id,
-                    timestamp: OffsetDateTime::now_utc(),
-                })
+            content.push_event(TaskEvent::Batched {
+                batch_id: id,
+                timestamp: OffsetDateTime::now_utc(),
             });
 
-            self.processing = ids;
+            self.processing = processing;
 
-            let batch = Batch {
-                id,
-                created_at: OffsetDateTime::now_utc(),
-                tasks,
-            };
+            let batch = Batch::new(Some(id), content);
 
             // There is more work to do, notify the update loop
             self.notify_if_not_empty();
 
-            Ok(Pending::Batch(batch))
+            Ok(batch)
         } else {
-            Ok(Pending::Nothing)
+            Ok(Batch::empty())
         }
     }
 }
 
-#[derive(Debug)]
-pub enum Pending {
-    Batch(Batch),
-    Job(Job),
+#[derive(Debug, PartialEq)]
+pub enum Processing {
+    DocumentAdditions(Vec<TaskId>),
+    IndexUpdate(TaskId),
+    Dump(TaskId),
+    /// Variant used when there is nothing to process.
     Nothing,
 }
 
-fn make_batch(tasks: &mut TaskQueue, processing: &mut Vec<TaskId>, config: &SchedulerConfig) {
-    processing.clear();
+impl Default for Processing {
+    fn default() -> Self {
+        Self::Nothing
+    }
+}
 
-    let mut doc_count = 0;
-    tasks.head_mut(|list| match list.peek().copied() {
-        Some(PendingTask {
-            kind: TaskType::Other,
-            id,
-        }) => {
-            processing.push(id);
-            list.pop();
+enum ProcessingIter<'a> {
+    Many(slice::Iter<'a, TaskId>),
+    Single(Option<TaskId>),
+}
+
+impl<'a> Iterator for ProcessingIter<'a> {
+    type Item = TaskId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            ProcessingIter::Many(iter) => iter.next().copied(),
+            ProcessingIter::Single(val) => val.take(),
         }
-        Some(PendingTask { kind, .. }) => loop {
-            match list.peek() {
-                Some(pending) if pending.kind == kind => {
-                    // We always need to process at least one task for the scheduler to make progress.
-                    if processing.len() >= config.max_batch_size.unwrap_or(usize::MAX).max(1) {
-                        break;
-                    }
-                    let pending = list.pop().unwrap();
-                    processing.push(pending.id);
+    }
+}
 
-                    // We add the number of documents to the count if we are scheduling document additions and
-                    // stop adding if we already have enough.
-                    //
-                    // We check that bound only after adding the current task to the batch, so that a batch contains at least one task.
-                    match pending.kind {
-                        TaskType::DocumentUpdate { number }
-                        | TaskType::DocumentAddition { number } => {
-                            doc_count += number;
+impl Processing {
+    fn is_nothing(&self) -> bool {
+        matches!(self, Processing::Nothing)
+    }
 
-                            if doc_count >= config.max_documents_per_batch.unwrap_or(usize::MAX) {
+    pub fn ids(&self) -> impl Iterator<Item = TaskId> + '_ {
+        match self {
+            Processing::DocumentAdditions(v) => ProcessingIter::Many(v.iter()),
+            Processing::IndexUpdate(id) | Processing::Dump(id) => ProcessingIter::Single(Some(*id)),
+            Processing::Nothing => ProcessingIter::Single(None),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Processing::DocumentAdditions(v) => v.len(),
+            Processing::IndexUpdate(_) | Processing::Dump(_) => 1,
+            Processing::Nothing => 0,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+fn make_batch(tasks: &mut TaskQueue, config: &SchedulerConfig) -> Processing {
+    let mut doc_count = 0;
+    tasks
+        .head_mut(|list| match list.peek().copied() {
+            Some(PendingTask {
+                kind: TaskType::IndexUpdate,
+                id,
+            }) => {
+                list.pop();
+                Processing::IndexUpdate(id)
+            }
+            Some(PendingTask {
+                kind: TaskType::Dump,
+                id,
+            }) => {
+                list.pop();
+                Processing::Dump(id)
+            }
+            Some(PendingTask { kind, .. }) => {
+                let mut task_list = Vec::new();
+                loop {
+                    match list.peek() {
+                        Some(pending) if pending.kind == kind => {
+                            // We always need to process at least one task for the scheduler to make progress.
+                            if task_list.len() >= config.max_batch_size.unwrap_or(usize::MAX).max(1)
+                            {
                                 break;
                             }
+                            let pending = list.pop().unwrap();
+                            task_list.push(pending.id);
+
+                            // We add the number of documents to the count if we are scheduling document additions and
+                            // stop adding if we already have enough.
+                            //
+                            // We check that bound only after adding the current task to the batch, so that a batch contains at least one task.
+                            match pending.kind {
+                                TaskType::DocumentUpdate { number }
+                                | TaskType::DocumentAddition { number } => {
+                                    doc_count += number;
+
+                                    if doc_count
+                                        >= config.max_documents_per_batch.unwrap_or(usize::MAX)
+                                    {
+                                        break;
+                                    }
+                                }
+                                _ => (),
+                            }
                         }
-                        _ => (),
+                        _ => break,
                     }
                 }
-                _ => break,
+                Processing::DocumentAdditions(task_list)
             }
-        },
-        None => (),
-    });
+            None => Processing::Nothing,
+        })
+        .unwrap_or(Processing::Nothing)
 }
 
 #[cfg(test)]
@@ -440,10 +536,10 @@ mod test {
 
     use super::*;
 
-    fn gen_task(id: TaskId, index_uid: &str, content: TaskContent) -> Task {
+    fn gen_task(id: TaskId, index_uid: Option<&str>, content: TaskContent) -> Task {
         Task {
             id,
-            index_uid: IndexUid::new_unchecked(index_uid),
+            index_uid: index_uid.map(IndexUid::new_unchecked),
             content,
             events: vec![],
         }
@@ -452,13 +548,13 @@ mod test {
     #[test]
     fn register_updates_multiples_indexes() {
         let mut queue = TaskQueue::default();
-        queue.insert(gen_task(0, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(1, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(2, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(4, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(5, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, "test2", TaskContent::IndexDeletion));
+        queue.insert(gen_task(0, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(1, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(3, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(4, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(6, Some("test2"), TaskContent::IndexDeletion));
 
         let test1_tasks = queue
             .head_mut(|tasks| tasks.drain().map(|t| t.id).collect::<Vec<_>>())
@@ -486,40 +582,45 @@ mod test {
             documents_count: 0,
             allow_index_creation: true,
         };
-        queue.insert(gen_task(0, "test1", content.clone()));
-        queue.insert(gen_task(1, "test2", content.clone()));
-        queue.insert(gen_task(2, "test2", TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, "test2", content.clone()));
-        queue.insert(gen_task(4, "test1", content.clone()));
-        queue.insert(gen_task(5, "test1", TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, "test2", content.clone()));
-        queue.insert(gen_task(7, "test1", content));
-
-        let mut batch = Vec::new();
+        queue.insert(gen_task(0, Some("test1"), content.clone()));
+        queue.insert(gen_task(1, Some("test2"), content.clone()));
+        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(3, Some("test2"), content.clone()));
+        queue.insert(gen_task(4, Some("test1"), content.clone()));
+        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(6, Some("test2"), content.clone()));
+        queue.insert(gen_task(7, Some("test1"), content));
+        queue.insert(gen_task(
+            8,
+            None,
+            TaskContent::Dump {
+                uid: "adump".to_owned(),
+            },
+        ));
 
         let config = SchedulerConfig::default();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[0, 4]);
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[1]);
+        // Make sure that the dump is processed before everybody else.
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::Dump(8));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[2]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![0, 4]));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[3, 6]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![1]));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[5]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::IndexUpdate(2));
 
-        batch.clear();
-        make_batch(&mut queue, &mut batch, &config);
-        assert_eq!(batch, &[7]);
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![3, 6]));
+
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::IndexUpdate(5));
+
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::DocumentAdditions(vec![7]));
 
         assert!(queue.is_empty());
     }

@@ -1,17 +1,13 @@
-use std::path::PathBuf;
-
 use meilisearch_error::ResponseError;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::batch::BatchId;
 use crate::{
     index::{Settings, Unchecked},
-    index_resolver::{error::IndexResolverError, IndexUid},
-    snapshot::SnapshotJob,
+    index_resolver::IndexUid,
 };
 
 pub type TaskId = u64;
@@ -66,6 +62,22 @@ pub enum TaskEvent {
     },
 }
 
+impl TaskEvent {
+    pub fn succeeded(result: TaskResult) -> Self {
+        Self::Succeded {
+            result,
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+
+    pub fn failed(error: ResponseError) -> Self {
+        Self::Failed {
+            error,
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 /// A task represents an operation that Meilisearch must do.
 /// It's stored on disk and executed from the lowest to highest Task id.
 /// Everytime a new task is created it has a higher Task id than the previous one.
@@ -74,7 +86,17 @@ pub enum TaskEvent {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
-    pub index_uid: IndexUid,
+    /// The name of the index the task is targeting. If it isn't targeting any index (i.e Dump task)
+    /// then this is None
+    // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
+    // the TaskContent.
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::weighted(proptest::option::Probability::new(0.99), IndexUid::arbitrary())"
+        )
+    )]
+    pub index_uid: Option<IndexUid>,
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
 }
@@ -97,33 +119,6 @@ impl Task {
             } => Some(*content_uuid),
             _ => None,
         }
-    }
-}
-
-/// A job is like a volatile priority `Task`.
-/// It should be processed as fast as possible and is not stored on disk.
-/// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
-#[derive(Debug, derivative::Derivative)]
-#[derivative(PartialEq)]
-pub enum Job {
-    Dump {
-        #[derivative(PartialEq = "ignore")]
-        ret: oneshot::Sender<Result<oneshot::Sender<()>, IndexResolverError>>,
-        path: PathBuf,
-    },
-    Snapshot(#[derivative(PartialEq = "ignore")] SnapshotJob),
-    Empty,
-}
-
-impl Default for Job {
-    fn default() -> Self {
-        Self::Empty
-    }
-}
-
-impl Job {
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
     }
 }
 
@@ -160,6 +155,9 @@ pub enum TaskContent {
     },
     IndexUpdate {
         primary_key: Option<String>,
+    },
+    Dump {
+        uid: String,
     },
 }
 

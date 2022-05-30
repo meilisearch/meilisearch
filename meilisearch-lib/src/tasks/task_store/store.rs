@@ -108,8 +108,10 @@ impl Store {
 
     pub fn put(&self, txn: &mut RwTxn, task: &Task) -> Result<()> {
         self.tasks.put(txn, &BEU64::new(task.id), task)?;
-        self.uids_task_ids
-            .put(txn, &(&task.index_uid, task.id), &())?;
+        // only add the task to the indexes index if it has an index_uid
+        if let Some(ref index_uid) = task.index_uid {
+            self.uids_task_ids.put(txn, &(index_uid, task.id), &())?;
+        }
 
         Ok(())
     }
@@ -325,7 +327,7 @@ pub mod test {
         let tasks = (0..100)
             .map(|_| Task {
                 id: rand::random(),
-                index_uid: IndexUid::new_unchecked("test"),
+                index_uid: Some(IndexUid::new_unchecked("test")),
                 content: TaskContent::IndexDeletion,
                 events: vec![],
             })
@@ -356,14 +358,14 @@ pub mod test {
 
         let task_1 = Task {
             id: 1,
-            index_uid: IndexUid::new_unchecked("test"),
+            index_uid: Some(IndexUid::new_unchecked("test")),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
 
         let task_2 = Task {
             id: 0,
-            index_uid: IndexUid::new_unchecked("test1"),
+            index_uid: Some(IndexUid::new_unchecked("test1")),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
@@ -379,18 +381,28 @@ pub mod test {
 
         txn.abort().unwrap();
         assert_eq!(tasks.len(), 1);
-        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
+        assert_eq!(
+            tasks
+                .first()
+                .as_ref()
+                .unwrap()
+                .index_uid
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "test"
+        );
 
         // same thing but invert the ids
         let task_1 = Task {
             id: 0,
-            index_uid: IndexUid::new_unchecked("test"),
+            index_uid: Some(IndexUid::new_unchecked("test")),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
         let task_2 = Task {
             id: 1,
-            index_uid: IndexUid::new_unchecked("test1"),
+            index_uid: Some(IndexUid::new_unchecked("test1")),
             content: TaskContent::IndexDeletion,
             events: vec![],
         };
@@ -405,7 +417,17 @@ pub mod test {
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(&*tasks.first().unwrap().index_uid, "test");
+        assert_eq!(
+            &*tasks
+                .first()
+                .as_ref()
+                .unwrap()
+                .index_uid
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "test"
+        );
     }
 
     proptest! {

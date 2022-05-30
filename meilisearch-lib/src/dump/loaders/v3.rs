@@ -9,8 +9,8 @@ use log::info;
 use tempfile::tempdir;
 use uuid::Uuid;
 
-use crate::index_controller::dump_actor::compat::v3;
-use crate::index_controller::dump_actor::Metadata;
+use crate::dump::compat::v3;
+use crate::dump::Metadata;
 use crate::index_resolver::meta_store::{DumpEntry, IndexMeta};
 use crate::options::IndexerOpts;
 use crate::tasks::task::{Task, TaskId};
@@ -66,6 +66,7 @@ pub fn load_dump(
         index_db_size,
         meta_env_size,
         indexing_options,
+        "V5",
     )
 }
 

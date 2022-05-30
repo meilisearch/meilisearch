@@ -6,7 +6,7 @@ use meilisearch_auth::AuthController;
 use milli::heed::EnvOpenOptions;
 
 use crate::analytics;
-use crate::index_controller::dump_actor::Metadata;
+use crate::dump::Metadata;
 use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
 use crate::tasks::TaskStore;
@@ -19,10 +19,11 @@ pub fn load_dump(
     index_db_size: usize,
     meta_env_size: usize,
     indexing_options: &IndexerOpts,
+    version: &str,
 ) -> anyhow::Result<()> {
     info!(
-        "Loading dump from {}, dump database version: {}, dump version: V4",
-        meta.dump_date, meta.db_version
+        "Loading dump from {}, dump database version: {}, dump version: {}",
+        meta.dump_date, meta.db_version, version
     );
 
     let mut options = EnvOpenOptions::new();

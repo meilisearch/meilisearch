@@ -26,7 +26,7 @@ pub struct UpdateFile {
 #[error("Error while persisting update to disk: {0}")]
 pub struct UpdateFileStoreError(Box<dyn std::error::Error + Sync + Send + 'static>);
 
-type Result<T> = std::result::Result<T, UpdateFileStoreError>;
+pub type Result<T> = std::result::Result<T, UpdateFileStoreError>;
 
 macro_rules! into_update_store_error {
     ($($other:path),*) => {
@@ -249,7 +249,7 @@ mod test {
         pub async fn delete(&self, uuid: Uuid) -> Result<()> {
             match self {
                 MockUpdateFileStore::Real(s) => s.delete(uuid).await,
-                MockUpdateFileStore::Mock(_) => todo!(),
+                MockUpdateFileStore::Mock(mocker) => unsafe { mocker.get("delete").call(uuid) },
             }
         }
     }

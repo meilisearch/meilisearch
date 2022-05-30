@@ -24,6 +24,7 @@ enum TaskType {
     DocumentDeletion,
     SettingsUpdate,
     ClearAll,
+    DumpCreation,
 }
 
 impl From<TaskContent> for TaskType {
@@ -43,6 +44,7 @@ impl From<TaskContent> for TaskType {
             TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
+            TaskContent::Dump { .. } => TaskType::DumpCreation,
             _ => unreachable!("unexpected task type"),
         }
     }
@@ -80,6 +82,8 @@ enum TaskDetails {
     },
     #[serde(rename_all = "camelCase")]
     ClearAll { deleted_documents: Option<u64> },
+    #[serde(rename_all = "camelCase")]
+    Dump { dump_uid: String },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -137,7 +141,7 @@ fn serialize_duration<S: Serializer>(
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     uid: TaskId,
-    index_uid: String,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -215,6 +219,10 @@ impl From<Task> for TaskView {
             TaskContent::IndexUpdate { primary_key } => (
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
+            ),
+            TaskContent::Dump { uid } => (
+                TaskType::DumpCreation,
+                Some(TaskDetails::Dump { dump_uid: uid }),
             ),
         };
 
@@ -313,7 +321,7 @@ impl From<Task> for TaskView {
 
         Self {
             uid: id,
-            index_uid: index_uid.into_inner(),
+            index_uid: index_uid.map(|u| u.into_inner()),
             status,
             task_type,
             details,
@@ -342,7 +350,7 @@ impl From<Vec<TaskView>> for TaskListView {
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
     uid: TaskId,
-    index_uid: String,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -365,7 +373,7 @@ impl From<Task> for SummarizedTaskView {
 
         Self {
             uid: other.id,
-            index_uid: other.index_uid.to_string(),
+            index_uid: other.index_uid.map(|u| u.into_inner()),
             status: TaskStatus::Enqueued,
             task_type: other.content.into(),
             enqueued_at,

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{Deserializer, Value};
 use tempfile::NamedTempFile;
 
-use crate::index_controller::dump_actor::compat::{self, v2, v3};
-use crate::index_controller::dump_actor::Metadata;
+use crate::dump::compat::{self, v2, v3};
+use crate::dump::Metadata;
 use crate::options::IndexerOpts;
 
 /// The dump v2 reads the dump folder and patches all the needed file to make it compatible with a

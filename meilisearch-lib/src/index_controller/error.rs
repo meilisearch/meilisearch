@@ -6,11 +6,11 @@ use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
+use crate::dump::error::DumpError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
 use crate::update_file_store::UpdateFileStoreError;
 
-use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
@@ -28,7 +28,7 @@ pub enum IndexControllerError {
     #[error("{0}")]
     TaskError(#[from] TaskError),
     #[error("{0}")]
-    DumpError(#[from] DumpActorError),
+    DumpError(#[from] DumpError),
     #[error("{0}")]
     DocumentFormatError(#[from] DocumentFormatError),
     #[error("A {0} payload is missing.")]

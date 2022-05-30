@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+pub use handlers::empty_handler::EmptyBatchHandler;
+pub use handlers::snapshot_handler::SnapshotHandler;
 pub use scheduler::Scheduler;
 pub use task_store::TaskFilter;
 
@@ -11,10 +13,9 @@ pub use task_store::TaskStore;
 use batch::Batch;
 use error::Result;
 
-use self::task::Job;
-
 pub mod batch;
 pub mod error;
+mod handlers;
 mod scheduler;
 pub mod task;
 mod task_store;
@@ -22,11 +23,15 @@ pub mod update_loop;
 
 #[cfg_attr(test, mockall::automock(type Error=test::DebugError;))]
 #[async_trait]
-pub trait TaskPerformer: Sync + Send + 'static {
-    /// Processes the `Task` batch returning the batch with the `Task` updated.
-    async fn process_batch(&self, batch: Batch) -> Batch;
+pub trait BatchHandler: Sync + Send + 'static {
+    /// return whether this handler can accept this batch
+    fn accept(&self, batch: &Batch) -> bool;
 
-    async fn process_job(&self, job: Job);
+    /// Processes the `Task` batch returning the batch with the `Task` updated.
+    ///
+    /// It is ok for this function to panic if a batch is handed that hasn't been verified by
+    /// `accept` beforehand.
+    async fn process_batch(&self, batch: Batch) -> Batch;
 
     /// `finish` is called when the result of `process` has been commited to the task store. This
     /// method can be used to perform cleanup after the update has been completed for example.
