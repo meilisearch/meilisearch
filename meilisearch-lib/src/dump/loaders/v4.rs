@@ -6,6 +6,8 @@ use fs_extra::dir::{self, CopyOptions};
 use log::info;
 use tempfile::tempdir;
 
+use meilisearch_auth::AuthController;
+
 use crate::dump::{compat, Metadata};
 use crate::options::IndexerOpts;
 use crate::tasks::task::Task;
@@ -43,9 +45,7 @@ pub fn load_dump(
     patch_updates(&src, &patched_dir)?;
 
     // Keys
-    if src.as_ref().join("keys").exists() {
-        fs::copy(src.as_ref().join("keys"), patched_dir.path().join("keys"))?;
-    }
+    AuthController::patch_dump_v4(&src, patched_dir.path())?;
 
     super::v5::load_dump(
         meta,

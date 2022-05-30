@@ -1,8 +1,11 @@
+use serde_json::{Map, Value};
+use std::fs;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::path::Path;
+use uuid::Uuid;
 
 use crate::{AuthController, HeedAuthStore, Result};
 
@@ -40,6 +43,29 @@ impl AuthController {
         while let Some(key) = reader.next().transpose()? {
             let key = serde_json::from_str(&key)?;
             store.put_api_key(key)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn patch_dump_v4(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+        let keys_file_src = src.as_ref().join(KEYS_PATH);
+
+        if !keys_file_src.exists() {
+            return Ok(());
+        }
+
+        fs::create_dir_all(&dst)?;
+        let keys_file_dst = dst.as_ref().join(KEYS_PATH);
+        let mut writer = File::create(&keys_file_dst)?;
+
+        let mut reader = BufReader::new(File::open(&keys_file_src)?).lines();
+        while let Some(key) = reader.next().transpose()? {
+            let mut key: Map<String, Value> = serde_json::from_str(&key)?;
+            let uid = Uuid::new_v4().to_string();
+            key.insert("uid".to_string(), Value::String(uid));
+            serde_json::to_writer(&mut writer, &key)?;
+            writer.write_all(b"\n")?;
         }
 
         Ok(())
