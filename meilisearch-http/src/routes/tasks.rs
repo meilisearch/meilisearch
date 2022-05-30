@@ -24,24 +24,25 @@ pub struct TaskFilterQuery {
     #[serde(rename = "type")]
     type_: Option<CS<TaskType>>,
     status: Option<CS<TaskStatus>>,
-    index_uid: Option<CS<StarOrIndexUid>>,
+    index_uid: Option<CS<StarOr<IndexUid>>>,
 }
 
-/// A type that tries to match either a star (*) or an IndexUid.
+/// A type that tries to match either a star (*) or
+/// any other thing that implements `FromStr`.
 #[derive(Debug)]
-enum StarOrIndexUid {
+enum StarOr<T> {
     Star,
-    IndexUid(IndexUid),
+    Other(T),
 }
 
-impl FromStr for StarOrIndexUid {
-    type Err = <IndexUid as FromStr>::Err;
+impl<T: FromStr> FromStr for StarOr<T> {
+    type Err = T::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.trim() == "*" {
-            Ok(StarOrIndexUid::Star)
+            Ok(StarOr::Star)
         } else {
-            IndexUid::from_str(s).map(StarOrIndexUid::IndexUid)
+            T::from_str(s).map(StarOr::Other)
         }
     }
 }
@@ -98,8 +99,8 @@ async fn get_tasks(
                 .into_inner()
                 .into_iter()
                 .fold(Some(Vec::new()), |acc, val| match (acc, val) {
-                    (None, _) | (_, StarOrIndexUid::Star) => None,
-                    (Some(mut acc), StarOrIndexUid::IndexUid(uid)) => {
+                    (None, _) | (_, StarOr::Star) => None,
+                    (Some(mut acc), StarOr::Other(uid)) => {
                         acc.push(uid);
                         Some(acc)
                     }
