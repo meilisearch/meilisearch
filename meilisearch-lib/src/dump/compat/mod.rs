@@ -1,5 +1,6 @@
 pub mod v2;
 pub mod v3;
+pub mod v4;
 
 /// Parses the v1 version of the Asc ranking rules `asc(price)`and returns the field name.
 pub fn asc_ranking_rule(text: &str) -> Option<&str> {

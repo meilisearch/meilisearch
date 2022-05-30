@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use crate::compression::from_tar_gz;
 use crate::options::IndexerOpts;
 
-use self::loaders::{v2, v3, v4};
+use self::loaders::{v2, v3, v4, v5};
 
 pub use handler::{generate_uid, DumpHandler};
 
@@ -69,7 +69,6 @@ impl MetadataVersion {
         meta_env_size: usize,
         indexing_options: &IndexerOpts,
     ) -> anyhow::Result<()> {
-        let version = self.version();
         match self {
             MetadataVersion::V1(_meta) => {
                 anyhow::bail!("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")
@@ -90,14 +89,21 @@ impl MetadataVersion {
                 meta_env_size,
                 indexing_options,
             )?,
-            MetadataVersion::V4(meta) | MetadataVersion::V5(meta) => v4::load_dump(
+            MetadataVersion::V4(meta) => v4::load_dump(
                 meta,
                 src,
                 dst,
                 index_db_size,
                 meta_env_size,
                 indexing_options,
-                version,
+            )?,
+            MetadataVersion::V5(meta) => v5::load_dump(
+                meta,
+                src,
+                dst,
+                index_db_size,
+                meta_env_size,
+                indexing_options,
             )?,
         }
 

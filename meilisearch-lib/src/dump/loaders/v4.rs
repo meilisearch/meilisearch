@@ -1,16 +1,9 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use log::info;
-use meilisearch_auth::AuthController;
-use milli::heed::EnvOpenOptions;
 
-use crate::analytics;
 use crate::dump::Metadata;
-use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
-use crate::tasks::TaskStore;
-use crate::update_file_store::UpdateFileStore;
 
 pub fn load_dump(
     meta: Metadata,
@@ -19,31 +12,15 @@ pub fn load_dump(
     index_db_size: usize,
     meta_env_size: usize,
     indexing_options: &IndexerOpts,
-    version: &str,
 ) -> anyhow::Result<()> {
-    info!(
-        "Loading dump from {}, dump database version: {}, dump version: {}",
-        meta.dump_date, meta.db_version, version
-    );
+    info!("Patching dump V4 to dump V5...");
 
-    let mut options = EnvOpenOptions::new();
-    options.map_size(meta_env_size);
-    options.max_dbs(100);
-    let env = Arc::new(options.open(&dst)?);
-
-    IndexResolver::load_dump(
-        src.as_ref(),
-        &dst,
+    super::v5::load_dump(
+        meta,
+        src,
+        dst,
         index_db_size,
-        env.clone(),
+        meta_env_size,
         indexing_options,
-    )?;
-    UpdateFileStore::load_dump(src.as_ref(), &dst)?;
-    TaskStore::load_dump(&src, env)?;
-    AuthController::load_dump(&src, &dst)?;
-    analytics::copy_user_id(src.as_ref(), dst.as_ref());
-
-    info!("Loading indexes.");
-
-    Ok(())
+    )
 }
