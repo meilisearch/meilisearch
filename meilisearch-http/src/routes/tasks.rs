@@ -6,6 +6,7 @@ use meilisearch_lib::{IndexUid, MeiliSearch};
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::json;
+use std::str::FromStr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -23,7 +24,26 @@ pub struct TaskFilterQuery {
     #[serde(rename = "type")]
     type_: Option<CS<TaskType>>,
     status: Option<CS<TaskStatus>>,
-    index_uid: Option<CS<IndexUid>>,
+    index_uid: Option<CS<StarOrIndexUid>>,
+}
+
+/// A type that tries to match either a star (*) or an IndexUid.
+#[derive(Debug)]
+enum StarOrIndexUid {
+    Star,
+    IndexUid(IndexUid),
+}
+
+impl FromStr for StarOrIndexUid {
+    type Err = <IndexUid as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.trim() == "*" {
+            Ok(StarOrIndexUid::Star)
+        } else {
+            IndexUid::from_str(s).map(StarOrIndexUid::IndexUid)
+        }
+    }
 }
 
 #[rustfmt::skip]
@@ -70,12 +90,29 @@ async fn get_tasks(
 
     let search_rules = &meilisearch.filters().search_rules;
 
-    // We first filter on potential indexes and make sure
+    // We first tranform a potential indexUid=* into a
+    // "not specified indexUid filter".
+    let index_uid =
+        match index_uid {
+            Some(indexes) => indexes
+                .into_inner()
+                .into_iter()
+                .fold(Some(Vec::new()), |acc, val| match (acc, val) {
+                    (None, _) | (_, StarOrIndexUid::Star) => None,
+                    (Some(mut acc), StarOrIndexUid::IndexUid(uid)) => {
+                        acc.push(uid);
+                        Some(acc)
+                    }
+                }),
+            None => None,
+        };
+
+    // Then we filter on potential indexes and make sure
     // that the search filter restrictions are also applied.
     let indexes_filters = match index_uid {
         Some(indexes) => {
             let mut filters = TaskFilter::default();
-            for name in indexes.into_inner() {
+            for name in indexes {
                 if search_rules.is_index_authorized(&name) {
                     filters.filter_index(name.to_string());
                 }

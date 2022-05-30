@@ -60,6 +60,31 @@ async fn list_tasks() {
 }
 
 #[actix_rt::test]
+async fn list_tasks_with_index_filter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+    index.wait_task(0).await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+    let (response, code) = index.service.get("/tasks?indexUid=test").await;
+    assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index.service.get("/tasks?indexUid=*").await;
+    assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index.service.get("/tasks?indexUid=*,pasteque").await;
+    assert_eq!(code, 200);
+    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
 async fn list_tasks_status_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
