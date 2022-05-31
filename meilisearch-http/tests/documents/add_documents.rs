@@ -828,7 +828,7 @@ async fn add_larger_dataset() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 77);
+    assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 
 #[actix_rt::test]
@@ -849,7 +849,7 @@ async fn update_larger_dataset() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 77);
+    assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 
 #[actix_rt::test]

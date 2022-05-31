@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fs::create_dir_all;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -218,17 +218,17 @@ impl Index {
         })
     }
 
+    /// Return the total number of documents contained in the index + the selected documents.
     pub fn retrieve_documents<S: AsRef<str>>(
         &self,
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<S>>,
-    ) -> Result<Vec<Map<String, Value>>> {
+    ) -> Result<(u64, Vec<Document>)> {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display =
-            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
+        let fields_to_display = self.fields_to_display(&attributes_to_retrieve, &fields_ids_map)?;
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -240,20 +240,20 @@ impl Index {
             documents.push(object);
         }
 
-        Ok(documents)
+        let number_of_documents = self.number_of_documents(&txn)?;
+
+        Ok((number_of_documents, documents))
     }
 
     pub fn retrieve_document<S: AsRef<str>>(
         &self,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<S>>,
-    ) -> Result<Map<String, Value>> {
+    ) -> Result<Document> {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-
-        let fields_to_display =
-            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
+        let fields_to_display = self.fields_to_display(&attributes_to_retrieve, &fields_ids_map)?;
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -278,25 +278,18 @@ impl Index {
 
     fn fields_to_display<S: AsRef<str>>(
         &self,
-        txn: &milli::heed::RoTxn,
         attributes_to_retrieve: &Option<Vec<S>>,
         fields_ids_map: &milli::FieldsIdsMap,
     ) -> Result<Vec<FieldId>> {
-        let mut displayed_fields_ids = match self.displayed_fields_ids(txn)? {
-            Some(ids) => ids.into_iter().collect::<Vec<_>>(),
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
-
         let attributes_to_retrieve_ids = match attributes_to_retrieve {
             Some(attrs) => attrs
                 .iter()
                 .filter_map(|f| fields_ids_map.id(f.as_ref()))
-                .collect::<HashSet<_>>(),
+                .collect(),
             None => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };
 
-        displayed_fields_ids.retain(|fid| attributes_to_retrieve_ids.contains(fid));
-        Ok(displayed_fields_ids)
+        Ok(attributes_to_retrieve_ids)
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {

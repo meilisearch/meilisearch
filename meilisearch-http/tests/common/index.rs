@@ -145,9 +145,12 @@ impl Index<'_> {
     pub async fn get_document(
         &self,
         id: u64,
-        _options: Option<GetDocumentOptions>,
+        options: Option<GetDocumentOptions>,
     ) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/{}", encode(self.uid.as_ref()), id);
+        let mut url = format!("/indexes/{}/documents/{}", encode(self.uid.as_ref()), id);
+        if let Some(fields) = options.and_then(|o| o.fields) {
+            url.push_str(&format!("?fields={}", fields.join(",")));
+        }
         self.service.get(url).await
     }
 
@@ -162,10 +165,7 @@ impl Index<'_> {
         }
 
         if let Some(attributes_to_retrieve) = options.attributes_to_retrieve {
-            url.push_str(&format!(
-                "attributesToRetrieve={}&",
-                attributes_to_retrieve.join(",")
-            ));
+            url.push_str(&format!("fields={}&", attributes_to_retrieve.join(",")));
         }
 
         self.service.get(url).await
@@ -245,7 +245,9 @@ impl Index<'_> {
     make_settings_test_routes!(distinct_attribute);
 }
 
-pub struct GetDocumentOptions;
+pub struct GetDocumentOptions {
+    pub fields: Option<Vec<&'static str>>,
+}
 
 #[derive(Debug, Default)]
 pub struct GetAllDocumentsOptions {

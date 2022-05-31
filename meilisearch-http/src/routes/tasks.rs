@@ -6,12 +6,13 @@ use meilisearch_lib::{IndexUid, MeiliSearch};
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::json;
-use std::str::FromStr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
+
+use super::{fold_star_or, StarOr};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
@@ -25,40 +26,6 @@ pub struct TaskFilterQuery {
     type_: Option<CS<StarOr<TaskType>>>,
     status: Option<CS<StarOr<TaskStatus>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
-}
-
-/// A type that tries to match either a star (*) or
-/// any other thing that implements `FromStr`.
-#[derive(Debug)]
-enum StarOr<T> {
-    Star,
-    Other(T),
-}
-
-impl<T: FromStr> FromStr for StarOr<T> {
-    type Err = T::Err;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.trim() == "*" {
-            Ok(StarOr::Star)
-        } else {
-            T::from_str(s).map(StarOr::Other)
-        }
-    }
-}
-
-/// Extracts the raw values from the `StarOr` types and
-/// return None if a `StarOr::Star` is encountered.
-fn fold_star_or<T>(content: Vec<StarOr<T>>) -> Option<Vec<T>> {
-    content
-        .into_iter()
-        .fold(Some(Vec::new()), |acc, val| match (acc, val) {
-            (None, _) | (_, StarOr::Star) => None,
-            (Some(mut acc), StarOr::Other(uid)) => {
-                acc.push(uid);
-                Some(acc)
-            }
-        })
 }
 
 #[rustfmt::skip]
