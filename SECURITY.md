@@ -4,7 +4,7 @@ Meilisearch takes the security of our software products and services seriously.
 
 If you believe you have found a security vulnerability in any Meilisearch-owned repository, please report it to us as described below.
 
-## Suported versions
+## Supported versions
 
 As long as we are pre-v1.0, only the latest version of Meilisearch will be supported with security updates.
 
