@@ -55,6 +55,7 @@ mod test {
         task::{Task, TaskContent},
     };
     use crate::update_file_store::{Result as FileStoreResult, UpdateFileStore};
+    use crate::IndexUid;
 
     use super::*;
     use milli::update::IndexDocumentsMethod;
@@ -103,13 +104,13 @@ mod test {
 
         let task = Task {
             id: 1,
-            index_uid: None,
             content: TaskContent::DocumentAddition {
                 content_uuid,
                 merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
                 primary_key: None,
                 documents_count: 100,
                 allow_index_creation: true,
+                index_uid: IndexUid::new_unchecked("test"),
             },
             events: Vec::new(),
         };
@@ -130,7 +131,6 @@ mod test {
 
         let task = Task {
             id: 1,
-            index_uid: None,
             content: TaskContent::Dump {
                 uid: String::from("hello"),
             },

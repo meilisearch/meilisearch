@@ -14,7 +14,6 @@ use super::error::TaskError;
 use super::scheduler::Processing;
 use super::task::{Task, TaskContent, TaskId};
 use super::Result;
-use crate::index_resolver::IndexUid;
 use crate::tasks::task::TaskEvent;
 use crate::update_file_store::UpdateFileStore;
 
@@ -32,11 +31,11 @@ pub struct TaskFilter {
 
 impl TaskFilter {
     fn pass(&self, task: &Task) -> bool {
-        match task.index_uid {
-            Some(ref index_uid) => self
+        match task.index_uid() {
+            Some(index_uid) => self
                 .indexes
                 .as_ref()
-                .map_or(true, |indexes| indexes.contains(index_uid.as_str())),
+                .map_or(true, |indexes| indexes.contains(index_uid)),
             None => false,
         }
     }
@@ -75,11 +74,7 @@ impl TaskStore {
         Ok(Self { store })
     }
 
-    pub async fn register(
-        &self,
-        index_uid: Option<IndexUid>,
-        content: TaskContent,
-    ) -> Result<Task> {
+    pub async fn register(&self, content: TaskContent) -> Result<Task> {
         debug!("registering update: {:?}", content);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
@@ -88,7 +83,6 @@ impl TaskStore {
             let created_at = TaskEvent::Created(OffsetDateTime::now_utc());
             let task = Task {
                 id: next_task_id,
-                index_uid,
                 content,
                 events: vec![created_at],
             };
@@ -273,7 +267,10 @@ impl TaskStore {
 
 #[cfg(test)]
 pub mod test {
-    use crate::tasks::{scheduler::Processing, task_store::store::test::tmp_env};
+    use crate::{
+        tasks::{scheduler::Processing, task_store::store::test::tmp_env},
+        IndexUid,
+    };
 
     use super::*;
 
@@ -359,13 +356,9 @@ pub mod test {
             }
         }
 
-        pub async fn register(
-            &self,
-            index_uid: Option<IndexUid>,
-            content: TaskContent,
-        ) -> Result<Task> {
+        pub async fn register(&self, content: TaskContent) -> Result<Task> {
             match self {
-                Self::Real(s) => s.register(index_uid, content).await,
+                Self::Real(s) => s.register(content).await,
                 Self::Mock(_m) => todo!(),
             }
         }
@@ -393,8 +386,10 @@ pub mod test {
 
         let gen_task = |id: TaskId| Task {
             id,
-            index_uid: Some(IndexUid::new_unchecked("test")),
-            content: TaskContent::IndexCreation { primary_key: None },
+            content: TaskContent::IndexCreation {
+                primary_key: None,
+                index_uid: IndexUid::new_unchecked("test"),
+            },
             events: Vec::new(),
         };
 

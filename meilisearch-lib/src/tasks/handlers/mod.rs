@@ -17,9 +17,9 @@ mod test {
             TaskContent::DocumentAddition { .. } => {
                 BatchContent::DocumentsAdditionBatch(vec![task])
             }
-            TaskContent::DocumentDeletion(_)
+            TaskContent::DocumentDeletion { .. }
             | TaskContent::SettingsUpdate { .. }
-            | TaskContent::IndexDeletion
+            | TaskContent::IndexDeletion { .. }
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => BatchContent::IndexUpdate(task),
             TaskContent::Dump { .. } => BatchContent::Dump(task),

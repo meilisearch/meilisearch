@@ -30,9 +30,9 @@ impl From<TaskContent> for TaskType {
         match other {
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            TaskContent::IndexDeletion => TaskType::IndexDeletion,
+            TaskContent::IndexDeletion { .. } => TaskType::IndexDeletion,
             TaskContent::DocumentAddition { .. } => TaskType::DocumentAdditionOrUpdate,
-            TaskContent::DocumentDeletion(_) => TaskType::DocumentDeletion,
+            TaskContent::DocumentDeletion { .. } => TaskType::DocumentDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::Dump { .. } => TaskType::DumpCreation,
         }
@@ -203,9 +203,9 @@ pub struct TaskView {
 
 impl From<Task> for TaskView {
     fn from(task: Task) -> Self {
+        let index_uid = task.index_uid().map(String::from);
         let Task {
             id,
-            index_uid,
             content,
             events,
         } = task;
@@ -221,20 +221,26 @@ impl From<Task> for TaskView {
 
                 (TaskType::DocumentAdditionOrUpdate, Some(details))
             }
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => (
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Ids(ids),
+                ..
+            } => (
                 TaskType::DocumentDeletion,
                 Some(TaskDetails::DocumentDeletion {
                     received_document_ids: ids.len(),
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Clear,
+                ..
+            } => (
                 TaskType::DocumentDeletion,
                 Some(TaskDetails::ClearAll {
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::IndexDeletion => (
+            TaskContent::IndexDeletion { .. } => (
                 TaskType::IndexDeletion,
                 Some(TaskDetails::ClearAll {
                     deleted_documents: None,
@@ -244,11 +250,11 @@ impl From<Task> for TaskView {
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
-            TaskContent::IndexCreation { primary_key } => (
+            TaskContent::IndexCreation { primary_key, .. } => (
                 TaskType::IndexCreation,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
-            TaskContent::IndexUpdate { primary_key } => (
+            TaskContent::IndexUpdate { primary_key, .. } => (
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
@@ -353,7 +359,7 @@ impl From<Task> for TaskView {
 
         Self {
             uid: id,
-            index_uid: index_uid.map(|u| u.into_inner()),
+            index_uid,
             status,
             task_type,
             details,
@@ -402,7 +408,7 @@ impl From<Task> for SummarizedTaskView {
 
         Self {
             task_uid: other.id,
-            index_uid: other.index_uid.map(|u| u.into_inner()),
+            index_uid: other.index_uid().map(String::from),
             status: TaskStatus::Enqueued,
             task_type: other.content.into(),
             enqueued_at,
