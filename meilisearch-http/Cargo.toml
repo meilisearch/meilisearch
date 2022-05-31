@@ -75,7 +75,7 @@ thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.17.0", features = ["full"] }
 tokio-stream = "0.1.8"
-uuid = { version = "0.8.2", features = ["serde"] }
+uuid = { version = "0.8.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 
 [dev-dependencies]
