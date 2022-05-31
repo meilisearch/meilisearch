@@ -29,21 +29,17 @@ pub struct Key {
 impl Key {
     pub fn create_from_value(value: Value) -> Result<Self> {
         let name = match value.get("name") {
-            Some(Value::Null) => None,
-            Some(des) => Some(
-                from_value(des.clone())
-                    .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()))?,
-            ),
-            None => None,
+            None | Some(Value::Null) => None,
+            Some(des) => from_value(des.clone())
+                .map(Some)
+                .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()))?,
         };
 
         let description = match value.get("description") {
-            Some(Value::Null) => None,
-            Some(des) => Some(
-                from_value(des.clone())
-                    .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))?,
-            ),
-            None => None,
+            None | Some(Value::Null) => None,
+            Some(des) => from_value(des.clone())
+                .map(Some)
+                .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))?,
         };
 
         let uid = value.get("uid").map_or_else(

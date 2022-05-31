@@ -147,7 +147,7 @@ pub mod policies {
         validation
     }
 
-    /// Extracts the key id used to sign the payload from the payload, without performing any validation.
+    /// Extracts the key id used to sign the payload, without performing any validation.
     fn extract_key_id(token: &str) -> Option<Uuid> {
         let mut validation = tenant_token_validation();
         validation.insecure_disable_signature_validation();
@@ -188,7 +188,7 @@ pub mod policies {
                 return Some(filters);
             } else if let Some(action) = Action::from_repr(A) {
                 // API key
-                if let Ok(Some(uid)) = auth.get_uid_from_sha(token.as_bytes()) {
+                if let Ok(Some(uid)) = auth.get_optional_uid_from_sha(token.as_bytes()) {
                     if let Ok(true) = auth.is_key_authorized(uid, action, index) {
                         return auth.get_key_filters(uid, None).ok();
                     }

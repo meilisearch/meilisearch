@@ -63,16 +63,16 @@ impl AuthController {
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))
     }
 
-    pub fn get_uid_from_sha(&self, key: &[u8]) -> Result<Option<Uuid>> {
+    pub fn get_optional_uid_from_sha(&self, sha: &[u8]) -> Result<Option<Uuid>> {
         match &self.master_key {
-            Some(master_key) => self.store.get_uid_from_sha(key, master_key.as_bytes()),
+            Some(master_key) => self.store.get_uid_from_sha(sha, master_key.as_bytes()),
             None => Ok(None),
         }
     }
 
-    pub fn try_get_uid_from_sha(&self, key: &str) -> Result<Uuid> {
-        self.get_uid_from_sha(key.as_bytes())?
-            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(key.to_string()))
+    pub fn get_uid_from_sha(&self, sha: &str) -> Result<Uuid> {
+        self.get_optional_uid_from_sha(sha.as_bytes())?
+            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(sha.to_string()))
     }
 
     pub fn get_key_filters(
