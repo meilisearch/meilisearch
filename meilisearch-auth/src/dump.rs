@@ -1,7 +1,7 @@
+use serde_json::Deserializer;
 use serde_json::{Map, Value};
 use std::fs;
 use std::fs::File;
-use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::path::Path;
@@ -39,10 +39,9 @@ impl AuthController {
             return Ok(());
         }
 
-        let mut reader = BufReader::new(File::open(&keys_file_path)?).lines();
-        while let Some(key) = reader.next().transpose()? {
-            let key = serde_json::from_str(&key)?;
-            store.put_api_key(key)?;
+        let reader = BufReader::new(File::open(&keys_file_path)?);
+        for key in Deserializer::from_reader(reader).into_iter() {
+            store.put_api_key(key?)?;
         }
 
         Ok(())
@@ -59,11 +58,14 @@ impl AuthController {
         let keys_file_dst = dst.as_ref().join(KEYS_PATH);
         let mut writer = File::create(&keys_file_dst)?;
 
-        let mut reader = BufReader::new(File::open(&keys_file_src)?).lines();
-        while let Some(key) = reader.next().transpose()? {
-            let mut key: Map<String, Value> = serde_json::from_str(&key)?;
-            let uid = Uuid::new_v4().to_string();
-            key.insert("uid".to_string(), Value::String(uid));
+        let reader = BufReader::new(File::open(&keys_file_src)?);
+        for key in Deserializer::from_reader(reader).into_iter() {
+            let mut key: Map<String, Value> = key?;
+
+            // generate a new uuid v4 and insert it in the key.
+            let uid = serde_json::to_value(Uuid::new_v4()).unwrap();
+            key.insert("uid".to_string(), uid);
+
             serde_json::to_writer(&mut writer, &key)?;
             writer.write_all(b"\n")?;
         }
