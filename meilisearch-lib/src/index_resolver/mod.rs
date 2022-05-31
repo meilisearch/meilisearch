@@ -200,7 +200,7 @@ where
                 .await;
 
                 let event = match result {
-                    Ok(Ok(result)) => TaskEvent::Succeded {
+                    Ok(Ok(result)) => TaskEvent::Succeeded {
                         timestamp: OffsetDateTime::now_utc(),
                         result: TaskResult::DocumentAddition {
                             indexed_documents: result.indexed_documents,
@@ -594,7 +594,7 @@ mod test {
                     {
                         assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Failed { .. }), "{:?}", result);
                     } else {
-                        assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Succeded { .. }), "{:?}", result);
+                        assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Succeeded { .. }), "{:?}", result);
                     }
                 }
             });

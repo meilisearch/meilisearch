@@ -263,7 +263,7 @@ impl From<Task> for TaskView {
             TaskEvent::Created(_) => (TaskStatus::Enqueued, None, None),
             TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
             TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
-            TaskEvent::Succeded { timestamp, result } => {
+            TaskEvent::Succeeded { timestamp, result } => {
                 match (result, &mut details) {
                     (
                         TaskResult::DocumentAddition {

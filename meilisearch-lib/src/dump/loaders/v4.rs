@@ -1,12 +1,14 @@
-use std::fs;
+use std::fs::{self, create_dir_all, File};
+use std::io::Write;
 use std::path::Path;
 
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
 use tempfile::tempdir;
 
-use crate::dump::Metadata;
+use crate::dump::{compat, Metadata};
 use crate::options::IndexerOpts;
+use crate::tasks::task::Task;
 
 pub fn load_dump(
     meta: Metadata,
@@ -38,7 +40,7 @@ pub fn load_dump(
     )?;
 
     // Updates
-    dir::copy(src.as_ref().join("updates"), patched_dir.path(), &options)?;
+    patch_updates(&src, &patched_dir)?;
 
     // Keys
     if src.as_ref().join("keys").exists() {
@@ -53,4 +55,27 @@ pub fn load_dump(
         meta_env_size,
         indexing_options,
     )
+}
+
+fn patch_updates(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    let updates_path = src.as_ref().join("updates/data.jsonl");
+    let output_updates_path = dst.as_ref().join("updates/data.jsonl");
+    create_dir_all(output_updates_path.parent().unwrap())?;
+    let udpates_file = File::open(updates_path)?;
+    let mut output_update_file = File::create(output_updates_path)?;
+
+    serde_json::Deserializer::from_reader(udpates_file)
+        .into_iter::<compat::v4::Task>()
+        .try_for_each(|task| -> anyhow::Result<()> {
+            let task: Task = task?.into();
+
+            serde_json::to_writer(&mut output_update_file, &task)?;
+            output_update_file.write_all(b"\n")?;
+
+            Ok(())
+        })?;
+
+    output_update_file.flush()?;
+
+    Ok(())
 }
