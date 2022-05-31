@@ -26,6 +26,8 @@ pub struct TaskFilterQuery {
     type_: Option<CS<StarOr<TaskType>>>,
     status: Option<CS<StarOr<TaskStatus>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
+    limit: Option<usize>,  // TODO must not return an error when deser fail
+    after: Option<TaskId>, // TODO must not return an error when deser fail
 }
 
 #[rustfmt::skip]
@@ -68,11 +70,13 @@ async fn get_tasks(
         type_,
         status,
         index_uid,
+        limit,
+        after,
     } = params.into_inner();
 
     let search_rules = &meilisearch.filters().search_rules;
 
-    // We first tranform a potential indexUid=* into a "not specified indexUid filter"
+    // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
     let type_ = type_.map(CS::into_inner).and_then(fold_star_or);
     let status = status.map(CS::into_inner).and_then(fold_star_or);
@@ -128,13 +132,32 @@ async fn get_tasks(
         indexes_filters
     };
 
-    let tasks: TaskListView = meilisearch
-        .list_tasks(filters, None, None)
+    // We +1 just to know if there is more after this "page" or not.
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).saturating_add(1);
+    // We -1 here because we need an offset and we must exclude the `after` one.
+    let offset = after.map(|n| n.saturating_sub(1));
+
+    let mut tasks_results = meilisearch
+        .list_tasks(filters, Some(limit), offset)
         .await?
         .into_iter()
         .map(TaskView::from)
-        .collect::<Vec<_>>()
-        .into();
+        .collect::<Vec<_>>();
+
+    // If we were able to fetch the number +1 tasks we asked
+    // it means that there is more to come.
+    let after = if tasks_results.len() == limit {
+        tasks_results.pop();
+        tasks_results.last().map(|t| t.uid)
+    } else {
+        None
+    };
+
+    let tasks = TaskListView {
+        results: tasks_results,
+        limit: limit.saturating_sub(1),
+        after,
+    };
 
     Ok(HttpResponse::Ok().json(tasks))
 }
