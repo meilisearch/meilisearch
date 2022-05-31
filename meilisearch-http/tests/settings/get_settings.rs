@@ -122,7 +122,7 @@ async fn reset_all_settings() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
     index.wait_task(0).await;
 
     index

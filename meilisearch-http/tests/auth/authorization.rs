@@ -16,8 +16,8 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/indexes/products/documents/0") =>                    hashset!{"documents.get", "*"},
             ("DELETE",  "/indexes/products/documents/0") =>                    hashset!{"documents.delete", "*"},
             ("GET",     "/tasks") =>                                           hashset!{"tasks.get", "*"},
-            ("GET",     "/indexes/products/tasks") =>                          hashset!{"tasks.get", "*"},
-            ("GET",     "/indexes/products/tasks/0") =>                        hashset!{"tasks.get", "*"},
+            ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "*"},
+            ("GET",     "/tasks/0") =>                                         hashset!{"tasks.get", "*"},
             ("PUT",     "/indexes/products/") =>                               hashset!{"indexes.update", "*"},
             ("GET",     "/indexes/products/") =>                               hashset!{"indexes.get", "*"},
             ("DELETE",  "/indexes/products/") =>                               hashset!{"indexes.delete", "*"},
@@ -523,7 +523,7 @@ async fn error_creating_index_without_action() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "{:?}", response);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
     assert_eq!(response["status"], "failed");
@@ -534,7 +534,7 @@ async fn error_creating_index_without_action() {
 
     let (response, code) = index.update_settings(settings).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
 
@@ -544,7 +544,7 @@ async fn error_creating_index_without_action() {
     // try to create a index via add specialized settings route
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = index.wait_task(task_id).await;
 
@@ -583,7 +583,7 @@ async fn lazy_create_index() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202, "{:?}", response);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 
@@ -597,7 +597,7 @@ async fn lazy_create_index() {
 
     let (response, code) = index.update_settings(settings).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 
@@ -609,7 +609,7 @@ async fn lazy_create_index() {
     let index = server.index("test2");
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
     assert_eq!(code, 202);
-    let task_id = response["uid"].as_u64().unwrap();
+    let task_id = response["taskUid"].as_u64().unwrap();
 
     index.wait_task(task_id).await;
 

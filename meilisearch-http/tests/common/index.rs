@@ -46,7 +46,7 @@ impl Index<'_> {
             .post_str(url, include_str!("../assets/test_set.json"))
             .await;
         assert_eq!(code, 202);
-        let update_id = response["uid"].as_i64().unwrap();
+        let update_id = response["taskUid"].as_i64().unwrap();
         self.wait_task(update_id as u64).await;
         update_id as u64
     }
@@ -122,12 +122,23 @@ impl Index<'_> {
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/tasks/{}", self.uid, update_id);
+        let url = format!("/tasks/{}", update_id);
         self.service.get(url).await
     }
 
     pub async fn list_tasks(&self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/tasks", self.uid);
+        let url = format!("/tasks?indexUid={}", self.uid);
+        self.service.get(url).await
+    }
+
+    pub async fn filtered_tasks(&self, type_: &[&str], status: &[&str]) -> (Value, StatusCode) {
+        let mut url = format!("/tasks?indexUid={}", self.uid);
+        if !type_.is_empty() {
+            url += &format!("&type={}", type_.join(","));
+        }
+        if !status.is_empty() {
+            url += &format!("&status={}", status.join(","));
+        }
         self.service.get(url).await
     }
 
