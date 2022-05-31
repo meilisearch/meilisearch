@@ -103,8 +103,27 @@ impl Server {
         }
     }
 
-    pub async fn list_indexes(&self) -> (Value, StatusCode) {
-        self.service.get("/indexes").await
+    pub async fn list_indexes(
+        &self,
+        offset: Option<usize>,
+        limit: Option<usize>,
+    ) -> (Value, StatusCode) {
+        let (offset, limit) = (
+            offset.map(|offset| format!("offset={offset}")),
+            limit.map(|limit| format!("limit={limit}")),
+        );
+        let query_parameter = offset
+            .as_ref()
+            .zip(limit.as_ref())
+            .map(|(offset, limit)| format!("{offset}&{limit}"))
+            .or_else(|| offset.xor(limit));
+        if let Some(query_parameter) = query_parameter {
+            self.service
+                .get(format!("/indexes?{query_parameter}"))
+                .await
+        } else {
+            self.service.get("/indexes").await
+        }
     }
 
     pub async fn version(&self) -> (Value, StatusCode) {
