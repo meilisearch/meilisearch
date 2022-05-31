@@ -703,13 +703,15 @@ async fn list_api_keys() {
             "expiresAt": "2050-11-13T00:00:00Z"
         },
         {
-            "description": "Default Search API Key (Use it to search from the frontend)",
+            "name": "Default Search API Key",
+            "description": "Use it to search from the frontend",
             "indexes": ["*"],
             "actions": ["search"],
             "expiresAt": serde_json::Value::Null,
         },
         {
-            "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
+            "name": "Default Admin API Key",
+            "description": "Use it for all other than search operations. Caution! Do not expose it on a public frontend",
             "indexes": ["*"],
             "actions": ["*"],
             "expiresAt": serde_json::Value::Null,
@@ -792,7 +794,7 @@ async fn delete_api_key() {
     assert_eq!(204, code, "{:?}", &response);
 
     // check if API key no longer exist.
-    let (_response, code) = server.get_api_key(&uid).await;
+    let (response, code) = server.get_api_key(&uid).await;
     assert_eq!(404, code, "{:?}", &response);
 }
 
