@@ -362,31 +362,6 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     assert_eq!(response, expected_response);
 }
 
-#[ignore]
-#[actix_rt::test]
-async fn error_add_api_key_invalid_index_uid_format() {
-    let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
-
-    let content = json!({
-        "description": "Indexing API key",
-        "indexes": ["inv@lid uid"],
-        "actions": ["documents.add"],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-    let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`inv@lid uid` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
-        "code": "invalid_api_key_indexes",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
-    });
-
-    assert_eq!(response, expected_response);
-}
-
 #[actix_rt::test]
 async fn error_add_api_key_invalid_parameters_actions() {
     let mut server = Server::new_auth().await;
