@@ -1,16 +1,12 @@
+use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
+use fs_extra::dir::{self, CopyOptions};
 use log::info;
-use meilisearch_auth::AuthController;
-use milli::heed::EnvOpenOptions;
+use tempfile::tempdir;
 
-use crate::analytics;
 use crate::dump::Metadata;
-use crate::index_resolver::IndexResolver;
 use crate::options::IndexerOpts;
-use crate::tasks::TaskStore;
-use crate::update_file_store::UpdateFileStore;
 
 pub fn load_dump(
     meta: Metadata,
@@ -19,31 +15,42 @@ pub fn load_dump(
     index_db_size: usize,
     meta_env_size: usize,
     indexing_options: &IndexerOpts,
-    version: &str,
 ) -> anyhow::Result<()> {
-    info!(
-        "Loading dump from {}, dump database version: {}, dump version: {}",
-        meta.dump_date, meta.db_version, version
-    );
+    info!("Patching dump V4 to dump V5...");
 
-    let mut options = EnvOpenOptions::new();
-    options.map_size(meta_env_size);
-    options.max_dbs(100);
-    let env = Arc::new(options.open(&dst)?);
+    let patched_dir = tempdir()?;
+    let options = CopyOptions::default();
 
-    IndexResolver::load_dump(
-        src.as_ref(),
-        &dst,
-        index_db_size,
-        env.clone(),
-        indexing_options,
+    // Indexes
+    dir::copy(src.as_ref().join("indexes"), patched_dir.path(), &options)?;
+
+    // Index uuids
+    dir::copy(
+        src.as_ref().join("index_uuids"),
+        patched_dir.path(),
+        &options,
     )?;
-    UpdateFileStore::load_dump(src.as_ref(), &dst)?;
-    TaskStore::load_dump(&src, env)?;
-    AuthController::load_dump(&src, &dst)?;
-    analytics::copy_user_id(src.as_ref(), dst.as_ref());
 
-    info!("Loading indexes.");
+    // Metadata
+    fs::copy(
+        src.as_ref().join("metadata.json"),
+        patched_dir.path().join("metadata.json"),
+    )?;
 
-    Ok(())
+    // Updates
+    dir::copy(src.as_ref().join("updates"), patched_dir.path(), &options)?;
+
+    // Keys
+    if src.as_ref().join("keys").exists() {
+        fs::copy(src.as_ref().join("keys"), patched_dir.path().join("keys"))?;
+    }
+
+    super::v5::load_dump(
+        meta,
+        patched_dir.path(),
+        dst,
+        index_db_size,
+        meta_env_size,
+        indexing_options,
+    )
 }
