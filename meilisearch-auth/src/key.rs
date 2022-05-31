@@ -112,8 +112,8 @@ impl Key {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::new_v4();
         Self {
-            name: Some("admin".to_string()),
-            description: Some("Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)".to_string()),
+            name: Some("Default Admin API Key".to_string()),
+            description: Some("Use it for all other than search operations. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::All],
             indexes: vec!["*".to_string()],
@@ -127,10 +127,8 @@ impl Key {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::new_v4();
         Self {
-            name: Some("search".to_string()),
-            description: Some(
-                "Default Search API Key (Use it to search from the frontend)".to_string(),
-            ),
+            name: Some("Default Search API Key".to_string()),
+            description: Some("Use it to search from the frontend".to_string()),
             uid,
             actions: vec![Action::Search],
             indexes: vec!["*".to_string()],
