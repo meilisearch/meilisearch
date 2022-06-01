@@ -188,7 +188,7 @@ pub mod policies {
                 return Some(filters);
             } else if let Some(action) = Action::from_repr(A) {
                 // API key
-                if let Ok(Some(uid)) = auth.get_optional_uid_from_encoded_key(token.as_bytes()) {
+                if let Some(uid) = auth.get_optional_uid_from_encoded_key(token) {
                     if let Ok(true) = auth.is_key_authorized(uid, action, index) {
                         return auth.get_key_filters(uid, None).ok();
                     }

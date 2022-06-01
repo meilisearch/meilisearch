@@ -4,14 +4,14 @@ version = "0.27.1"
 edition = "2021"
 
 [dependencies]
-base64 = "0.13.0"
 enum-iterator = "0.7.0"
 meilisearch-error = { path = "../meilisearch-error" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.28.0" }
 rand = "0.8.4"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
-sha2 = "0.10.2"
+bcrypt = "0.13.0"
+base64 = "0.13.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }

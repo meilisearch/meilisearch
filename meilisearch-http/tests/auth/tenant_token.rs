@@ -495,7 +495,7 @@ async fn error_access_expired_parent_key() {
     let content = json!({
         "indexes": ["*"],
         "actions": ["*"],
-        "expiresAt": (OffsetDateTime::now_utc() + Duration::seconds(1)).format(&Rfc3339).unwrap(),
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::seconds(2)).format(&Rfc3339).unwrap(),
     });
 
     let (response, code) = server.add_api_key(content).await;
@@ -520,7 +520,7 @@ async fn error_access_expired_parent_key() {
     assert_ne!(code, 403);
 
     // wait until the key is expired.
-    thread::sleep(time::Duration::new(1, 0));
+    thread::sleep(time::Duration::new(2, 0));
 
     let (response, code) = server
         .dummy_request("POST", "/indexes/products/search")

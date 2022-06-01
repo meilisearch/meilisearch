@@ -6,6 +6,7 @@ mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -62,17 +63,26 @@ impl AuthController {
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))
     }
 
-    pub fn get_optional_uid_from_encoded_key(&self, encoded_key: &[u8]) -> Result<Option<Uuid>> {
-        match &self.master_key {
-            Some(master_key) => self
-                .store
-                .get_uid_from_encoded_key(encoded_key, master_key.as_bytes()),
-            None => Ok(None),
+    pub fn get_optional_uid_from_encoded_key(&self, encoded_key: &str) -> Option<Uuid> {
+        let master_key = self.master_key.as_ref()?;
+
+        // decode encoded_key
+        let encoded_key = base64::decode_config(encoded_key, base64::URL_SAFE_NO_PAD).ok()?;
+        let encoded_key = std::str::from_utf8(&encoded_key).ok()?;
+
+        // Check if the sha corresponds to the current master key.
+        if !bcrypt::verify(master_key.as_bytes(), encoded_key).ok()? {
+            return None;
         }
+
+        let hash_parts = bcrypt::HashParts::from_str(encoded_key).ok()?;
+        let uid = base64::decode_config(hash_parts.get_salt(), base64::BCRYPT).ok()?;
+
+        Uuid::from_slice(uid.as_slice()).ok()
     }
 
     pub fn get_uid_from_encoded_key(&self, encoded_key: &str) -> Result<Uuid> {
-        self.get_optional_uid_from_encoded_key(encoded_key.as_bytes())?
+        self.get_optional_uid_from_encoded_key(encoded_key)
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(encoded_key.to_string()))
     }
 
