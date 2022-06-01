@@ -186,6 +186,17 @@ impl TaskStore {
         Ok(tasks)
     }
 
+    pub async fn fetch_unfinished_tasks(&self, offset: Option<TaskId>) -> Result<Vec<Task>> {
+        let store = self.store.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let txn = store.rtxn()?;
+            let tasks = store.fetch_unfinished_tasks(&txn, offset)?;
+            Ok(tasks)
+        })
+        .await?
+    }
+
     pub async fn list_tasks(
         &self,
         offset: Option<TaskId>,
@@ -322,6 +333,13 @@ pub mod test {
             match self {
                 Self::Real(s) => s.get_processing_tasks(tasks).await,
                 Self::Mock(m) => unsafe { m.get("get_pending_task").call(tasks) },
+            }
+        }
+
+        pub async fn fetch_unfinished_tasks(&self, from: Option<TaskId>) -> Result<Vec<Task>> {
+            match self {
+                Self::Real(s) => s.fetch_unfinished_tasks(from).await,
+                Self::Mock(m) => unsafe { m.get("fetch_unfinished_tasks").call(from) },
             }
         }
 

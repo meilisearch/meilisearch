@@ -342,14 +342,8 @@ impl Scheduler {
     }
 
     async fn fetch_pending_tasks(&mut self) -> Result<()> {
-        // We must NEVER re-enqueue an already processed task! It's content uuid would point to an unexisting file.
-        //
-        // TODO(marin): This may create some latency when the first batch lazy loads the pending updates.
-        let mut filter = TaskFilter::default();
-        filter.filter_fn(|task| !task.is_finished());
-
         self.store
-            .list_tasks(Some(self.next_fetched_task_id), Some(filter), None)
+            .fetch_unfinished_tasks(Some(self.next_fetched_task_id))
             .await?
             .into_iter()
             // The tasks arrive in reverse order, and we need to insert them in order.
