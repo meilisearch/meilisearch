@@ -238,7 +238,7 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 pub fn generate_key(uid: &[u8], master_key: &[u8]) -> String {
     let key = [uid, master_key].concat();
     let sha = Sha256::digest(&key);
-    format!("{:x}", sha)
+    base64::encode_config(sha, base64::URL_SAFE_NO_PAD)
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.

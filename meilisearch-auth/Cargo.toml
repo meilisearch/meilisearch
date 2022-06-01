@@ -11,6 +11,7 @@ rand = "0.8.4"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
 sha2 = "0.10.2"
+base64 = "0.13.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
