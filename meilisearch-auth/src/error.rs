@@ -22,12 +22,14 @@ pub enum AuthControllerError {
         "`name` field value `{0}` is invalid. It should be a string or specified as a null value."
     )]
     InvalidApiKeyName(Value),
-    #[error("`uid` field value `{0}` is invalid. It should be a valid uuidv4 string or ommited.")]
+    #[error("`uid` field value `{0}` is invalid. It should be a valid UUID v4 string or omitted.")]
     InvalidApiKeyUid(Value),
     #[error("API key `{0}` not found.")]
     ApiKeyNotFound(String),
-    #[error("`uid` field value `{0}` already exists for an API key.")]
+    #[error("`uid` field value `{0}` is already an existing API key.")]
     ApiKeyAlreadyExists(String),
+    #[error("`{0}` field cannot be modified for the given resource.")]
+    ImmutableField(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -51,6 +53,7 @@ impl ErrorCode for AuthControllerError {
             Self::ApiKeyNotFound(_) => Code::ApiKeyNotFound,
             Self::InvalidApiKeyUid(_) => Code::InvalidApiKeyUid,
             Self::ApiKeyAlreadyExists(_) => Code::ApiKeyAlreadyExists,
+            Self::ImmutableField(_) => Code::ImmutableField,
             Self::Internal(_) => Code::Internal,
         }
     }

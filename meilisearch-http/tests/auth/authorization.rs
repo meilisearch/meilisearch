@@ -149,31 +149,22 @@ async fn error_access_unauthorized_index() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_action() {
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
-
-    let content = json!({
-        "indexes": ["products"],
-        "actions": [],
-        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
-    });
-
-    let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-
-    let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
 
     for ((method, route), action) in AUTHORIZATIONS.iter() {
+        // create a new API key letting only the needed action.
         server.use_api_key("MASTER_KEY");
 
-        // Patch API key letting all rights but the needed one.
         let content = json!({
+            "indexes": ["products"],
             "actions": ALL_ACTIONS.difference(action).collect::<Vec<_>>(),
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
         });
-        let (response, code) = server.patch_api_key(&key, content).await;
-        assert_eq!(200, code, "{:?}", &response);
 
+        let (response, code) = server.add_api_key(content).await;
+        assert_eq!(201, code, "{:?}", &response);
+        assert!(response["key"].is_string());
+
+        let key = response["key"].as_str().unwrap();
         server.use_api_key(&key);
         let (response, code) = server.dummy_request(method, route).await;
 

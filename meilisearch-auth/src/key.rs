@@ -99,6 +99,30 @@ impl Key {
             self.name = des?;
         }
 
+        if value.get("uid").is_some() {
+            return Err(AuthControllerError::ImmutableField("uid".to_string()));
+        }
+
+        if value.get("actions").is_some() {
+            return Err(AuthControllerError::ImmutableField("actions".to_string()));
+        }
+
+        if value.get("indexes").is_some() {
+            return Err(AuthControllerError::ImmutableField("indexes".to_string()));
+        }
+
+        if value.get("expiresAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("expiresAt".to_string()));
+        }
+
+        if value.get("createdAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("createdAt".to_string()));
+        }
+
+        if value.get("updatedAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("updatedAt".to_string()));
+        }
+
         self.updated_at = OffsetDateTime::now_utc();
 
         Ok(())

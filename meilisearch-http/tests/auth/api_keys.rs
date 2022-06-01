@@ -470,7 +470,7 @@ async fn error_add_api_key_invalid_parameters_uid() {
     assert_eq!(400, code, "{:?}", &response);
 
     let expected_response = json!({
-        "message": r#"`uid` field value `"aaaaabbbbbccc"` is invalid. It should be a valid uuidv4 string or ommited."#,
+        "message": r#"`uid` field value `"aaaaabbbbbccc"` is invalid. It should be a valid UUID v4 string or omitted."#,
         "code": "invalid_api_key_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
@@ -499,7 +499,7 @@ async fn error_add_api_key_parameters_uid_already_exist() {
     assert_eq!(409, code, "{:?}", &response);
 
     let expected_response = json!({
-        "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` already exists for an API key.",
+        "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
         "code": "api_key_already_exists",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#api_key_already_exists"
@@ -1112,7 +1112,7 @@ async fn patch_api_key_name() {
 }
 
 #[actix_rt::test]
-async fn patch_api_key_indexes_unchanged() {
+async fn error_patch_api_key_indexes() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
 
@@ -1143,44 +1143,24 @@ async fn patch_api_key_indexes_unchanged() {
     assert!(response["updatedAt"].is_string());
 
     let uid = response["uid"].as_str().unwrap();
-    let created_at = response["createdAt"].as_str().unwrap();
-    let updated_at = response["updatedAt"].as_str().unwrap();
 
     let content = json!({ "indexes": ["products", "prices"] });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert_ne!(response["updatedAt"].as_str().unwrap(), updated_at);
-    assert_eq!(response["createdAt"].as_str().unwrap(), created_at);
+    assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-            "dumps.get"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
+    let expected = json!({"message": "`indexes` field cannot be modified for the given resource.",
+        "code": "immutable_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#immutable_field"
     });
 
     assert_json_include!(actual: response, expected: expected);
 }
 
 #[actix_rt::test]
-async fn patch_api_key_actions_unchanged() {
+async fn error_patch_api_key_actions() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
 
@@ -1211,9 +1191,6 @@ async fn patch_api_key_actions_unchanged() {
     assert!(response["updatedAt"].is_string());
 
     let uid = response["uid"].as_str().unwrap();
-
-    let created_at = response["createdAt"].as_str().unwrap();
-    let updated_at = response["updatedAt"].as_str().unwrap();
 
     let content = json!({
         "actions": [
@@ -1227,37 +1204,19 @@ async fn patch_api_key_actions_unchanged() {
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert_ne!(response["updatedAt"].as_str().unwrap(), updated_at);
-    assert_eq!(response["createdAt"].as_str().unwrap(), created_at);
+    assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-            "dumps.get"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
+    let expected = json!({"message": "`actions` field cannot be modified for the given resource.",
+        "code": "immutable_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#immutable_field"
     });
 
     assert_json_include!(actual: response, expected: expected);
 }
 
 #[actix_rt::test]
-async fn patch_api_key_expiration_date_unchanged() {
+async fn error_patch_api_key_expiration_date() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
 
@@ -1288,37 +1247,17 @@ async fn patch_api_key_expiration_date_unchanged() {
     assert!(response["updatedAt"].is_string());
 
     let uid = response["uid"].as_str().unwrap();
-    let created_at = response["createdAt"].as_str().unwrap();
-    let updated_at = response["updatedAt"].as_str().unwrap();
 
     let content = json!({ "expiresAt": "2055-11-13T00:00:00Z" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert_ne!(response["updatedAt"].as_str().unwrap(), updated_at);
-    assert_eq!(response["createdAt"].as_str().unwrap(), created_at);
+    assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-            "dumps.get"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
+    let expected = json!({"message": "`expiresAt` field cannot be modified for the given resource.",
+        "code": "immutable_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#immutable_field"
     });
 
     assert_json_include!(actual: response, expected: expected);
