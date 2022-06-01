@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Bound::Unbounded;
-use std::{fmt, mem};
+use std::{cmp, fmt, mem};
 
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
@@ -13,6 +13,14 @@ use crate::heed_codec::facet::{
 use crate::search::facet::{FacetNumberIter, FacetNumberRange, FacetStringIter};
 use crate::{FieldId, Index, Result};
 
+/// The default number of values by facets that will
+/// be fetched from the key-value store.
+const DEFAULT_VALUES_BY_FACET: usize = 1000;
+
+/// The hard limit in the number of values by facets that will be fetched from
+/// the key-value store. Searching for more values could slow down the engine.
+const MAX_VALUES_BY_FACET: usize = 10000;
+
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
 const CANDIDATES_THRESHOLD: u64 = 3000;
@@ -20,17 +28,29 @@ const CANDIDATES_THRESHOLD: u64 = 3000;
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
     candidates: Option<RoaringBitmap>,
+    max_values_by_facet: usize,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
 
 impl<'a> FacetDistribution<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> FacetDistribution<'a> {
-        FacetDistribution { facets: None, candidates: None, rtxn, index }
+        FacetDistribution {
+            facets: None,
+            candidates: None,
+            max_values_by_facet: DEFAULT_VALUES_BY_FACET,
+            rtxn,
+            index,
+        }
     }
 
     pub fn facets<I: IntoIterator<Item = A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
         self.facets = Some(names.into_iter().map(|s| s.as_ref().to_string()).collect());
+        self
+    }
+
+    pub fn max_values_by_facet(&mut self, max: usize) -> &mut Self {
+        self.max_values_by_facet = cmp::min(max, MAX_VALUES_BY_FACET);
         self
     }
 
@@ -52,6 +72,7 @@ impl<'a> FacetDistribution<'a> {
             FacetType::Number => {
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
+                let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
                 for docid in candidates.into_iter() {
                     key_buffer.truncate(mem::size_of::<FieldId>());
@@ -64,6 +85,10 @@ impl<'a> FacetDistribution<'a> {
                     for result in iter {
                         let ((_, _, value), ()) = result?;
                         *distribution.entry(value.to_string()).or_insert(0) += 1;
+
+                        if distribution.len() - distribution_prelength == self.max_values_by_facet {
+                            break;
+                        }
                     }
                 }
             }
@@ -86,6 +111,10 @@ impl<'a> FacetDistribution<'a> {
                             .entry(normalized_value)
                             .or_insert_with(|| (original_value, 0));
                         *count += 1;
+
+                        if normalized_distribution.len() == self.max_values_by_facet {
+                            break;
+                        }
                     }
                 }
 
@@ -116,6 +145,9 @@ impl<'a> FacetDistribution<'a> {
             if !docids.is_empty() {
                 distribution.insert(value.to_string(), docids.len());
             }
+            if distribution.len() == self.max_values_by_facet {
+                break;
+            }
         }
 
         Ok(())
@@ -136,6 +168,9 @@ impl<'a> FacetDistribution<'a> {
             if !docids.is_empty() {
                 distribution.insert(original.to_string(), docids.len());
             }
+            if distribution.len() == self.max_values_by_facet {
+                break;
+            }
         }
 
         Ok(())
@@ -155,6 +190,9 @@ impl<'a> FacetDistribution<'a> {
         for result in range {
             let ((_, _, value, _), docids) = result?;
             distribution.insert(value.to_string(), docids.len());
+            if distribution.len() == self.max_values_by_facet {
+                break;
+            }
         }
 
         let iter = self
@@ -168,6 +206,9 @@ impl<'a> FacetDistribution<'a> {
         for result in iter {
             let ((_, normalized_value), (original_value, docids)) = result?;
             normalized_distribution.insert(normalized_value, (original_value, docids.len()));
+            if normalized_distribution.len() == self.max_values_by_facet {
+                break;
+            }
         }
 
         let iter = normalized_distribution
@@ -253,11 +294,12 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution { facets, candidates, rtxn: _, index: _ } = self;
+        let FacetDistribution { facets, candidates, max_values_by_facet, rtxn: _, index: _ } = self;
 
         f.debug_struct("FacetDistribution")
             .field("facets", facets)
             .field("candidates", candidates)
+            .field("max_values_by_facet", max_values_by_facet)
             .finish()
     }
 }
