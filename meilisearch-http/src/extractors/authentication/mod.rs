@@ -177,7 +177,7 @@ pub mod policies {
             // if master key is None only keys routes are inaccessible.
             if auth
                 .get_master_key()
-                .map_or_else(|| !is_keys_action(A), |mk| mk == token && is_keys_action(A))
+                .map_or_else(|| !is_keys_action(A), |mk| mk == token)
             {
                 return Some(AuthFilter::default());
             }

@@ -190,39 +190,12 @@ async fn error_access_unauthorized_action() {
 
 #[actix_rt::test]
 #[cfg_attr(target_os = "windows", ignore)]
-async fn error_access_master_key() {
-    let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
-
-    // master key must only have access to /keys
-    for ((method, route), _) in AUTHORIZATIONS
-        .iter()
-        .filter(|(_, action)| action.iter().all(|a| !a.starts_with("keys.")))
-    {
-        let (response, code) = server.dummy_request(method, route).await;
-
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
-        assert_eq!(403, code, "{:?}", &response);
-    }
-}
-
-#[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_master_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
 
-    // master key must only have access to /keys
-    for ((method, route), _) in AUTHORIZATIONS
-        .iter()
-        .filter(|(_, action)| action.iter().any(|a| a.starts_with("keys.")))
-    {
+    // master key must have access to all routes.
+    for ((method, route), _) in AUTHORIZATIONS.iter() {
         let (response, code) = server.dummy_request(method, route).await;
 
         assert_ne!(
