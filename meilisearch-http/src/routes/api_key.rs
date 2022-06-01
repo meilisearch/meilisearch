@@ -69,7 +69,8 @@ pub async fn get_api_key(
     let key = path.into_inner().key;
 
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_sha(&key))?;
+        let uid =
+            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         let key = auth_controller.get_key(uid)?;
 
         Ok(KeyView::from_key(key, &auth_controller))
@@ -88,7 +89,8 @@ pub async fn patch_api_key(
     let key = path.into_inner().key;
     let body = body.into_inner();
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
-        let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_sha(&key))?;
+        let uid =
+            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         let key = auth_controller.update_key(uid, body)?;
 
         Ok(KeyView::from_key(key, &auth_controller))
@@ -105,7 +107,8 @@ pub async fn delete_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     tokio::task::spawn_blocking(move || {
-        let uid = Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_sha(&key))?;
+        let uid =
+            Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         auth_controller.delete_key(uid)
     })
     .await

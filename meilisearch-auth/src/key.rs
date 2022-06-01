@@ -133,7 +133,7 @@ impl Key {
         let uid = Uuid::new_v4();
         Self {
             name: Some("Default Admin API Key".to_string()),
-            description: Some("Use it for all other than search operations. Caution! Do not expose it on a public frontend".to_string()),
+            description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::All],
             indexes: vec!["*".to_string()],

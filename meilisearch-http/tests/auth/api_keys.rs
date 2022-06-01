@@ -711,7 +711,7 @@ async fn list_api_keys() {
         },
         {
             "name": "Default Admin API Key",
-            "description": "Use it for all other than search operations. Caution! Do not expose it on a public frontend",
+            "description": "Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend",
             "indexes": ["*"],
             "actions": ["*"],
             "expiresAt": serde_json::Value::Null,

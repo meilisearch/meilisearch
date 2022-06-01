@@ -4,20 +4,19 @@ pub mod error;
 mod key;
 mod store;
 
-use crate::store::generate_key;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-
 use std::sync::Arc;
-use uuid::Uuid;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
 pub use key::Key;
+use store::generate_key_as_base64;
 pub use store::open_auth_store_env;
 use store::HeedAuthStore;
 
@@ -63,16 +62,18 @@ impl AuthController {
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))
     }
 
-    pub fn get_optional_uid_from_sha(&self, sha: &[u8]) -> Result<Option<Uuid>> {
+    pub fn get_optional_uid_from_encoded_key(&self, encoded_key: &[u8]) -> Result<Option<Uuid>> {
         match &self.master_key {
-            Some(master_key) => self.store.get_uid_from_sha(sha, master_key.as_bytes()),
+            Some(master_key) => self
+                .store
+                .get_uid_from_encoded_key(encoded_key, master_key.as_bytes()),
             None => Ok(None),
         }
     }
 
-    pub fn get_uid_from_sha(&self, sha: &str) -> Result<Uuid> {
-        self.get_optional_uid_from_sha(sha.as_bytes())?
-            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(sha.to_string()))
+    pub fn get_uid_from_encoded_key(&self, encoded_key: &str) -> Result<Uuid> {
+        self.get_optional_uid_from_encoded_key(encoded_key.as_bytes())?
+            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(encoded_key.to_string()))
     }
 
     pub fn get_key_filters(
@@ -134,7 +135,7 @@ impl AuthController {
     pub fn generate_key(&self, uid: Uuid) -> Option<String> {
         self.master_key
             .as_ref()
-            .map(|master_key| generate_key(uid.as_bytes(), master_key.as_bytes()))
+            .map(|master_key| generate_key_as_base64(uid.as_bytes(), master_key.as_bytes()))
     }
 
     /// Check if the provided key is authorized to make a specific action

@@ -118,14 +118,20 @@ impl HeedAuthStore {
         self.keys.get(&rtxn, uid.as_bytes()).map_err(|e| e.into())
     }
 
-    pub fn get_uid_from_sha(&self, key_sha: &[u8], master_key: &[u8]) -> Result<Option<Uuid>> {
+    pub fn get_uid_from_encoded_key(
+        &self,
+        encoded_key: &[u8],
+        master_key: &[u8],
+    ) -> Result<Option<Uuid>> {
         let rtxn = self.env.read_txn()?;
         let uid = self
             .keys
             .remap_data_type::<DecodeIgnore>()
             .iter(&rtxn)?
             .filter_map(|res| match res {
-                Ok((uid, _)) if generate_key(uid, master_key).as_bytes() == key_sha => {
+                Ok((uid, _))
+                    if generate_key_as_base64(uid, master_key).as_bytes() == encoded_key =>
+                {
                     let (uid, _) = try_split_array_at(uid)?;
                     Some(Uuid::from_bytes(*uid))
                 }
@@ -235,7 +241,7 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     }
 }
 
-pub fn generate_key(uid: &[u8], master_key: &[u8]) -> String {
+pub fn generate_key_as_base64(uid: &[u8], master_key: &[u8]) -> String {
     let key = [uid, master_key].concat();
     let sha = Sha256::digest(&key);
     base64::encode_config(sha, base64::URL_SAFE_NO_PAD)
