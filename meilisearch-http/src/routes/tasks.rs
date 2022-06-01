@@ -30,7 +30,7 @@ pub struct TaskFilterQuery {
     index_uid: Option<CS<StarOr<IndexUid>>>,
     #[serde(default = "DEFAULT_LIMIT")]
     limit: usize,
-    after: Option<TaskId>,
+    from: Option<TaskId>,
 }
 
 #[rustfmt::skip]
@@ -74,7 +74,7 @@ async fn get_tasks(
         status,
         index_uid,
         limit,
-        after,
+        from,
     } = params.into_inner();
 
     let search_rules = &meilisearch.filters().search_rules;
@@ -135,25 +135,11 @@ async fn get_tasks(
         indexes_filters
     };
 
-    let offset = match after {
-        Some(0) => {
-            let tasks = TaskListView {
-                results: vec![],
-                limit,
-                after: None,
-            };
-            return Ok(HttpResponse::Ok().json(tasks));
-        }
-        // We -1 here because we need an offset and we must exclude the `after` one.
-        Some(n) => Some(n - 1),
-        None => None,
-    };
-
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
 
     let mut tasks_results = meilisearch
-        .list_tasks(filters, Some(limit), offset)
+        .list_tasks(filters, Some(limit), from)
         .await?
         .into_iter()
         .map(TaskView::from)
@@ -161,17 +147,19 @@ async fn get_tasks(
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
-    let after = if tasks_results.len() == limit {
-        tasks_results.pop();
-        tasks_results.last().map(|t| t.uid)
+    let next = if tasks_results.len() == limit {
+        tasks_results.pop().map(|t| t.uid)
     } else {
         None
     };
 
+    let from = tasks_results.first().map(|t| t.uid);
+
     let tasks = TaskListView {
         results: tasks_results,
         limit: limit.saturating_sub(1),
-        after,
+        from,
+        next,
     };
 
     Ok(HttpResponse::Ok().json(tasks))

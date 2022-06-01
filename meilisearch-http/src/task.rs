@@ -371,7 +371,8 @@ impl From<Task> for TaskView {
 pub struct TaskListView {
     pub results: Vec<TaskView>,
     pub limit: usize,
-    pub after: Option<TaskId>,
+    pub from: Option<TaskId>,
+    pub next: Option<TaskId>,
 }
 
 #[derive(Debug, Serialize)]
