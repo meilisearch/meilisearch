@@ -4,7 +4,7 @@ use crate::snapshot::SnapshotJob;
 
 use super::task::{Task, TaskEvent};
 
-pub type BatchId = u64;
+pub type BatchId = u32;
 
 #[derive(Debug)]
 pub enum BatchContent {

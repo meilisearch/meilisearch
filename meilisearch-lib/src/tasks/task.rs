@@ -10,7 +10,7 @@ use crate::{
     index_resolver::IndexUid,
 };
 
-pub type TaskId = u64;
+pub type TaskId = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

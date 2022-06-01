@@ -14,6 +14,8 @@ use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
 
 use super::{fold_star_or, StarOr};
 
+const DEFAULT_LIMIT: fn() -> usize = || 20;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
         .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
@@ -26,8 +28,9 @@ pub struct TaskFilterQuery {
     type_: Option<CS<StarOr<TaskType>>>,
     status: Option<CS<StarOr<TaskStatus>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
-    limit: Option<usize>,  // TODO must not return an error when deser fail
-    after: Option<TaskId>, // TODO must not return an error when deser fail
+    #[serde(default = "DEFAULT_LIMIT")]
+    limit: usize,
+    after: Option<TaskId>,
 }
 
 #[rustfmt::skip]
@@ -132,10 +135,22 @@ async fn get_tasks(
         indexes_filters
     };
 
+    let offset = match after {
+        Some(0) => {
+            let tasks = TaskListView {
+                results: vec![],
+                limit,
+                after: None,
+            };
+            return Ok(HttpResponse::Ok().json(tasks));
+        }
+        // We -1 here because we need an offset and we must exclude the `after` one.
+        Some(n) => Some(n - 1),
+        None => None,
+    };
+
     // We +1 just to know if there is more after this "page" or not.
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).saturating_add(1);
-    // We -1 here because we need an offset and we must exclude the `after` one.
-    let offset = after.map(|n| n.saturating_sub(1));
+    let limit = limit.saturating_add(1);
 
     let mut tasks_results = meilisearch
         .list_tasks(filters, Some(limit), offset)
