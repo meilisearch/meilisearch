@@ -346,8 +346,6 @@ impl Scheduler {
             .fetch_unfinished_tasks(Some(self.next_fetched_task_id))
             .await?
             .into_iter()
-            // The tasks arrive in reverse order, and we need to insert them in order.
-            .rev()
             .for_each(|t| {
                 self.next_fetched_task_id = t.id + 1;
                 self.register_task(t);
