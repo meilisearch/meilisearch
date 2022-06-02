@@ -20,30 +20,11 @@ use super::index::Index;
 pub type Document = serde_json::Map<String, Value>;
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
-pub const DEFAULT_SEARCH_LIMIT: usize = 20;
-const fn default_search_limit() -> usize {
-    DEFAULT_SEARCH_LIMIT
-}
-
-pub const DEFAULT_CROP_LENGTH: usize = 10;
-pub const fn default_crop_length() -> usize {
-    DEFAULT_CROP_LENGTH
-}
-
-pub const DEFAULT_CROP_MARKER: &str = "…";
-pub fn default_crop_marker() -> String {
-    DEFAULT_CROP_MARKER.to_string()
-}
-
-pub const DEFAULT_HIGHLIGHT_PRE_TAG: &str = "<em>";
-pub fn default_highlight_pre_tag() -> String {
-    DEFAULT_HIGHLIGHT_PRE_TAG.to_string()
-}
-
-pub const DEFAULT_HIGHLIGHT_POST_TAG: &str = "</em>";
-pub fn default_highlight_post_tag() -> String {
-    DEFAULT_HIGHLIGHT_POST_TAG.to_string()
-}
+pub const DEFAULT_SEARCH_LIMIT: fn() -> usize = || 20;
+pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
+pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
+pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
+pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -54,11 +35,11 @@ pub const HARD_RESULT_LIMIT: usize = 1000;
 pub struct SearchQuery {
     pub q: Option<String>,
     pub offset: Option<usize>,
-    #[serde(default = "default_search_limit")]
+    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
     pub limit: usize,
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
-    #[serde(default = "default_crop_length")]
+    #[serde(default = "DEFAULT_CROP_LENGTH")]
     pub crop_length: usize,
     pub attributes_to_highlight: Option<HashSet<String>>,
     // Default to false
@@ -67,11 +48,11 @@ pub struct SearchQuery {
     pub filter: Option<Value>,
     pub sort: Option<Vec<String>>,
     pub facets: Option<Vec<String>>,
-    #[serde(default = "default_highlight_pre_tag")]
+    #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
     pub highlight_pre_tag: String,
-    #[serde(default = "default_highlight_post_tag")]
+    #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
     pub highlight_post_tag: String,
-    #[serde(default = "default_crop_marker")]
+    #[serde(default = "DEFAULT_CROP_MARKER")]
     pub crop_marker: String,
 }
 

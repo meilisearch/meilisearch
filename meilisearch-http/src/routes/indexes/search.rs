@@ -3,8 +3,8 @@ use log::debug;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{
-    default_crop_length, default_crop_marker, default_highlight_post_tag,
-    default_highlight_pre_tag, SearchQuery, DEFAULT_SEARCH_LIMIT,
+    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
@@ -30,7 +30,7 @@ pub struct SearchQueryGet {
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
     attributes_to_crop: Option<String>,
-    #[serde(default = "default_crop_length")]
+    #[serde(default = "DEFAULT_CROP_LENGTH")]
     crop_length: usize,
     attributes_to_highlight: Option<String>,
     filter: Option<String>,
@@ -38,11 +38,11 @@ pub struct SearchQueryGet {
     #[serde(default = "Default::default")]
     show_matches_position: bool,
     facets: Option<String>,
-    #[serde(default = "default_highlight_pre_tag")]
+    #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
     highlight_pre_tag: String,
-    #[serde(default = "default_highlight_post_tag")]
+    #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
     highlight_post_tag: String,
-    #[serde(default = "default_crop_marker")]
+    #[serde(default = "DEFAULT_CROP_MARKER")]
     crop_marker: String,
 }
 
@@ -77,7 +77,7 @@ impl From<SearchQueryGet> for SearchQuery {
         Self {
             q: other.q,
             offset: other.offset,
-            limit: other.limit.unwrap_or(DEFAULT_SEARCH_LIMIT),
+            limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
             attributes_to_retrieve,
             attributes_to_crop,
             crop_length: other.crop_length,
