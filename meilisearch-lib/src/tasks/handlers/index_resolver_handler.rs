@@ -49,7 +49,12 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::index_resolver::{index_store::MockIndexStore, meta_store::MockIndexMetaStore};
+    use crate::index_resolver::index_store::MapIndexStore;
+    use crate::index_resolver::meta_store::HeedMetaStore;
+    use crate::index_resolver::{
+        error::Result as IndexResult, index_store::MockIndexStore, meta_store::MockIndexMetaStore,
+    };
+    use crate::tasks::task::TaskResult;
     use crate::tasks::{
         handlers::test::task_to_batch,
         task::{Task, TaskContent},
@@ -142,5 +147,58 @@ mod test {
         index_resolver.process_batch(batch).await;
     }
 
-    // TODO: test perform_batch. We need a Mocker for IndexResolver.
+    proptest! {
+        #[test]
+        fn index_document_task_deletes_update_file(
+            task in any::<Task>(),
+        ) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let handle = rt.spawn(async {
+                let mocker = Mocker::default();
+
+                if let TaskContent::DocumentAddition{ .. } = task.content {
+                    mocker.when::<Uuid, IndexResult<()>>("delete_content_file").then(|_| Ok(()));
+                }
+
+                let index_resolver: IndexResolver<HeedMetaStore, MapIndexStore> = IndexResolver::mock(mocker);
+
+                let batch = task_to_batch(task);
+
+                index_resolver.finish(&batch).await;
+            });
+
+            rt.block_on(handle).unwrap();
+        }
+
+        #[test]
+        fn test_handle_batch(task in any::<Task>()) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let handle = rt.spawn(async {
+                let mocker = Mocker::default();
+                match task.content {
+                    TaskContent::DocumentAddition { .. } => {
+                        mocker.when::<Vec<Task>, Vec<Task>>("process_document_addition_batch").then(|tasks| tasks);
+                    }
+                    TaskContent::Dump { .. } => (),
+                    _ => {
+                        mocker.when::<&Task, IndexResult<TaskResult>>("process_task").then(|_| Ok(TaskResult::Other));
+                    }
+                }
+                let index_resolver: IndexResolver<HeedMetaStore, MapIndexStore> = IndexResolver::mock(mocker);
+
+
+                let batch = task_to_batch(task);
+
+                if index_resolver.accept(&batch) {
+                    index_resolver.process_batch(batch).await;
+                }
+            });
+
+            if let Err(e) = rt.block_on(handle) {
+                if e.is_panic() {
+                    std::panic::resume_unwind(e.into_panic());
+                }
+            }
+        }
+    }
 }

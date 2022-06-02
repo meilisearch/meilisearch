@@ -438,24 +438,9 @@ mod real {
 
 #[cfg(test)]
 mod test {
-    // use std::{collections::BTreeMap, vec::IntoIter};
-    //
-    // use super::*;
-    //
-    // use futures::future::ok;
-    // use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
-    // use nelson::Mocker;
-    // use proptest::prelude::*;
-    //
-    // use crate::{
-    //     index::{
-    //         error::{IndexError, Result as IndexResult},
-    //         Checked, IndexMeta, IndexStats, Settings,
-    //     },
-    //     tasks::{batch::Batch, BatchHandler},
-    // };
-    // use index_store::MockIndexStore;
-    // use meta_store::MockIndexMetaStore;
+    use super::*;
+
+    use nelson::Mocker;
 
     pub enum MockIndexResolver<U, I> {
         Real(super::real::IndexResolver<U, I>),
@@ -494,14 +479,16 @@ mod test {
         pub async fn process_document_addition_batch(&self, tasks: Vec<Task>) -> Vec<Task> {
             match self {
                 IndexResolver::Real(r) => r.process_document_addition_batch(tasks).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe {
+                    m.get("process_document_addition_batch").call(tasks)
+                },
             }
         }
 
         pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
             match self {
                 IndexResolver::Real(r) => r.process_task(task).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe { m.get("process_task").call(task) },
             }
         }
 
@@ -551,7 +538,9 @@ mod test {
         pub async fn delete_content_file(&self, content_uuid: Uuid) -> Result<()> {
             match self {
                 IndexResolver::Real(r) => r.delete_content_file(content_uuid).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe {
+                    m.get("delete_content_file").call(content_uuid)
+                },
             }
         }
     }
