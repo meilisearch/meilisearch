@@ -6,12 +6,12 @@ use std::result::Result as StdResult;
 use std::str::Utf8Error;
 use std::time::Instant;
 
+use charabia::TokenizerBuilder;
 use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
 use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::debug;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
@@ -126,14 +126,14 @@ impl<'a> Search<'a> {
                 builder.words_limit(self.words_limit);
                 // We make sure that the analyzer is aware of the stop words
                 // this ensures that the query builder is able to properly remove them.
-                let mut config = AnalyzerConfig::default();
+                let mut tokbuilder = TokenizerBuilder::new();
                 let stop_words = self.index.stop_words(self.rtxn)?;
                 if let Some(ref stop_words) = stop_words {
-                    config.stop_words(stop_words);
+                    tokbuilder.stop_words(stop_words);
                 }
-                let analyzer = Analyzer::new(config);
-                let result = analyzer.analyze(query);
-                let tokens = result.tokens();
+
+                let tokenizer = tokbuilder.build();
+                let tokens = tokenizer.tokenize(query);
                 builder
                     .build(tokens)?
                     .map_or((None, None, None), |(qt, pq, mw)| (Some(qt), Some(pq), Some(mw)))

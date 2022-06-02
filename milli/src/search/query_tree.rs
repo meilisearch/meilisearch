@@ -1,10 +1,9 @@
 use std::borrow::Cow;
 use std::{cmp, fmt, mem};
 
+use charabia::classifier::ClassifiedTokenIter;
+use charabia::{SeparatorKind, TokenKind};
 use fst::Set;
-use meilisearch_tokenizer::token::SeparatorKind;
-use meilisearch_tokenizer::tokenizer::TokenStream;
-use meilisearch_tokenizer::TokenKind;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
@@ -235,9 +234,9 @@ impl<'a> QueryTreeBuilder<'a> {
     /// - if `authorize_typos` is set to `false` the query tree will be generated
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
-    pub fn build(
+    pub fn build<A: AsRef<[u8]>>(
         &self,
-        query: TokenStream,
+        query: ClassifiedTokenIter<A>,
     ) -> Result<Option<(Operation, PrimitiveQuery, MatchingWords)>> {
         let stop_words = self.index.stop_words(self.rtxn)?;
         let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
@@ -649,11 +648,14 @@ impl PrimitiveQueryPart {
 
 /// Create primitive query from tokenized query string,
 /// the primitive query is an intermediate state to build the query tree.
-fn create_primitive_query(
-    query: TokenStream,
+fn create_primitive_query<A>(
+    query: ClassifiedTokenIter<A>,
     stop_words: Option<Set<&[u8]>>,
     words_limit: Option<usize>,
-) -> PrimitiveQuery {
+) -> PrimitiveQuery
+where
+    A: AsRef<[u8]>,
+{
     let mut primitive_query = Vec::new();
     let mut phrase = Vec::new();
     let mut quoted = false;
@@ -673,21 +675,18 @@ fn create_primitive_query(
                 // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if quoted {
-                    phrase.push(token.word.to_string());
+                    phrase.push(token.lemma().to_string());
                 } else if peekable.peek().is_some() {
-                    if !stop_words
-                        .as_ref()
-                        .map_or(false, |swords| swords.contains(token.word.as_ref()))
-                    {
+                    if !stop_words.as_ref().map_or(false, |swords| swords.contains(token.lemma())) {
                         primitive_query
-                            .push(PrimitiveQueryPart::Word(token.word.to_string(), false));
+                            .push(PrimitiveQueryPart::Word(token.lemma().to_string(), false));
                     }
                 } else {
-                    primitive_query.push(PrimitiveQueryPart::Word(token.word.to_string(), true));
+                    primitive_query.push(PrimitiveQueryPart::Word(token.lemma().to_string(), true));
                 }
             }
             TokenKind::Separator(separator_kind) => {
-                let quote_count = token.word.chars().filter(|&s| s == '"').count();
+                let quote_count = token.lemma().chars().filter(|&s| s == '"').count();
                 // swap quoted state if we encounter a double quote
                 if quote_count % 2 != 0 {
                     quoted = !quoted;
@@ -738,8 +737,8 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 mod test {
     use std::collections::HashMap;
 
+    use charabia::Tokenize;
     use maplit::hashmap;
-    use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
 
@@ -754,12 +753,12 @@ mod test {
     }
 
     impl TestContext {
-        fn build(
+        fn build<A: AsRef<[u8]>>(
             &self,
             optional_words: bool,
             authorize_typos: bool,
             words_limit: Option<usize>,
-            query: TokenStream,
+            query: ClassifiedTokenIter<A>,
         ) -> Result<Option<(Operation, PrimitiveQuery)>> {
             let primitive_query = create_primitive_query(query, None, words_limit);
             if !primitive_query.is_empty() {
@@ -856,9 +855,7 @@ mod test {
     #[test]
     fn prefix() {
         let query = "hey friends";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -889,9 +886,7 @@ mod test {
     #[test]
     fn no_prefix() {
         let query = "hey friends ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -922,9 +917,7 @@ mod test {
     #[test]
     fn synonyms() {
         let query = "hello world ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -987,9 +980,7 @@ mod test {
     #[test]
     fn complex_synonyms() {
         let query = "new york city ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -1087,9 +1078,7 @@ mod test {
     #[test]
     fn ngrams() {
         let query = "n grams ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -1120,9 +1109,7 @@ mod test {
     #[test]
     fn word_split() {
         let query = "wordsplit fish ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -1159,9 +1146,7 @@ mod test {
     #[test]
     fn phrase() {
         let query = "\"hey friends\" \" \" \"wooop";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::And(vec![
             Operation::Phrase(vec!["hey".to_string(), "friends".to_string()]),
@@ -1177,9 +1162,7 @@ mod test {
     #[test]
     fn phrase_with_hard_separator() {
         let query = "\"hey friends. wooop wooop\"";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::And(vec![
             Operation::Phrase(vec!["hey".to_string(), "friends".to_string()]),
@@ -1195,9 +1178,7 @@ mod test {
     #[test]
     fn optional_word() {
         let query = "hey my friend ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             true,
@@ -1280,9 +1261,7 @@ mod test {
     #[test]
     fn optional_word_phrase() {
         let query = "\"hey my\"";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Phrase(vec!["hey".to_string(), "my".to_string()]);
         let (query_tree, _) =
@@ -1294,9 +1273,7 @@ mod test {
     #[test]
     fn optional_word_multiple_phrases() {
         let query = r#""hey" my good "friend""#;
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             true,
@@ -1365,9 +1342,7 @@ mod test {
     #[test]
     fn no_typo() {
         let query = "hey friends ";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::Or(
             false,
@@ -1397,9 +1372,7 @@ mod test {
     #[test]
     fn words_limit() {
         let query = "\"hey my\" good friend";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
-        let tokens = result.tokens();
+        let tokens = query.tokenize();
 
         let expected = Operation::And(vec![
             Operation::Phrase(vec!["hey".to_string(), "my".to_string()]),
@@ -1441,10 +1414,8 @@ mod test {
     #[test]
     fn disable_typo_on_word() {
         let query = "goodbye";
-        let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-        let result = analyzer.analyze(query);
+        let tokens = query.tokenize();
 
-        let tokens = result.tokens();
         let exact_words = fst::Set::from_iter(Some("goodbye")).unwrap().into_fst().into_inner();
         let exact_words = Some(fst::Set::new(exact_words).unwrap().map_data(Cow::Owned).unwrap());
         let context = TestContext { exact_words, ..Default::default() };

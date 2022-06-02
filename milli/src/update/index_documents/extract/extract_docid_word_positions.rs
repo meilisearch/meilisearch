@@ -3,8 +3,7 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::{io, mem, str};
 
-use meilisearch_tokenizer::token::SeparatorKind;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind};
+use charabia::{SeparatorKind, Token, TokenKind, TokenizerBuilder};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
@@ -40,11 +39,11 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
     let mut key_buffer = Vec::new();
     let mut field_buffer = String::new();
-    let mut config = AnalyzerConfig::default();
+    let mut builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
-        config.stop_words(stop_words);
+        builder.stop_words(stop_words);
     }
-    let analyzer = Analyzer::<Vec<u8>>::new(AnalyzerConfig::default());
+    let tokenizer = builder.build();
 
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
@@ -64,12 +63,11 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                     serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
                 field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut field_buffer) {
-                    let analyzed = analyzer.analyze(field);
-                    let tokens = process_tokens(analyzed.tokens())
+                    let tokens = process_tokens(tokenizer.tokenize(field))
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
-                        let token = token.text().trim();
+                        let token = token.lemma().trim();
                         if !token.is_empty() {
                             key_buffer.truncate(mem::size_of::<u32>());
                             key_buffer.extend_from_slice(token.as_bytes());
@@ -146,7 +144,7 @@ fn process_tokens<'a>(
     tokens: impl Iterator<Item = Token<'a>>,
 ) -> impl Iterator<Item = (usize, Token<'a>)> {
     tokens
-        .skip_while(|token| token.is_separator().is_some())
+        .skip_while(|token| token.is_separator())
         .scan((0, None), |(offset, prev_kind), token| {
             match token.kind {
                 TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {

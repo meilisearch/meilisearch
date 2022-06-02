@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
+use charabia::Token;
 use levenshtein_automata::{Distance, DFA};
-use meilisearch_tokenizer::Token;
 
 use crate::search::build_dfa;
 
@@ -99,13 +99,13 @@ impl MatchingWord {
 
     /// Returns the lenght in chars of the match in case of the token matches the term.
     pub fn match_token(&self, token: &Token) -> Option<usize> {
-        match self.dfa.eval(token.text()) {
+        match self.dfa.eval(token.lemma()) {
             Distance::Exact(t) if t <= self.typo => {
                 if self.prefix {
-                    let len = bytes_to_highlight(token.text(), &self.word);
-                    Some(token.num_chars_from_bytes(len))
+                    let len = bytes_to_highlight(token.lemma(), &self.word);
+                    Some(token.original_lengths(len).0)
                 } else {
-                    Some(token.num_chars_from_bytes(token.text().len()))
+                    Some(token.original_lengths(token.lemma().len()).0)
                 }
             }
             _otherwise => None,
@@ -262,7 +262,7 @@ mod tests {
     use std::borrow::Cow;
     use std::str::from_utf8;
 
-    use meilisearch_tokenizer::TokenKind;
+    use charabia::TokenKind;
 
     use super::*;
     use crate::MatchingWords;
@@ -344,11 +344,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("word"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("word"),
+                    char_end: "word".chars().count(),
                     byte_end: "word".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             Some(MatchType::Full { char_len: 3, ids: &[2] })
@@ -357,11 +356,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("nyc"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("nyc"),
+                    char_end: "nyc".chars().count(),
                     byte_end: "nyc".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             None
@@ -370,11 +368,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("world"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("world"),
+                    char_end: "world".chars().count(),
                     byte_end: "world".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             Some(MatchType::Full { char_len: 5, ids: &[2] })
@@ -383,11 +380,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("splitted"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("splitted"),
+                    char_end: "splitted".chars().count(),
                     byte_end: "splitted".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             Some(MatchType::Full { char_len: 5, ids: &[0] })
@@ -396,11 +392,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("thisnew"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("thisnew"),
+                    char_end: "thisnew".chars().count(),
                     byte_end: "thisnew".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             None
@@ -409,11 +404,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("borld"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("borld"),
+                    char_end: "borld".chars().count(),
                     byte_end: "borld".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             Some(MatchType::Full { char_len: 5, ids: &[2] })
@@ -422,11 +416,10 @@ mod tests {
             matching_words
                 .match_token(&Token {
                     kind: TokenKind::Word,
-                    word: Cow::Borrowed("wordsplit"),
-                    byte_start: 0,
-                    char_index: 0,
+                    lemma: Cow::Borrowed("wordsplit"),
+                    char_end: "wordsplit".chars().count(),
                     byte_end: "wordsplit".len(),
-                    char_map: None,
+                    ..Default::default()
                 })
                 .next(),
             Some(MatchType::Full { char_len: 4, ids: &[2] })

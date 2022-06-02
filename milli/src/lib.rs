@@ -21,7 +21,7 @@ pub use filter_parser::{Condition, FilterCondition};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::{Map, Value};
-pub use {heed, meilisearch_tokenizer as tokenizer};
+pub use {charabia as tokenizer, heed};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::criterion::{default_criteria, Criterion, CriterionError};

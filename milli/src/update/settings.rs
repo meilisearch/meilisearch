@@ -1,8 +1,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
+use charabia::{Tokenizer, TokenizerBuilder};
 use itertools::Itertools;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
@@ -385,13 +385,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
             Setting::Set(ref synonyms) => {
-                fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> Vec<String> {
-                    analyzer
-                        .analyze(text)
-                        .tokens()
+                fn normalize(tokenizer: &Tokenizer<&[u8]>, text: &str) -> Vec<String> {
+                    tokenizer
+                        .tokenize(text)
                         .filter_map(|token| {
                             if token.is_word() {
-                                Some(token.text().to_string())
+                                Some(token.lemma().to_string())
                             } else {
                                 None
                             }
@@ -399,19 +398,19 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                         .collect::<Vec<_>>()
                 }
 
-                let mut config = AnalyzerConfig::default();
+                let mut builder = TokenizerBuilder::new();
                 let stop_words = self.index.stop_words(self.wtxn)?;
-                if let Some(stop_words) = &stop_words {
-                    config.stop_words(stop_words);
+                if let Some(ref stop_words) = stop_words {
+                    builder.stop_words(stop_words);
                 }
-                let analyzer = Analyzer::new(config);
+                let tokenizer = builder.build();
 
                 let mut new_synonyms = HashMap::new();
                 for (word, synonyms) in synonyms {
                     // Normalize both the word and associated synonyms.
-                    let normalized_word = normalize(&analyzer, word);
+                    let normalized_word = normalize(&tokenizer, word);
                     let normalized_synonyms =
-                        synonyms.iter().map(|synonym| normalize(&analyzer, synonym));
+                        synonyms.iter().map(|synonym| normalize(&tokenizer, synonym));
 
                     // Store the normalized synonyms under the normalized word,
                     // merging the possible duplicate words.
@@ -584,19 +583,19 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
-                fn normalize(analyzer: &Analyzer<&[u8]>, text: &str) -> String {
-                    analyzer.analyze(text).tokens().map(|token| token.text().to_string()).collect()
+                fn normalize(tokenizer: &Tokenizer<&[u8]>, text: &str) -> String {
+                    tokenizer.tokenize(text).map(|token| token.lemma().to_string()).collect()
                 }
 
-                let mut config = AnalyzerConfig::default();
+                let mut builder = TokenizerBuilder::new();
                 let stop_words = self.index.stop_words(self.wtxn)?;
-                if let Some(stop_words) = &stop_words {
-                    config.stop_words(stop_words);
+                if let Some(ref stop_words) = stop_words {
+                    builder.stop_words(stop_words);
                 }
-                let analyzer = Analyzer::new(config);
+                let tokenizer = builder.build();
 
                 let mut words: Vec<_> =
-                    words.iter().map(|word| normalize(&analyzer, word)).collect();
+                    words.iter().map(|word| normalize(&tokenizer, word)).collect();
 
                 // normalization could reorder words
                 words.sort_unstable();
