@@ -827,7 +827,7 @@ async fn add_larger_dataset() {
             ..Default::default()
         })
         .await;
-    assert_eq!(code, 200);
+    assert_eq!(code, 200, "failed with `{}`", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 

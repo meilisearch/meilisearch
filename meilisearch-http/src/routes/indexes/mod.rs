@@ -12,6 +12,8 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::SummarizedTaskView;
 
+use super::Pagination;
+
 pub mod documents;
 pub mod search;
 pub mod settings;
@@ -37,38 +39,22 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Paginate {
-    #[serde(default)]
-    offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    limit: usize,
-}
-
 pub async fn list_indexes(
     data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
-    paginate: web::Query<Paginate>,
+    paginate: web::Query<Pagination>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &data.filters().search_rules;
     let indexes: Vec<_> = data.list_indexes().await?;
     let nb_indexes = indexes.len();
-    let indexes: Vec<_> = indexes
+    let iter = indexes
         .into_iter()
-        .filter(|i| search_rules.is_index_authorized(&i.uid))
-        .skip(paginate.offset)
-        .take(paginate.limit)
-        .collect();
+        .filter(|i| search_rules.is_index_authorized(&i.uid));
+    let ret = paginate
+        .into_inner()
+        .auto_paginate_unsized(nb_indexes, iter);
 
-    debug!("returns: {:?}", indexes);
-    Ok(HttpResponse::Ok().json(json!({
-        "results": indexes,
-        "offset": paginate.offset,
-        "limit": paginate.limit,
-        "total": nb_indexes,
-    })))
+    debug!("returns: {:?}", ret);
+    Ok(HttpResponse::Ok().json(ret))
 }
 
 #[derive(Debug, Deserialize)]
