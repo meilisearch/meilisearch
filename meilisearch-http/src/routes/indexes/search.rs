@@ -8,11 +8,13 @@ use meilisearch_lib::index::{
 };
 use meilisearch_lib::MeiliSearch;
 use serde::Deserialize;
+use serde_cs::vec::CS;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::{fold_star_or, StarOr};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -28,16 +30,16 @@ pub struct SearchQueryGet {
     q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
-    attributes_to_retrieve: Option<String>,
-    attributes_to_crop: Option<String>,
+    attributes_to_retrieve: Option<CS<StarOr<String>>>,
+    attributes_to_crop: Option<CS<StarOr<String>>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]
     crop_length: usize,
-    attributes_to_highlight: Option<String>,
+    attributes_to_highlight: Option<CS<StarOr<String>>>,
     filter: Option<String>,
     sort: Option<String>,
     #[serde(default = "Default::default")]
     show_matches_position: bool,
-    facets: Option<String>,
+    facets: Option<CS<StarOr<String>>>,
     #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
     highlight_pre_tag: String,
     #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
@@ -50,19 +52,20 @@ impl From<SearchQueryGet> for SearchQuery {
     fn from(other: SearchQueryGet) -> Self {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect());
+            .map(CS::into_inner)
+            .and_then(fold_star_or);
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect());
+            .map(CS::into_inner)
+            .and_then(fold_star_or);
 
         let attributes_to_highlight = other
             .attributes_to_highlight
-            .map(|attrs| attrs.split(',').map(String::from).collect());
+            .map(CS::into_inner)
+            .and_then(fold_star_or);
 
-        let facets = other
-            .facets
-            .map(|attrs| attrs.split(',').map(String::from).collect());
+        let facets = other.facets.map(CS::into_inner).and_then(fold_star_or);
 
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
