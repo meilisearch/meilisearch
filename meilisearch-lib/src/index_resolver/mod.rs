@@ -608,14 +608,16 @@ mod test {
         pub async fn process_document_addition_batch(&self, tasks: Vec<Task>) -> Vec<Task> {
             match self {
                 IndexResolver::Real(r) => r.process_document_addition_batch(tasks).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe {
+                    m.get("process_document_addition_batch").call(tasks)
+                },
             }
         }
 
         pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
             match self {
                 IndexResolver::Real(r) => r.process_task(task).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe { m.get("process_task").call(task) },
             }
         }
 
@@ -665,7 +667,9 @@ mod test {
         pub async fn delete_content_file(&self, content_uuid: Uuid) -> Result<()> {
             match self {
                 IndexResolver::Real(r) => r.delete_content_file(content_uuid).await,
-                IndexResolver::Mock(_) => todo!(),
+                IndexResolver::Mock(m) => unsafe {
+                    m.get("delete_content_file").call(content_uuid)
+                },
             }
         }
     }
