@@ -1150,7 +1150,7 @@ async fn error_patch_api_key_indexes() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({"message": "`indexes` field cannot be modified for the given resource.",
+    let expected = json!({"message": "The `indexes` field cannot be modified for the given resource.",
         "code": "immutable_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#immutable_field"
@@ -1206,7 +1206,7 @@ async fn error_patch_api_key_actions() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({"message": "`actions` field cannot be modified for the given resource.",
+    let expected = json!({"message": "The `actions` field cannot be modified for the given resource.",
         "code": "immutable_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#immutable_field"
@@ -1254,7 +1254,7 @@ async fn error_patch_api_key_expiration_date() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     assert_eq!(400, code, "{:?}", &response);
 
-    let expected = json!({"message": "`expiresAt` field cannot be modified for the given resource.",
+    let expected = json!({"message": "The `expiresAt` field cannot be modified for the given resource.",
         "code": "immutable_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#immutable_field"
