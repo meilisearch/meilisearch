@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use charabia::{SeparatorKind, Token};
+use charabia::{SeparatorKind, Token, Tokenizer};
 use matching_words::{MatchType, PartialMatch, PrimitiveWordId};
 pub use matching_words::{MatchingWord, MatchingWords};
 use serde::Serialize;
@@ -11,16 +11,23 @@ const DEFAULT_CROP_MARKER: &'static str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &'static str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &'static str = "</em>";
 
-pub struct MatcherBuilder {
+pub struct MatcherBuilder<'a, A> {
     matching_words: MatchingWords,
+    tokenizer: Tokenizer<'a, A>,
     crop_marker: Option<String>,
     highlight_prefix: Option<String>,
     highlight_suffix: Option<String>,
 }
 
-impl MatcherBuilder {
-    pub fn from_matching_words(matching_words: MatchingWords) -> Self {
-        Self { matching_words, crop_marker: None, highlight_prefix: None, highlight_suffix: None }
+impl<'a, A> MatcherBuilder<'a, A> {
+    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'a, A>) -> Self {
+        Self {
+            matching_words,
+            tokenizer,
+            crop_marker: None,
+            highlight_prefix: None,
+            highlight_suffix: None,
+        }
     }
 
     pub fn crop_marker(&mut self, marker: String) -> &Self {
@@ -38,7 +45,7 @@ impl MatcherBuilder {
         self
     }
 
-    pub fn build<'t, 'm>(&'m self, tokens: &'t [Token], text: &'t str) -> Matcher<'t, 'm> {
+    pub fn build<'t, 'm>(&'m self, text: &'t str) -> Matcher<'t, 'm, A> {
         let crop_marker = match &self.crop_marker {
             Some(marker) => marker.as_str(),
             None => &DEFAULT_CROP_MARKER,
@@ -54,8 +61,8 @@ impl MatcherBuilder {
         };
         Matcher {
             text,
-            tokens,
             matching_words: &self.matching_words,
+            tokenizer: &self.tokenizer,
             crop_marker,
             highlight_prefix,
             highlight_suffix,
@@ -93,17 +100,17 @@ pub struct MatchBounds {
     pub length: usize,
 }
 
-pub struct Matcher<'t, 'm> {
+pub struct Matcher<'t, 'm, A> {
     text: &'t str,
-    tokens: &'t [Token<'t>],
     matching_words: &'m MatchingWords,
+    tokenizer: &'m Tokenizer<'m, A>,
     crop_marker: &'m str,
     highlight_prefix: &'m str,
     highlight_suffix: &'m str,
-    matches: Option<Vec<Match>>,
+    matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t> Matcher<'t, '_> {
+impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         fn compute_partial_match<'a>(
@@ -159,10 +166,10 @@ impl<'t> Matcher<'t, '_> {
             false
         }
 
+        let tokens: Vec<_> = self.tokenizer.tokenize(self.text).collect();
         let mut matches = Vec::new();
 
-        let mut words_positions = self
-            .tokens
+        let mut words_positions = tokens
             .iter()
             .scan((0, 0), |(token_position, word_position), token| {
                 let current_token_position = *token_position;
@@ -210,7 +217,7 @@ impl<'t> Matcher<'t, '_> {
             }
         }
 
-        self.matches = Some(matches);
+        self.matches = Some((tokens, matches));
         self
     }
 
@@ -218,10 +225,10 @@ impl<'t> Matcher<'t, '_> {
     pub fn matches(&mut self) -> Vec<MatchBounds> {
         match &self.matches {
             None => self.compute_matches().matches(),
-            Some(matches) => matches
+            Some((tokens, matches)) => matches
                 .iter()
                 .map(|m| MatchBounds {
-                    start: self.tokens[m.token_position].byte_start,
+                    start: tokens[m.token_position].byte_start,
                     length: m.match_len,
                 })
                 .collect(),
@@ -229,7 +236,7 @@ impl<'t> Matcher<'t, '_> {
     }
 
     /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(&self, matches: &[Match], crop_size: usize) -> (usize, usize) {
+    fn crop_bounds(&self, tokens: &[Token], matches: &[Match], crop_size: usize) -> (usize, usize) {
         // if there is no match, we start from the beginning of the string by default.
         let first_match_word_position = matches.first().map(|m| m.word_position).unwrap_or(0);
         let first_match_token_position = matches.first().map(|m| m.token_position).unwrap_or(0);
@@ -239,8 +246,8 @@ impl<'t> Matcher<'t, '_> {
         // matches needs to be counted in the crop len.
         let mut remaining_words = crop_size + first_match_word_position - last_match_word_position;
 
-        let mut before_tokens = self.tokens[..first_match_token_position].iter().rev().peekable();
-        let mut after_tokens = self.tokens[last_match_token_position..].iter().peekable();
+        let mut before_tokens = tokens[..first_match_token_position].iter().rev().peekable();
+        let mut after_tokens = tokens[last_match_token_position..].iter().peekable();
 
         while remaining_words > 0 {
             let before_token = before_tokens.peek().map(|t| t.separator_kind());
@@ -396,7 +403,7 @@ impl<'t> Matcher<'t, '_> {
             Cow::Borrowed(self.text)
         } else {
             match &self.matches {
-                Some(matches) => {
+                Some((tokens, matches)) => {
                     let matches = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
                             self.find_best_match_interval(matches, crop_size)
@@ -405,7 +412,9 @@ impl<'t> Matcher<'t, '_> {
                     };
 
                     let (byte_start, byte_end) = match format_options.crop {
-                        Some(crop_size) if crop_size > 0 => self.crop_bounds(matches, crop_size),
+                        Some(crop_size) if crop_size > 0 => {
+                            self.crop_bounds(tokens, matches, crop_size)
+                        }
                         _ => (0, self.text.len()),
                     };
 
@@ -420,7 +429,6 @@ impl<'t> Matcher<'t, '_> {
 
                     if format_options.highlight {
                         // insert highlight markers around matches.
-                        let tokens = self.tokens;
                         for m in matches {
                             let token = &tokens[m.token_position];
 
@@ -470,7 +478,7 @@ impl<'t> Matcher<'t, '_> {
 
 #[cfg(test)]
 mod tests {
-    use charabia::Tokenize;
+    use charabia::TokenizerBuilder;
 
     use super::*;
     use crate::search::matches::matching_words::MatchingWord;
@@ -485,6 +493,12 @@ mod tests {
         MatchingWords::new(matching_words)
     }
 
+    impl MatcherBuilder<'_, Vec<u8>> {
+        pub fn from_matching_words(matching_words: MatchingWords) -> Self {
+            Self::new(matching_words, TokenizerBuilder::default().build())
+        }
+    }
+
     #[test]
     fn format_identity() {
         let matching_words = matching_words();
@@ -495,22 +509,22 @@ mod tests {
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
     }
@@ -525,34 +539,34 @@ mod tests {
 
         // empty text.
         let text = "";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text, because there is no matches.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(
             &matcher.format(format_options),
@@ -575,22 +589,22 @@ mod tests {
 
         // Text containing prefix match.
         let text = "Ŵôřlḑôle";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Ŵôřlḑ</em>ôle");
 
         // Text containing unicode match.
         let text = "Ŵôřlḑ";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Ŵôřlḑ</em>");
 
         // Text containing unicode match.
         let text = "Westfália";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Westfáli</em>a");
     }
@@ -605,20 +619,20 @@ mod tests {
 
         // empty text.
         let text = "";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(format_options),
@@ -627,8 +641,8 @@ mod tests {
 
         // Text without any match starting by a separator.
         let text = "(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(format_options),
@@ -637,8 +651,8 @@ mod tests {
 
         // Test phrase propagation
         let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // should crop the phrase instead of croping around the match.
         assert_eq!(
             &matcher.format(format_options),
@@ -647,8 +661,8 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -657,8 +671,8 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -667,8 +681,8 @@ mod tests {
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -677,8 +691,8 @@ mod tests {
 
         // Text containing matches with diferent density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -687,8 +701,8 @@ mod tests {
 
         // Text containing matches with same word.
         let text = "split split split split split split void void void void void void void void void void split the world void void";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -706,20 +720,20 @@ mod tests {
 
         // empty text.
         let text = "";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // both should return 10 first words with a marker at the end.
         assert_eq!(
             &matcher.format(format_options),
@@ -728,8 +742,8 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // both should return 10 last words with a marker at the start and highlighted matches.
         assert_eq!(
             &matcher.format(format_options),
@@ -738,15 +752,15 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // both should return 10 last words with a marker at the start and highlighted matches.
         assert_eq!(&matcher.format(format_options), "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-        let tokens: Vec<_> = text.tokenize().collect();
-        let mut matcher = builder.build(&tokens[..], text);
+
+        let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
             &matcher.format(format_options),
@@ -762,26 +776,25 @@ mod tests {
         let builder = MatcherBuilder::from_matching_words(matching_words);
 
         let text = "void void split the world void void.";
-        let tokens: Vec<_> = text.tokenize().collect();
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(2) };
 
-        let mut matcher = builder.build(&tokens[..], text);
+        let mut matcher = builder.build(text);
         // because crop size < query size, partially format matches.
         assert_eq!(&matcher.format(format_options), "…split the…");
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(1) };
 
-        let mut matcher = builder.build(&tokens[..], text);
+        let mut matcher = builder.build(text);
         // because crop size < query size, partially format matches.
         assert_eq!(&matcher.format(format_options), "…split…");
 
         // set  crop size to 0
         let format_options = FormatOptions { highlight: false, crop: Some(0) };
 
-        let mut matcher = builder.build(&tokens[..], text);
+        let mut matcher = builder.build(text);
         // because crop size is 0, crop is ignored.
         assert_eq!(&matcher.format(format_options), "void void split the world void void.");
     }
@@ -817,9 +830,8 @@ mod tests {
         let format_options = FormatOptions { highlight: true, crop: None };
 
         let text = "the do or die can't be he do and or isn't he";
-        let tokens: Vec<_> = text.tokenize().collect();
 
-        let mut matcher = builder.build(&tokens[..], text);
+        let mut matcher = builder.build(text);
         assert_eq!(
             &matcher.format(format_options),
             "_the_ _do_ _or_ die can't be he _do_ and or isn'_t_ _he_",
