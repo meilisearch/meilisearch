@@ -14,7 +14,7 @@ use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::analytics::Analytics;
@@ -22,7 +22,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, StarOr};
+use crate::routes::{fold_star_or, PaginationView, StarOr};
 use crate::task::SummarizedTaskView;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -122,14 +122,12 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowseQuery {
     #[serde(default)]
     offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    #[serde(default = "crate::routes::PAGINATION_DEFAULT_LIMIT")]
     limit: usize,
     fields: Option<CS<StarOr<String>>>,
 }
@@ -141,8 +139,8 @@ pub async fn get_all_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let BrowseQuery {
-        offset,
         limit,
+        offset,
         fields,
     } = params.into_inner();
     let attributes_to_retrieve = fields.map(CS::into_inner).and_then(fold_star_or);
@@ -151,10 +149,10 @@ pub async fn get_all_documents(
         .documents(path.into_inner(), offset, limit, attributes_to_retrieve)
         .await?;
 
-    debug!("returns: {:?}", documents);
-    Ok(HttpResponse::Ok().json(json!(
-        { "limit": limit, "offset": offset, "total": total, "results": documents }
-    )))
+    let ret = PaginationView::new(offset, limit, total as usize, documents);
+
+    debug!("returns: {:?}", ret);
+    Ok(HttpResponse::Ok().json(ret))
 }
 
 #[derive(Deserialize, Debug)]
