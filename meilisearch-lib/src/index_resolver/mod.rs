@@ -654,6 +654,59 @@ mod test {
         assert!(matches!(task.events[0], TaskEvent::Succeeded { .. }));
     }
 
+    #[actix_rt::test]
+    async fn test_delete_documents() {
+        let mut meta_store = MockIndexMetaStore::new();
+        meta_store.expect_get().once().returning(|_| {
+            Box::pin(ok((
+                "test".to_string(),
+                Some(IndexMeta {
+                    uuid: Uuid::new_v4(),
+                    creation_task_id: 1,
+                }),
+            )))
+        });
+
+        let mut index_store = MockIndexStore::new();
+        index_store.expect_get().once().returning(|_| {
+            let mocker = Mocker::default();
+            mocker
+                .when::<(), IndexResult<()>>("clear_documents")
+                .once()
+                .then(|_| Ok(()));
+            mocker
+                .when::<(), IndexResult<IndexStats>>("stats")
+                .once()
+                .then(|_| {
+                    Ok(IndexStats {
+                        size: 10,
+                        number_of_documents: 10,
+                        is_indexing: None,
+                        field_distribution: FieldDistribution::default(),
+                    })
+                });
+            Box::pin(ok(Some(Index::mock(mocker))))
+        });
+
+        let mocker = Mocker::default();
+        let file_store = UpdateFileStore::mock(mocker);
+
+        let index_resolver = IndexResolver::new(meta_store, index_store, file_store);
+
+        let mut task = Task {
+            id: 1,
+            content: TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Clear,
+                index_uid: IndexUid::new_unchecked("test"),
+            },
+            events: Vec::new(),
+        };
+
+        index_resolver.process_task(&mut task).await;
+
+        assert!(matches!(task.events[0], TaskEvent::Succeeded { .. }));
+    }
+
     // TODO: ignoring this test, it has become too complex to maintain, and rather implement
     // handler logic test.
     // proptest! {
