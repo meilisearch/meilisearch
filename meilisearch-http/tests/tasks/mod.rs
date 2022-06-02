@@ -182,7 +182,7 @@ async fn list_tasks_status_and_type_filtered() {
     let (response, code) = index
         .filtered_tasks(
             &["indexCreation", "documentAdditionOrUpdate"],
-            &["succeeded", "processing"],
+            &["succeeded", "processing", "enqueued"],
         )
         .await;
     assert_eq!(code, 200, "{}", response);
