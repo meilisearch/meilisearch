@@ -41,6 +41,10 @@ impl TaskFilter {
         }
     }
 
+    fn filtered_indexes(&self) -> Option<&HashSet<String>> {
+        self.indexes.as_ref()
+    }
+
     /// Adds an index to the filter, so the filter must match this index.
     pub fn filter_index(&mut self, index: String) {
         self.indexes
@@ -186,6 +190,17 @@ impl TaskStore {
         Ok(tasks)
     }
 
+    pub async fn fetch_unfinished_tasks(&self, offset: Option<TaskId>) -> Result<Vec<Task>> {
+        let store = self.store.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let txn = store.rtxn()?;
+            let tasks = store.fetch_unfinished_tasks(&txn, offset)?;
+            Ok(tasks)
+        })
+        .await?
+    }
+
     pub async fn list_tasks(
         &self,
         offset: Option<TaskId>,
@@ -325,6 +340,13 @@ pub mod test {
             }
         }
 
+        pub async fn fetch_unfinished_tasks(&self, from: Option<TaskId>) -> Result<Vec<Task>> {
+            match self {
+                Self::Real(s) => s.fetch_unfinished_tasks(from).await,
+                Self::Mock(m) => unsafe { m.get("fetch_unfinished_tasks").call(from) },
+            }
+        }
+
         pub async fn list_tasks(
             &self,
             from: Option<TaskId>,
@@ -378,7 +400,7 @@ pub mod test {
 
         let mut runner = TestRunner::new(Config::default());
         runner
-            .run(&(0..100u64).prop_map(gen_task), |task| {
+            .run(&(0..100u32).prop_map(gen_task), |task| {
                 let mut txn = store.wtxn().unwrap();
                 let previous_id = store.next_task_id(&mut txn).unwrap();
 

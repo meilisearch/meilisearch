@@ -180,7 +180,7 @@ fn serialize_duration<S: Serializer>(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
-    uid: TaskId,
+    pub uid: TaskId,
     index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
@@ -369,13 +369,10 @@ impl From<Task> for TaskView {
 
 #[derive(Debug, Serialize)]
 pub struct TaskListView {
-    results: Vec<TaskView>,
-}
-
-impl From<Vec<TaskView>> for TaskListView {
-    fn from(results: Vec<TaskView>) -> Self {
-        Self { results }
-    }
+    pub results: Vec<TaskView>,
+    pub limit: usize,
+    pub from: Option<TaskId>,
+    pub next: Option<TaskId>,
 }
 
 #[derive(Debug, Serialize)]

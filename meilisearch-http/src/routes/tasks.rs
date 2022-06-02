@@ -14,6 +14,8 @@ use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
 
 use super::{fold_star_or, StarOr};
 
+const DEFAULT_LIMIT: fn() -> usize = || 20;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
         .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
@@ -26,6 +28,9 @@ pub struct TaskFilterQuery {
     type_: Option<CS<StarOr<TaskType>>>,
     status: Option<CS<StarOr<TaskStatus>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
+    #[serde(default = "DEFAULT_LIMIT")]
+    limit: usize,
+    from: Option<TaskId>,
 }
 
 #[rustfmt::skip]
@@ -68,11 +73,13 @@ async fn get_tasks(
         type_,
         status,
         index_uid,
+        limit,
+        from,
     } = params.into_inner();
 
     let search_rules = &meilisearch.filters().search_rules;
 
-    // We first tranform a potential indexUid=* into a "not specified indexUid filter"
+    // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
     let type_ = type_.map(CS::into_inner).and_then(fold_star_or);
     let status = status.map(CS::into_inner).and_then(fold_star_or);
@@ -128,13 +135,32 @@ async fn get_tasks(
         indexes_filters
     };
 
-    let tasks: TaskListView = meilisearch
-        .list_tasks(filters, None, None)
+    // We +1 just to know if there is more after this "page" or not.
+    let limit = limit.saturating_add(1);
+
+    let mut tasks_results: Vec<_> = meilisearch
+        .list_tasks(filters, Some(limit), from)
         .await?
         .into_iter()
         .map(TaskView::from)
-        .collect::<Vec<_>>()
-        .into();
+        .collect();
+
+    // If we were able to fetch the number +1 tasks we asked
+    // it means that there is more to come.
+    let next = if tasks_results.len() == limit {
+        tasks_results.pop().map(|t| t.uid)
+    } else {
+        None
+    };
+
+    let from = tasks_results.first().map(|t| t.uid);
+
+    let tasks = TaskListView {
+        results: tasks_results,
+        limit: limit.saturating_sub(1),
+        from,
+        next,
+    };
 
     Ok(HttpResponse::Ok().json(tasks))
 }
