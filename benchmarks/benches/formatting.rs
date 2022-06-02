@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main};
-use milli::tokenizer::{Analyzer, AnalyzerConfig};
+use milli::tokenizer::Tokenize;
 use milli::{FormatOptions, MatcherBuilder, MatchingWord, MatchingWords};
 
 #[cfg(target_os = "linux")]
@@ -52,9 +52,7 @@ fn bench_formatting(c: &mut criterion::Criterion) {
         for conf in confs {
             group.bench_function(conf.name, |b| {
                 b.iter(|| {
-                    let analyzer = Analyzer::new(AnalyzerConfig::<Vec<u8>>::default());
-                    let analyzed = analyzer.analyze(&conf.text);
-                    let tokens: Vec<_> = analyzed.tokens().collect();
+                    let tokens: Vec<_> = conf.text.tokenize().collect();
                     let mut matcher = conf.matching_words.build(&tokens[..], conf.text);
                     matcher.format(option.clone());
                 })
