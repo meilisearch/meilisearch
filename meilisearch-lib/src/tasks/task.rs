@@ -5,10 +5,8 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::batch::BatchId;
-use crate::{
-    index::{Settings, Unchecked},
-    index_resolver::IndexUid,
-};
+use crate::index::{Settings, Unchecked};
+use crate::index_resolver::IndexUid;
 
 pub type TaskId = u32;
 
@@ -90,13 +88,6 @@ pub struct Task {
     /// then this is None
     // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
     // the TaskContent.
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::weighted(proptest::option::Probability::new(0.99), IndexUid::arbitrary())"
-        )
-    )]
-    pub index_uid: Option<IndexUid>,
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
 }
@@ -123,6 +114,18 @@ impl Task {
             _ => None,
         }
     }
+
+    pub fn index_uid(&self) -> Option<&str> {
+        match &self.content {
+            TaskContent::DocumentAddition { index_uid, .. }
+            | TaskContent::DocumentDeletion { index_uid, .. }
+            | TaskContent::SettingsUpdate { index_uid, .. }
+            | TaskContent::IndexDeletion { index_uid }
+            | TaskContent::IndexCreation { index_uid, .. }
+            | TaskContent::IndexUpdate { index_uid, .. } => Some(index_uid.as_str()),
+            TaskContent::Dump { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -137,6 +140,7 @@ pub enum DocumentDeletion {
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
     DocumentAddition {
+        index_uid: IndexUid,
         #[cfg_attr(test, proptest(value = "Uuid::new_v4()"))]
         content_uuid: Uuid,
         #[cfg_attr(test, proptest(strategy = "test::index_document_method_strategy()"))]
@@ -145,18 +149,26 @@ pub enum TaskContent {
         documents_count: usize,
         allow_index_creation: bool,
     },
-    DocumentDeletion(DocumentDeletion),
+    DocumentDeletion {
+        index_uid: IndexUid,
+        deletion: DocumentDeletion,
+    },
     SettingsUpdate {
+        index_uid: IndexUid,
         settings: Settings<Unchecked>,
         /// Indicates whether the task was a deletion
         is_deletion: bool,
         allow_index_creation: bool,
     },
-    IndexDeletion,
+    IndexDeletion {
+        index_uid: IndexUid,
+    },
     IndexCreation {
+        index_uid: IndexUid,
         primary_key: Option<String>,
     },
     IndexUpdate {
+        index_uid: IndexUid,
         primary_key: Option<String>,
     },
     Dump {

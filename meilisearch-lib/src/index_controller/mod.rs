@@ -356,12 +356,16 @@ where
     }
 
     pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {
-        let uid = IndexUid::new(uid)?;
+        let index_uid = IndexUid::new(uid)?;
         let content = match update {
-            Update::DeleteDocuments(ids) => {
-                TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
-            }
-            Update::ClearDocuments => TaskContent::DocumentDeletion(DocumentDeletion::Clear),
+            Update::DeleteDocuments(ids) => TaskContent::DocumentDeletion {
+                index_uid,
+                deletion: DocumentDeletion::Ids(ids),
+            },
+            Update::ClearDocuments => TaskContent::DocumentDeletion {
+                index_uid,
+                deletion: DocumentDeletion::Clear,
+            },
             Update::Settings {
                 settings,
                 is_deletion,
@@ -370,6 +374,7 @@ where
                 settings,
                 is_deletion,
                 allow_index_creation,
+                index_uid,
             },
             Update::DocumentAddition {
                 mut payload,
@@ -409,14 +414,21 @@ where
                     primary_key,
                     documents_count,
                     allow_index_creation,
+                    index_uid,
                 }
             }
-            Update::DeleteIndex => TaskContent::IndexDeletion,
-            Update::CreateIndex { primary_key } => TaskContent::IndexCreation { primary_key },
-            Update::UpdateIndex { primary_key } => TaskContent::IndexUpdate { primary_key },
+            Update::DeleteIndex => TaskContent::IndexDeletion { index_uid },
+            Update::CreateIndex { primary_key } => TaskContent::IndexCreation {
+                primary_key,
+                index_uid,
+            },
+            Update::UpdateIndex { primary_key } => TaskContent::IndexUpdate {
+                primary_key,
+                index_uid,
+            },
         };
 
-        let task = self.task_store.register(Some(uid), content).await?;
+        let task = self.task_store.register(content).await?;
         self.scheduler.read().await.notify();
 
         Ok(task)
@@ -425,7 +437,7 @@ where
     pub async fn register_dump_task(&self) -> Result<Task> {
         let uid = dump::generate_uid();
         let content = TaskContent::Dump { uid };
-        let task = self.task_store.register(None, content).await?;
+        let task = self.task_store.register(content).await?;
         self.scheduler.read().await.notify();
         Ok(task)
     }
@@ -569,13 +581,7 @@ where
         // Check if the currently indexing update is from our index.
         let is_indexing = processing_tasks
             .first()
-            .map(|task| {
-                task.index_uid
-                    .as_ref()
-                    .map(|u| u.as_str() == uid)
-                    .unwrap_or(false)
-            })
-            .unwrap_or_default();
+            .map_or(false, |task| task.index_uid().map_or(false, |u| u == uid));
 
         let index = self.index_resolver.get_index(uid).await?;
         let mut stats = spawn_blocking(move || index.stats()).await??;
@@ -610,7 +616,7 @@ where
             // Check if the currently indexing update is from our index.
             stats.is_indexing = processing_tasks
                 .first()
-                .and_then(|p| p.index_uid.as_ref().map(|u| u.as_str() == index_uid))
+                .and_then(|p| p.index_uid().map(|u| u == index_uid))
                 .or(Some(false));
 
             indexes.insert(index_uid, stats);

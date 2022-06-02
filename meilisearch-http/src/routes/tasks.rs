@@ -38,9 +38,9 @@ fn task_type_matches_content(type_: &TaskType, content: &TaskContent) -> bool {
     matches!((type_, content),
           (TaskType::IndexCreation, TaskContent::IndexCreation { .. })
         | (TaskType::IndexUpdate, TaskContent::IndexUpdate { .. })
-        | (TaskType::IndexDeletion, TaskContent::IndexDeletion)
+        | (TaskType::IndexDeletion, TaskContent::IndexDeletion { .. })
         | (TaskType::DocumentAdditionOrUpdate, TaskContent::DocumentAddition { .. })
-        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion(_))
+        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion{ .. })
         | (TaskType::SettingsUpdate, TaskContent::SettingsUpdate { .. })
     )
 }

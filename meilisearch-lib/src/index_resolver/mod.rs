@@ -58,7 +58,6 @@ impl IndexUid {
         }
     }
 
-    #[cfg(test)]
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
         Self(s.as_ref().to_string())
     }
@@ -151,13 +150,13 @@ where
 
         match tasks.first() {
             Some(Task {
-                index_uid: Some(ref index_uid),
                 id,
                 content:
                     TaskContent::DocumentAddition {
                         merge_strategy,
                         primary_key,
                         allow_index_creation,
+                        index_uid,
                         ..
                     },
                 ..
@@ -227,12 +226,14 @@ where
     }
 
     pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
-        let index_uid = task.index_uid.clone();
         match &task.content {
             TaskContent::DocumentAddition { .. } => panic!("updates should be handled by batch"),
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => {
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Ids(ids),
+                index_uid,
+            } => {
                 let ids = ids.clone();
-                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
+                let index = self.get_index(index_uid.clone().into_inner()).await?;
 
                 let DocumentDeletionResult {
                     deleted_documents, ..
@@ -240,8 +241,11 @@ where
 
                 Ok(TaskResult::DocumentDeletion { deleted_documents })
             }
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Clear,
+                index_uid,
+            } => {
+                let index = self.get_index(index_uid.clone().into_inner()).await?;
                 let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
                     let number_documents = index.stats()?.number_of_documents;
                     index.clear_documents()?;
@@ -255,12 +259,12 @@ where
                 settings,
                 is_deletion,
                 allow_index_creation,
+                index_uid,
             } => {
                 let index = if *is_deletion || !*allow_index_creation {
-                    self.get_index(index_uid.unwrap().into_inner()).await?
+                    self.get_index(index_uid.clone().into_inner()).await?
                 } else {
-                    self.get_or_create_index(index_uid.unwrap(), task.id)
-                        .await?
+                    self.get_or_create_index(index_uid.clone(), task.id).await?
                 };
 
                 let settings = settings.clone();
@@ -268,8 +272,8 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::IndexDeletion => {
-                let index = self.delete_index(index_uid.unwrap().into_inner()).await?;
+            TaskContent::IndexDeletion { index_uid } => {
+                let index = self.delete_index(index_uid.clone().into_inner()).await?;
 
                 let deleted_documents = spawn_blocking(move || -> IndexResult<u64> {
                     Ok(index.stats()?.number_of_documents)
@@ -278,8 +282,11 @@ where
 
                 Ok(TaskResult::ClearAll { deleted_documents })
             }
-            TaskContent::IndexCreation { primary_key } => {
-                let index = self.create_index(index_uid.unwrap(), task.id).await?;
+            TaskContent::IndexCreation {
+                primary_key,
+                index_uid,
+            } => {
+                let index = self.create_index(index_uid.clone(), task.id).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -288,8 +295,11 @@ where
 
                 Ok(TaskResult::Other)
             }
-            TaskContent::IndexUpdate { primary_key } => {
-                let index = self.get_index(index_uid.unwrap().into_inner()).await?;
+            TaskContent::IndexUpdate {
+                primary_key,
+                index_uid,
+            } => {
+                let index = self.get_index(index_uid.clone().into_inner()).await?;
 
                 if let Some(primary_key) = primary_key {
                     let primary_key = primary_key.clone();
@@ -411,193 +421,193 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, vec::IntoIter};
-
-    use super::*;
-
-    use futures::future::ok;
-    use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
-    use nelson::Mocker;
-    use proptest::prelude::*;
-
-    use crate::{
-        index::{
-            error::{IndexError, Result as IndexResult},
-            Checked, IndexMeta, IndexStats, Settings,
-        },
-        tasks::{batch::Batch, BatchHandler},
-    };
-    use index_store::MockIndexStore;
-    use meta_store::MockIndexMetaStore;
+    // use std::{collections::BTreeMap, vec::IntoIter};
+    //
+    // use super::*;
+    //
+    // use futures::future::ok;
+    // use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
+    // use nelson::Mocker;
+    // use proptest::prelude::*;
+    //
+    // use crate::{
+    //     index::{
+    //         error::{IndexError, Result as IndexResult},
+    //         Checked, IndexMeta, IndexStats, Settings,
+    //     },
+    //     tasks::{batch::Batch, BatchHandler},
+    // };
+    // use index_store::MockIndexStore;
+    // use meta_store::MockIndexMetaStore;
 
     // TODO: ignoring this test, it has become too complex to maintain, and rather implement
     // handler logic test.
-    proptest! {
-        #[test]
-        #[ignore]
-        fn test_process_task(
-            task in any::<Task>().prop_filter("IndexUid should be Some", |s| s.index_uid.is_some()),
-            index_exists in any::<bool>(),
-            index_op_fails in any::<bool>(),
-            any_int in any::<u64>(),
-            ) {
-            actix_rt::System::new().block_on(async move {
-                let uuid = Uuid::new_v4();
-                let mut index_store = MockIndexStore::new();
-
-                let mocker = Mocker::default();
-
-                // Return arbitrary data from index call.
-                match &task.content {
-                    TaskContent::DocumentAddition{primary_key, ..} => {
-                        let result = move || if !index_op_fails {
-                            Ok(DocumentAdditionResult { indexed_documents: any_int, number_of_documents: any_int })
-                        } else {
-                            // return this error because it's easy to generate...
-                            Err(IndexError::DocumentNotFound("a doc".into()))
-                        };
-                        if primary_key.is_some() {
-                            mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
-                                .then(move |_| Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None }));
-                        }
-                        mocker.when::<(IndexDocumentsMethod, Option<String>, UpdateFileStore, IntoIter<Uuid>), IndexResult<DocumentAdditionResult>>("update_documents")
-                                .then(move |(_, _, _, _)| result());
-                    }
-                    TaskContent::SettingsUpdate{..} => {
-                        let result = move || if !index_op_fails {
-                            Ok(())
-                        } else {
-                            // return this error because it's easy to generate...
-                            Err(IndexError::DocumentNotFound("a doc".into()))
-                        };
-                        mocker.when::<&Settings<Checked>, IndexResult<()>>("update_settings")
-                                .then(move |_| result());
-                    }
-                    TaskContent::DocumentDeletion(DocumentDeletion::Ids(_ids)) => {
-                        let result = move || if !index_op_fails {
-                            Ok(DocumentDeletionResult { deleted_documents: any_int as u64, remaining_documents: any_int as u64 })
-                        } else {
-                            // return this error because it's easy to generate...
-                            Err(IndexError::DocumentNotFound("a doc".into()))
-                        };
-
-                        mocker.when::<&[String], IndexResult<DocumentDeletionResult>>("delete_documents")
-                                .then(move |_| result());
-                    },
-                    TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
-                        let result = move || if !index_op_fails {
-                            Ok(())
-                        } else {
-                            // return this error because it's easy to generate...
-                            Err(IndexError::DocumentNotFound("a doc".into()))
-                        };
-                        mocker.when::<(), IndexResult<()>>("clear_documents")
-                            .then(move |_| result());
-                    },
-                    TaskContent::IndexDeletion => {
-                        mocker.when::<(), ()>("close")
-                            .times(index_exists as usize)
-                            .then(move |_| ());
-                    }
-                    TaskContent::IndexUpdate { primary_key }
-                    | TaskContent::IndexCreation { primary_key } => {
-                        if primary_key.is_some() {
-                            let result = move || if !index_op_fails {
-                                Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None })
-                            } else {
-                                // return this error because it's easy to generate...
-                                Err(IndexError::DocumentNotFound("a doc".into()))
-                            };
-                            mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
-                                .then(move |_| result());
-                            }
-                    }
-                    TaskContent::Dump { .. } => { }
-                }
-
-                mocker.when::<(), IndexResult<IndexStats>>("stats")
-            .then(|()| Ok(IndexStats { size: 0, number_of_documents: 0, is_indexing: Some(false), field_distribution: BTreeMap::new() }));
-
-                let index = Index::mock(mocker);
-
-                match &task.content {
-                    // an unexisting index should trigger an index creation in the folllowing cases:
-                    TaskContent::DocumentAddition { allow_index_creation: true, .. }
-                    | TaskContent::SettingsUpdate { allow_index_creation: true, is_deletion: false, .. }
-                    | TaskContent::IndexCreation { .. } if !index_exists => {
-                        index_store
-                            .expect_create()
-                            .once()
-                            .withf(move |&found| !index_exists || found == uuid)
-                            .returning(move |_| Box::pin(ok(index.clone())));
-                    },
-                    TaskContent::IndexDeletion => {
-                        index_store
-                            .expect_delete()
-                            // this is called only if the index.exists
-                            .times(index_exists as usize)
-                            .withf(move |&found| !index_exists || found == uuid)
-                            .returning(move |_| Box::pin(ok(Some(index.clone()))));
-                    }
-                    // if index already exists, create index will return an error
-                    TaskContent::IndexCreation { .. } if index_exists => (),
-                    TaskContent::Dump { .. } => (),
-                    // The index exists and get should be called
-                    _ if index_exists => {
-                        index_store
-                            .expect_get()
-                            .once()
-                            .withf(move |&found| found == uuid)
-                            .returning(move |_| Box::pin(ok(Some(index.clone()))));
-                    },
-                    // the index doesn't exist and shouldn't be created, the uuidstore will return an error, and get_index will never be called.
-                    _ => (),
-                }
-
-                let mut uuid_store = MockIndexMetaStore::new();
-                uuid_store
-                    .expect_get()
-                    .returning(move |uid| {
-                        Box::pin(ok((uid, index_exists.then(|| crate::index_resolver::meta_store::IndexMeta {uuid, creation_task_id: 0 }))))
-                    });
-
-                // we sould only be creating an index if the index doesn't alredy exist
-                uuid_store
-                    .expect_insert()
-                    .withf(move |_, _| !index_exists)
-                    .returning(|_, _| Box::pin(ok(())));
-
-                uuid_store
-                    .expect_delete()
-                    .times(matches!(task.content, TaskContent::IndexDeletion) as usize)
-                    .returning(move |_| Box::pin(ok(index_exists.then(|| crate::index_resolver::meta_store::IndexMeta { uuid, creation_task_id: 0}))));
-
-                let mocker = Mocker::default();
-                let update_file_store = UpdateFileStore::mock(mocker);
-                let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store);
-
-                let batch = Batch { id: Some(1), created_at: OffsetDateTime::now_utc(), content: crate::tasks::batch::BatchContent::IndexUpdate(task.clone()) };
-                if index_resolver.accept(&batch) {
-                    let result = index_resolver.process_batch(batch).await;
-
-                    // Test for some expected output scenarios:
-                    // Index creation and deletion cannot fail because of a failed index op, since they
-                    // don't perform index ops.
-                    if index_op_fails && !matches!(task.content, TaskContent::IndexDeletion | TaskContent::IndexCreation { primary_key: None } | TaskContent::IndexUpdate { primary_key: None } | TaskContent::Dump { .. })
-                        || (index_exists && matches!(task.content, TaskContent::IndexCreation { .. }))
-                        || (!index_exists && matches!(task.content, TaskContent::IndexDeletion
-                                                                    | TaskContent::DocumentDeletion(_)
-                                                                    | TaskContent::SettingsUpdate { is_deletion: true, ..}
-                                                                    | TaskContent::SettingsUpdate { allow_index_creation: false, ..}
-                                                                    | TaskContent::DocumentAddition { allow_index_creation: false, ..}
-                                                                    | TaskContent::IndexUpdate { .. } ))
-                    {
-                        assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Failed { .. }), "{:?}", result);
-                    } else {
-                        assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Succeeded { .. }), "{:?}", result);
-                    }
-                }
-            });
-        }
-    }
+    // proptest! {
+    //     #[test]
+    //     #[ignore]
+    //     fn test_process_task(
+    //         task in any::<Task>().prop_filter("IndexUid should be Some", |s| s.index_uid.is_some()),
+    //         index_exists in any::<bool>(),
+    //         index_op_fails in any::<bool>(),
+    //         any_int in any::<u64>(),
+    //         ) {
+    //         actix_rt::System::new().block_on(async move {
+    //             let uuid = Uuid::new_v4();
+    //             let mut index_store = MockIndexStore::new();
+    //
+    //             let mocker = Mocker::default();
+    //
+    //             // Return arbitrary data from index call.
+    //             match &task.content {
+    //                 TaskContent::DocumentAddition{primary_key, ..} => {
+    //                     let result = move || if !index_op_fails {
+    //                         Ok(DocumentAdditionResult { indexed_documents: any_int, number_of_documents: any_int })
+    //                     } else {
+    //                         // return this error because it's easy to generate...
+    //                         Err(IndexError::DocumentNotFound("a doc".into()))
+    //                     };
+    //                     if primary_key.is_some() {
+    //                         mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
+    //                             .then(move |_| Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None }));
+    //                     }
+    //                     mocker.when::<(IndexDocumentsMethod, Option<String>, UpdateFileStore, IntoIter<Uuid>), IndexResult<DocumentAdditionResult>>("update_documents")
+    //                             .then(move |(_, _, _, _)| result());
+    //                 }
+    //                 TaskContent::SettingsUpdate{..} => {
+    //                     let result = move || if !index_op_fails {
+    //                         Ok(())
+    //                     } else {
+    //                         // return this error because it's easy to generate...
+    //                         Err(IndexError::DocumentNotFound("a doc".into()))
+    //                     };
+    //                     mocker.when::<&Settings<Checked>, IndexResult<()>>("update_settings")
+    //                             .then(move |_| result());
+    //                 }
+    //                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(_ids)) => {
+    //                     let result = move || if !index_op_fails {
+    //                         Ok(DocumentDeletionResult { deleted_documents: any_int as u64, remaining_documents: any_int as u64 })
+    //                     } else {
+    //                         // return this error because it's easy to generate...
+    //                         Err(IndexError::DocumentNotFound("a doc".into()))
+    //                     };
+    //
+    //                     mocker.when::<&[String], IndexResult<DocumentDeletionResult>>("delete_documents")
+    //                             .then(move |_| result());
+    //                 },
+    //                 TaskContent::DocumentDeletion(DocumentDeletion::Clear) => {
+    //                     let result = move || if !index_op_fails {
+    //                         Ok(())
+    //                     } else {
+    //                         // return this error because it's easy to generate...
+    //                         Err(IndexError::DocumentNotFound("a doc".into()))
+    //                     };
+    //                     mocker.when::<(), IndexResult<()>>("clear_documents")
+    //                         .then(move |_| result());
+    //                 },
+    //                 TaskContent::IndexDeletion => {
+    //                     mocker.when::<(), ()>("close")
+    //                         .times(index_exists as usize)
+    //                         .then(move |_| ());
+    //                 }
+    //                 TaskContent::IndexUpdate { primary_key }
+    //                 | TaskContent::IndexCreation { primary_key } => {
+    //                     if primary_key.is_some() {
+    //                         let result = move || if !index_op_fails {
+    //                             Ok(IndexMeta{ created_at: OffsetDateTime::now_utc(), updated_at: OffsetDateTime::now_utc(), primary_key: None })
+    //                         } else {
+    //                             // return this error because it's easy to generate...
+    //                             Err(IndexError::DocumentNotFound("a doc".into()))
+    //                         };
+    //                         mocker.when::<String, IndexResult<IndexMeta>>("update_primary_key")
+    //                             .then(move |_| result());
+    //                         }
+    //                 }
+    //                 TaskContent::Dump { .. } => { }
+    //             }
+    //
+    //             mocker.when::<(), IndexResult<IndexStats>>("stats")
+    //         .then(|()| Ok(IndexStats { size: 0, number_of_documents: 0, is_indexing: Some(false), field_distribution: BTreeMap::new() }));
+    //
+    //             let index = Index::mock(mocker);
+    //
+    //             match &task.content {
+    //                 // an unexisting index should trigger an index creation in the folllowing cases:
+    //                 TaskContent::DocumentAddition { allow_index_creation: true, .. }
+    //                 | TaskContent::SettingsUpdate { allow_index_creation: true, is_deletion: false, .. }
+    //                 | TaskContent::IndexCreation { .. } if !index_exists => {
+    //                     index_store
+    //                         .expect_create()
+    //                         .once()
+    //                         .withf(move |&found| !index_exists || found == uuid)
+    //                         .returning(move |_| Box::pin(ok(index.clone())));
+    //                 },
+    //                 TaskContent::IndexDeletion => {
+    //                     index_store
+    //                         .expect_delete()
+    //                         // this is called only if the index.exists
+    //                         .times(index_exists as usize)
+    //                         .withf(move |&found| !index_exists || found == uuid)
+    //                         .returning(move |_| Box::pin(ok(Some(index.clone()))));
+    //                 }
+    //                 // if index already exists, create index will return an error
+    //                 TaskContent::IndexCreation { .. } if index_exists => (),
+    //                 TaskContent::Dump { .. } => (),
+    //                 // The index exists and get should be called
+    //                 _ if index_exists => {
+    //                     index_store
+    //                         .expect_get()
+    //                         .once()
+    //                         .withf(move |&found| found == uuid)
+    //                         .returning(move |_| Box::pin(ok(Some(index.clone()))));
+    //                 },
+    //                 // the index doesn't exist and shouldn't be created, the uuidstore will return an error, and get_index will never be called.
+    //                 _ => (),
+    //             }
+    //
+    //             let mut uuid_store = MockIndexMetaStore::new();
+    //             uuid_store
+    //                 .expect_get()
+    //                 .returning(move |uid| {
+    //                     Box::pin(ok((uid, index_exists.then(|| crate::index_resolver::meta_store::IndexMeta {uuid, creation_task_id: 0 }))))
+    //                 });
+    //
+    //             // we sould only be creating an index if the index doesn't alredy exist
+    //             uuid_store
+    //                 .expect_insert()
+    //                 .withf(move |_, _| !index_exists)
+    //                 .returning(|_, _| Box::pin(ok(())));
+    //
+    //             uuid_store
+    //                 .expect_delete()
+    //                 .times(matches!(task.content, TaskContent::IndexDeletion) as usize)
+    //                 .returning(move |_| Box::pin(ok(index_exists.then(|| crate::index_resolver::meta_store::IndexMeta { uuid, creation_task_id: 0}))));
+    //
+    //             let mocker = Mocker::default();
+    //             let update_file_store = UpdateFileStore::mock(mocker);
+    //             let index_resolver = IndexResolver::new(uuid_store, index_store, update_file_store);
+    //
+    //             let batch = Batch { id: Some(1), created_at: OffsetDateTime::now_utc(), content: crate::tasks::batch::BatchContent::IndexUpdate(task.clone()) };
+    //             if index_resolver.accept(&batch) {
+    //                 let result = index_resolver.process_batch(batch).await;
+    //
+    //                 // Test for some expected output scenarios:
+    //                 // Index creation and deletion cannot fail because of a failed index op, since they
+    //                 // don't perform index ops.
+    //                 if index_op_fails && !matches!(task.content, TaskContent::IndexDeletion | TaskContent::IndexCreation { primary_key: None } | TaskContent::IndexUpdate { primary_key: None } | TaskContent::Dump { .. })
+    //                     || (index_exists && matches!(task.content, TaskContent::IndexCreation { .. }))
+    //                     || (!index_exists && matches!(task.content, TaskContent::IndexDeletion
+    //                                                                 | TaskContent::DocumentDeletion(_)
+    //                                                                 | TaskContent::SettingsUpdate { is_deletion: true, ..}
+    //                                                                 | TaskContent::SettingsUpdate { allow_index_creation: false, ..}
+    //                                                                 | TaskContent::DocumentAddition { allow_index_creation: false, ..}
+    //                                                                 | TaskContent::IndexUpdate { .. } ))
+    //                 {
+    //                     assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Failed { .. }), "{:?}", result);
+    //                 } else {
+    //                     assert!(matches!(result.content.first().unwrap().events.last().unwrap(), TaskEvent::Succeeded { .. }), "{:?}", result);
+    //                 }
+    //             }
+    //         });
+    //     }
+    // }
 }

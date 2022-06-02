@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use super::v4::{Task, TaskEvent};
+use super::v4::{Task, TaskContent, TaskEvent};
 use crate::index::{Settings, Unchecked};
 use crate::index_resolver::IndexUid;
-use crate::tasks::task::{DocumentDeletion, TaskContent, TaskId, TaskResult};
+use crate::tasks::task::{DocumentDeletion, TaskId, TaskResult};
 
 use super::v2;
 
@@ -59,9 +59,9 @@ pub enum Update {
     ClearDocuments,
 }
 
-impl From<Update> for TaskContent {
-    fn from(other: Update) -> Self {
-        match other {
+impl From<Update> for super::v4::TaskContent {
+    fn from(update: Update) -> Self {
+        match update {
             Update::DeleteDocuments(ids) => {
                 TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids))
             }
@@ -186,10 +186,10 @@ impl Failed {
 impl From<(UpdateStatus, String, TaskId)> for Task {
     fn from((update, uid, task_id): (UpdateStatus, String, TaskId)) -> Self {
         // Dummy task
-        let mut task = Task {
+        let mut task = super::v4::Task {
             id: task_id,
-            index_uid: IndexUid::new(uid).unwrap(),
-            content: TaskContent::IndexDeletion,
+            index_uid: IndexUid::new_unchecked(uid),
+            content: super::v4::TaskContent::IndexDeletion,
             events: Vec::new(),
         };
 

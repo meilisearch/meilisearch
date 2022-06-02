@@ -131,6 +131,22 @@ enum TaskListIdentifier {
     Dump,
 }
 
+impl From<&Task> for TaskListIdentifier {
+    fn from(task: &Task) -> Self {
+        match &task.content {
+            TaskContent::DocumentAddition { index_uid, .. }
+            | TaskContent::DocumentDeletion { index_uid, .. }
+            | TaskContent::SettingsUpdate { index_uid, .. }
+            | TaskContent::IndexDeletion { index_uid }
+            | TaskContent::IndexCreation { index_uid, .. }
+            | TaskContent::IndexUpdate { index_uid, .. } => {
+                TaskListIdentifier::Index(index_uid.as_str().to_string())
+            }
+            TaskContent::Dump { .. } => TaskListIdentifier::Dump,
+        }
+    }
+}
+
 #[derive(Default)]
 struct TaskQueue {
     /// Maps index uids to their TaskList, for quick access
@@ -142,11 +158,8 @@ struct TaskQueue {
 impl TaskQueue {
     fn insert(&mut self, task: Task) {
         let id = task.id;
-        let uid = match task.index_uid {
-            Some(uid) => TaskListIdentifier::Index(uid.into_inner()),
-            None if matches!(task.content, TaskContent::Dump { .. }) => TaskListIdentifier::Dump,
-            None => unreachable!("invalid task state"),
-        };
+        let uid = TaskListIdentifier::from(&task);
+
         let kind = match task.content {
             TaskContent::DocumentAddition {
                 documents_count,
@@ -163,9 +176,9 @@ impl TaskQueue {
                 number: documents_count,
             },
             TaskContent::Dump { .. } => TaskType::Dump,
-            TaskContent::DocumentDeletion(_)
+            TaskContent::DocumentDeletion { .. }
             | TaskContent::SettingsUpdate { .. }
-            | TaskContent::IndexDeletion
+            | TaskContent::IndexDeletion { .. }
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
             _ => unreachable!("unhandled task type"),
@@ -528,25 +541,25 @@ mod test {
 
     use super::*;
 
-    fn gen_task(id: TaskId, index_uid: Option<&str>, content: TaskContent) -> Task {
+    fn gen_task(id: TaskId, content: TaskContent) -> Task {
         Task {
             id,
-            index_uid: index_uid.map(IndexUid::new_unchecked),
             content,
             events: vec![],
         }
     }
 
     #[test]
+    #[rustfmt::skip]
     fn register_updates_multiples_indexes() {
         let mut queue = TaskQueue::default();
-        queue.insert(gen_task(0, Some("test1"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(1, Some("test2"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, Some("test2"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(4, Some("test1"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, Some("test2"), TaskContent::IndexDeletion));
+        queue.insert(gen_task(0, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test1") }));
+        queue.insert(gen_task(1, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test2") }));
+        queue.insert(gen_task(2, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test2") }));
+        queue.insert(gen_task(3, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test2") }));
+        queue.insert(gen_task(4, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test1") }));
+        queue.insert(gen_task(5, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test1") }));
+        queue.insert(gen_task(6, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test2") }));
 
         let test1_tasks = queue
             .head_mut(|tasks| tasks.drain().map(|t| t.id).collect::<Vec<_>>())
@@ -564,31 +577,30 @@ mod test {
         assert!(queue.queue.is_empty());
     }
 
-    #[test]
-    fn test_make_batch() {
-        let mut queue = TaskQueue::default();
-        let content = TaskContent::DocumentAddition {
+    fn gen_doc_addition_task_content(index_uid: &str) -> TaskContent {
+        TaskContent::DocumentAddition {
             content_uuid: Uuid::new_v4(),
             merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
             primary_key: Some("test".to_string()),
             documents_count: 0,
             allow_index_creation: true,
-        };
-        queue.insert(gen_task(0, Some("test1"), content.clone()));
-        queue.insert(gen_task(1, Some("test2"), content.clone()));
-        queue.insert(gen_task(2, Some("test2"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(3, Some("test2"), content.clone()));
-        queue.insert(gen_task(4, Some("test1"), content.clone()));
-        queue.insert(gen_task(5, Some("test1"), TaskContent::IndexDeletion));
-        queue.insert(gen_task(6, Some("test2"), content.clone()));
-        queue.insert(gen_task(7, Some("test1"), content));
-        queue.insert(gen_task(
-            8,
-            None,
-            TaskContent::Dump {
-                uid: "adump".to_owned(),
-            },
-        ));
+            index_uid: IndexUid::new_unchecked(index_uid),
+        }
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_make_batch() {
+        let mut queue = TaskQueue::default();
+        queue.insert(gen_task(0, gen_doc_addition_task_content("test1")));
+        queue.insert(gen_task(1, gen_doc_addition_task_content("test2")));
+        queue.insert(gen_task(2, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test2")}));
+        queue.insert(gen_task(3, gen_doc_addition_task_content("test2")));
+        queue.insert(gen_task(4, gen_doc_addition_task_content("test1")));
+        queue.insert(gen_task(5, TaskContent::IndexDeletion { index_uid: IndexUid::new_unchecked("test1")}));
+        queue.insert(gen_task(6, gen_doc_addition_task_content("test2")));
+        queue.insert(gen_task(7, gen_doc_addition_task_content("test1")));
+        queue.insert(gen_task(8, TaskContent::Dump { uid: "adump".to_owned() }));
 
         let config = SchedulerConfig::default();
 
