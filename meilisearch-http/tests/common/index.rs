@@ -228,7 +228,7 @@ impl Index<'_> {
     pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
         let url = format!(
             "/indexes/{}/settings/{}",
-            encode(self.uid.as_ref()).to_string(),
+            encode(self.uid.as_ref()),
             "distinct-attribute"
         );
         self.service.put(url, value).await
@@ -237,7 +237,7 @@ impl Index<'_> {
     pub async fn get_distinct_attribute(&self) -> (Value, StatusCode) {
         let url = format!(
             "/indexes/{}/settings/{}",
-            encode(self.uid.as_ref()).to_string(),
+            encode(self.uid.as_ref()),
             "distinct-attribute"
         );
         self.service.get(url).await
