@@ -13,7 +13,7 @@ use crate::task::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
+    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
@@ -100,18 +100,27 @@ macro_rules! make_setting_route {
             pub fn resources() -> Resource {
                 Resource::new($route)
                     .route(web::get().to(SeqHandler(get)))
-                    .route(web::post().to(SeqHandler(update)))
+                    .route(web::$update_verb().to(SeqHandler(update)))
                     .route(web::delete().to(SeqHandler(delete)))
             }
         }
     };
-    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        make_setting_route!($route, $type, $attr, $camelcase_attr, _analytics, |_, _| {});
+    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal) => {
+        make_setting_route!(
+            $route,
+            $update_verb,
+            $type,
+            $attr,
+            $camelcase_attr,
+            _analytics,
+            |_, _| {}
+        );
     };
 }
 
 make_setting_route!(
     "/filterable-attributes",
+    put,
     std::collections::BTreeSet<String>,
     filterable_attributes,
     "filterableAttributes",
@@ -134,6 +143,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/sortable-attributes",
+    put,
     std::collections::BTreeSet<String>,
     sortable_attributes,
     "sortableAttributes",
@@ -156,6 +166,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/displayed-attributes",
+    put,
     Vec<String>,
     displayed_attributes,
     "displayedAttributes"
@@ -163,6 +174,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/typo-tolerance",
+    patch,
     meilisearch_lib::index::updates::TypoSettings,
     typo_tolerance,
     "typoTolerance",
@@ -204,6 +216,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/searchable-attributes",
+    put,
     Vec<String>,
     searchable_attributes,
     "searchableAttributes",
@@ -225,6 +238,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/stop-words",
+    put,
     std::collections::BTreeSet<String>,
     stop_words,
     "stopWords"
@@ -232,6 +246,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/synonyms",
+    put,
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
     "synonyms"
@@ -239,6 +254,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/distinct-attribute",
+    put,
     String,
     distinct_attribute,
     "distinctAttribute"
@@ -246,6 +262,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/ranking-rules",
+    put,
     Vec<String>,
     ranking_rules,
     "rankingRules",
