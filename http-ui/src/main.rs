@@ -19,7 +19,7 @@ use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
 use heed::EnvOpenOptions;
 use milli::documents::DocumentBatchReader;
-use milli::tokenizer::{Tokenizer, TokenizerBuilder};
+use milli::tokenizer::TokenizerBuilder;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{
     ClearDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
@@ -140,38 +140,31 @@ pub struct IndexerOpt {
 }
 
 struct Highlighter<'s, A> {
-    tokenizer: Tokenizer<'s, A>,
+    matcher_builder: MatcherBuilder<'s, A>,
 }
 
 impl<'s, A: AsRef<[u8]>> Highlighter<'s, A> {
-    fn new(stop_words: &'s fst::Set<A>) -> Self {
-        let mut builder = TokenizerBuilder::new();
-        builder.stop_words(stop_words);
-
-        Self { tokenizer: builder.build() }
+    fn new(matcher_builder: MatcherBuilder<'s, A>) -> Self {
+        Self { matcher_builder }
     }
 
-    fn highlight_value(&self, value: Value, matcher_builder: &MatcherBuilder) -> Value {
+    fn highlight_value(&self, value: Value) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
             Value::Number(number) => Value::Number(number),
             Value::String(old_string) => {
-                let tokens: Vec<_> = self.tokenizer.tokenize(&old_string).collect();
-                let mut matcher = matcher_builder.build(&tokens[..], &old_string);
+                let mut matcher = self.matcher_builder.build(&old_string);
 
                 let format_options = FormatOptions { highlight: true, crop: Some(10) };
 
                 Value::String(matcher.format(format_options).to_string())
             }
-            Value::Array(values) => Value::Array(
-                values.into_iter().map(|v| self.highlight_value(v, matcher_builder)).collect(),
-            ),
+            Value::Array(values) => {
+                Value::Array(values.into_iter().map(|v| self.highlight_value(v)).collect())
+            }
             Value::Object(object) => Value::Object(
-                object
-                    .into_iter()
-                    .map(|(k, v)| (k, self.highlight_value(v, matcher_builder)))
-                    .collect(),
+                object.into_iter().map(|(k, v)| (k, self.highlight_value(v))).collect(),
             ),
         }
     }
@@ -179,14 +172,13 @@ impl<'s, A: AsRef<[u8]>> Highlighter<'s, A> {
     fn highlight_record(
         &self,
         object: &mut Map<String, Value>,
-        matcher_builder: &MatcherBuilder,
         attributes_to_highlight: &HashSet<String>,
     ) {
         // TODO do we need to create a string for element that are not and needs to be highlight?
         for (key, value) in object.iter_mut() {
             if attributes_to_highlight.contains(key) {
                 let old_value = mem::take(value);
-                *value = self.highlight_value(old_value, matcher_builder);
+                *value = self.highlight_value(old_value);
             }
         }
     }
@@ -798,20 +790,15 @@ async fn main() -> anyhow::Result<()> {
                 None => fields_ids_map.iter().map(|(_, name)| name).map(String::from).collect(),
             };
 
-            let stop_words = fst::Set::default();
-            let highlighter = Highlighter::new(&stop_words);
-
-            let mut matcher_builder = MatcherBuilder::from_matching_words(matching_words);
+            let mut matcher_builder =
+                MatcherBuilder::new(matching_words, TokenizerBuilder::default().build());
             matcher_builder.highlight_prefix("<mark>".to_string());
             matcher_builder.highlight_suffix("</mark>".to_string());
+            let highlighter = Highlighter::new(matcher_builder);
             for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
                 let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
                 if !disable_highlighting {
-                    highlighter.highlight_record(
-                        &mut object,
-                        &matcher_builder,
-                        &attributes_to_highlight,
-                    );
+                    highlighter.highlight_record(&mut object, &attributes_to_highlight);
                 }
 
                 documents.push(object);
