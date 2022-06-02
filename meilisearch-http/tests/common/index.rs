@@ -48,7 +48,7 @@ impl Index<'_> {
         });
         let url = format!("/indexes/{}", encode(self.uid.as_ref()));
 
-        self.service.put(url, body).await
+        self.service.patch(url, body).await
     }
 
     pub async fn delete(&self) -> (Value, StatusCode) {
