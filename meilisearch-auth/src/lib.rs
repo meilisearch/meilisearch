@@ -6,17 +6,17 @@ mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::str::from_utf8;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
 pub use key::Key;
+use store::generate_key_as_base64;
 pub use store::open_auth_store_env;
 use store::HeedAuthStore;
 
@@ -42,61 +42,74 @@ impl AuthController {
 
     pub fn create_key(&self, value: Value) -> Result<Key> {
         let key = Key::create_from_value(value)?;
-        self.store.put_api_key(key)
+        match self.store.get_api_key(key.uid)? {
+            Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(
+                key.uid.to_string(),
+            )),
+            None => self.store.put_api_key(key),
+        }
     }
 
-    pub fn update_key(&self, key: impl AsRef<str>, value: Value) -> Result<Key> {
-        let mut key = self.get_key(key)?;
+    pub fn update_key(&self, uid: Uuid, value: Value) -> Result<Key> {
+        let mut key = self.get_key(uid)?;
         key.update_from_value(value)?;
         self.store.put_api_key(key)
     }
 
-    pub fn get_key(&self, key: impl AsRef<str>) -> Result<Key> {
+    pub fn get_key(&self, uid: Uuid) -> Result<Key> {
         self.store
-            .get_api_key(&key)?
-            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(key.as_ref().to_string()))
+            .get_api_key(uid)?
+            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))
+    }
+
+    pub fn get_optional_uid_from_encoded_key(&self, encoded_key: &[u8]) -> Result<Option<Uuid>> {
+        match &self.master_key {
+            Some(master_key) => self
+                .store
+                .get_uid_from_encoded_key(encoded_key, master_key.as_bytes()),
+            None => Ok(None),
+        }
+    }
+
+    pub fn get_uid_from_encoded_key(&self, encoded_key: &str) -> Result<Uuid> {
+        self.get_optional_uid_from_encoded_key(encoded_key.as_bytes())?
+            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(encoded_key.to_string()))
     }
 
     pub fn get_key_filters(
         &self,
-        key: impl AsRef<str>,
+        uid: Uuid,
         search_rules: Option<SearchRules>,
     ) -> Result<AuthFilter> {
         let mut filters = AuthFilter::default();
-        if self
-            .master_key
-            .as_ref()
-            .map_or(false, |master_key| master_key != key.as_ref())
-        {
-            let key = self
-                .store
-                .get_api_key(&key)?
-                .ok_or_else(|| AuthControllerError::ApiKeyNotFound(key.as_ref().to_string()))?;
+        let key = self
+            .store
+            .get_api_key(uid)?
+            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))?;
 
-            if !key.indexes.iter().any(|i| i.as_str() == "*") {
-                filters.search_rules = match search_rules {
-                    // Intersect search_rules with parent key authorized indexes.
-                    Some(search_rules) => SearchRules::Map(
-                        key.indexes
-                            .into_iter()
-                            .filter_map(|index| {
-                                search_rules
-                                    .get_index_search_rules(&index)
-                                    .map(|index_search_rules| (index, Some(index_search_rules)))
-                            })
-                            .collect(),
-                    ),
-                    None => SearchRules::Set(key.indexes.into_iter().collect()),
-                };
-            } else if let Some(search_rules) = search_rules {
-                filters.search_rules = search_rules;
-            }
-
-            filters.allow_index_creation = key
-                .actions
-                .iter()
-                .any(|&action| action == Action::IndexesAdd || action == Action::All);
+        if !key.indexes.iter().any(|i| i.as_str() == "*") {
+            filters.search_rules = match search_rules {
+                // Intersect search_rules with parent key authorized indexes.
+                Some(search_rules) => SearchRules::Map(
+                    key.indexes
+                        .into_iter()
+                        .filter_map(|index| {
+                            search_rules
+                                .get_index_search_rules(&index)
+                                .map(|index_search_rules| (index, Some(index_search_rules)))
+                        })
+                        .collect(),
+                ),
+                None => SearchRules::Set(key.indexes.into_iter().collect()),
+            };
+        } else if let Some(search_rules) = search_rules {
+            filters.search_rules = search_rules;
         }
+
+        filters.allow_index_creation = key
+            .actions
+            .iter()
+            .any(|&action| action == Action::IndexesAdd || action == Action::All);
 
         Ok(filters)
     }
@@ -105,13 +118,11 @@ impl AuthController {
         self.store.list_api_keys()
     }
 
-    pub fn delete_key(&self, key: impl AsRef<str>) -> Result<()> {
-        if self.store.delete_api_key(&key)? {
+    pub fn delete_key(&self, uid: Uuid) -> Result<()> {
+        if self.store.delete_api_key(uid)? {
             Ok(())
         } else {
-            Err(AuthControllerError::ApiKeyNotFound(
-                key.as_ref().to_string(),
-            ))
+            Err(AuthControllerError::ApiKeyNotFound(uid.to_string()))
         }
     }
 
@@ -121,32 +132,32 @@ impl AuthController {
 
     /// Generate a valid key from a key id using the current master key.
     /// Returns None if no master key has been set.
-    pub fn generate_key(&self, id: &str) -> Option<String> {
+    pub fn generate_key(&self, uid: Uuid) -> Option<String> {
         self.master_key
             .as_ref()
-            .map(|master_key| generate_key(master_key.as_bytes(), id))
+            .map(|master_key| generate_key_as_base64(uid.as_bytes(), master_key.as_bytes()))
     }
 
     /// Check if the provided key is authorized to make a specific action
     /// without checking if the key is valid.
     pub fn is_key_authorized(
         &self,
-        key: &[u8],
+        uid: Uuid,
         action: Action,
         index: Option<&str>,
     ) -> Result<bool> {
         match self
             .store
             // check if the key has access to all indexes.
-            .get_expiration_date(key, action, None)?
+            .get_expiration_date(uid, action, None)?
             .or(match index {
                 // else check if the key has access to the requested index.
                 Some(index) => {
                     self.store
-                        .get_expiration_date(key, action, Some(index.as_bytes()))?
+                        .get_expiration_date(uid, action, Some(index.as_bytes()))?
                 }
                 // or to any index if no index has been requested.
-                None => self.store.prefix_first_expiration_date(key, action)?,
+                None => self.store.prefix_first_expiration_date(uid, action)?,
             }) {
             // check expiration date.
             Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
@@ -154,29 +165,6 @@ impl AuthController {
             Some(None) => Ok(true),
             // action or index forbidden.
             None => Ok(false),
-        }
-    }
-
-    /// Check if the provided key is valid
-    /// without checking if the key is authorized to make a specific action.
-    pub fn is_key_valid(&self, key: &[u8]) -> Result<bool> {
-        if let Some(id) = self.store.get_key_id(key) {
-            let id = from_utf8(&id)?;
-            if let Some(generated) = self.generate_key(id) {
-                return Ok(generated.as_bytes() == key);
-            }
-        }
-
-        Ok(false)
-    }
-
-    /// Check if the provided key is valid
-    /// and is authorized to make a specific action.
-    pub fn authenticate(&self, key: &[u8], action: Action, index: Option<&str>) -> Result<bool> {
-        if self.is_key_authorized(key, action, index)? {
-            self.is_key_valid(key)
-        } else {
-            Ok(false)
         }
     }
 }
@@ -256,12 +244,6 @@ impl IntoIterator for SearchRules {
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct IndexSearchRules {
     pub filter: Option<serde_json::Value>,
-}
-
-fn generate_key(master_key: &[u8], keyid: &str) -> String {
-    let key = [keyid.as_bytes(), master_key].concat();
-    let sha = Sha256::digest(&key);
-    format!("{}{:x}", keyid, sha)
 }
 
 fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {

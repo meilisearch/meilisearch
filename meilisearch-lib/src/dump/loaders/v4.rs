@@ -1,10 +1,12 @@
 use std::fs::{self, create_dir_all, File};
-use std::io::Write;
+use std::io::{BufReader, Write};
 use std::path::Path;
 
 use fs_extra::dir::{self, CopyOptions};
 use log::info;
+use serde_json::{Deserializer, Map, Value};
 use tempfile::tempdir;
+use uuid::Uuid;
 
 use crate::dump::{compat, Metadata};
 use crate::options::IndexerOpts;
@@ -24,14 +26,10 @@ pub fn load_dump(
     let options = CopyOptions::default();
 
     // Indexes
-    dir::copy(src.as_ref().join("indexes"), patched_dir.path(), &options)?;
+    dir::copy(src.as_ref().join("indexes"), &patched_dir, &options)?;
 
     // Index uuids
-    dir::copy(
-        src.as_ref().join("index_uuids"),
-        patched_dir.path(),
-        &options,
-    )?;
+    dir::copy(src.as_ref().join("index_uuids"), &patched_dir, &options)?;
 
     // Metadata
     fs::copy(
@@ -43,13 +41,11 @@ pub fn load_dump(
     patch_updates(&src, &patched_dir)?;
 
     // Keys
-    if src.as_ref().join("keys").exists() {
-        fs::copy(src.as_ref().join("keys"), patched_dir.path().join("keys"))?;
-    }
+    patch_keys(&src, &patched_dir)?;
 
     super::v5::load_dump(
         meta,
-        patched_dir.path(),
+        &patched_dir,
         dst,
         index_db_size,
         meta_env_size,
@@ -76,6 +72,32 @@ fn patch_updates(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result
         })?;
 
     output_update_file.flush()?;
+
+    Ok(())
+}
+
+fn patch_keys(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    let keys_file_src = src.as_ref().join("keys");
+
+    if !keys_file_src.exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(&dst)?;
+    let keys_file_dst = dst.as_ref().join("keys");
+    let mut writer = File::create(&keys_file_dst)?;
+
+    let reader = BufReader::new(File::open(&keys_file_src)?);
+    for key in Deserializer::from_reader(reader).into_iter() {
+        let mut key: Map<String, Value> = key?;
+
+        // generate a new uuid v4 and insert it in the key.
+        let uid = serde_json::to_value(Uuid::new_v4()).unwrap();
+        key.insert("uid".to_string(), uid);
+
+        serde_json::to_writer(&mut writer, &key)?;
+        writer.write_all(b"\n")?;
+    }
 
     Ok(())
 }
