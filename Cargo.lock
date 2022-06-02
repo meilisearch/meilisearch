@@ -735,6 +735,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
+name = "convert_case"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb4a24b1aaf0fd0ce8b45161144d6f42cd91677fd5940fd431183eb023b3a2b8"
+
+[[package]]
 name = "cookie"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -921,7 +927,7 @@ version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
 dependencies = [
- "convert_case",
+ "convert_case 0.4.0",
  "proc-macro2 1.0.39",
  "quote 1.0.18",
  "rustc_version 0.4.0",
@@ -1627,6 +1633,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112c678d4050afce233f4f2852bb2eb519230b3cf12f33585275537d7e41578d"
 
 [[package]]
+name = "jayson"
+version = "0.1.0"
+dependencies = [
+ "jayson-internal",
+ "serde_json",
+]
+
+[[package]]
+name = "jayson-internal"
+version = "0.1.0"
+dependencies = [
+ "convert_case 0.5.0",
+ "proc-macro2 1.0.39",
+ "quote 1.0.18",
+ "syn 1.0.96",
+]
+
+[[package]]
 name = "jieba-rs"
 version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2045,6 +2069,7 @@ dependencies = [
  "http",
  "indexmap",
  "itertools",
+ "jayson",
  "jsonwebtoken",
  "log",
  "manifest-dir-macros",
