@@ -2036,7 +2036,6 @@ dependencies = [
  "obkv",
  "once_cell",
  "parking_lot",
- "paste",
  "pin-project-lite",
  "platform-dirs",
  "rand",

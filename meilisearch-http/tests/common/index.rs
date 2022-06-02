@@ -4,28 +4,11 @@ use std::{
 };
 
 use actix_web::http::StatusCode;
-use paste::paste;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use urlencoding::encode;
 
 use super::service::Service;
-
-macro_rules! make_settings_test_routes {
-    ($($name:ident),+) => {
-        $(paste! {
-            pub async fn [<update_$name>](&self, value: Value) -> (Value, StatusCode) {
-                let url = format!("/indexes/{}/settings/{}", encode(self.uid.as_ref()).to_string(), stringify!($name).replace("_", "-"));
-                self.service.post(url, value).await
-            }
-
-            pub async fn [<get_$name>](&self) -> (Value, StatusCode) {
-                let url = format!("/indexes/{}/settings/{}", encode(self.uid.as_ref()).to_string(), stringify!($name).replace("_", "-"));
-                self.service.get(url).await
-            }
-        })*
-    };
-}
 
 pub struct Index<'a> {
     pub uid: String,
@@ -198,7 +181,7 @@ impl Index<'_> {
 
     pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", encode(self.uid.as_ref()));
-        self.service.post(url, settings).await
+        self.service.patch(url, settings).await
     }
 
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
@@ -242,7 +225,23 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    make_settings_test_routes!(distinct_attribute);
+    pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
+        let url = format!(
+            "/indexes/{}/settings/{}",
+            encode(self.uid.as_ref()).to_string(),
+            "distinct-attribute"
+        );
+        self.service.put(url, value).await
+    }
+
+    pub async fn get_distinct_attribute(&self) -> (Value, StatusCode) {
+        let url = format!(
+            "/indexes/{}/settings/{}",
+            encode(self.uid.as_ref()).to_string(),
+            "distinct-attribute"
+        );
+        self.service.get(url).await
+    }
 }
 
 pub struct GetDocumentOptions {
