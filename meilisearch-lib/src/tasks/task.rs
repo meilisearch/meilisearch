@@ -68,9 +68,9 @@ impl TaskEvent {
         }
     }
 
-    pub fn failed(error: ResponseError) -> Self {
+    pub fn failed(error: impl Into<ResponseError>) -> Self {
         Self::Failed {
-            error,
+            error: error.into(),
             timestamp: OffsetDateTime::now_utc(),
         }
     }

@@ -1,7 +1,6 @@
 use crate::index_resolver::IndexResolver;
 use crate::index_resolver::{index_store::IndexStore, meta_store::IndexMetaStore};
 use crate::tasks::batch::{Batch, BatchContent};
-use crate::tasks::task::TaskEvent;
 use crate::tasks::BatchHandler;
 
 #[async_trait::async_trait]
@@ -24,10 +23,9 @@ where
                     .process_document_addition_batch(std::mem::take(tasks))
                     .await;
             }
-            BatchContent::IndexUpdate(ref mut task) => match self.process_task(task).await {
-                Ok(success) => task.events.push(TaskEvent::succeeded(success)),
-                Err(err) => task.events.push(TaskEvent::failed(err.into())),
-            },
+            BatchContent::IndexUpdate(ref mut task) => {
+                self.process_task(task).await;
+            }
             _ => unreachable!(),
         }
 
@@ -54,7 +52,6 @@ mod test {
     use crate::index_resolver::{
         error::Result as IndexResult, index_store::MockIndexStore, meta_store::MockIndexMetaStore,
     };
-    use crate::tasks::task::TaskResult;
     use crate::tasks::{
         handlers::test::task_to_batch,
         task::{Task, TaskContent},
@@ -181,7 +178,7 @@ mod test {
                     }
                     TaskContent::Dump { .. } => (),
                     _ => {
-                        mocker.when::<&Task, IndexResult<TaskResult>>("process_task").then(|_| Ok(TaskResult::Other));
+                        mocker.when::<&mut Task, ()>("process_task").then(|_| ());
                     }
                 }
                 let index_resolver: IndexResolver<HeedMetaStore, MapIndexStore> = IndexResolver::mock(mocker);
