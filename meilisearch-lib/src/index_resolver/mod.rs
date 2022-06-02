@@ -27,7 +27,11 @@ use self::meta_store::IndexMeta;
 
 pub type HardStateIndexResolver = IndexResolver<HeedMetaStore, MapIndexStore>;
 
+#[cfg(not(test))]
 pub use real::IndexResolver;
+
+#[cfg(test)]
+pub use test::MockIndexResolver as IndexResolver;
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
@@ -102,9 +106,9 @@ mod real {
     use super::*;
 
     pub struct IndexResolver<U, I> {
-        index_uuid_store: U,
-        index_store: I,
-        pub file_store: UpdateFileStore,
+        pub(super) index_uuid_store: U,
+        pub(super) index_store: I,
+        pub(super) file_store: UpdateFileStore,
     }
 
     impl IndexResolver<HeedMetaStore, MapIndexStore> {
@@ -228,6 +232,11 @@ mod real {
                 }
                 _ => panic!("invalid batch!"),
             }
+        }
+
+        pub async fn delete_content_file(&self, content_uuid: Uuid) -> Result<()> {
+            self.file_store.delete(content_uuid).await?;
+            Ok(())
         }
 
         pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
@@ -447,6 +456,105 @@ mod test {
     // };
     // use index_store::MockIndexStore;
     // use meta_store::MockIndexMetaStore;
+
+    pub enum MockIndexResolver<U, I> {
+        Real(super::real::IndexResolver<U, I>),
+        Mock(Mocker),
+    }
+
+    impl MockIndexResolver<HeedMetaStore, MapIndexStore> {
+        pub fn load_dump(
+            src: impl AsRef<Path>,
+            dst: impl AsRef<Path>,
+            index_db_size: usize,
+            env: Arc<Env>,
+            indexer_opts: &IndexerOpts,
+        ) -> anyhow::Result<()> {
+            super::real::IndexResolver::load_dump(src, dst, index_db_size, env, indexer_opts)
+        }
+    }
+
+    impl<U, I> MockIndexResolver<U, I>
+    where
+        U: IndexMetaStore,
+        I: IndexStore,
+    {
+        pub fn new(index_uuid_store: U, index_store: I, file_store: UpdateFileStore) -> Self {
+            Self::Real(super::real::IndexResolver {
+                index_uuid_store,
+                index_store,
+                file_store,
+            })
+        }
+
+        pub fn mock(mocker: Mocker) -> Self {
+            Self::Mock(mocker)
+        }
+
+        pub async fn process_document_addition_batch(&self, tasks: Vec<Task>) -> Vec<Task> {
+            match self {
+                IndexResolver::Real(r) => r.process_document_addition_batch(tasks).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn process_task(&self, task: &Task) -> Result<TaskResult> {
+            match self {
+                IndexResolver::Real(r) => r.process_task(task).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
+            match self {
+                IndexResolver::Real(r) => r.dump(path).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        /// Get or create an index with name `uid`.
+        pub async fn get_or_create_index(&self, uid: IndexUid, task_id: TaskId) -> Result<Index> {
+            match self {
+                IndexResolver::Real(r) => r.get_or_create_index(uid, task_id).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn list(&self) -> Result<Vec<(String, Index)>> {
+            match self {
+                IndexResolver::Real(r) => r.list().await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn delete_index(&self, uid: String) -> Result<Index> {
+            match self {
+                IndexResolver::Real(r) => r.delete_index(uid).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn get_index(&self, uid: String) -> Result<Index> {
+            match self {
+                IndexResolver::Real(r) => r.get_index(uid).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn get_index_creation_task_id(&self, index_uid: String) -> Result<TaskId> {
+            match self {
+                IndexResolver::Real(r) => r.get_index_creation_task_id(index_uid).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+
+        pub async fn delete_content_file(&self, content_uuid: Uuid) -> Result<()> {
+            match self {
+                IndexResolver::Real(r) => r.delete_content_file(content_uuid).await,
+                IndexResolver::Mock(_) => todo!(),
+            }
+        }
+    }
 
     // TODO: ignoring this test, it has become too complex to maintain, and rather implement
     // handler logic test.

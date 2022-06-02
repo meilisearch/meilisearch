@@ -38,7 +38,7 @@ where
         if let BatchContent::DocumentsAdditionBatch(ref tasks) = batch.content {
             for task in tasks {
                 if let Some(content_uuid) = task.get_content_uuid() {
-                    if let Err(e) = self.file_store.delete(content_uuid).await {
+                    if let Err(e) = self.delete_content_file(content_uuid).await {
                         log::error!("error deleting update file: {}", e);
                     }
                 }
