@@ -19,9 +19,7 @@ where
     async fn process_batch(&self, mut batch: Batch) -> Batch {
         match batch.content {
             BatchContent::DocumentsAdditionBatch(ref mut tasks) => {
-                *tasks = self
-                    .process_document_addition_batch(std::mem::take(tasks))
-                    .await;
+                self.process_document_addition_batch(tasks).await;
             }
             BatchContent::IndexUpdate(ref mut task) => {
                 self.process_task(task).await;
@@ -174,7 +172,7 @@ mod test {
                 let mocker = Mocker::default();
                 match task.content {
                     TaskContent::DocumentAddition { .. } => {
-                        mocker.when::<Vec<Task>, Vec<Task>>("process_document_addition_batch").then(|tasks| tasks);
+                        mocker.when::<&mut [Task], ()>("process_document_addition_batch").then(|_| ());
                     }
                     TaskContent::Dump { .. } => (),
                     _ => {
