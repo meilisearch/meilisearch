@@ -138,12 +138,12 @@ async fn get_tasks(
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
 
-    let mut tasks_results = meilisearch
+    let mut tasks_results: Vec<_> = meilisearch
         .list_tasks(filters, Some(limit), from)
         .await?
         .into_iter()
         .map(TaskView::from)
-        .collect::<Vec<_>>();
+        .collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
