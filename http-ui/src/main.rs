@@ -19,7 +19,7 @@ use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
 use heed::EnvOpenOptions;
 use milli::documents::DocumentBatchReader;
-use milli::tokenizer::{Analyzer, AnalyzerConfig};
+use milli::tokenizer::{Tokenizer, TokenizerBuilder};
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{
     ClearDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
@@ -139,17 +139,16 @@ pub struct IndexerOpt {
     pub max_positions_per_attributes: Option<u32>,
 }
 
-struct Highlighter<'a, A> {
-    analyzer: Analyzer<'a, A>,
+struct Highlighter<'s, A> {
+    tokenizer: Tokenizer<'s, A>,
 }
 
-impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
-    fn new(stop_words: &'a fst::Set<A>) -> Self {
-        let mut config = AnalyzerConfig::default();
-        config.stop_words(stop_words);
-        let analyzer = Analyzer::new(config);
+impl<'s, A: AsRef<[u8]>> Highlighter<'s, A> {
+    fn new(stop_words: &'s fst::Set<A>) -> Self {
+        let mut builder = TokenizerBuilder::new();
+        builder.stop_words(stop_words);
 
-        Self { analyzer }
+        Self { tokenizer: builder.build() }
     }
 
     fn highlight_value(&self, value: Value, matcher_builder: &MatcherBuilder) -> Value {
@@ -158,9 +157,8 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             Value::Bool(boolean) => Value::Bool(boolean),
             Value::Number(number) => Value::Number(number),
             Value::String(old_string) => {
-                let analyzed = self.analyzer.analyze(&old_string);
-                let analyzed: Vec<_> = analyzed.tokens().collect();
-                let mut matcher = matcher_builder.build(&analyzed[..], &old_string);
+                let tokens: Vec<_> = self.tokenizer.tokenize(&old_string).collect();
+                let mut matcher = matcher_builder.build(&tokens[..], &old_string);
 
                 let format_options = FormatOptions { highlight: true, crop: Some(10) };
 
