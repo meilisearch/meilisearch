@@ -27,7 +27,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(
                 web::resource("")
                     .route(web::get().to(SeqHandler(get_index)))
-                    .route(web::put().to(SeqHandler(update_index)))
+                    .route(web::patch().to(SeqHandler(update_index)))
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))

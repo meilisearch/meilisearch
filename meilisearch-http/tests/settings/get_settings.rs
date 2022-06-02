@@ -214,7 +214,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.post(url, serde_json::Value::Null).await;
+                    let (response, code) = server.service.put(url, serde_json::Value::Null).await;
                     assert_eq!(code, 202, "{}", response);
                     server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;
