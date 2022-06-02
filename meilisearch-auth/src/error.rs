@@ -28,7 +28,7 @@ pub enum AuthControllerError {
     ApiKeyNotFound(String),
     #[error("`uid` field value `{0}` is already an existing API key.")]
     ApiKeyAlreadyExists(String),
-    #[error("`{0}` field cannot be modified for the given resource.")]
+    #[error("The `{0}` field cannot be modified for the given resource.")]
     ImmutableField(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
