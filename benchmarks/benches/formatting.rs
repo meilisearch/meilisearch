@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main};
-use milli::tokenizer::Tokenize;
+use milli::tokenizer::TokenizerBuilder;
 use milli::{FormatOptions, MatcherBuilder, MatchingWord, MatchingWords};
 
 #[cfg(target_os = "linux")]
@@ -9,7 +9,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 struct Conf<'a> {
     name: &'a str,
     text: &'a str,
-    matching_words: MatcherBuilder,
+    matching_words: MatcherBuilder<'a, Vec<u8>>,
 }
 
 fn bench_formatting(c: &mut criterion::Criterion) {
@@ -18,7 +18,7 @@ fn bench_formatting(c: &mut criterion::Criterion) {
     	Conf {
     		name: "'the door d'",
 			text: r#"He used to do the door sounds in "Star Trek" with his mouth, phssst, phssst. The MD-11 passenger and cargo doors also tend to behave like electromagnetic apertures, because the doors do not have continuous electrical contact with the door frames around the door perimeter. But Theodor said that the doors don't work."#,
-			matching_words: MatcherBuilder::from_matching_words(MatchingWords::new(vec![
+			matching_words: MatcherBuilder::new(MatchingWords::new(vec![
 	            (vec![MatchingWord::new("t".to_string(), 0, false), MatchingWord::new("he".to_string(), 0, false)], vec![0]),
 	            (vec![MatchingWord::new("the".to_string(), 0, false)], vec![0]),
 	            (vec![MatchingWord::new("door".to_string(), 1, false)], vec![1]),
@@ -27,7 +27,8 @@ fn bench_formatting(c: &mut criterion::Criterion) {
 	            (vec![MatchingWord::new("d".to_string(), 0, true)], vec![2]),
 	            (vec![MatchingWord::new("thedoord".to_string(), 1, true)], vec![0, 1, 2]),
 	            (vec![MatchingWord::new("doord".to_string(), 1, true)], vec![1, 2]),
-        	])),
+        	]
+            ), TokenizerBuilder::default().build()),
 		},
     ];
 
@@ -52,8 +53,7 @@ fn bench_formatting(c: &mut criterion::Criterion) {
         for conf in confs {
             group.bench_function(conf.name, |b| {
                 b.iter(|| {
-                    let tokens: Vec<_> = conf.text.tokenize().collect();
-                    let mut matcher = conf.matching_words.build(&tokens[..], conf.text);
+                    let mut matcher = conf.matching_words.build(conf.text);
                     matcher.format(option.clone());
                 })
             });
