@@ -271,7 +271,7 @@ macro_rules! generate_configure {
             use crate::extractors::sequential_extractor::SeqHandler;
             cfg.service(
                 web::resource("")
-                .route(web::post().to(SeqHandler(update_all)))
+                .route(web::patch().to(SeqHandler(update_all)))
                 .route(web::get().to(SeqHandler(get_all)))
                 .route(web::delete().to(SeqHandler(delete_all))))
                 $(.service($mod::resources()))*;
