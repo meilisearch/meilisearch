@@ -509,21 +509,18 @@ mod tests {
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-
         let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-
         let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-
         let mut matcher = builder.build(text);
         // no crop and no highlight should return complete text.
         assert_eq!(&matcher.format(format_options), &text);
@@ -539,33 +536,28 @@ mod tests {
 
         // empty text.
         let text = "";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text, because there is no matches.
         assert_eq!(&matcher.format(format_options), &text);
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(
@@ -589,21 +581,18 @@ mod tests {
 
         // Text containing prefix match.
         let text = "Ŵôřlḑôle";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Ŵôřlḑ</em>ôle");
 
         // Text containing unicode match.
         let text = "Ŵôřlḑ";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Ŵôřlḑ</em>");
 
         // Text containing unicode match.
         let text = "Westfália";
-
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         assert_eq!(&matcher.format(format_options), "<em>Westfáli</em>a");
@@ -619,19 +608,16 @@ mod tests {
 
         // empty text.
         let text = "";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-
         let mut matcher = builder.build(text);
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
@@ -641,7 +627,6 @@ mod tests {
 
         // Text without any match starting by a separator.
         let text = "(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)";
-
         let mut matcher = builder.build(text);
         // no highlight should return 10 first words with a marker at the end.
         assert_eq!(
@@ -651,7 +636,6 @@ mod tests {
 
         // Test phrase propagation
         let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
-
         let mut matcher = builder.build(text);
         // should crop the phrase instead of croping around the match.
         assert_eq!(
@@ -661,7 +645,6 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-
         let mut matcher = builder.build(text);
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
@@ -671,7 +654,6 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-
         let mut matcher = builder.build(text);
         // no highlight should return 10 last words with a marker at the start.
         assert_eq!(
@@ -681,7 +663,6 @@ mod tests {
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
@@ -691,7 +672,6 @@ mod tests {
 
         // Text containing matches with diferent density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
-
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
@@ -701,7 +681,6 @@ mod tests {
 
         // Text containing matches with same word.
         let text = "split split split split split split void void void void void void void void void void split the world void void";
-
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
@@ -720,19 +699,16 @@ mod tests {
 
         // empty text.
         let text = "";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), "");
 
         // text containing only separators.
         let text = ":-)";
-
         let mut matcher = builder.build(text);
         assert_eq!(&matcher.format(format_options), ":-)");
 
         // Text without any match.
         let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-
         let mut matcher = builder.build(text);
         // both should return 10 first words with a marker at the end.
         assert_eq!(
@@ -742,7 +718,6 @@ mod tests {
 
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
-
         let mut matcher = builder.build(text);
         // both should return 10 last words with a marker at the start and highlighted matches.
         assert_eq!(
@@ -752,14 +727,12 @@ mod tests {
 
         // Text containing all matches.
         let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-
         let mut matcher = builder.build(text);
         // both should return 10 last words with a marker at the start and highlighted matches.
         assert_eq!(&matcher.format(format_options), "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>.");
 
         // Text containing a match unordered and a match ordered.
         let text = "The world split void void void void void void void void void split the world void void";
-
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.
         assert_eq!(
@@ -779,21 +752,18 @@ mod tests {
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(2) };
-
         let mut matcher = builder.build(text);
         // because crop size < query size, partially format matches.
         assert_eq!(&matcher.format(format_options), "…split the…");
 
         // set a smaller crop size
         let format_options = FormatOptions { highlight: false, crop: Some(1) };
-
         let mut matcher = builder.build(text);
         // because crop size < query size, partially format matches.
         assert_eq!(&matcher.format(format_options), "…split…");
 
         // set  crop size to 0
         let format_options = FormatOptions { highlight: false, crop: Some(0) };
-
         let mut matcher = builder.build(text);
         // because crop size is 0, crop is ignored.
         assert_eq!(&matcher.format(format_options), "void void split the world void void.");
@@ -830,7 +800,6 @@ mod tests {
         let format_options = FormatOptions { highlight: true, crop: None };
 
         let text = "the do or die can't be he do and or isn't he";
-
         let mut matcher = builder.build(text);
         assert_eq!(
             &matcher.format(format_options),
