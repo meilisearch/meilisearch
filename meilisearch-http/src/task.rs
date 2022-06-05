@@ -94,10 +94,28 @@ pub enum TaskStatus {
     Failed,
 }
 
-impl FromStr for TaskStatus {
-    type Err = String;
+#[derive(Debug)]
+pub struct TaskStatusError {
+    invalid_status: String,
+}
 
-    fn from_str(status: &str) -> Result<Self, String> {
+impl fmt::Display for TaskStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task status `{}`, expecting one of: \
+            enqueued, processing, succeeded, or failed",
+            self.invalid_status,
+        )
+    }
+}
+
+impl Error for TaskStatusError {}
+
+impl FromStr for TaskStatus {
+    type Err = TaskStatusError;
+
+    fn from_str(status: &str) -> Result<Self, TaskStatusError> {
         if status.eq_ignore_ascii_case("enqueued") {
             Ok(TaskStatus::Enqueued)
         } else if status.eq_ignore_ascii_case("processing") {
@@ -107,11 +125,9 @@ impl FromStr for TaskStatus {
         } else if status.eq_ignore_ascii_case("failed") {
             Ok(TaskStatus::Failed)
         } else {
-            Err(format!(
-                "invalid task status `{}`, expecting one of: \
-                enqueued, processing, succeeded, or failed",
-                status,
-            ))
+            Err(TaskStatusError {
+                invalid_status: status.to_string(),
+            })
         }
     }
 }
