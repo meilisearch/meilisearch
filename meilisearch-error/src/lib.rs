@@ -73,12 +73,12 @@ impl aweb::error::ResponseError for ResponseError {
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
 
-    /// returns the HTTP status code ascociated with the error
+    /// returns the HTTP status code associated with the error
     fn http_status(&self) -> StatusCode {
         self.error_code().http()
     }
 
-    /// returns the doc url ascociated with the error
+    /// returns the doc url associated with the error
     fn error_url(&self) -> String {
         self.error_code().url()
     }
@@ -173,7 +173,7 @@ pub enum Code {
 }
 
 impl Code {
-    /// ascociate a `Code` variant to the actual ErrCode
+    /// associate a `Code` variant to the actual ErrCode
     fn err_code(&self) -> ErrCode {
         use Code::*;
 
@@ -286,7 +286,7 @@ impl Code {
         }
     }
 
-    /// return the HTTP status code ascociated with the `Code`
+    /// return the HTTP status code associated with the `Code`
     fn http(&self) -> StatusCode {
         self.err_code().status_code
     }
@@ -301,7 +301,7 @@ impl Code {
         self.err_code().error_type.to_string()
     }
 
-    /// return the doc url ascociated with the error
+    /// return the doc url associated with the error
     fn url(&self) -> String {
         format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
