@@ -1,4 +1,5 @@
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{self, Write};
 use std::str::FromStr;
 use std::write;
 
@@ -39,10 +40,29 @@ impl From<TaskContent> for TaskType {
     }
 }
 
-impl FromStr for TaskType {
-    type Err = String;
+#[derive(Debug)]
+pub struct TaskTypeError {
+    invalid_type: String,
+}
 
-    fn from_str(status: &str) -> Result<Self, String> {
+impl fmt::Display for TaskTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task type `{}`, expecting one of: \
+            indexCreation, indexUpdate, indexDeletion, documentAdditionOrUpdate, \
+            documentDeletion, settingsUpdate, dumpCreation",
+            self.invalid_type
+        )
+    }
+}
+
+impl Error for TaskTypeError {}
+
+impl FromStr for TaskType {
+    type Err = TaskTypeError;
+
+    fn from_str(status: &str) -> Result<Self, TaskTypeError> {
         if status.eq_ignore_ascii_case("indexCreation") {
             Ok(TaskType::IndexCreation)
         } else if status.eq_ignore_ascii_case("indexUpdate") {
@@ -58,12 +78,9 @@ impl FromStr for TaskType {
         } else if status.eq_ignore_ascii_case("dumpCreation") {
             Ok(TaskType::DumpCreation)
         } else {
-            Err(format!(
-                "invalid task type `{}`, expecting one of: \
-                indexCreation, indexUpdate, indexDeletion, documentAdditionOrUpdate, \
-                documentDeletion, settingsUpdate, dumpCreation",
-                status
-            ))
+            Err(TaskTypeError {
+                invalid_type: status.to_string(),
+            })
         }
     }
 }
