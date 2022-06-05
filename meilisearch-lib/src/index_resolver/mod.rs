@@ -3,6 +3,8 @@ pub mod index_store;
 pub mod meta_store;
 
 use std::convert::{TryFrom, TryInto};
+use std::error::Error;
+use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -81,18 +83,53 @@ impl std::ops::Deref for IndexUid {
 }
 
 impl TryInto<IndexUid> for String {
-    type Error = IndexResolverError;
+    type Error = IndexUidFormatError;
 
-    fn try_into(self) -> Result<IndexUid> {
-        IndexUid::new(self)
+    fn try_into(self) -> std::result::Result<IndexUid, IndexUidFormatError> {
+        IndexUid::from_str(&self)
+    }
+}
+
+#[derive(Debug)]
+pub struct IndexUidFormatError {
+    invalid_uid: String,
+}
+
+impl fmt::Display for IndexUidFormatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid index uid `{}`, the uid must be an integer \
+            or a string containing only alphanumeric characters \
+            a-z A-Z 0-9, hyphens - and underscores _.",
+            self.invalid_uid,
+        )
+    }
+}
+
+impl Error for IndexUidFormatError {}
+
+impl From<IndexUidFormatError> for IndexResolverError {
+    fn from(error: IndexUidFormatError) -> Self {
+        Self::BadlyFormatted(error.invalid_uid)
     }
 }
 
 impl FromStr for IndexUid {
-    type Err = IndexResolverError;
+    type Err = IndexUidFormatError;
 
-    fn from_str(s: &str) -> Result<IndexUid> {
-        IndexUid::new(s.to_string())
+    fn from_str(uid: &str) -> std::result::Result<IndexUid, IndexUidFormatError> {
+        if !uid
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+            || !(1..=400).contains(&uid.len())
+        {
+            Err(IndexUidFormatError {
+                invalid_uid: uid.to_string(),
+            })
+        } else {
+            Ok(IndexUid(uid.to_string()))
+        }
     }
 }
 
