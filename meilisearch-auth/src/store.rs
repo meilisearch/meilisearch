@@ -205,7 +205,7 @@ impl HeedAuthStore {
 }
 
 /// Codec allowing to retrieve the expiration date of an action,
-/// optionnally on a spcific index, for a given key.
+/// optionally on a specific index, for a given key.
 pub struct KeyIdActionCodec;
 
 impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
