@@ -643,12 +643,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "character_converter"
-version = "1.0.0"
+name = "charabia"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e48477ece09d6a21c033cb604968524a37782532727055d6f6faafac1781e5c"
+checksum = "4a26a3df4d9c9231eb1e757fe6b1c66c471e0c2cd5410265e7c3109a726663c4"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "lindera",
+ "lindera-core",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang",
+]
+
+[[package]]
+name = "character_converter"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7064c6e919124b6541c52fef59d88c3c3eabdf4bc97c13b14551df775aead02"
 dependencies = [
  "bincode",
+ "fst",
+ "once_cell",
 ]
 
 [[package]]
@@ -1101,8 +1122,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.28.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
+version = "0.29.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.1#7313d6c5331e7dc13e9ded70b60b1f56dd7e583c"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1126,8 +1147,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.28.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
+version = "0.29.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.1#7313d6c5331e7dc13e9ded70b60b1f56dd7e583c"
 dependencies = [
  "serde_json",
 ]
@@ -1630,8 +1651,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.28.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
+version = "0.29.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.1#7313d6c5331e7dc13e9ded70b60b1f56dd7e583c"
 dependencies = [
  "serde_json",
 ]
@@ -1709,9 +1730,9 @@ dependencies = [
 
 [[package]]
 name = "lindera"
-version = "0.12.6"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dea10df226936ff54f16d3922500e08ef4be2ba7c0070bec9ad4a1474316111"
+checksum = "7d1c5db4b1d12637aa316dc1adb215f78fe79025080af750942516c5ff17d1a0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1731,9 +1752,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-cc-cedict-builder"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4392785248c3d8755c6fae9d0086d27ad7a1d6810155a2494fe5206e2021f471"
+checksum = "73a3509fb497340571d49feddb57e1db2ce5248c4d449f2548d0ee8cb745eb1e"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1751,9 +1772,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-core"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af63a4484334d4b83277621f1ba62fb83472858cc37fb4ab2181a4c19eebcb38"
+checksum = "5d20d1b2c085393aed58625d741beca69410e1143fc35bc67ebc35c9885f9f74"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1767,9 +1788,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-decompress"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "817ee62bc8973ec2457805df83796c59f074e49a4a0ee9baffe2663fe157f54a"
+checksum = "b96b8050cded13927a99bcb8cbb0987f89fc8f35429fc153b4bc05ddc7a53a44"
 dependencies = [
  "anyhow",
  "lzma-rs",
@@ -1778,9 +1799,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-dictionary"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd57501ee44a6aba0431d043c7926347e29883a79d8fc3955b8837e4ad1fee3c"
+checksum = "5abe3dddc22303402957edb4472ab0c996e0d93b3b00643de3bee8b28c2f9297"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1790,9 +1811,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade3bd3faa5f0db629c26264663e901dee5f46221eb04c2c7b592bd7485d44f9"
+checksum = "b8f4c111f6ad9eb9e015d02061af2ed36fc0255f29359294415c7c2f1ea5b5b6"
 dependencies = [
  "bincode",
  "byteorder",
@@ -1807,9 +1828,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic-builder"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee61f8dd6566738c5fd0ee9b1c11212ffc2d1f97af69c08a02cbb5c49995250a"
+checksum = "a2b9893f22a4a7511ac70ff7d96cda9b8d7259b7d7121784183c73bc593ce6e7"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1827,9 +1848,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ko-dic-builder"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01f05950d9adc7aa42aa8b16be1616f9625576c867179ac29372714eaed6993d"
+checksum = "14282600ebfe7ab6fd4f3042143024ff9d74c09d58fd983d0c587839cf940d4a"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1847,9 +1868,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-unidic-builder"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3836c1278b8309ebf209c67bc7a935f4ce7c9246a578b250540398806a40b81d"
+checksum = "b20825d46c95854e47c532c3e548dfec07c8f187c1ed89383cb6c35790338088"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2132,24 +2153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-tokenizer"
-version = "0.2.9"
-source = "git+https://github.com/meilisearch/tokenizer.git?tag=v0.2.9#1dfc8ad9f5b338c39c3bc5fd5b2d0c1328314ddc"
-dependencies = [
- "character_converter",
- "cow-utils",
- "deunicode",
- "fst",
- "jieba-rs",
- "lindera",
- "lindera-core",
- "once_cell",
- "slice-group-by",
- "unicode-segmentation",
- "whatlang",
-]
-
-[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2175,13 +2178,14 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.28.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.28.0#19dac01c5ca81543b751f66ad51fcff61608d969"
+version = "0.29.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.1#7313d6c5331e7dc13e9ded70b60b1f56dd7e583c"
 dependencies = [
  "bimap",
  "bincode",
  "bstr",
  "byteorder",
+ "charabia",
  "concat-arrays",
  "crossbeam-channel",
  "csv",
@@ -2198,7 +2202,6 @@ dependencies = [
  "levenshtein_automata",
  "log",
  "logging_timer",
- "meilisearch-tokenizer",
  "memmap2",
  "obkv",
  "once_cell",
