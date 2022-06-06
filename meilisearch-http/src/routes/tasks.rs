@@ -1,8 +1,9 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_error::ResponseError;
 use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
 use meilisearch_lib::tasks::TaskFilter;
-use meilisearch_lib::{IndexUid, MeiliSearch};
+use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::json;

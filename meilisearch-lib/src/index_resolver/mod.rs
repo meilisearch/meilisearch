@@ -2,20 +2,17 @@ pub mod error;
 pub mod index_store;
 pub mod meta_store;
 
-use std::convert::{TryFrom, TryInto};
-use std::error::Error;
-use std::fmt;
+use std::convert::TryFrom;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
-use meilisearch_error::ResponseError;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meta_store::{HeedMetaStore, IndexMetaStore};
 use milli::heed::Env;
 use milli::update::{DocumentDeletionResult, IndexerConfig};
-use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -35,12 +32,6 @@ pub use real::IndexResolver;
 #[cfg(test)]
 pub use test::MockIndexResolver as IndexResolver;
 
-/// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
-/// bytes long
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct IndexUid(#[cfg_attr(test, proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String);
-
 pub fn create_index_resolver(
     path: impl AsRef<Path>,
     index_size: usize,
@@ -51,81 +42,6 @@ pub fn create_index_resolver(
     let uuid_store = HeedMetaStore::new(meta_env)?;
     let index_store = MapIndexStore::new(&path, index_size, indexer_opts)?;
     Ok(IndexResolver::new(uuid_store, index_store, file_store))
-}
-
-impl IndexUid {
-    pub fn new_unchecked(s: impl AsRef<str>) -> Self {
-        Self(s.as_ref().to_string())
-    }
-
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
-    /// Return a reference over the inner str.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::ops::Deref for IndexUid {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl TryInto<IndexUid> for String {
-    type Error = IndexUidFormatError;
-
-    fn try_into(self) -> std::result::Result<IndexUid, IndexUidFormatError> {
-        IndexUid::from_str(&self)
-    }
-}
-
-#[derive(Debug)]
-pub struct IndexUidFormatError {
-    invalid_uid: String,
-}
-
-impl fmt::Display for IndexUidFormatError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid index uid `{}`, the uid must be an integer \
-            or a string containing only alphanumeric characters \
-            a-z A-Z 0-9, hyphens - and underscores _.",
-            self.invalid_uid,
-        )
-    }
-}
-
-impl Error for IndexUidFormatError {}
-
-impl From<IndexUidFormatError> for IndexResolverError {
-    fn from(error: IndexUidFormatError) -> Self {
-        Self::BadlyFormatted(error.invalid_uid)
-    }
-}
-
-impl FromStr for IndexUid {
-    type Err = IndexUidFormatError;
-
-    fn from_str(uid: &str) -> std::result::Result<IndexUid, IndexUidFormatError> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-            || uid.is_empty()
-            || uid.len() > 400
-        {
-            Err(IndexUidFormatError {
-                invalid_uid: uid.to_string(),
-            })
-        } else {
-            Ok(IndexUid(uid.to_string()))
-        }
-    }
 }
 
 mod real {

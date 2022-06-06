@@ -1,5 +1,5 @@
 use anyhow::bail;
-use meilisearch_error::Code;
+use meilisearch_types::error::Code;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use time::OffsetDateTime;
 
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
 

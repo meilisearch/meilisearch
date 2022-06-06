@@ -1,10 +1,10 @@
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
 use crate::analytics::Analytics;
@@ -21,7 +21,7 @@ macro_rules! make_setting_route {
             use meilisearch_lib::milli::update::Setting;
             use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
-            use meilisearch_error::ResponseError;
+            use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::{policies::*, GuardedData};
             use $crate::extractors::sequential_extractor::SeqHandler;

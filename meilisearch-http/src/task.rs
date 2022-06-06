@@ -3,12 +3,12 @@ use std::fmt::{self, Write};
 use std::str::FromStr;
 use std::write;
 
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
+use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 

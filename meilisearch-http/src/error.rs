@@ -1,6 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
-use meilisearch_error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {

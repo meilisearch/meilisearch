@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
-use meilisearch_error::{Code, ResponseError};
+use meilisearch_types::error::{Code, ResponseError};
 
 use crate::extractors::{
     authentication::{policies::*, GuardedData},

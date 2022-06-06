@@ -1,8 +1,8 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;

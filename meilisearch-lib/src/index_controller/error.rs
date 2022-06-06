@@ -1,7 +1,8 @@
 use std::error::Error;
 
-use meilisearch_error::Code;
-use meilisearch_error::{internal_error, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::internal_error;
 use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
@@ -61,5 +62,11 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
             IndexControllerError::DumpError(e) => e.error_code(),
         }
+    }
+}
+
+impl From<IndexUidFormatError> for IndexControllerError {
+    fn from(err: IndexUidFormatError) -> Self {
+        IndexResolverError::from(err).into()
     }
 }

@@ -7,7 +7,7 @@ edition = "2021"
 base64 = "0.13.0"
 enum-iterator = "0.7.0"
 hmac = "0.12.1"
-meilisearch-error = { path = "../meilisearch-error" }
+meilisearch-types = { path = "../meilisearch-types" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.29.2" }
 rand = "0.8.4"
 serde = { version = "1.0.136", features = ["derive"] }

@@ -5,12 +5,11 @@ use std::ops::Deref;
 use std::pin::Pin;
 
 use actix_web::FromRequest;
+use error::AuthenticationError;
 use futures::future::err;
 use futures::Future;
-use meilisearch_error::{Code, ResponseError};
-
-use error::AuthenticationError;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::error::{Code, ResponseError};
 
 pub struct GuardedData<P, D> {
     data: D,

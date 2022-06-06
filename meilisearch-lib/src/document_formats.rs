@@ -2,7 +2,8 @@ use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
 use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 
-use meilisearch_error::{internal_error, Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::internal_error;
 use milli::documents::DocumentBatchBuilder;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;

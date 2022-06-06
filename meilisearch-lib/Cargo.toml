@@ -29,7 +29,7 @@ itertools = "0.10.3"
 lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-error = { path = "../meilisearch-error" }
+meilisearch-types = { path = "../meilisearch-types" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.29.2" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
@@ -59,7 +59,7 @@ whoami = { version = "1.2.1", optional = true }
 
 [dev-dependencies]
 actix-rt = "2.7.0"
-meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
+meilisearch-types = { path = "../meilisearch-types", features = ["test-traits"] }
 mockall = "0.11.0"
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
 paste = "1.0.6"

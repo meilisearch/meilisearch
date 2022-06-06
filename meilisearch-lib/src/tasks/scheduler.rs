@@ -534,10 +534,11 @@ fn make_batch(tasks: &mut TaskQueue, config: &SchedulerConfig) -> Processing {
 
 #[cfg(test)]
 mod test {
+    use meilisearch_types::index_uid::IndexUid;
     use milli::update::IndexDocumentsMethod;
     use uuid::Uuid;
 
-    use crate::{index_resolver::IndexUid, tasks::task::TaskContent};
+    use crate::tasks::task::TaskContent;
 
     use super::*;
 

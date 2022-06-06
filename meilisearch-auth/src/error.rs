@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use meilisearch_error::ErrorCode;
-use meilisearch_error::{internal_error, Code};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::internal_error;
 use serde_json::Value;
 
 pub type Result<T> = std::result::Result<T, AuthControllerError>;
