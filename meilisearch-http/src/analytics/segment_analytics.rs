@@ -426,10 +426,10 @@ impl SearchAggregator {
         ret.max_limit = query.limit;
         ret.max_offset = query.offset.unwrap_or_default();
 
-        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG;
-        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG;
-        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER;
-        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH;
+        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
+        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
+        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER();
+        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH();
         ret.show_matches_position = query.show_matches_position;
 
         ret
