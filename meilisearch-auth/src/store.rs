@@ -3,12 +3,14 @@ use std::cmp::Reverse;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fs::create_dir_all;
+use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
 use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
+use meilisearch_types::star_or::StarOr;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::{Digest, Sha256};
@@ -92,7 +94,7 @@ impl HeedAuthStore {
             key.actions.clone()
         };
 
-        let no_index_restriction = key.indexes.contains(&"*".to_owned());
+        let no_index_restriction = key.indexes.contains(&StarOr::Star);
         for action in actions {
             if no_index_restriction {
                 // If there is no index restriction we put None.
@@ -102,7 +104,7 @@ impl HeedAuthStore {
                 for index in key.indexes.iter() {
                     db.put(
                         &mut wtxn,
-                        &(&uid, &action, Some(index.as_bytes())),
+                        &(&uid, &action, Some(index.deref().as_bytes())),
                         &key.expires_at,
                     )?;
                 }

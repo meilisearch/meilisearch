@@ -151,7 +151,7 @@ impl KeyView {
             key: generated_key,
             uid: key.uid,
             actions: key.actions,
-            indexes: key.indexes,
+            indexes: key.indexes.into_iter().map(String::from).collect(),
             expires_at: key.expires_at,
             created_at: key.created_at,
             updated_at: key.updated_at,

@@ -2,6 +2,8 @@ use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
 use crate::store::KeyId;
 
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 use time::format_description::well_known::Rfc3339;
@@ -17,7 +19,7 @@ pub struct Key {
     pub name: Option<String>,
     pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<String>,
+    pub indexes: Vec<StarOr<IndexUid>>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -136,7 +138,7 @@ impl Key {
             description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::All],
-            indexes: vec!["*".to_string()],
+            indexes: vec![StarOr::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -151,7 +153,7 @@ impl Key {
             description: Some("Use it to search from the frontend".to_string()),
             uid,
             actions: vec![Action::Search],
-            indexes: vec!["*".to_string()],
+            indexes: vec![StarOr::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,

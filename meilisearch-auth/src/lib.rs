@@ -5,6 +5,7 @@ mod key;
 mod store;
 
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -16,6 +17,7 @@ use uuid::Uuid;
 pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
 pub use key::Key;
+use meilisearch_types::star_or::StarOr;
 use store::generate_key_as_base64;
 pub use store::open_auth_store_env;
 use store::HeedAuthStore;
@@ -87,20 +89,22 @@ impl AuthController {
             .get_api_key(uid)?
             .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))?;
 
-        if !key.indexes.iter().any(|i| i.as_str() == "*") {
+        if !key.indexes.iter().any(|i| i == &StarOr::Star) {
             filters.search_rules = match search_rules {
                 // Intersect search_rules with parent key authorized indexes.
                 Some(search_rules) => SearchRules::Map(
                     key.indexes
                         .into_iter()
                         .filter_map(|index| {
-                            search_rules
-                                .get_index_search_rules(&index)
-                                .map(|index_search_rules| (index, Some(index_search_rules)))
+                            search_rules.get_index_search_rules(index.deref()).map(
+                                |index_search_rules| {
+                                    (String::from(index), Some(index_search_rules))
+                                },
+                            )
                         })
                         .collect(),
                 ),
-                None => SearchRules::Set(key.indexes.into_iter().collect()),
+                None => SearchRules::Set(key.indexes.into_iter().map(String::from).collect()),
             };
         } else if let Some(search_rules) = search_rules {
             filters.search_rules = search_rules;
