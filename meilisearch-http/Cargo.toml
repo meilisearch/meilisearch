@@ -62,7 +62,7 @@ rustls = "0.20.4"
 rustls-pemfile = "0.3.0"
 segment = { version = "0.2.0", optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
-serde-cs = "0.2.2"
+serde-cs = "0.2.3"
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
 sha2 = "0.10.2"
 siphasher = "0.3.10"

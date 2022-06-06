@@ -81,9 +81,9 @@ async fn get_tasks(
 
     // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
-    let type_ = type_.map(CS::into_inner).and_then(fold_star_or);
-    let status = status.map(CS::into_inner).and_then(fold_star_or);
-    let index_uid = index_uid.map(CS::into_inner).and_then(fold_star_or);
+    let type_: Option<Vec<_>> = type_.and_then(fold_star_or);
+    let status: Option<Vec<_>> = status.and_then(fold_star_or);
+    let index_uid: Option<Vec<_>> = index_uid.and_then(fold_star_or);
 
     // Then we filter on potential indexes and make sure that the search filter
     // restrictions are also applied.

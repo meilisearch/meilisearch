@@ -49,7 +49,10 @@ impl<T: FromStr> FromStr for StarOr<T> {
 
 /// Extracts the raw values from the `StarOr` types and
 /// return None if a `StarOr::Star` is encountered.
-pub fn fold_star_or<T>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<Vec<T>> {
+pub fn fold_star_or<T, O>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<O>
+where
+    O: FromIterator<T>,
+{
     content
         .into_iter()
         .map(|value| match value {

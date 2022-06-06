@@ -1,6 +1,5 @@
 pub use search::{
-    default_crop_length, default_crop_marker, default_highlight_post_tag,
-    default_highlight_pre_tag, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
