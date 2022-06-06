@@ -2,6 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use actix_web::HttpServer;
+use actix_web::http::KeepAlive;
 use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
@@ -83,7 +84,8 @@ async fn run_http(
         )
     })
     // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-    .disable_signals();
+    .disable_signals()
+    .keep_alive(KeepAlive::Os);
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
