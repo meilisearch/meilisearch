@@ -1,8 +1,8 @@
 use std::env;
 use std::sync::Arc;
 
-use actix_web::HttpServer;
 use actix_web::http::KeepAlive;
+use actix_web::HttpServer;
 use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
