@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
-use milli::tokenizer::{Analyzer, AnalyzerConfig};
+use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder, SortError,
 };
@@ -175,12 +175,9 @@ impl Index {
             &displayed_ids,
         );
 
-        let stop_words = fst::Set::default();
-        let mut config = AnalyzerConfig::default();
-        config.stop_words(&stop_words);
-        let analyzer = Analyzer::new(config);
+        let tokenizer = TokenizerBuilder::default().build();
 
-        let mut formatter_builder = MatcherBuilder::from_matching_words(matching_words);
+        let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
         formatter_builder.crop_marker(query.crop_marker);
         formatter_builder.highlight_prefix(query.highlight_pre_tag);
         formatter_builder.highlight_suffix(query.highlight_post_tag);
@@ -204,7 +201,6 @@ impl Index {
                 &displayed_document,
                 &fields_ids_map,
                 &formatter_builder,
-                &analyzer,
                 &formatted_options,
                 query.show_matches_position,
                 &displayed_ids,
@@ -414,8 +410,7 @@ fn make_document(
 fn format_fields<'a, A: AsRef<[u8]>>(
     document: &Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder,
-    analyzer: &'a Analyzer<'a, A>,
+    builder: &MatcherBuilder<'a, A>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
@@ -446,7 +441,6 @@ fn format_fields<'a, A: AsRef<[u8]>>(
             std::mem::take(value),
             builder,
             format,
-            analyzer,
             &mut infos,
             compute_matches,
         );
@@ -470,19 +464,14 @@ fn format_fields<'a, A: AsRef<[u8]>>(
 
 fn format_value<'a, A: AsRef<[u8]>>(
     value: Value,
-    builder: &MatcherBuilder,
+    builder: &MatcherBuilder<'a, A>,
     format_options: Option<FormatOptions>,
-    analyzer: &'a Analyzer<'a, A>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
 ) -> Value {
     match value {
         Value::String(old_string) => {
-            // this will be removed with charabia
-            let analyzed = analyzer.analyze(&old_string);
-            let tokens: Vec<_> = analyzed.tokens().collect();
-
-            let mut matcher = builder.build(&tokens[..], &old_string);
+            let mut matcher = builder.build(&old_string);
             if compute_matches {
                 let matches = matcher.matches();
                 infos.extend_from_slice(&matches[..]);
@@ -507,7 +496,6 @@ fn format_value<'a, A: AsRef<[u8]>>(
                             highlight: format_options.highlight,
                             crop: None,
                         }),
-                        analyzer,
                         infos,
                         compute_matches,
                     )
@@ -527,7 +515,6 @@ fn format_value<'a, A: AsRef<[u8]>>(
                                 highlight: format_options.highlight,
                                 crop: None,
                             }),
-                            analyzer,
                             infos,
                             compute_matches,
                         ),
@@ -536,12 +523,9 @@ fn format_value<'a, A: AsRef<[u8]>>(
                 .collect(),
         ),
         Value::Number(number) => {
-            // this will be removed with charabia
             let s = number.to_string();
-            let analyzed = analyzer.analyze(&s);
-            let tokens: Vec<_> = analyzed.tokens().collect();
 
-            let mut matcher = builder.build(&tokens[..], &s);
+            let mut matcher = builder.build(&s);
             if compute_matches {
                 let matches = matcher.matches();
                 infos.extend_from_slice(&matches[..]);
