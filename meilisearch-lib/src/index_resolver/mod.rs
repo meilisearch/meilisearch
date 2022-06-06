@@ -472,7 +472,9 @@ mod real {
 mod test {
     use crate::index::IndexStats;
 
-    use super::{index_store::MockIndexStore, meta_store::MockIndexMetaStore, *};
+    use super::index_store::MockIndexStore;
+    use super::meta_store::MockIndexMetaStore;
+    use super::*;
 
     use futures::future::ok;
     use milli::FieldDistribution;
@@ -697,6 +699,55 @@ mod test {
             id: 1,
             content: TaskContent::DocumentDeletion {
                 deletion: DocumentDeletion::Clear,
+                index_uid: IndexUid::new_unchecked("test"),
+            },
+            events: Vec::new(),
+        };
+
+        index_resolver.process_task(&mut task).await;
+
+        assert!(matches!(task.events[0], TaskEvent::Succeeded { .. }));
+    }
+
+    #[actix_rt::test]
+    async fn test_index_update() {
+        let mut meta_store = MockIndexMetaStore::new();
+        meta_store.expect_get().once().returning(|_| {
+            Box::pin(ok((
+                "test".to_string(),
+                Some(IndexMeta {
+                    uuid: Uuid::new_v4(),
+                    creation_task_id: 1,
+                }),
+            )))
+        });
+
+        let mut index_store = MockIndexStore::new();
+        index_store.expect_get().once().returning(|_| {
+            let mocker = Mocker::default();
+
+            mocker
+                .when::<String, IndexResult<crate::index::IndexMeta>>("update_primary_key")
+                .once()
+                .then(|_| {
+                    Ok(crate::index::IndexMeta {
+                        created_at: OffsetDateTime::now_utc(),
+                        updated_at: OffsetDateTime::now_utc(),
+                        primary_key: Some("key".to_string()),
+                    })
+                });
+            Box::pin(ok(Some(Index::mock(mocker))))
+        });
+
+        let mocker = Mocker::default();
+        let file_store = UpdateFileStore::mock(mocker);
+
+        let index_resolver = IndexResolver::new(meta_store, index_store, file_store);
+
+        let mut task = Task {
+            id: 1,
+            content: TaskContent::IndexUpdate {
+                primary_key: Some("key".to_string()),
                 index_uid: IndexUid::new_unchecked("test"),
             },
             events: Vec::new(),
