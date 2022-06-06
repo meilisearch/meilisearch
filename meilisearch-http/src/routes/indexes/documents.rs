@@ -99,7 +99,7 @@ pub async fn get_document(
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
     let GetDocument { fields } = params.into_inner();
-    let attributes_to_retrieve = fields.map(CS::into_inner).and_then(fold_star_or);
+    let attributes_to_retrieve = fields.and_then(fold_star_or);
 
     let document = meilisearch
         .document(index, id, attributes_to_retrieve)
@@ -143,7 +143,7 @@ pub async fn get_all_documents(
         offset,
         fields,
     } = params.into_inner();
-    let attributes_to_retrieve = fields.map(CS::into_inner).and_then(fold_star_or);
+    let attributes_to_retrieve = fields.and_then(fold_star_or);
 
     let (total, documents) = meilisearch
         .documents(path.into_inner(), offset, limit, attributes_to_retrieve)

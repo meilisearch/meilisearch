@@ -50,23 +50,6 @@ pub struct SearchQueryGet {
 
 impl From<SearchQueryGet> for SearchQuery {
     fn from(other: SearchQueryGet) -> Self {
-        let attributes_to_retrieve = other
-            .attributes_to_retrieve
-            .map(CS::into_inner)
-            .and_then(fold_star_or);
-
-        let attributes_to_crop = other
-            .attributes_to_crop
-            .map(CS::into_inner)
-            .and_then(fold_star_or);
-
-        let attributes_to_highlight = other
-            .attributes_to_highlight
-            .map(CS::into_inner)
-            .and_then(fold_star_or);
-
-        let facets = other.facets.map(CS::into_inner).and_then(fold_star_or);
-
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
                 Ok(v) => Some(v),
@@ -75,20 +58,18 @@ impl From<SearchQueryGet> for SearchQuery {
             None => None,
         };
 
-        let sort = other.sort.map(|attr| fix_sort_query_parameters(&attr));
-
         Self {
             q: other.q,
             offset: other.offset,
             limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-            attributes_to_retrieve,
-            attributes_to_crop,
+            attributes_to_retrieve: other.attributes_to_retrieve.and_then(fold_star_or),
+            attributes_to_crop: other.attributes_to_crop.and_then(fold_star_or),
             crop_length: other.crop_length,
-            attributes_to_highlight,
+            attributes_to_highlight: other.attributes_to_highlight.and_then(fold_star_or),
             filter,
-            sort,
+            sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position,
-            facets,
+            facets: other.facets.and_then(fold_star_or),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
