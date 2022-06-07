@@ -27,7 +27,6 @@ async fn add_valid_api_key() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -58,7 +57,6 @@ async fn add_valid_api_key() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -88,7 +86,6 @@ async fn add_valid_api_key_expired_at() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13"
     });
@@ -117,7 +114,6 @@ async fn add_valid_api_key_expired_at() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -532,7 +528,6 @@ async fn get_api_key() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -562,7 +557,6 @@ async fn get_api_key() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -667,7 +661,6 @@ async fn list_api_keys() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -698,7 +691,6 @@ async fn list_api_keys() {
                 "settings.update",
                 "stats.get",
                 "dumps.create",
-                "dumps.get"
             ],
             "expiresAt": "2050-11-13T00:00:00Z"
         },
@@ -778,7 +770,6 @@ async fn delete_api_key() {
             "settings.update",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -875,7 +866,6 @@ async fn patch_api_key_description() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -917,7 +907,6 @@ async fn patch_api_key_description() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -947,7 +936,6 @@ async fn patch_api_key_description() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -976,7 +964,6 @@ async fn patch_api_key_description() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1002,7 +989,6 @@ async fn patch_api_key_name() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1044,7 +1030,6 @@ async fn patch_api_key_name() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1074,7 +1059,6 @@ async fn patch_api_key_name() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1103,7 +1087,6 @@ async fn patch_api_key_name() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1130,7 +1113,6 @@ async fn error_patch_api_key_indexes() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1178,7 +1160,6 @@ async fn error_patch_api_key_actions() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1234,7 +1215,6 @@ async fn error_patch_api_key_expiration_date() {
             "indexes.delete",
             "stats.get",
             "dumps.create",
-            "dumps.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
