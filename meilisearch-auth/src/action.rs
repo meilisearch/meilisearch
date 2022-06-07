@@ -32,8 +32,6 @@ pub enum Action {
     StatsGet = actions::STATS_GET,
     #[serde(rename = "dumps.create")]
     DumpsCreate = actions::DUMPS_CREATE,
-    #[serde(rename = "dumps.get")]
-    DumpsGet = actions::DUMPS_GET,
     #[serde(rename = "version")]
     Version = actions::VERSION,
     #[serde(rename = "keys.create")]
@@ -64,7 +62,6 @@ impl Action {
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             STATS_GET => Some(Self::StatsGet),
             DUMPS_CREATE => Some(Self::DumpsCreate),
-            DUMPS_GET => Some(Self::DumpsGet),
             VERSION => Some(Self::Version),
             KEYS_CREATE => Some(Self::KeysAdd),
             KEYS_GET => Some(Self::KeysGet),
@@ -91,7 +88,6 @@ impl Action {
             Self::SettingsUpdate => SETTINGS_UPDATE,
             Self::StatsGet => STATS_GET,
             Self::DumpsCreate => DUMPS_CREATE,
-            Self::DumpsGet => DUMPS_GET,
             Self::Version => VERSION,
             Self::KeysAdd => KEYS_CREATE,
             Self::KeysGet => KEYS_GET,
@@ -116,7 +112,6 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u8 = 11;
     pub const STATS_GET: u8 = 12;
     pub const DUMPS_CREATE: u8 = 13;
-    pub const DUMPS_GET: u8 = 14;
     pub const VERSION: u8 = 15;
     pub const KEYS_CREATE: u8 = 16;
     pub const KEYS_GET: u8 = 17;
