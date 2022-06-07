@@ -77,12 +77,11 @@ async fn get_and_paginate_indexes() {
     const NB_INDEXES: usize = 50;
     for i in 0..NB_INDEXES {
         server.index(&format!("test_{i:02}")).create(None).await;
+        server
+            .index(&format!("test_{i:02}"))
+            .wait_task(i as u64)
+            .await;
     }
-
-    server
-        .index(&format!("test_{NB_INDEXES}"))
-        .wait_task(NB_INDEXES as u64 - 1)
-        .await;
 
     // basic
     let (response, code) = server.list_indexes(None, None).await;
