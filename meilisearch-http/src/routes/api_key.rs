@@ -1,18 +1,19 @@
 use std::str;
-use uuid::Uuid;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-
-use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
+use uuid::Uuid;
+
+use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
+use meilisearch_error::{Code, ResponseError};
 
 use crate::extractors::{
     authentication::{policies::*, GuardedData},
     sequential_extractor::SeqHandler,
 };
-use meilisearch_error::{Code, ResponseError};
+use crate::routes::Pagination;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -46,20 +47,21 @@ pub async fn create_api_key(
 
 pub async fn list_api_keys(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
-    _req: HttpRequest,
+    paginate: web::Query<Pagination>,
 ) -> Result<HttpResponse, ResponseError> {
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+    let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
-        let res: Vec<_> = keys
-            .into_iter()
-            .map(|k| KeyView::from_key(k, &auth_controller))
-            .collect();
-        Ok(res)
+        let page_view = paginate.auto_paginate_sized(
+            keys.into_iter()
+                .map(|k| KeyView::from_key(k, &auth_controller)),
+        );
+
+        Ok(page_view)
     })
     .await
     .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
-    Ok(HttpResponse::Ok().json(KeyListView::from(res)))
+    Ok(HttpResponse::Ok().json(page_view))
 }
 
 pub async fn get_api_key(
@@ -154,16 +156,5 @@ impl KeyView {
             created_at: key.created_at,
             updated_at: key.updated_at,
         }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct KeyListView {
-    results: Vec<KeyView>,
-}
-
-impl From<Vec<KeyView>> for KeyListView {
-    fn from(results: Vec<KeyView>) -> Self {
-        Self { results }
     }
 }
