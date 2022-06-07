@@ -22,6 +22,7 @@ mod real {
     use meilisearch_auth::AuthController;
     use milli::heed::Env;
     use tokio::fs::create_dir_all;
+    use tokio::io::AsyncWriteExt;
 
     use crate::analytics;
     use crate::compression::to_tar_gz;
@@ -78,9 +79,11 @@ mod real {
 
             let meta = MetadataVersion::new_v5(self.index_db_size, self.task_store_size);
             let meta_path = temp_dump_path.join(META_FILE_NAME);
-            // TODO: blocking
-            let mut meta_file = File::create(&meta_path)?;
-            serde_json::to_writer(&mut meta_file, &meta)?;
+
+            let meta_bytes = serde_json::to_vec(&meta)?;
+            let mut meta_file = tokio::fs::File::create(&meta_path).await?;
+            meta_file.write_all(&meta_bytes).await?;
+
             analytics::copy_user_id(&self.db_path, &temp_dump_path);
 
             create_dir_all(&temp_dump_path.join("indexes")).await?;
