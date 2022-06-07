@@ -16,7 +16,8 @@ pub fn generate_uid() -> String {
 }
 
 mod real {
-    use std::{fs::File, path::PathBuf, sync::Arc};
+    use std::path::PathBuf;
+    use std::sync::Arc;
 
     use log::{info, trace};
     use meilisearch_auth::AuthController;
@@ -88,8 +89,13 @@ mod real {
 
             create_dir_all(&temp_dump_path.join("indexes")).await?;
 
-            // TODO: this is blocking!!
-            AuthController::dump(&self.db_path, &temp_dump_path)?;
+            let db_path = self.db_path.clone();
+            let temp_dump_path_clone = temp_dump_path.clone();
+            tokio::task::spawn_blocking(move || -> Result<()> {
+                AuthController::dump(db_path, temp_dump_path_clone)?;
+                Ok(())
+            })
+            .await??;
             TaskStore::dump(
                 self.env.clone(),
                 &temp_dump_path,
