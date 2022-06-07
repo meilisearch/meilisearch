@@ -3,11 +3,13 @@ on:
   push:
     tags:
       - '*'
+  release:
+    types: [released]
 
 name: Publish tagged image to Docker Hub
 
 jobs:
-  docker-tag:
+  docker:
     runs-on: docker
     steps:
       - name: Set up QEMU
@@ -27,8 +29,12 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: getmeili/meilisearch
+          # Output 'latest' tag only when 'release' happen, instead of when 'push tag' event happend (default behavior).
+          # See https://github.com/docker/metadata-action#latest-tag
           flavor: latest=false
-          tags: type=ref,event=tag
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.action == 'released' }}
 
       - name: Build and push
         id: docker_build
