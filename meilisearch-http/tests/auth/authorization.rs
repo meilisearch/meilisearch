@@ -249,7 +249,7 @@ async fn access_authorized_no_index_restriction() {
             server.use_api_key("MASTER_KEY");
 
             let content = json!({
-                "indexes": ["products"],
+                "indexes": ["*"],
                 "actions": [action],
                 "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
             });
