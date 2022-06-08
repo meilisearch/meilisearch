@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.13.0"
 enum-iterator = "0.7.0"
+hmac = "0.12.1"
 meilisearch-error = { path = "../meilisearch-error" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.28.0" }
 rand = "0.8.4"

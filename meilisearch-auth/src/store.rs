@@ -8,9 +8,10 @@ use std::str;
 use std::sync::Arc;
 
 use enum_iterator::IntoEnumIterator;
+use hmac::{Hmac, Mac};
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -242,9 +243,11 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 }
 
 pub fn generate_key_as_base64(uid: &[u8], master_key: &[u8]) -> String {
-    let key = [uid, master_key].concat();
-    let sha = Sha256::digest(&key);
-    base64::encode_config(sha, base64::URL_SAFE_NO_PAD)
+    let mut mac = Hmac::<Sha256>::new_from_slice(master_key).unwrap();
+    mac.update(uid);
+
+    let result = mac.finalize();
+    base64::encode_config(result.into_bytes(), base64::URL_SAFE_NO_PAD)
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
