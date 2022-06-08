@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,6 +24,7 @@ use crate::dump::{self, load_dump, DumpHandler};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
 };
+use crate::index_resolver::error::IndexResolverError;
 use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
 use crate::tasks::error::TaskError;
@@ -356,7 +358,7 @@ where
     }
 
     pub async fn register_update(&self, uid: String, update: Update) -> Result<Task> {
-        let index_uid = IndexUid::new(uid)?;
+        let index_uid = IndexUid::from_str(&uid).map_err(IndexResolverError::from)?;
         let content = match update {
             Update::DeleteDocuments(ids) => TaskContent::DocumentDeletion {
                 index_uid,

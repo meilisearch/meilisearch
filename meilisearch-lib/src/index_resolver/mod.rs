@@ -48,18 +48,6 @@ pub fn create_index_resolver(
 }
 
 impl IndexUid {
-    pub fn new(uid: String) -> Result<Self> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-            || !(1..=400).contains(&uid.len())
-        {
-            Err(IndexResolverError::BadlyFormatted(uid))
-        } else {
-            Ok(Self(uid))
-        }
-    }
-
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
         Self(s.as_ref().to_string())
     }
