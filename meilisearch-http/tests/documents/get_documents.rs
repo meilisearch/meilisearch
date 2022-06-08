@@ -43,7 +43,7 @@ async fn get_document() {
     ]);
     let (_, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(0).await;
+    index.wait_task(1).await;
     let (response, code) = index.get_document(0, None).await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -306,7 +306,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     ]);
     let (_, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(0).await;
+    index.wait_task(1).await;
 
     let (response, code) = index
         .get_document(

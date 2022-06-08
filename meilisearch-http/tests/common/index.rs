@@ -89,9 +89,9 @@ impl Index<'_> {
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
-        // try 10 times to get status, or panic to not wait forever
+        // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
-        for _ in 0..10 {
+        for _ in 0..100 {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(200, status_code, "response: {}", response);
 
@@ -99,7 +99,8 @@ impl Index<'_> {
                 return response;
             }
 
-            sleep(Duration::from_secs(1)).await;
+            // wait 0.5 second.
+            sleep(Duration::from_millis(500)).await;
         }
         panic!("Timeout waiting for update id");
     }

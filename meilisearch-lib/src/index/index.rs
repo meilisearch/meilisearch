@@ -175,12 +175,10 @@ impl Index {
             two_typos: Setting::Set(self.min_word_len_two_typos(txn)?),
         };
 
-        let disabled_words = self
-            .exact_words(txn)?
-            .into_stream()
-            .into_strs()?
-            .into_iter()
-            .collect();
+        let disabled_words = match self.exact_words(txn)? {
+            Some(fst) => fst.into_stream().into_strs()?.into_iter().collect(),
+            None => BTreeSet::new(),
+        };
 
         let disabled_attributes = self
             .exact_attributes(txn)?
