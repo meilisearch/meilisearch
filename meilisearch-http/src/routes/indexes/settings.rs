@@ -282,6 +282,34 @@ make_setting_route!(
     }
 );
 
+make_setting_route!(
+    "/faceting",
+    patch,
+    meilisearch_lib::index::updates::TypoSettings,
+    faceting,
+    "faceting",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::FacetingSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Faceting Updated".to_string(),
+            json!({
+                "faceting": {
+                    "max_values_per_facet": setting
+                        .as_ref()
+                        .and_then(|s| s.max_values_per_facet
+                            .as_ref()
+                            .set()
+                            .map(|s| s.one_typo.set()))
+                        .flatten(),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
