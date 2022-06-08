@@ -11,7 +11,7 @@ use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -243,7 +243,8 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
 }
 
 pub fn generate_key_as_base64(uid: &[u8], master_key: &[u8]) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(master_key).unwrap();
+    let master_key_sha = Sha256::digest(master_key);
+    let mut mac = Hmac::<Sha256>::new_from_slice(master_key_sha.as_slice()).unwrap();
     mac.update(uid);
 
     let result = mac.finalize();
