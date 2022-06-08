@@ -34,7 +34,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.action == 'released' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - name: Build and push
         id: docker_build
