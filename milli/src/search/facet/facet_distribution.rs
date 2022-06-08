@@ -15,7 +15,7 @@ use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
-const DEFAULT_VALUES_BY_FACET: usize = 1000;
+const DEFAULT_VALUES_BY_FACET: usize = 100;
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
