@@ -285,7 +285,7 @@ make_setting_route!(
 make_setting_route!(
     "/faceting",
     patch,
-    meilisearch_lib::index::updates::TypoSettings,
+    meilisearch_lib::index::updates::FacetingSettings,
     faceting,
     "faceting",
     analytics,
@@ -296,13 +296,7 @@ make_setting_route!(
             "Faceting Updated".to_string(),
             json!({
                 "faceting": {
-                    "max_values_per_facet": setting
-                        .as_ref()
-                        .and_then(|s| s.max_values_per_facet
-                            .as_ref()
-                            .set()
-                            .map(|s| s.one_typo.set()))
-                        .flatten(),
+                    "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
                 },
             }),
             Some(req),

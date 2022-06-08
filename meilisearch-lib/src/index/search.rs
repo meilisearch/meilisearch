@@ -7,6 +7,7 @@ use either::Either;
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder, SortError,
+    DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -223,6 +224,12 @@ impl Index {
         let facet_distribution = match query.facets {
             Some(ref fields) => {
                 let mut facet_distribution = self.facets_distribution(&rtxn);
+
+                let max_values_by_facet = self
+                    .max_values_per_facet(&rtxn)?
+                    .unwrap_or(DEFAULT_VALUES_PER_FACET);
+                facet_distribution.max_values_per_facet(max_values_by_facet);
+
                 if fields.iter().all(|f| f != "*") {
                     facet_distribution.facets(fields);
                 }

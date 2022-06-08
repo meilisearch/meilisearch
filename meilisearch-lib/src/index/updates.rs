@@ -484,6 +484,7 @@ pub(crate) mod test {
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            faceting: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -506,6 +507,7 @@ pub(crate) mod test {
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            faceting: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

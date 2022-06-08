@@ -8,7 +8,7 @@ use std::sync::Arc;
 use fst::IntoStreamer;
 use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
-use milli::{obkv_to_json, FieldDistribution};
+use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
@@ -18,7 +18,7 @@ use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::updates::{MinWordSizeTyposSetting, TypoSettings};
+use super::updates::{FacetingSettings, MinWordSizeTyposSetting, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -193,6 +193,15 @@ impl Index {
             disable_on_attributes: Setting::Set(disabled_attributes),
         };
 
+        let faceting = FacetingSettings {
+            max_values_per_facet: Setting::Set(
+                self.max_values_per_facet(txn)?
+                    .unwrap_or(DEFAULT_VALUES_PER_FACET),
+            ),
+        };
+
+        dbg!(&faceting);
+
         Ok(Settings {
             displayed_attributes: match displayed_attributes {
                 Some(attrs) => Setting::Set(attrs),
@@ -212,6 +221,7 @@ impl Index {
             },
             synonyms: Setting::Set(synonyms),
             typo_tolerance: Setting::Set(typo_tolerance),
+            faceting: Setting::Set(faceting),
             _kind: PhantomData,
         })
     }
