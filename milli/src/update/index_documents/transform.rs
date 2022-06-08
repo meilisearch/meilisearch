@@ -51,6 +51,7 @@ pub struct Transform<'a, 'i> {
     indexer_settings: &'a IndexerConfig,
     pub autogenerate_docids: bool,
     pub index_documents_method: IndexDocumentsMethod,
+    available_documents_ids: AvailableDocumentsIds,
 
     original_sorter: grenad::Sorter<MergeFn>,
     flattened_sorter: grenad::Sorter<MergeFn>,
@@ -128,12 +129,14 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.max_nb_chunks,
             indexer_settings.max_memory.map(|mem| mem / 2),
         );
+        let documents_ids = index.documents_ids(wtxn)?;
 
         Ok(Transform {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
             autogenerate_docids,
+            available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
             original_sorter,
             flattened_sorter,
             index_documents_method,
@@ -156,8 +159,6 @@ impl<'a, 'i> Transform<'a, 'i> {
     {
         let fields_index = reader.index();
         let external_documents_ids = self.index.external_documents_ids(wtxn)?;
-        let documents_ids = self.index.documents_ids(wtxn)?;
-        let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
 
         let mapping = create_fields_mapping(&mut self.fields_ids_map, fields_index)?;
 
@@ -261,7 +262,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                             // if the document has never been encountered we give it a new docid
                             // and push this new docid to the external documents ids builder
                             Entry::Vacant(entry) => {
-                                let new_docid = available_documents_ids
+                                let new_docid = self
+                                    .available_documents_ids
                                     .next()
                                     .ok_or(UserError::DocumentLimitReached)?;
                                 entry.insert(new_docid as u64);

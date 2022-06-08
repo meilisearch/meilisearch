@@ -1881,4 +1881,52 @@ mod tests {
 
         wtxn.commit().unwrap();
     }
+
+    #[test]
+    fn index_documents_in_multiple_transforms() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100);
+        let index = Index::new(options, tmp).unwrap();
+        let mut wtxn = index.write_txn().unwrap();
+        let indexer_config = IndexerConfig::default();
+        let mut builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &indexer_config,
+            IndexDocumentsConfig::default(),
+            |_| (),
+        )
+        .unwrap();
+
+        let doc1 = documents! {[{
+            "id": 228142,
+            "title": "asdsad",
+            "state": "automated",
+            "priority": "normal",
+            "public_uid": "37ccf021",
+            "project_id": 78207,
+            "branch_id_number": 0
+        }]};
+
+        let doc2 = documents! {[{
+            "id": 228143,
+            "title": "something",
+            "state": "automated",
+            "priority": "normal",
+            "public_uid": "39c6499b",
+            "project_id": 78207,
+            "branch_id_number": 0
+        }]};
+
+        builder.add_documents(doc1).unwrap();
+        builder.add_documents(doc2).unwrap();
+
+        builder.execute().unwrap();
+
+        let map = index.external_documents_ids(&wtxn).unwrap().to_hash_map();
+        let ids = map.values().collect::<HashSet<_>>();
+
+        assert_eq!(ids.len(), map.len());
+    }
 }
