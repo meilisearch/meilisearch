@@ -110,7 +110,8 @@ impl FromStr for IndexUid {
         if !uid
             .chars()
             .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-            || !(1..=400).contains(&uid.len())
+            || uid.is_empty()
+            || uid.len() > 400
         {
             Err(IndexUidFormatError {
                 invalid_uid: uid.to_string(),
