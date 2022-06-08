@@ -62,24 +62,24 @@ impl Error for TaskTypeError {}
 impl FromStr for TaskType {
     type Err = TaskTypeError;
 
-    fn from_str(status: &str) -> Result<Self, TaskTypeError> {
-        if status.eq_ignore_ascii_case("indexCreation") {
+    fn from_str(type_: &str) -> Result<Self, TaskTypeError> {
+        if type_.eq_ignore_ascii_case("indexCreation") {
             Ok(TaskType::IndexCreation)
-        } else if status.eq_ignore_ascii_case("indexUpdate") {
+        } else if type_.eq_ignore_ascii_case("indexUpdate") {
             Ok(TaskType::IndexUpdate)
-        } else if status.eq_ignore_ascii_case("indexDeletion") {
+        } else if type_.eq_ignore_ascii_case("indexDeletion") {
             Ok(TaskType::IndexDeletion)
-        } else if status.eq_ignore_ascii_case("documentAdditionOrUpdate") {
+        } else if type_.eq_ignore_ascii_case("documentAdditionOrUpdate") {
             Ok(TaskType::DocumentAdditionOrUpdate)
-        } else if status.eq_ignore_ascii_case("documentDeletion") {
+        } else if type_.eq_ignore_ascii_case("documentDeletion") {
             Ok(TaskType::DocumentDeletion)
-        } else if status.eq_ignore_ascii_case("settingsUpdate") {
+        } else if type_.eq_ignore_ascii_case("settingsUpdate") {
             Ok(TaskType::SettingsUpdate)
-        } else if status.eq_ignore_ascii_case("dumpCreation") {
+        } else if type_.eq_ignore_ascii_case("dumpCreation") {
             Ok(TaskType::DumpCreation)
         } else {
             Err(TaskTypeError {
-                invalid_type: status.to_string(),
+                invalid_type: type_.to_string(),
             })
         }
     }
