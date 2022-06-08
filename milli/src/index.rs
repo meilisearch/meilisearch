@@ -1101,6 +1101,22 @@ impl Index {
     pub(crate) fn delete_max_values_per_facet(&self, txn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(txn, main_key::MAX_VALUES_PER_FACET)
     }
+
+    pub fn pagination_limited_to(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
+        self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_LIMITED_TO)
+    }
+
+    pub(crate) fn put_pagination_limited_to(
+        &self,
+        txn: &mut RwTxn,
+        val: usize,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_LIMITED_TO, &val)
+    }
+
+    pub(crate) fn delete_pagination_limited_to(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::PAGINATION_LIMITED_TO)
+    }
 }
 
 #[cfg(test)]

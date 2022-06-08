@@ -258,12 +258,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.max_values_per_facet = Setting::Reset;
     }
 
-    pub fn set_limit_pagination_to(&mut self, value: usize) {
-        self.limit_pagination_to = Setting::Set(value);
+    pub fn set_pagination_limited_to(&mut self, value: usize) {
+        self.pagination_limited_to = Setting::Set(value);
     }
 
-    pub fn reset_limit_pagination_to(&mut self) {
-        self.limit_pagination_to = Setting::Reset;
+    pub fn reset_pagination_limited_to(&mut self) {
+        self.pagination_limited_to = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -639,6 +639,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             }
             Setting::Reset => {
                 self.index.delete_max_values_per_facet(&mut self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+
+        Ok(())
+    }
+
+    fn update_pagination_limited_to(&mut self) -> Result<()> {
+        match self.pagination_limited_to {
+            Setting::Set(max) => {
+                self.index.put_pagination_limited_to(&mut self.wtxn, max)?;
+            }
+            Setting::Reset => {
+                self.index.delete_pagination_limited_to(&mut self.wtxn)?;
             }
             Setting::NotSet => (),
         }
