@@ -105,7 +105,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
     max_values_per_facet: Setting<usize>,
-    limit_pagination_to: Setting<usize>,
+    pagination_limited_to: Setting<usize>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -132,7 +132,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             min_word_len_one_typo: Setting::NotSet,
             exact_attributes: Setting::NotSet,
             max_values_per_facet: Setting::NotSet,
-            limit_pagination_to: Setting::NotSet,
+            pagination_limited_to: Setting::NotSet,
             indexer_config,
         }
     }
@@ -632,6 +632,20 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
+    fn update_max_values_per_facet(&mut self) -> Result<()> {
+        match self.max_values_per_facet {
+            Setting::Set(max) => {
+                self.index.put_max_values_per_facet(&mut self.wtxn, max)?;
+            }
+            Setting::Reset => {
+                self.index.delete_max_values_per_facet(&mut self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+
+        Ok(())
+    }
+
     pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync,
@@ -650,6 +664,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_authorize_typos()?;
         self.update_min_typo_word_len()?;
         self.update_exact_words()?;
+        self.update_max_values_per_facet()?;
+        self.update_pagination_limited_to()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
@@ -1546,7 +1562,7 @@ mod tests {
             exact_words,
             exact_attributes,
             max_values_per_facet,
-            limit_pagination_to,
+            pagination_limited_to,
         } = builder;
 
         assert!(matches!(searchable_fields, Setting::NotSet));
@@ -1564,6 +1580,6 @@ mod tests {
         assert!(matches!(exact_words, Setting::NotSet));
         assert!(matches!(exact_attributes, Setting::NotSet));
         assert!(matches!(max_values_per_facet, Setting::NotSet));
-        assert!(matches!(limit_pagination_to, Setting::NotSet));
+        assert!(matches!(pagination_limited_to, Setting::NotSet));
     }
 }
