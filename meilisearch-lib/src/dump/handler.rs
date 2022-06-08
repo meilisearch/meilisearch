@@ -121,7 +121,6 @@ mod real {
 
 #[cfg(test)]
 mod test {
-    use std::marker::PhantomData;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -137,12 +136,12 @@ mod test {
 
     pub enum MockDumpHandler<U, I> {
         Real(super::real::DumpHandler<U, I>),
-        Mock(Mocker, PhantomData<(U, I)>),
+        Mock(Mocker),
     }
 
     impl<U, I> MockDumpHandler<U, I> {
         pub fn mock(mocker: Mocker) -> Self {
-            Self::Mock(mocker, PhantomData)
+            Self::Mock(mocker)
         }
     }
 
@@ -173,7 +172,7 @@ mod test {
         pub async fn run(&self, uid: String) -> Result<()> {
             match self {
                 DumpHandler::Real(real) => real.run(uid).await,
-                DumpHandler::Mock(mocker, _) => unsafe { mocker.get("run").call(uid) },
+                DumpHandler::Mock(mocker) => unsafe { mocker.get("run").call(uid) },
             }
         }
     }

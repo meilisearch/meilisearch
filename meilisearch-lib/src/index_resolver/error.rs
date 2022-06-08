@@ -5,7 +5,7 @@ use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
 use uuid::Uuid;
 
-use crate::{error::MilliError, index::error::IndexError};
+use crate::{error::MilliError, index::error::IndexError, update_file_store::UpdateFileStoreError};
 
 pub type Result<T> = std::result::Result<T, IndexResolverError>;
 
@@ -49,7 +49,8 @@ internal_error!(
     uuid::Error,
     std::io::Error,
     tokio::task::JoinError,
-    serde_json::Error
+    serde_json::Error,
+    UpdateFileStoreError
 );
 
 impl ErrorCode for IndexResolverError {
