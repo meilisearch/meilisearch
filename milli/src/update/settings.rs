@@ -104,6 +104,8 @@ pub struct Settings<'a, 't, 'u, 'i> {
     exact_words: Setting<BTreeSet<String>>,
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
+    max_values_per_facet: Setting<usize>,
+    limit_pagination_to: Setting<usize>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -129,6 +131,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
             exact_attributes: Setting::NotSet,
+            max_values_per_facet: Setting::NotSet,
+            limit_pagination_to: Setting::NotSet,
             indexer_config,
         }
     }
@@ -244,6 +248,22 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn reset_exact_attributes(&mut self) {
         self.exact_attributes = Setting::Reset;
+    }
+
+    pub fn set_max_values_per_facet(&mut self, value: usize) {
+        self.max_values_per_facet = Setting::Set(value);
+    }
+
+    pub fn reset_max_values_per_facet(&mut self) {
+        self.max_values_per_facet = Setting::Reset;
+    }
+
+    pub fn set_limit_pagination_to(&mut self, value: usize) {
+        self.limit_pagination_to = Setting::Set(value);
+    }
+
+    pub fn reset_limit_pagination_to(&mut self) {
+        self.limit_pagination_to = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -1525,6 +1545,8 @@ mod tests {
             min_word_len_one_typo,
             exact_words,
             exact_attributes,
+            max_values_per_facet,
+            limit_pagination_to,
         } = builder;
 
         assert!(matches!(searchable_fields, Setting::NotSet));
@@ -1541,5 +1563,7 @@ mod tests {
         assert!(matches!(min_word_len_one_typo, Setting::NotSet));
         assert!(matches!(exact_words, Setting::NotSet));
         assert!(matches!(exact_attributes, Setting::NotSet));
+        assert!(matches!(max_values_per_facet, Setting::NotSet));
+        assert!(matches!(limit_pagination_to, Setting::NotSet));
     }
 }
