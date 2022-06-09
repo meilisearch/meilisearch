@@ -1,4 +1,5 @@
-use meilisearch_error::{Code, ResponseError};
+use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::index_uid::IndexUid;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -6,7 +7,6 @@ use uuid::Uuid;
 
 use super::v4::{Task, TaskContent, TaskEvent};
 use crate::index::{Settings, Unchecked};
-use crate::index_resolver::IndexUid;
 use crate::tasks::task::{DocumentDeletion, TaskId, TaskResult};
 
 use super::v2;

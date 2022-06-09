@@ -1,6 +1,8 @@
 use std::fmt;
 
-use meilisearch_error::{internal_error, Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::internal_error;
 use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
 use uuid::Uuid;
@@ -25,8 +27,8 @@ pub enum IndexResolverError {
     UuidAlreadyExists(Uuid),
     #[error("{0}")]
     Milli(#[from] milli::Error),
-    #[error("`{0}` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).")]
-    BadlyFormatted(String),
+    #[error("{0}")]
+    BadlyFormatted(#[from] IndexUidFormatError),
 }
 
 impl<T> From<MpscSendError<T>> for IndexResolverError

@@ -1,8 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_error::ResponseError;
 use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
 use meilisearch_lib::tasks::TaskFilter;
-use meilisearch_lib::{IndexUid, MeiliSearch};
+use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::star_or::StarOr;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::json;
@@ -12,7 +14,7 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
 
-use super::{fold_star_or, StarOr};
+use super::fold_star_or;
 
 const DEFAULT_LIMIT: fn() -> usize = || 20;
 

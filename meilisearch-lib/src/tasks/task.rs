@@ -1,4 +1,5 @@
-use meilisearch_error::ResponseError;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -6,7 +7,6 @@ use uuid::Uuid;
 
 use super::batch::BatchId;
 use crate::index::{Settings, Unchecked};
-use crate::index_resolver::IndexUid;
 
 pub type TaskId = u32;
 

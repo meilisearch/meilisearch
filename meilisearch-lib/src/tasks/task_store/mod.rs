@@ -267,13 +267,11 @@ impl TaskStore {
 
 #[cfg(test)]
 pub mod test {
-    use crate::{
-        tasks::{scheduler::Processing, task_store::store::test::tmp_env},
-        IndexUid,
-    };
+    use crate::tasks::{scheduler::Processing, task_store::store::test::tmp_env};
 
     use super::*;
 
+    use meilisearch_types::index_uid::IndexUid;
     use nelson::Mocker;
     use proptest::{
         strategy::Strategy,

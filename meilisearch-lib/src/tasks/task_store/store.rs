@@ -179,11 +179,11 @@ impl Store {
 #[cfg(test)]
 pub mod test {
     use itertools::Itertools;
+    use meilisearch_types::index_uid::IndexUid;
     use milli::heed::EnvOpenOptions;
     use nelson::Mocker;
     use tempfile::TempDir;
 
-    use crate::index_resolver::IndexUid;
     use crate::tasks::task::TaskContent;
 
     use super::*;

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
 use milli::UserError;
 
 #[derive(Debug)]

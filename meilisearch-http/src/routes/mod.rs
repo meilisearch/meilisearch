@@ -1,14 +1,13 @@
-use std::str::FromStr;
-
 use actix_web::{web, HttpResponse};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
 use time::OffsetDateTime;
 
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::star_or::StarOr;
 
 use crate::extractors::authentication::{policies::*, GuardedData};
 
@@ -25,26 +24,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure));
-}
-
-/// A type that tries to match either a star (*) or
-/// any other thing that implements `FromStr`.
-#[derive(Debug)]
-pub enum StarOr<T> {
-    Star,
-    Other(T),
-}
-
-impl<T: FromStr> FromStr for StarOr<T> {
-    type Err = T::Err;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.trim() == "*" {
-            Ok(StarOr::Star)
-        } else {
-            T::from_str(s).map(StarOr::Other)
-        }
-    }
 }
 
 /// Extracts the raw values from the `StarOr` types and

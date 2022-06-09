@@ -2006,7 +2006,7 @@ dependencies = [
  "base64",
  "enum-iterator",
  "hmac",
- "meilisearch-error",
+ "meilisearch-types",
  "milli",
  "rand",
  "serde",
@@ -2015,17 +2015,6 @@ dependencies = [
  "thiserror",
  "time 0.3.9",
  "uuid",
-]
-
-[[package]]
-name = "meilisearch-error"
-version = "0.28.0"
-dependencies = [
- "actix-web",
- "proptest",
- "proptest-derive",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -2061,8 +2050,8 @@ dependencies = [
  "manifest-dir-macros",
  "maplit",
  "meilisearch-auth",
- "meilisearch-error",
  "meilisearch-lib",
+ "meilisearch-types",
  "mime",
  "num_cpus",
  "obkv",
@@ -2129,7 +2118,7 @@ dependencies = [
  "lazy_static",
  "log",
  "meilisearch-auth",
- "meilisearch-error",
+ "meilisearch-types",
  "milli",
  "mime",
  "mockall",
@@ -2161,6 +2150,17 @@ dependencies = [
  "uuid",
  "walkdir",
  "whoami",
+]
+
+[[package]]
+name = "meilisearch-types"
+version = "0.28.0"
+dependencies = [
+ "actix-web",
+ "proptest",
+ "proptest-derive",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

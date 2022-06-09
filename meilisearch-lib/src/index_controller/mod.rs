@@ -11,6 +11,7 @@ use actix_web::error::PayloadError;
 use bytes::Bytes;
 use futures::Stream;
 use futures::StreamExt;
+use meilisearch_types::index_uid::IndexUid;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -37,7 +38,6 @@ use error::Result;
 use self::error::IndexControllerError;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};
 use crate::index_resolver::meta_store::{HeedMetaStore, IndexMetaStore};
-pub use crate::index_resolver::IndexUid;
 use crate::index_resolver::{create_index_resolver, IndexResolver};
 use crate::update_file_store::UpdateFileStore;
 

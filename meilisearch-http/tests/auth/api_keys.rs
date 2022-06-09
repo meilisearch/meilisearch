@@ -359,6 +359,32 @@ async fn error_add_api_key_invalid_parameters_indexes() {
 }
 
 #[actix_rt::test]
+async fn error_add_api_key_invalid_index_uids() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": Value::Null,
+        "indexes": ["invalid index # / \\name with spaces"],
+        "actions": [
+            "documents.add"
+        ],
+        "expiresAt": "2050-11-13T00:00:00"
+    });
+    let (response, code) = server.add_api_key(content).await;
+
+    let expected_response = json!({
+        "message": r#"`indexes` field value `["invalid index # / \\name with spaces"]` is invalid. It should be an array of string representing index names."#,
+        "code": "invalid_api_key_indexes",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
+    });
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
 async fn error_add_api_key_invalid_parameters_actions() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");

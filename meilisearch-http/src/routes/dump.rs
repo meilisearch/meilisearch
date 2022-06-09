@@ -1,7 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
 use crate::analytics::Analytics;

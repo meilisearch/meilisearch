@@ -1,4 +1,5 @@
-use meilisearch_error::{internal_error, Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::internal_error;
 use tokio::task::JoinError;
 
 use crate::update_file_store::UpdateFileStoreError;

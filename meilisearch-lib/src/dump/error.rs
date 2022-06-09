@@ -1,5 +1,6 @@
 use meilisearch_auth::error::AuthControllerError;
-use meilisearch_error::{internal_error, Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::internal_error;
 
 use crate::{index_resolver::error::IndexResolverError, tasks::error::TaskError};
 

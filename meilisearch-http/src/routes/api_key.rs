@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
-use meilisearch_error::{Code, ResponseError};
+use meilisearch_types::error::{Code, ResponseError};
 
 use crate::extractors::{
     authentication::{policies::*, GuardedData},
@@ -151,7 +151,7 @@ impl KeyView {
             key: generated_key,
             uid: key.uid,
             actions: key.actions,
-            indexes: key.indexes,
+            indexes: key.indexes.into_iter().map(String::from).collect(),
             expires_at: key.expires_at,
             created_at: key.created_at,
             updated_at: key.updated_at,

@@ -1,4 +1,4 @@
-use meilisearch_error::{Code, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {

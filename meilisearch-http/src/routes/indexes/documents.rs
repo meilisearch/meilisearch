@@ -6,10 +6,11 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::{Stream, StreamExt};
 use log::debug;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::star_or::StarOr;
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -22,7 +23,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, StarOr};
+use crate::routes::{fold_star_or, PaginationView};
 use crate::task::SummarizedTaskView;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {

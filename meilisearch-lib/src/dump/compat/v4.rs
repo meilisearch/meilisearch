@@ -1,4 +1,5 @@
-use meilisearch_error::ResponseError;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -9,7 +10,6 @@ use crate::tasks::batch::BatchId;
 use crate::tasks::task::{
     DocumentDeletion, TaskContent as NewTaskContent, TaskEvent as NewTaskEvent, TaskId, TaskResult,
 };
-use crate::IndexUid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Task {

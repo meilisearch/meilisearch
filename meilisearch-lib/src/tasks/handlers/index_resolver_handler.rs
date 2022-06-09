@@ -55,9 +55,9 @@ mod test {
         task::{Task, TaskContent},
     };
     use crate::update_file_store::{Result as FileStoreResult, UpdateFileStore};
-    use crate::IndexUid;
 
     use super::*;
+    use meilisearch_types::index_uid::IndexUid;
     use milli::update::IndexDocumentsMethod;
     use nelson::Mocker;
     use proptest::prelude::*;
