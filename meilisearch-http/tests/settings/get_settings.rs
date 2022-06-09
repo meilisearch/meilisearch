@@ -24,6 +24,12 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     );
     map.insert("stop_words", json!([]));
     map.insert("synonyms", json!({}));
+    map.insert(
+        "faceting",
+        json!({
+            "maxValuesByFacet": json!(100),
+        }),
+    );
     map
 });
 
@@ -43,7 +49,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 9);
+    assert_eq!(settings.keys().len(), 11);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -61,6 +67,18 @@ async fn get_settings() {
         ])
     );
     assert_eq!(settings["stopWords"], json!([]));
+    assert_eq!(
+        settings["faceting"],
+        json!({
+            "maxValuesPerFacet": 100,
+        })
+    );
+    assert_eq!(
+        settings["pagination"],
+        json!({
+            "limitedTo": 1000,
+        })
+    );
 }
 
 #[actix_rt::test]

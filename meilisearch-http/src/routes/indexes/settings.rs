@@ -282,6 +282,50 @@ make_setting_route!(
     }
 );
 
+make_setting_route!(
+    "/faceting",
+    patch,
+    meilisearch_lib::index::updates::FacetingSettings,
+    faceting,
+    "faceting",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::FacetingSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Faceting Updated".to_string(),
+            json!({
+                "faceting": {
+                    "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
+    "/pagination",
+    patch,
+    meilisearch_lib::index::updates::PaginationSettings,
+    pagination,
+    "pagination",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::PaginationSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Pagination Updated".to_string(),
+            json!({
+                "pagination": {
+                    "limited_to": setting.as_ref().and_then(|s| s.limited_to.set()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {

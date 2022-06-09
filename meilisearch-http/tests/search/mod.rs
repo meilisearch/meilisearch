@@ -565,6 +565,36 @@ async fn placeholder_search_is_hard_limited() {
             },
         )
         .await;
+
+    index
+        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "offset": 1000,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
 }
 
 #[actix_rt::test]
@@ -601,6 +631,87 @@ async fn search_is_hard_limited() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
+
+    index
+        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "offset": 1000,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn faceting_max_values_per_facet() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index
+        .update_settings(json!({ "filterableAttributes": ["number"] }))
+        .await;
+
+    let documents: Vec<_> = (0..10_000)
+        .map(|id| json!({ "id": id, "number": id * 10 }))
+        .collect();
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({
+                "facets": ["number"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                let numbers = response["facetDistribution"]["number"].as_object().unwrap();
+                assert_eq!(numbers.len(), 100);
+            },
+        )
+        .await;
+
+    index
+        .update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } }))
+        .await;
+    index.wait_task(2).await;
+
+    index
+        .search(
+            json!({
+                "facets": ["number"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                let numbers = dbg!(&response)["facetDistribution"]["number"]
+                    .as_object()
+                    .unwrap();
+                assert_eq!(numbers.len(), 10_000);
             },
         )
         .await;
