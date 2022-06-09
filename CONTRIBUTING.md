@@ -9,6 +9,7 @@ Remember that there are many ways to contribute other than writing code: writing
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
+- [Release Process (for internal team only)](#release-process-for-internal-team-only)
 
 ## Assumptions
 
