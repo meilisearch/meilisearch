@@ -78,6 +78,19 @@ Some notes on GitHub PRs:
   The draft PRs are recommended when you want to show that you are working on something and make your work visible.
 - The branch related to the PR must be **up-to-date with `main`** before merging. Fortunately, this project uses [Bors](https://github.com/bors-ng/bors-ng) to automatically enforce this requirement without the PR author having to rebase manually.
 
+## Release Process (for internal team only)
+
+Meilisearch tools follow the [Semantic Versioning Convention](https://semver.org/).
+
+### Automation to rebase and Merge the PRs
+
+This project integrates a bot that helps us manage pull requests merging.<br>
+_[Read more about this](https://github.com/meilisearch/integration-guides/blob/main/resources/bors.md)._
+
+### How to Publish a new Release
+
+The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/core-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
+
 <hr>
 
 Thank you again for reading this through, we can not wait to begin to work with you if you made your way through this contributing guide ❤️
