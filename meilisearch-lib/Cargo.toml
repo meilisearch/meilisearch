@@ -30,7 +30,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-error = { path = "../meilisearch-error" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.29.1" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.29.2" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
