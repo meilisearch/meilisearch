@@ -565,6 +565,36 @@ async fn placeholder_search_is_hard_limited() {
             },
         )
         .await;
+
+    index
+        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "offset": 1000,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
 }
 
 #[actix_rt::test]
@@ -596,6 +626,38 @@ async fn search_is_hard_limited() {
             json!({
                 "q": "unique",
                 "offset": 800,
+                "limit": 400,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 200);
+            },
+        )
+        .await;
+
+    index
+        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .await;
+    index.wait_task(1).await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "limit": 1500,
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": "unique",
+                "offset": 1000,
                 "limit": 400,
             }),
             |response, code| {
