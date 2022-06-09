@@ -40,7 +40,6 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
@@ -70,14 +69,6 @@ pub struct Token<'a> {
     value: Option<String>,
 }
 
-impl<'a> Deref for Token<'a> {
-    type Target = &'a str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.span
-    }
-}
-
 impl<'a> PartialEq for Token<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.span.fragment() == other.span.fragment()
@@ -87,6 +78,10 @@ impl<'a> PartialEq for Token<'a> {
 impl<'a> Token<'a> {
     pub fn new(span: Span<'a>, value: Option<String>) -> Self {
         Self { span, value }
+    }
+
+    pub fn lexeme(&self) -> &str {
+        &self.span
     }
 
     pub fn value(&self) -> &str {
