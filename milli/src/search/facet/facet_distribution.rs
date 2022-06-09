@@ -15,7 +15,7 @@ use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
-const DEFAULT_VALUES_BY_FACET: usize = 100;
+pub const DEFAULT_VALUES_PER_FACET: usize = 100;
 
 /// Threshold on the number of candidates that will make
 /// the system to choose between one algorithm or another.
@@ -24,7 +24,7 @@ const CANDIDATES_THRESHOLD: u64 = 3000;
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
     candidates: Option<RoaringBitmap>,
-    max_values_by_facet: usize,
+    max_values_per_facet: usize,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -34,7 +34,7 @@ impl<'a> FacetDistribution<'a> {
         FacetDistribution {
             facets: None,
             candidates: None,
-            max_values_by_facet: DEFAULT_VALUES_BY_FACET,
+            max_values_per_facet: DEFAULT_VALUES_PER_FACET,
             rtxn,
             index,
         }
@@ -45,8 +45,8 @@ impl<'a> FacetDistribution<'a> {
         self
     }
 
-    pub fn max_values_by_facet(&mut self, max: usize) -> &mut Self {
-        self.max_values_by_facet = max;
+    pub fn max_values_per_facet(&mut self, max: usize) -> &mut Self {
+        self.max_values_per_facet = max;
         self
     }
 
@@ -82,7 +82,8 @@ impl<'a> FacetDistribution<'a> {
                         let ((_, _, value), ()) = result?;
                         *distribution.entry(value.to_string()).or_insert(0) += 1;
 
-                        if distribution.len() - distribution_prelength == self.max_values_by_facet {
+                        if distribution.len() - distribution_prelength == self.max_values_per_facet
+                        {
                             break;
                         }
                     }
@@ -108,7 +109,7 @@ impl<'a> FacetDistribution<'a> {
                             .or_insert_with(|| (original_value, 0));
                         *count += 1;
 
-                        if normalized_distribution.len() == self.max_values_by_facet {
+                        if normalized_distribution.len() == self.max_values_per_facet {
                             break;
                         }
                     }
@@ -141,7 +142,7 @@ impl<'a> FacetDistribution<'a> {
             if !docids.is_empty() {
                 distribution.insert(value.to_string(), docids.len());
             }
-            if distribution.len() == self.max_values_by_facet {
+            if distribution.len() == self.max_values_per_facet {
                 break;
             }
         }
@@ -164,7 +165,7 @@ impl<'a> FacetDistribution<'a> {
             if !docids.is_empty() {
                 distribution.insert(original.to_string(), docids.len());
             }
-            if distribution.len() == self.max_values_by_facet {
+            if distribution.len() == self.max_values_per_facet {
                 break;
             }
         }
@@ -186,7 +187,7 @@ impl<'a> FacetDistribution<'a> {
         for result in range {
             let ((_, _, value, _), docids) = result?;
             distribution.insert(value.to_string(), docids.len());
-            if distribution.len() == self.max_values_by_facet {
+            if distribution.len() == self.max_values_per_facet {
                 break;
             }
         }
@@ -202,7 +203,7 @@ impl<'a> FacetDistribution<'a> {
         for result in iter {
             let ((_, normalized_value), (original_value, docids)) = result?;
             normalized_distribution.insert(normalized_value, (original_value, docids.len()));
-            if normalized_distribution.len() == self.max_values_by_facet {
+            if normalized_distribution.len() == self.max_values_per_facet {
                 break;
             }
         }
@@ -290,12 +291,13 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution { facets, candidates, max_values_by_facet, rtxn: _, index: _ } = self;
+        let FacetDistribution { facets, candidates, max_values_per_facet, rtxn: _, index: _ } =
+            self;
 
         f.debug_struct("FacetDistribution")
             .field("facets", facets)
             .field("candidates", candidates)
-            .field("max_values_by_facet", max_values_by_facet)
+            .field("max_values_per_facet", max_values_per_facet)
             .finish()
     }
 }
