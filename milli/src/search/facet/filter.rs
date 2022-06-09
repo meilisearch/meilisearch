@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
-use std::ops::Deref;
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
@@ -283,8 +282,9 @@ impl<'a> Filter<'a> {
             Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(val.parse()?)),
             Condition::Between { from, to } => (Included(from.parse()?), Included(to.parse()?)),
             Condition::Equal(val) => {
-                let (_original_value, string_docids) =
-                    strings_db.get(rtxn, &(field_id, &val.to_lowercase()))?.unwrap_or_default();
+                let (_original_value, string_docids) = strings_db
+                    .get(rtxn, &(field_id, &val.value().to_lowercase()))?
+                    .unwrap_or_default();
                 let number = val.parse::<f64>().ok();
                 let number_docids = match number {
                     Some(n) => {
@@ -362,7 +362,7 @@ impl<'a> Filter<'a> {
                         return Ok(RoaringBitmap::new());
                     }
                 } else {
-                    match *fid.deref() {
+                    match fid.lexeme() {
                         attribute @ "_geo" => {
                             return Err(fid.as_external_error(FilterError::BadGeo(attribute)))?;
                         }
@@ -461,7 +461,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::update::{IndexerConfig, Settings};
+    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::Index;
 
     #[test]
@@ -596,6 +596,75 @@ mod tests {
         assert!(error.to_string().starts_with(
             "Attribute `name` is not filterable. Available filterable attributes are: `title`."
         ));
+    }
+
+    #[test]
+    fn escaped_quote_in_filter_value_2380() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            {
+                "id": "test_1",
+                "monitor_diagonal": "27' to 30'"
+            },
+            {
+                "id": "test_2",
+                "monitor_diagonal": "27\" to 30\""
+            },
+            {
+                "id": "test_3",
+                "monitor_diagonal": "27\" to 30'"
+            },
+        ]);
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        builder.set_filterable_fields(hashset!(S("monitor_diagonal")));
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let mut search = crate::Search::new(&rtxn, &index);
+        // this filter is copy pasted from #2380 with the exact same espace sequence
+        search.filter(
+            crate::Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap(),
+        );
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![2]);
+
+        search.filter(
+            crate::Filter::from_str(r#"monitor_diagonal = "27' to 30'" "#).unwrap().unwrap(),
+        );
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![0]);
+
+        search.filter(
+            crate::Filter::from_str(r#"monitor_diagonal = "27\" to 30\"" "#).unwrap().unwrap(),
+        );
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![1]);
+
+        search.filter(
+            crate::Filter::from_str(r#"monitor_diagonal = "27\" to 30'" "#).unwrap().unwrap(),
+        );
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![2]);
     }
 
     #[test]
