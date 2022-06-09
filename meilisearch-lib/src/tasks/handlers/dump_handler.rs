@@ -27,7 +27,7 @@ where
                             .content
                             .push_event(TaskEvent::succeeded(TaskResult::Other));
                     }
-                    Err(e) => batch.content.push_event(TaskEvent::failed(e.into())),
+                    Err(e) => batch.content.push_event(TaskEvent::failed(e)),
                 }
                 batch
             }
