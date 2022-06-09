@@ -49,7 +49,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 10);
+    assert_eq!(settings.keys().len(), 11);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -70,7 +70,13 @@ async fn get_settings() {
     assert_eq!(
         settings["faceting"],
         json!({
-            "maxValuesPerFacet": 100
+            "maxValuesPerFacet": 100,
+        })
+    );
+    assert_eq!(
+        settings["pagination"],
+        json!({
+            "limitedTo": 1000,
         })
     );
 }

@@ -304,6 +304,28 @@ make_setting_route!(
     }
 );
 
+make_setting_route!(
+    "/pagination",
+    patch,
+    meilisearch_lib::index::updates::PaginationSettings,
+    pagination,
+    "pagination",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::PaginationSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Pagination Updated".to_string(),
+            json!({
+                "pagination": {
+                    "limited_to": setting.as_ref().and_then(|s| s.limited_to.set()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {

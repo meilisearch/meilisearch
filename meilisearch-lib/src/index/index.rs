@@ -14,11 +14,12 @@ use serde_json::{Map, Value};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::index::search::DEFAULT_PAGINATION_LIMITED_TO;
 use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::updates::{FacetingSettings, MinWordSizeTyposSetting, TypoSettings};
+use super::updates::{FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -200,7 +201,12 @@ impl Index {
             ),
         };
 
-        dbg!(&faceting);
+        let pagination = PaginationSettings {
+            limited_to: Setting::Set(
+                self.pagination_limited_to(txn)?
+                    .unwrap_or(DEFAULT_PAGINATION_LIMITED_TO),
+            ),
+        };
 
         Ok(Settings {
             displayed_attributes: match displayed_attributes {
@@ -222,6 +228,7 @@ impl Index {
             synonyms: Setting::Set(synonyms),
             typo_tolerance: Setting::Set(typo_tolerance),
             faceting: Setting::Set(faceting),
+            pagination: Setting::Set(pagination),
             _kind: PhantomData,
         })
     }

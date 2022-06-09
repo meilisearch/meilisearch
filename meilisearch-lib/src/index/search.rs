@@ -29,7 +29,7 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
-pub const HARD_RESULT_LIMIT: usize = 1000;
+pub const DEFAULT_PAGINATION_LIMITED_TO: usize = 1000;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -91,10 +91,14 @@ impl Index {
             search.query(query);
         }
 
+        let pagination_limited_to = self
+            .pagination_limited_to(&rtxn)?
+            .unwrap_or(DEFAULT_PAGINATION_LIMITED_TO);
+
         // Make sure that a user can't get more documents than the hard limit,
         // we align that on the offset too.
-        let offset = min(query.offset.unwrap_or(0), HARD_RESULT_LIMIT);
-        let limit = min(query.limit, HARD_RESULT_LIMIT.saturating_sub(offset));
+        let offset = min(query.offset.unwrap_or(0), pagination_limited_to);
+        let limit = min(query.limit, pagination_limited_to.saturating_sub(offset));
 
         search.offset(offset);
         search.limit(limit);
