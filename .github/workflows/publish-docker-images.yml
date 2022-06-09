@@ -1,13 +1,17 @@
 ---
 on:
+  schedule:
+    - cron: '0 4 * * *' # Every day at 4:00am
   push:
     tags:
       - '*'
+  release:
+    types: [released]
 
-name: Publish tagged image to Docker Hub
+name: Publish tagged images to Docker Hub
 
 jobs:
-  docker-tag:
+  docker:
     runs-on: docker
     steps:
       - name: Set up QEMU
@@ -17,6 +21,7 @@ jobs:
         uses: docker/setup-buildx-action@v1
 
       - name: Login to DockerHub
+        if: github.event_name != 'schedule'
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -27,13 +32,18 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: getmeili/meilisearch
+          # The lastest tag is only pushed for the official Meilisearch release
+          # See https://github.com/docker/metadata-action#latest-tag
           flavor: latest=false
-          tags: type=ref,event=tag
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
-          push: true
+          # We do not push tags for the cron jobs, this is only for test purposes
+          push: ${{ github.event_name != 'schedule' }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
