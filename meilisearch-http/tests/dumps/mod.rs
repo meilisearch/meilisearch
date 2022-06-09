@@ -1,6 +1,6 @@
 mod data;
 
-use crate::common::{default_settings, Server};
+use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use meilisearch_http::Opt;
 use serde_json::json;
 
@@ -604,4 +604,73 @@ async fn import_dump_v4_rubygems_with_settings() {
         document,
         json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
+}
+
+#[actix_rt::test]
+async fn import_dump_v5() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let options = Opt {
+        import_dump: Some(GetDump::TestV5.path()),
+        ..default_settings(temp.path())
+    };
+    let mut server = Server::new_auth_with_options(options, temp).await;
+    server.use_api_key("MASTER_KEY");
+
+    let (indexes, code) = server.list_indexes(None, None).await;
+    assert_eq!(code, 200, "{indexes}");
+
+    assert_eq!(indexes["results"].as_array().unwrap().len(), 2);
+    assert_eq!(indexes["results"][0]["uid"], json!("test"));
+    assert_eq!(indexes["results"][1]["uid"], json!("test2"));
+    assert_eq!(indexes["results"][0]["primaryKey"], json!("id"));
+
+    let expected_stats = json!({
+        "numberOfDocuments": 10,
+        "isIndexing": false,
+        "fieldDistribution": {
+            "cast": 10,
+            "director": 10,
+            "genres": 10,
+            "id": 10,
+            "overview": 10,
+            "popularity": 10,
+            "poster_path": 10,
+            "producer": 10,
+            "production_companies": 10,
+            "release_date": 10,
+            "tagline": 10,
+            "title": 10,
+            "vote_average": 10,
+            "vote_count": 10
+        }
+    });
+
+    let index1 = server.index("test");
+    let index2 = server.index("test2");
+
+    let (stats, code) = index1.stats().await;
+    assert_eq!(code, 200);
+    assert_eq!(stats, expected_stats);
+
+    let (docs, code) = index2
+        .get_all_documents(GetAllDocumentsOptions::default())
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(docs["results"].as_array().unwrap().len(), 10);
+    let (docs, code) = index1
+        .get_all_documents(GetAllDocumentsOptions::default())
+        .await;
+    assert_eq!(code, 200);
+    assert_eq!(docs["results"].as_array().unwrap().len(), 10);
+
+    let (stats, code) = index2.stats().await;
+    assert_eq!(code, 200);
+    assert_eq!(stats, expected_stats);
+
+    let (keys, code) = server.list_api_keys().await;
+    assert_eq!(code, 200);
+    let key = &keys["results"][0];
+
+    assert_eq!(key["name"], "my key");
 }

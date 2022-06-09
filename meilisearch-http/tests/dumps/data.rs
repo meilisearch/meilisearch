@@ -18,6 +18,8 @@ pub enum GetDump {
     MoviesRawV4,
     MoviesWithSettingsV4,
     RubyGemsWithSettingsV4,
+
+    TestV5,
 }
 
 impl GetDump {
@@ -62,6 +64,9 @@ impl GetDump {
             }
             GetDump::RubyGemsWithSettingsV4 => {
                 exist_relative_path!("tests/assets/v4_v0.25.2_rubygems_with_settings.dump").into()
+            }
+            GetDump::TestV5 => {
+                exist_relative_path!("tests/assets/v5_v0.28.0_test_dump.dump").into()
             }
         }
     }

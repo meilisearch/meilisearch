@@ -52,16 +52,13 @@ impl Server {
         }
     }
 
-    pub async fn new_auth() -> Self {
-        let dir = TempDir::new().unwrap();
-
+    pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
             std::env::set_var("TMP", TEST_TEMP_DIR.path());
         } else {
             std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
         }
 
-        let mut options = default_settings(dir.path());
         options.master_key = Some("MASTER_KEY".to_string());
 
         let meilisearch = setup_meilisearch(&options).unwrap();
@@ -77,6 +74,12 @@ impl Server {
             service,
             _dir: Some(dir),
         }
+    }
+
+    pub async fn new_auth() -> Self {
+        let dir = TempDir::new().unwrap();
+        let options = default_settings(dir.path());
+        Self::new_auth_with_options(options, dir).await
     }
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
