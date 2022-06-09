@@ -1,4 +1,5 @@
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{self, Write};
 use std::str::FromStr;
 use std::write;
 
@@ -39,31 +40,47 @@ impl From<TaskContent> for TaskType {
     }
 }
 
-impl FromStr for TaskType {
-    type Err = String;
+#[derive(Debug)]
+pub struct TaskTypeError {
+    invalid_type: String,
+}
 
-    fn from_str(status: &str) -> Result<Self, String> {
-        if status.eq_ignore_ascii_case("indexCreation") {
+impl fmt::Display for TaskTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task type `{}`, expecting one of: \
+            indexCreation, indexUpdate, indexDeletion, documentAdditionOrUpdate, \
+            documentDeletion, settingsUpdate, dumpCreation",
+            self.invalid_type
+        )
+    }
+}
+
+impl Error for TaskTypeError {}
+
+impl FromStr for TaskType {
+    type Err = TaskTypeError;
+
+    fn from_str(type_: &str) -> Result<Self, TaskTypeError> {
+        if type_.eq_ignore_ascii_case("indexCreation") {
             Ok(TaskType::IndexCreation)
-        } else if status.eq_ignore_ascii_case("indexUpdate") {
+        } else if type_.eq_ignore_ascii_case("indexUpdate") {
             Ok(TaskType::IndexUpdate)
-        } else if status.eq_ignore_ascii_case("indexDeletion") {
+        } else if type_.eq_ignore_ascii_case("indexDeletion") {
             Ok(TaskType::IndexDeletion)
-        } else if status.eq_ignore_ascii_case("documentAdditionOrUpdate") {
+        } else if type_.eq_ignore_ascii_case("documentAdditionOrUpdate") {
             Ok(TaskType::DocumentAdditionOrUpdate)
-        } else if status.eq_ignore_ascii_case("documentDeletion") {
+        } else if type_.eq_ignore_ascii_case("documentDeletion") {
             Ok(TaskType::DocumentDeletion)
-        } else if status.eq_ignore_ascii_case("settingsUpdate") {
+        } else if type_.eq_ignore_ascii_case("settingsUpdate") {
             Ok(TaskType::SettingsUpdate)
-        } else if status.eq_ignore_ascii_case("dumpCreation") {
+        } else if type_.eq_ignore_ascii_case("dumpCreation") {
             Ok(TaskType::DumpCreation)
         } else {
-            Err(format!(
-                "invalid task type `{}`, expecting one of: \
-                indexCreation, indexUpdate, indexDeletion, documentAdditionOrUpdate, \
-                documentDeletion, settingsUpdate, dumpCreation",
-                status
-            ))
+            Err(TaskTypeError {
+                invalid_type: type_.to_string(),
+            })
         }
     }
 }
@@ -77,10 +94,28 @@ pub enum TaskStatus {
     Failed,
 }
 
-impl FromStr for TaskStatus {
-    type Err = String;
+#[derive(Debug)]
+pub struct TaskStatusError {
+    invalid_status: String,
+}
 
-    fn from_str(status: &str) -> Result<Self, String> {
+impl fmt::Display for TaskStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task status `{}`, expecting one of: \
+            enqueued, processing, succeeded, or failed",
+            self.invalid_status,
+        )
+    }
+}
+
+impl Error for TaskStatusError {}
+
+impl FromStr for TaskStatus {
+    type Err = TaskStatusError;
+
+    fn from_str(status: &str) -> Result<Self, TaskStatusError> {
         if status.eq_ignore_ascii_case("enqueued") {
             Ok(TaskStatus::Enqueued)
         } else if status.eq_ignore_ascii_case("processing") {
@@ -90,11 +125,9 @@ impl FromStr for TaskStatus {
         } else if status.eq_ignore_ascii_case("failed") {
             Ok(TaskStatus::Failed)
         } else {
-            Err(format!(
-                "invalid task status `{}`, expecting one of: \
-                enqueued, processing, succeeded, or failed",
-                status,
-            ))
+            Err(TaskStatusError {
+                invalid_status: status.to_string(),
+            })
         }
     }
 }
