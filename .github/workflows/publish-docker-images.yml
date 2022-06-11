@@ -37,6 +37,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=ref,event=tag
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ endsWith(github.ref_name, '.0') }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - name: Build and push
