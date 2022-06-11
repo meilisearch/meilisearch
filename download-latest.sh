@@ -67,8 +67,8 @@ semverLT() {
     return 1
 }
 
-# Get a token from https://github.com/settings/tokens to increasae rate limit (from 60 to 5000), make sure the token scope is set to 'public_repo'
-# Create GITHUB_PAT enviroment variable once you aquired the token to start using it
+# Get a token from https://github.com/settings/tokens to increase rate limit (from 60 to 5000), make sure the token scope is set to 'public_repo'
+# Create GITHUB_PAT environment variable once you acquired the token to start using it
 # Returns the tag of the latest stable release (in terms of semver and not of release date)
 get_latest() {
     temp_file='temp_file' # temp_file needed because the grep would start before the download is over
@@ -89,7 +89,7 @@ get_latest() {
     latest=''
     current_tag=''
     for release_info in $releases; do
-        if [ $i -eq 0 ]; then # Cheking tag_name
+        if [ $i -eq 0 ]; then # Checking tag_name
             if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
                 current_tag=$release_info
             else
