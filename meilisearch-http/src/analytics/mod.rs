@@ -61,7 +61,7 @@ pub trait Analytics: Sync + Send {
     /// The method used to publish most analytics that do not need to be batched every hours
     fn publish(&self, event_name: String, send: Value, request: Option<&HttpRequest>);
 
-    /// This method should be called to aggergate a get search
+    /// This method should be called to aggregate a get search
     fn get_search(&self, aggregate: SearchAggregator);
 
     /// This method should be called to aggregate a post search

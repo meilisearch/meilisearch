@@ -495,7 +495,7 @@ impl SearchAggregator {
             let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
-            // We are only intersted by the slowest value of the 99th fastest results
+            // We are only interested by the slowest value of the 99th fastest results
             let time_spent = time_spent.get(percentile_99th as usize);
 
             let properties = json!({
@@ -574,8 +574,8 @@ impl DocumentsAggregator {
         let content_type = request
             .headers()
             .get(CONTENT_TYPE)
-            .map(|s| s.to_str().unwrap_or("unkown"))
-            .unwrap_or("unkown")
+            .map(|s| s.to_str().unwrap_or("unknown"))
+            .unwrap_or("unknown")
             .to_string();
         ret.content_types.insert(content_type);
         ret.index_creation = index_creation;
