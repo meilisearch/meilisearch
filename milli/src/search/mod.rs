@@ -214,7 +214,7 @@ impl<'a> Search<'a> {
     ) -> Result<SearchResult> {
         let mut offset = self.offset;
         let mut initial_candidates = RoaringBitmap::new();
-        let mut excluded_candidates = RoaringBitmap::new();
+        let mut excluded_candidates = self.index.soft_deleted_documents_ids(self.rtxn)?;
         let mut documents_ids = Vec::new();
 
         while let Some(FinalResult { candidates, bucket_candidates, .. }) =

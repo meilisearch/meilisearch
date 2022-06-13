@@ -8,11 +8,16 @@ pub struct AvailableDocumentsIds {
 }
 
 impl AvailableDocumentsIds {
-    pub fn from_documents_ids(docids: &RoaringBitmap) -> AvailableDocumentsIds {
-        match docids.max() {
+    pub fn from_documents_ids(
+        docids: &RoaringBitmap,
+        soft_deleted_docids: &RoaringBitmap,
+    ) -> AvailableDocumentsIds {
+        let used_docids = docids | soft_deleted_docids;
+
+        match used_docids.max() {
             Some(last_id) => {
                 let mut available = RoaringBitmap::from_iter(0..last_id);
-                available -= docids;
+                available -= used_docids;
 
                 let iter = match last_id.checked_add(1) {
                     Some(id) => id..=u32::max_value(),
@@ -44,7 +49,7 @@ mod tests {
     #[test]
     fn empty() {
         let base = RoaringBitmap::new();
-        let left = AvailableDocumentsIds::from_documents_ids(&base);
+        let left = AvailableDocumentsIds::from_documents_ids(&base, &RoaringBitmap::new());
         let right = 0..=u32::max_value();
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
@@ -57,8 +62,28 @@ mod tests {
         base.insert(100);
         base.insert(405);
 
-        let left = AvailableDocumentsIds::from_documents_ids(&base);
+        let left = AvailableDocumentsIds::from_documents_ids(&base, &RoaringBitmap::new());
         let right = (0..=u32::max_value()).filter(|&n| n != 0 && n != 10 && n != 100 && n != 405);
+        left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
+    }
+
+    #[test]
+    fn soft_deleted() {
+        let mut base = RoaringBitmap::new();
+        base.insert(0);
+        base.insert(10);
+        base.insert(100);
+        base.insert(405);
+
+        let mut soft_deleted = RoaringBitmap::new();
+        soft_deleted.insert(1);
+        soft_deleted.insert(11);
+        soft_deleted.insert(101);
+        soft_deleted.insert(406);
+
+        let left = AvailableDocumentsIds::from_documents_ids(&base, &soft_deleted);
+        let right =
+            (0..=u32::max_value()).filter(|&n| ![0, 1, 10, 11, 100, 101, 405, 406].contains(&n));
         left.zip(right).take(500).for_each(|(l, r)| assert_eq!(l, r));
     }
 }

@@ -719,10 +719,11 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.documents(&rtxn, Some(0)).unwrap();
+        // Since the document has been deleted and re-inserted, its internal docid has has been incremented to 1
+        let docs = index.documents(&rtxn, Some(1)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];
-        assert_eq!(id, 0);
+        assert_eq!(id, 1);
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
@@ -809,11 +810,12 @@ mod tests {
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
 
-        let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
-        let (kevin_id, _) =
-            docs.iter().find(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
-        let (id, doc) = docs[*kevin_id as usize];
-        assert_eq!(id, *kevin_id);
+        // the document 0 has been deleted and reinserted with the id 3
+        let docs = index.documents(&rtxn, vec![1, 2, 3]).unwrap();
+        let kevin_position =
+            docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
+        assert_eq!(kevin_position, 2);
+        let (_, doc) = docs[kevin_position];
 
         // Check that this document is equal to the last
         // one sent and that an UUID has been generated.

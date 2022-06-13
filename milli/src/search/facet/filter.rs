@@ -10,9 +10,7 @@ use roaring::RoaringBitmap;
 
 use super::FacetNumberRange;
 use crate::error::{Error, UserError};
-use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-};
+use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, CboRoaringBitmapCodec, FieldId, Index, Result,
 };
@@ -266,11 +264,12 @@ impl<'a> Filter<'a> {
     fn evaluate_operator(
         rtxn: &heed::RoTxn,
         index: &Index,
-        numbers_db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-        strings_db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
         field_id: FieldId,
         operator: &Condition<'a>,
     ) -> Result<RoaringBitmap> {
+        let numbers_db = index.facet_id_f64_docids;
+        let strings_db = index.facet_id_string_docids;
+
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
@@ -309,9 +308,7 @@ impl<'a> Filter<'a> {
                 let all_numbers_ids = index.number_faceted_documents_ids(rtxn, field_id)?;
                 let all_strings_ids = index.string_faceted_documents_ids(rtxn, field_id)?;
                 let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(
-                    rtxn, index, numbers_db, strings_db, field_id, &operator,
-                )?;
+                let docids = Self::evaluate_operator(rtxn, index, field_id, &operator)?;
                 return Ok((all_numbers_ids | all_strings_ids) - docids);
             }
         };
@@ -342,17 +339,27 @@ impl<'a> Filter<'a> {
     }
 
     pub fn evaluate(&self, rtxn: &heed::RoTxn, index: &Index) -> Result<RoaringBitmap> {
-        let numbers_db = index.facet_id_f64_docids;
-        let strings_db = index.facet_id_string_docids;
+        // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
+        let soft_deleted_documents = index.soft_deleted_documents_ids(rtxn)?;
+        let filterable_fields = index.filterable_fields(rtxn)?;
 
+        // and finally we delete all the soft_deleted_documents, again, only once at the very end
+        self.inner_evaluate(rtxn, index, &filterable_fields)
+            .map(|result| result - soft_deleted_documents)
+    }
+
+    fn inner_evaluate(
+        &self,
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        filterable_fields: &HashSet<String>,
+    ) -> Result<RoaringBitmap> {
         match &self.condition {
             FilterCondition::Condition { fid, op } => {
-                let filterable_fields = index.filterable_fields(rtxn)?;
-
-                if crate::is_faceted(fid.value(), &filterable_fields) {
+                if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
                     if let Some(fid) = field_ids_map.id(fid.value()) {
-                        Self::evaluate_operator(rtxn, index, numbers_db, strings_db, fid, &op)
+                        Self::evaluate_operator(rtxn, index, fid, &op)
                     } else {
                         return Ok(RoaringBitmap::new());
                     }
@@ -371,7 +378,7 @@ impl<'a> Filter<'a> {
                             return Err(fid.as_external_error(
                                 FilterError::AttributeNotFilterable {
                                     attribute,
-                                    filterable_fields,
+                                    filterable_fields: filterable_fields.clone(),
                                 },
                             ))?;
                         }
@@ -379,17 +386,39 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::Or(lhs, rhs) => {
-                let lhs = Self::evaluate(&(lhs.as_ref().clone()).into(), rtxn, index)?;
-                let rhs = Self::evaluate(&(rhs.as_ref().clone()).into(), rtxn, index)?;
+                let lhs = Self::inner_evaluate(
+                    &(lhs.as_ref().clone()).into(),
+                    rtxn,
+                    index,
+                    filterable_fields,
+                )?;
+                let rhs = Self::inner_evaluate(
+                    &(rhs.as_ref().clone()).into(),
+                    rtxn,
+                    index,
+                    filterable_fields,
+                )?;
                 Ok(lhs | rhs)
             }
             FilterCondition::And(lhs, rhs) => {
-                let lhs = Self::evaluate(&(lhs.as_ref().clone()).into(), rtxn, index)?;
-                let rhs = Self::evaluate(&(rhs.as_ref().clone()).into(), rtxn, index)?;
+                let lhs = Self::inner_evaluate(
+                    &(lhs.as_ref().clone()).into(),
+                    rtxn,
+                    index,
+                    filterable_fields,
+                )?;
+                if lhs.is_empty() {
+                    return Ok(lhs);
+                }
+                let rhs = Self::inner_evaluate(
+                    &(rhs.as_ref().clone()).into(),
+                    rtxn,
+                    index,
+                    filterable_fields,
+                )?;
                 Ok(lhs & rhs)
             }
             FilterCondition::GeoLowerThan { point, radius } => {
-                let filterable_fields = index.filterable_fields(rtxn)?;
                 if filterable_fields.contains("_geo") {
                     let base_point: [f64; 2] = [point[0].parse()?, point[1].parse()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
@@ -422,16 +451,17 @@ impl<'a> Filter<'a> {
                 } else {
                     return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: "_geo",
-                        filterable_fields,
+                        filterable_fields: filterable_fields.clone(),
                     }))?;
                 }
             }
             FilterCondition::GeoGreaterThan { point, radius } => {
-                let result = Self::evaluate(
+                let result = Self::inner_evaluate(
                     &FilterCondition::GeoLowerThan { point: point.clone(), radius: radius.clone() }
                         .into(),
                     rtxn,
                     index,
+                    filterable_fields,
                 )?;
                 let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
                 Ok(geo_faceted_doc_ids - result)

@@ -27,6 +27,8 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum InternalError {
+    #[error("Tried to access a soft deleted documents.")]
+    AccessingSoftDeletedDocument { document_id: DocumentId },
     #[error("{}", HeedError::DatabaseClosing)]
     DatabaseClosing,
     #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]

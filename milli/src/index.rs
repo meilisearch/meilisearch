@@ -32,6 +32,7 @@ pub mod main_key {
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
     pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+    pub const SOFT_DELETED_DOCUMENTS_IDS_KEY: &str = "soft-deleted-documents-ids";
     pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
@@ -254,6 +255,29 @@ impl Index {
         Ok(count.unwrap_or_default())
     }
 
+    /* deleted documents ids */
+
+    /// Writes the soft deleted documents ids.
+    pub(crate) fn put_soft_deleted_documents_ids(
+        &self,
+        wtxn: &mut RwTxn,
+        docids: &RoaringBitmap,
+    ) -> heed::Result<()> {
+        self.main.put::<_, Str, RoaringBitmapCodec>(
+            wtxn,
+            main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY,
+            docids,
+        )
+    }
+
+    /// Returns the soft deleted documents ids.
+    pub(crate) fn soft_deleted_documents_ids(&self, rtxn: &RoTxn) -> heed::Result<RoaringBitmap> {
+        Ok(self
+            .main
+            .get::<_, Str, RoaringBitmapCodec>(rtxn, main_key::SOFT_DELETED_DOCUMENTS_IDS_KEY)?
+            .unwrap_or_default())
+    }
+
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
@@ -280,7 +304,7 @@ impl Index {
         wtxn: &mut RwTxn,
         external_documents_ids: &ExternalDocumentsIds<'a>,
     ) -> heed::Result<()> {
-        let ExternalDocumentsIds { hard, soft } = external_documents_ids;
+        let ExternalDocumentsIds { hard, soft, .. } = external_documents_ids;
         let hard = hard.as_fst().as_bytes();
         let soft = soft.as_fst().as_bytes();
         self.main.put::<_, Str, ByteSlice>(
@@ -311,7 +335,8 @@ impl Index {
             Some(soft) => fst::Map::new(soft)?.map_data(Cow::Borrowed)?,
             None => fst::Map::default().map_data(Cow::Owned)?,
         };
-        Ok(ExternalDocumentsIds::new(hard, soft))
+        let soft_deleted_docids = self.soft_deleted_documents_ids(rtxn)?;
+        Ok(ExternalDocumentsIds::new(hard, soft, soft_deleted_docids))
     }
 
     /* fields ids map */
@@ -929,9 +954,13 @@ impl Index {
         rtxn: &'t RoTxn,
         ids: impl IntoIterator<Item = DocumentId>,
     ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
         let mut documents = Vec::new();
 
         for id in ids {
+            if soft_deleted_documents.contains(id) {
+                return Err(InternalError::AccessingSoftDeletedDocument { document_id: id })?;
+            }
             let kv = self
                 .documents
                 .get(rtxn, &BEU32::new(id))?
@@ -947,11 +976,16 @@ impl Index {
         &self,
         rtxn: &'t RoTxn,
     ) -> Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReaderU16<'t>)>>> {
+        let soft_deleted_docids = self.soft_deleted_documents_ids(rtxn)?;
+
         Ok(self
             .documents
             .iter(rtxn)?
             // we cast the BEU32 to a DocumentId
-            .map(|document| document.map(|(id, obkv)| (id.get(), obkv))))
+            .map(|document| document.map(|(id, obkv)| (id.get(), obkv)))
+            .filter(move |document| {
+                document.as_ref().map_or(true, |(id, _)| !soft_deleted_docids.contains(*id))
+            }))
     }
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
