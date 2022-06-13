@@ -17,18 +17,23 @@ where
 
     async fn process_batch(&self, mut batch: Batch) -> Batch {
         match &batch.content {
-            BatchContent::Dump(Task {
-                content: TaskContent::Dump { uid },
-                ..
-            }) => {
-                match self.run(uid.clone()).await {
-                    Ok(_) => {
-                        batch
-                            .content
-                            .push_event(TaskEvent::succeeded(TaskResult::Other));
+            BatchContent::Dump(
+                task @ Task {
+                    content: TaskContent::Dump { uid },
+                    ..
+                },
+            ) => {
+                if !task.is_aborted() {
+                    match self.run(uid.clone()).await {
+                        Ok(_) => {
+                            batch
+                                .content
+                                .push_event(TaskEvent::succeeded(TaskResult::Other));
+                        }
+                        Err(e) => batch.content.push_event(TaskEvent::failed(e)),
                     }
-                    Err(e) => batch.content.push_event(TaskEvent::failed(e)),
                 }
+
                 batch
             }
             _ => unreachable!("invalid batch content for dump"),
@@ -128,5 +133,29 @@ mod test {
 
             rt.block_on(handle).unwrap();
         }
+    }
+
+    #[actix_rt::test]
+    async fn ignore_aborted_tasks() {
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "test".to_string(),
+            },
+            events: vec![TaskEvent::abort()],
+        };
+
+        assert!(task.is_aborted());
+
+        let batch = task_to_batch(task.clone());
+
+        let mocker = Mocker::default();
+        let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+        assert!(dump_handler.accept(&batch));
+
+        let batch = dump_handler.process_batch(batch).await;
+
+        // update is unchanged after being processed, and nothing was called on the DumpHandler.
+        assert_eq!(&task, batch.content.first().unwrap());
     }
 }
