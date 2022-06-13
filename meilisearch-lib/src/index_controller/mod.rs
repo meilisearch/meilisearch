@@ -233,10 +233,12 @@ impl IndexControllerBuilder {
             meta_env.clone(),
             index_resolver.clone(),
         ));
+
         let task_store = TaskStore::new(meta_env)?;
 
         // register all the batch handlers for use with the scheduler.
         let handlers: Vec<Arc<dyn BatchHandler + Sync + Send + 'static>> = vec![
+            Arc::new(task_store.clone()),
             index_resolver.clone(),
             dump_handler,
             Arc::new(SnapshotHandler),
