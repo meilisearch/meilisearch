@@ -430,6 +430,10 @@ where
             },
         };
 
+        self.register_task_content(content).await
+    }
+
+    async fn register_task_content(&self, content: TaskContent) -> Result<Task> {
         let task = self.task_store.register(content).await?;
         self.scheduler.read().await.notify();
 
@@ -439,13 +443,19 @@ where
     pub async fn register_dump_task(&self) -> Result<Task> {
         let uid = dump::generate_uid();
         let content = TaskContent::Dump { uid };
-        let task = self.task_store.register(content).await?;
-        self.scheduler.read().await.notify();
-        Ok(task)
+
+        self.register_task_content(content).await
+    }
+
+    pub async fn register_abort_task(&self, tasks: Vec<TaskId>) -> Result<Task> {
+        let content = TaskContent::TaskAbortion { tasks };
+
+        self.register_task_content(content).await
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
         let task = self.scheduler.read().await.get_task(id, filter).await?;
+
         Ok(task)
     }
 

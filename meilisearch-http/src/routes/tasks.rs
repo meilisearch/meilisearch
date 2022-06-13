@@ -12,7 +12,7 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
+use crate::task::{SummarizedTaskView, TaskListView, TaskStatus, TaskType, TaskView};
 
 use super::fold_star_or;
 
@@ -20,7 +20,8 @@ const DEFAULT_LIMIT: fn() -> usize = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
+        .service(web::resource("/{task_id}/abort").route(web::get().to(SeqHandler(abort_task))));
 }
 
 #[derive(Deserialize, Debug)]
@@ -196,4 +197,18 @@ async fn get_task(
         .into();
 
     Ok(HttpResponse::Ok().json(task))
+}
+
+async fn abort_task(
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_ABORT }>, MeiliSearch>,
+    task_id: web::Path<TaskId>,
+    _analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let task = meilisearch
+        .register_abort_task(vec![task_id.into_inner()])
+        .await?;
+
+    let view: SummarizedTaskView = task.into();
+
+    Ok(HttpResponse::Ok().json(view))
 }
