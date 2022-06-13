@@ -102,6 +102,7 @@ impl Eq for TaskList {}
 impl Ord for TaskList {
     fn cmp(&self, other: &Self) -> Ordering {
         match (&self.id, &other.id) {
+            // comparing two indexes task lists
             (TaskListIdentifier::Index(_), TaskListIdentifier::Index(_)) => {
                 match (self.peek(), other.peek()) {
                     (None, None) => Ordering::Equal,
@@ -110,8 +111,22 @@ impl Ord for TaskList {
                     (Some(lhs), Some(rhs)) => lhs.cmp(rhs),
                 }
             }
+            // index and dump: a dump is always processed before an index update.
             (TaskListIdentifier::Index(_), TaskListIdentifier::Dump) => Ordering::Less,
             (TaskListIdentifier::Dump, TaskListIdentifier::Index(_)) => Ordering::Greater,
+
+            // dump and task abortion: task abortion is processed before a dump.
+            (TaskListIdentifier::TaskAbortion, TaskListIdentifier::Dump) => Ordering::Greater,
+            (TaskListIdentifier::Dump, TaskListIdentifier::TaskAbortion) => Ordering::Less,
+
+            // task abortion and index: task abortion is processed before any index update.
+            (TaskListIdentifier::TaskAbortion, TaskListIdentifier::Index(_)) => Ordering::Greater,
+            (TaskListIdentifier::Index(_), TaskListIdentifier::TaskAbortion) => Ordering::Less,
+
+            // invalid states
+            (TaskListIdentifier::TaskAbortion, TaskListIdentifier::TaskAbortion) => {
+                unreachable!("There should be only one TaskAbortion task list")
+            }
             (TaskListIdentifier::Dump, TaskListIdentifier::Dump) => {
                 unreachable!("There should be only one Dump task list")
             }
@@ -129,6 +144,7 @@ impl PartialOrd for TaskList {
 enum TaskListIdentifier {
     Index(String),
     Dump,
+    TaskAbortion,
 }
 
 impl From<&Task> for TaskListIdentifier {
