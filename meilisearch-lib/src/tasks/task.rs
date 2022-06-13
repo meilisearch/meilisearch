@@ -85,6 +85,10 @@ impl TaskEvent {
             timestamp: OffsetDateTime::now_utc(),
         }
     }
+
+    pub fn is_aborted(&self) -> bool {
+        matches!(self, Self::Aborted { .. })
+    }
 }
 
 /// A task represents an operation that Meilisearch must do.
@@ -137,6 +141,10 @@ impl Task {
             TaskContent::Dump { .. } => None,
             TaskContent::TaskAbortion { .. } => None,
         }
+    }
+
+    pub fn is_aborted(&self) -> bool {
+        self.events.iter().any(TaskEvent::is_aborted)
     }
 }
 
