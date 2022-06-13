@@ -12,6 +12,8 @@ pub type Result<T> = std::result::Result<T, TaskError>;
 pub enum TaskError {
     #[error("Task `{0}` not found.")]
     UnexistingTask(TaskId),
+    #[error("Cannot abort already processed task")]
+    AbortProcessedTask,
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -29,6 +31,7 @@ impl ErrorCode for TaskError {
         match self {
             TaskError::UnexistingTask(_) => Code::TaskNotFound,
             TaskError::Internal(_) => Code::Internal,
+            TaskError::AbortProcessedTask => todo!(),
         }
     }
 }

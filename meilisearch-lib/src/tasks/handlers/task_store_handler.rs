@@ -1,6 +1,28 @@
 use crate::tasks::batch::{Batch, BatchContent};
-use crate::tasks::task::{Task, TaskContent, TaskEvent, TaskResult};
-use crate::tasks::{BatchHandler, TaskStore};
+use crate::tasks::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
+use crate::tasks::{error::TaskError, BatchHandler, Result, TaskStore};
+
+impl TaskStore {
+    async fn abort_updates(&self, ids: &[TaskId]) -> Result<()> {
+        let mut tasks = Vec::with_capacity(ids.len());
+
+        for id in ids {
+            let mut task = self.get_task(*id, None).await?;
+            // Since updates are processed sequentially, no updates can be in an undecided state
+            // here, therefore it's ok to only check for completion.
+            if !task.is_finished() {
+                task.events.push(TaskEvent::abort());
+                tasks.push(task);
+            } else {
+                return Err(TaskError::AbortProcessedTask);
+            }
+        }
+
+        self.update_tasks(tasks).await?;
+
+        Ok(())
+    }
+}
 
 #[async_trait::async_trait]
 impl BatchHandler for TaskStore {
@@ -15,19 +37,10 @@ impl BatchHandler for TaskStore {
                 ref mut events,
                 ..
             }) => {
-                let mut updated_tasks = Vec::with_capacity(tasks.len());
-                for id in tasks {
-                    let mut task = self.get_task(*id, None).await.unwrap();
-                    if !task.is_finished() {
-                        task.events.push(TaskEvent::abort());
-                        updated_tasks.push(task);
-                    } else {
-                        panic!("can't abort already processed task");
-                    }
+                match self.abort_updates(tasks).await {
+                    Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
+                    Err(e) => events.push(TaskEvent::failed(e)),
                 }
-
-                self.update_tasks(updated_tasks).await.unwrap();
-
                 events.push(TaskEvent::succeeded(TaskResult::Other));
             }
             _ => unreachable!(),
