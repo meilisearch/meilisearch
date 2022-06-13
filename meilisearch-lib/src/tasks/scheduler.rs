@@ -309,9 +309,7 @@ impl Scheduler {
 
     fn register_task(&mut self, task: Task) {
         assert!(!task.is_finished());
-        if !task.is_aborted() {
-            self.tasks.insert(task);
-        }
+        self.tasks.insert(task);
     }
 
     /// Clears the processing list, this method should be called when the processing of a batch is finished.
