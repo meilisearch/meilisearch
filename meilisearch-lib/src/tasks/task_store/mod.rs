@@ -142,18 +142,35 @@ impl TaskStore {
                         let task = store
                             .get(&txn, *id)?
                             .ok_or(TaskError::UnexistingTask(*id))?;
-                        tasks.push(task);
+
+                        if !task.is_aborted() {
+                            tasks.push(task);
+                        }
                     }
-                    BatchContent::DocumentsAdditionBatch(tasks)
+
+                    if !tasks.is_empty() {
+                        BatchContent::DocumentsAdditionBatch(tasks)
+                    } else {
+                        BatchContent::Empty
+                    }
                 }
                 Processing::IndexUpdate(id) => {
                     let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
-                    BatchContent::IndexUpdate(task)
+
+                    if !task.is_aborted() {
+                        BatchContent::IndexUpdate(task)
+                    } else {
+                        BatchContent::Empty
+                    }
                 }
                 Processing::Dump(id) => {
                     let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
                     debug_assert!(matches!(task.content, TaskContent::Dump { .. }));
-                    BatchContent::Dump(task)
+                    if !task.is_aborted() {
+                        BatchContent::Dump(task)
+                    } else {
+                        BatchContent::Empty
+                    }
                 }
                 Processing::Nothing => BatchContent::Empty,
             };
