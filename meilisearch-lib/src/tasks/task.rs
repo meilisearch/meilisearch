@@ -58,6 +58,11 @@ pub enum TaskEvent {
         #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
     },
+    Aborted {
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
+        timestamp: OffsetDateTime,
+    },
 }
 
 impl TaskEvent {

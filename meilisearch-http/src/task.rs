@@ -366,6 +366,7 @@ impl From<Task> for TaskView {
                 }
                 (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
             }
+            TaskEvent::Aborted { .. } => todo!(),
         };
 
         let enqueued_at = match events.first() {
