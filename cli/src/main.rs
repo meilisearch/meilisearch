@@ -229,7 +229,7 @@ impl Performer for DocumentAddition {
 
         println!("Adding {} documents to the index.", reader.len());
 
-        let mut txn = index.env.write_txn()?;
+        let mut txn = index.write_txn()?;
         let config = milli::update::IndexerConfig { log_every_n: Some(100), ..Default::default() };
         let update_method = if self.update_documents {
             IndexDocumentsMethod::UpdateDocuments
@@ -424,7 +424,7 @@ impl Search {
         offset: &Option<usize>,
         limit: &Option<usize>,
     ) -> Result<Vec<Map<String, Value>>> {
-        let txn = index.env.read_txn()?;
+        let txn = index.read_txn()?;
         let mut search = index.search(&txn);
 
         if let Some(ref query) = query {
@@ -475,7 +475,7 @@ struct SettingsUpdate {
 
 impl Performer for SettingsUpdate {
     fn perform(self, index: milli::Index) -> Result<()> {
-        let mut txn = index.env.write_txn()?;
+        let mut txn = index.write_txn()?;
 
         let config = IndexerConfig { log_every_n: Some(100), ..Default::default() };
 

@@ -371,11 +371,9 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
 
-    use heed::types::{ByteSlice, Str};
+    use heed::types::ByteSlice;
 
     let Index {
-        env: _env,
-        main,
         word_docids,
         word_prefix_docids,
         docid_word_positions,
@@ -390,7 +388,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         exact_word_prefix_docids,
         field_id_docid_facet_f64s: _,
         field_id_docid_facet_strings: _,
-        documents,
+        ..
     } = index;
 
     let main_name = "main";
@@ -425,11 +423,10 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             heap.pop();
         }
 
-        if let Some(documents_ids) = main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
-            heap.push(Reverse((documents_ids.len(), format!("documents-ids"), main_name)));
-            if heap.len() > limit {
-                heap.pop();
-            }
+        let documents_ids = index.documents_ids(rtxn)?;
+        heap.push(Reverse((documents_ids.len() as usize, format!("documents-ids"), main_name)));
+        if heap.len() > limit {
+            heap.pop();
         }
 
         for result in word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
@@ -549,9 +546,10 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             }
         }
 
-        for result in documents.remap_data_type::<ByteSlice>().iter(rtxn)? {
+        for result in index.all_documents(rtxn)? {
             let (id, value) = result?;
-            heap.push(Reverse((value.len(), id.to_string(), documents_name)));
+            let size = value.iter().map(|(k, v)| k.to_ne_bytes().len() + v.len()).sum();
+            heap.push(Reverse((size, id.to_string(), documents_name)));
             if heap.len() > limit {
                 heap.pop();
             }
@@ -877,7 +875,7 @@ fn export_documents(
 ) -> anyhow::Result<()> {
     use std::io::{BufWriter, Write as _};
 
-    use milli::{obkv_to_json, BEU32};
+    use milli::obkv_to_json;
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout);
@@ -886,12 +884,13 @@ fn export_documents(
     let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
 
     let iter: Box<dyn Iterator<Item = _>> = if internal_ids.is_empty() {
-        Box::new(index.documents.iter(rtxn)?.map(|result| result.map(|(_id, obkv)| obkv)))
+        Box::new(index.all_documents(rtxn)?.map(|result| result.map(|(_id, obkv)| obkv)))
     } else {
         Box::new(
-            internal_ids
+            index
+                .documents(rtxn, internal_ids.into_iter())?
                 .into_iter()
-                .flat_map(|id| index.documents.get(rtxn, &BEU32::new(id)).transpose()),
+                .map(|(_id, obkv)| Ok(obkv)),
         )
     };
 
@@ -973,8 +972,6 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
     use heed::types::ByteSlice;
 
     let Index {
-        env: _env,
-        main,
         word_docids,
         word_prefix_docids,
         docid_word_positions,
@@ -989,7 +986,7 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         field_id_docid_facet_strings,
         exact_word_prefix_docids,
         exact_word_docids,
-        documents,
+        ..
     } = index;
 
     let names = if names.is_empty() {
@@ -1000,7 +997,6 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
 
     for name in names {
         let database = match name.as_str() {
-            MAIN => &main,
             WORD_PREFIX_DOCIDS => word_prefix_docids.as_polymorph(),
             WORD_DOCIDS => word_docids.as_polymorph(),
             DOCID_WORD_POSITIONS => docid_word_positions.as_polymorph(),
@@ -1016,7 +1012,6 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
             EXACT_WORD_DOCIDS => exact_word_docids.as_polymorph(),
             EXACT_WORD_PREFIX_DOCIDS => exact_word_prefix_docids.as_polymorph(),
 
-            DOCUMENTS => documents.as_polymorph(),
             unknown => anyhow::bail!("unknown database {:?}", unknown),
         };
 
