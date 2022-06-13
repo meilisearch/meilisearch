@@ -24,6 +24,8 @@ pub enum Action {
     IndexesDelete = actions::INDEXES_DELETE,
     #[serde(rename = "tasks.get")]
     TasksGet = actions::TASKS_GET,
+    #[serde(rename = "tasks.abort")]
+    TasksAbort = actions::TASKS_ABORT,
     #[serde(rename = "settings.get")]
     SettingsGet = actions::SETTINGS_GET,
     #[serde(rename = "settings.update")]
@@ -72,28 +74,7 @@ impl Action {
     }
 
     pub fn repr(&self) -> u8 {
-        use actions::*;
-        match self {
-            Self::All => ALL,
-            Self::Search => SEARCH,
-            Self::DocumentsAdd => DOCUMENTS_ADD,
-            Self::DocumentsGet => DOCUMENTS_GET,
-            Self::DocumentsDelete => DOCUMENTS_DELETE,
-            Self::IndexesAdd => INDEXES_CREATE,
-            Self::IndexesGet => INDEXES_GET,
-            Self::IndexesUpdate => INDEXES_UPDATE,
-            Self::IndexesDelete => INDEXES_DELETE,
-            Self::TasksGet => TASKS_GET,
-            Self::SettingsGet => SETTINGS_GET,
-            Self::SettingsUpdate => SETTINGS_UPDATE,
-            Self::StatsGet => STATS_GET,
-            Self::DumpsCreate => DUMPS_CREATE,
-            Self::Version => VERSION,
-            Self::KeysAdd => KEYS_CREATE,
-            Self::KeysGet => KEYS_GET,
-            Self::KeysUpdate => KEYS_UPDATE,
-            Self::KeysDelete => KEYS_DELETE,
-        }
+        *self as u8
     }
 }
 
@@ -117,4 +98,5 @@ pub mod actions {
     pub const KEYS_GET: u8 = 17;
     pub const KEYS_UPDATE: u8 = 18;
     pub const KEYS_DELETE: u8 = 19;
+    pub const TASKS_ABORT: u8 = 20;
 }
