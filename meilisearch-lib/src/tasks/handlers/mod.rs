@@ -23,6 +23,7 @@ mod test {
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => BatchContent::IndexUpdate(task),
             TaskContent::Dump { .. } => BatchContent::Dump(task),
+            TaskContent::TaskAbortion { .. } => todo!(),
         };
 
         Batch {

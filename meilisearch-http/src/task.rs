@@ -36,6 +36,7 @@ impl From<TaskContent> for TaskType {
             TaskContent::DocumentDeletion { .. } => TaskType::DocumentDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::Dump { .. } => TaskType::DumpCreation,
+            TaskContent::TaskAbortion { .. } => todo!(),
         }
     }
 }
@@ -295,6 +296,7 @@ impl From<Task> for TaskView {
                 TaskType::DumpCreation,
                 Some(TaskDetails::Dump { dump_uid: uid }),
             ),
+            TaskContent::TaskAbortion { .. } => todo!(),
         };
 
         // An event always has at least one event: "Created"

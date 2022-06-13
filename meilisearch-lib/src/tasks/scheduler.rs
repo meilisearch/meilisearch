@@ -143,6 +143,7 @@ impl From<&Task> for TaskListIdentifier {
                 TaskListIdentifier::Index(index_uid.as_str().to_string())
             }
             TaskContent::Dump { .. } => TaskListIdentifier::Dump,
+            TaskContent::TaskAbortion { .. } => todo!(),
         }
     }
 }
