@@ -22,7 +22,9 @@ where
                 self.process_document_addition_batch(tasks).await;
             }
             BatchContent::IndexUpdate(ref mut task) => {
-                self.process_task(task).await;
+                if !task.is_aborted() {
+                    self.process_task(task).await;
+                }
             }
             _ => unreachable!(),
         }
@@ -32,6 +34,7 @@ where
 
     async fn finish(&self, batch: &Batch) {
         if let BatchContent::DocumentsAdditionBatch(ref tasks) = batch.content {
+            // we do not ignore the aborted tasks here, since we want to remove their content.
             for task in tasks {
                 if let Some(content_uuid) = task.get_content_uuid() {
                     if let Err(e) = self.delete_content_file(content_uuid).await {
@@ -50,6 +53,7 @@ mod test {
     use crate::index_resolver::{
         error::Result as IndexResult, index_store::MockIndexStore, meta_store::MockIndexMetaStore,
     };
+    use crate::tasks::task::TaskEvent;
     use crate::tasks::{
         handlers::test::task_to_batch,
         task::{Task, TaskContent},
@@ -196,5 +200,58 @@ mod test {
                 }
             }
         }
+    }
+
+    #[actix_rt::test]
+    async fn test_abort_task() {
+        let task = Task {
+            id: 1,
+            content: TaskContent::IndexUpdate {
+                index_uid: IndexUid::new_unchecked("hello"),
+                primary_key: None,
+            },
+            events: vec![TaskEvent::abort()],
+        };
+
+        let batch = task_to_batch(task.clone());
+
+        let mocker = Mocker::default();
+        let index_resolver: IndexResolver<HeedMetaStore, MapIndexStore> =
+            IndexResolver::mock(mocker);
+
+        let batch = index_resolver.process_batch(batch).await;
+        assert!(index_resolver.accept(&batch));
+        assert_eq!(batch.content.first().unwrap(), &task);
+
+        index_resolver.finish(&batch).await;
+    }
+
+    #[actix_rt::test]
+    async fn test_cleanup_after_abort() {
+        let content_uuid = Uuid::new_v4();
+        let task = Task {
+            id: 1,
+            content: TaskContent::DocumentAddition {
+                index_uid: IndexUid::new_unchecked("hello"),
+                content_uuid,
+                merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
+                primary_key: None,
+                documents_count: 10,
+                allow_index_creation: true,
+            },
+            events: vec![TaskEvent::abort()],
+        };
+
+        let batch = task_to_batch(task.clone());
+
+        let mocker = Mocker::default();
+        mocker
+            .when::<Uuid, IndexResult<()>>("delete_content_file")
+            .then(|_| Ok(()));
+
+        let index_resolver: IndexResolver<HeedMetaStore, MapIndexStore> =
+            IndexResolver::mock(mocker);
+
+        index_resolver.finish(&batch).await;
     }
 }

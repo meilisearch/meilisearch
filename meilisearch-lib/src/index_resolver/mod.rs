@@ -97,7 +97,11 @@ mod real {
                 }
             }
 
-            let content_uuids = tasks.iter().map(get_content_uuid).collect::<Vec<_>>();
+            let content_uuids = tasks
+                .iter()
+                .filter(|t| t.is_aborted())
+                .map(get_content_uuid)
+                .collect::<Vec<_>>();
 
             match tasks.first() {
                 Some(Task {
@@ -167,7 +171,8 @@ mod real {
                         },
                     };
 
-                    for task in tasks.iter_mut() {
+                    // do not push event to aborted tasks
+                    for task in tasks.iter_mut().filter(|t| t.is_aborted()) {
                         task.events.push(event.clone());
                     }
                 }
