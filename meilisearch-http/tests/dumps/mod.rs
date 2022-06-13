@@ -607,6 +607,7 @@ async fn import_dump_v4_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v5() {
     let temp = tempfile::tempdir().unwrap();
 
