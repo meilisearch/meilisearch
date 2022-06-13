@@ -24,6 +24,7 @@ enum TaskType {
     DocumentAddition { number: usize },
     DocumentUpdate { number: usize },
     IndexUpdate,
+    TaskAbortion,
     Dump,
 }
 
@@ -159,7 +160,7 @@ impl From<&Task> for TaskListIdentifier {
                 TaskListIdentifier::Index(index_uid.as_str().to_string())
             }
             TaskContent::Dump { .. } => TaskListIdentifier::Dump,
-            TaskContent::TaskAbortion { .. } => todo!(),
+            TaskContent::TaskAbortion { .. } => TaskListIdentifier::TaskAbortion,
         }
     }
 }
@@ -198,8 +199,10 @@ impl TaskQueue {
             | TaskContent::IndexDeletion { .. }
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
+            TaskContent::TaskAbortion { .. } => TaskType::TaskAbortion,
             _ => unreachable!("unhandled task type"),
         };
+
         let task = PendingTask { kind, id };
 
         match self.index_tasks.entry(uid) {
@@ -306,7 +309,9 @@ impl Scheduler {
 
     fn register_task(&mut self, task: Task) {
         assert!(!task.is_finished());
-        self.tasks.insert(task);
+        if !task.is_aborted() {
+            self.tasks.insert(task);
+        }
     }
 
     /// Clears the processing list, this method should be called when the processing of a batch is finished.
