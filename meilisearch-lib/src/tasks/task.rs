@@ -79,6 +79,12 @@ impl TaskEvent {
             timestamp: OffsetDateTime::now_utc(),
         }
     }
+
+    pub fn abort() -> Self {
+        Self::Aborted {
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
 }
 
 /// A task represents an operation that Meilisearch must do.
