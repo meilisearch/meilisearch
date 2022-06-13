@@ -81,7 +81,8 @@ mod test {
                     | BatchContent::IndexUpdate(_) => assert!(index_resolver.accept(&batch)),
                 BatchContent::Dump(_)
                     | BatchContent::Snapshot(_)
-                    | BatchContent::Empty => assert!(!index_resolver.accept(&batch)),
+                    | BatchContent::Empty
+                    | BatchContent::TaskAbortion(_) => assert!(!index_resolver.accept(&batch)),
             }
         }
     }

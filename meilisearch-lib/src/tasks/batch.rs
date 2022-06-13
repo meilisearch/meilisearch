@@ -11,6 +11,7 @@ pub enum BatchContent {
     DocumentsAdditionBatch(Vec<Task>),
     IndexUpdate(Task),
     Dump(Task),
+    TaskAbortion(Task),
     Snapshot(SnapshotJob),
     // Symbolizes a empty batch. This can occur when we were woken, but there wasn't any work to do.
     Empty,
@@ -20,7 +21,9 @@ impl BatchContent {
     pub fn first(&self) -> Option<&Task> {
         match self {
             BatchContent::DocumentsAdditionBatch(ts) => ts.first(),
-            BatchContent::Dump(t) | BatchContent::IndexUpdate(t) => Some(t),
+            BatchContent::Dump(t)
+            | BatchContent::IndexUpdate(t)
+            | BatchContent::TaskAbortion(t) => Some(t),
             BatchContent::Snapshot(_) | BatchContent::Empty => None,
         }
     }
@@ -30,7 +33,9 @@ impl BatchContent {
             BatchContent::DocumentsAdditionBatch(ts) => {
                 ts.iter_mut().for_each(|t| t.events.push(event.clone()))
             }
-            BatchContent::IndexUpdate(t) | BatchContent::Dump(t) => t.events.push(event),
+            BatchContent::IndexUpdate(t)
+            | BatchContent::Dump(t)
+            | BatchContent::TaskAbortion(t) => t.events.push(event),
             BatchContent::Snapshot(_) | BatchContent::Empty => (),
         }
     }
@@ -56,7 +61,10 @@ impl Batch {
     pub fn len(&self) -> usize {
         match self.content {
             BatchContent::DocumentsAdditionBatch(ref ts) => ts.len(),
-            BatchContent::IndexUpdate(_) | BatchContent::Dump(_) | BatchContent::Snapshot(_) => 1,
+            BatchContent::IndexUpdate(_)
+            | BatchContent::Dump(_)
+            | BatchContent::Snapshot(_)
+            | BatchContent::TaskAbortion(_) => 1,
             BatchContent::Empty => 0,
         }
     }
