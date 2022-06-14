@@ -622,15 +622,45 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use big_s::S;
-    use heed::EnvOpenOptions;
+    use heed::{EnvOpenOptions, RwTxn};
     use maplit::hashset;
 
     use super::*;
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::Filter;
+
+    fn insert_documents<'t, R: std::io::Read + std::io::Seek>(
+        wtxn: &mut RwTxn<'t, '_>,
+        index: &'t Index,
+        documents: crate::documents::DocumentBatchReader<R>,
+    ) {
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+        builder.add_documents(documents).unwrap();
+        builder.execute().unwrap();
+    }
+
+    fn delete_documents<'t>(
+        wtxn: &mut RwTxn<'t, '_>,
+        index: &'t Index,
+        external_ids: &[&str],
+    ) -> Vec<u32> {
+        let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
+        let ids_to_delete: Vec<u32> = external_ids
+            .iter()
+            .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
+            .collect();
+
+        // Delete some documents.
+        let mut builder = DeleteDocuments::new(wtxn, index).unwrap();
+        external_ids.iter().for_each(|id| drop(builder.delete_external_id(id)));
+        builder.execute().unwrap();
+
+        ids_to_delete
+    }
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {
@@ -697,7 +727,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_documents_with_filterable_attributes() {
+    fn filtered_placeholder_search_should_not_return_deleted_documents() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
@@ -733,18 +763,10 @@ mod tests {
             {"docid":"1_69","label":"geometry"}
         ]);
 
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        builder.add_documents(content).unwrap();
-        builder.execute().unwrap();
+        insert_documents(&mut wtxn, &index, content);
+        delete_documents(&mut wtxn, &index, &["1_4"]);
 
-        // Delete not all of the documents but some of them.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.delete_external_id("1_4");
-        builder.execute().unwrap();
-
+        // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
         let results = index.search(&wtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
@@ -753,7 +775,113 @@ mod tests {
     }
 
     #[test]
-    fn delete_documents_with_geo_points() {
+    fn placeholder_search_should_not_return_deleted_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key(S("docid"));
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!([
+            {"docid":"1_4","label":"sign"},
+            {"docid":"1_5","label":"letter"},
+            {"docid":"1_7","label":"abstract,cartoon,design,pattern"},
+            {"docid":"1_36","label":"drawing,painting,pattern"},
+            {"docid":"1_37","label":"art,drawing,outdoor"},
+            {"docid":"1_38","label":"aquarium,art,drawing"},
+            {"docid":"1_39","label":"abstract"},
+            {"docid":"1_40","label":"cartoon"},
+            {"docid":"1_41","label":"art,drawing"},
+            {"docid":"1_42","label":"art,pattern"},
+            {"docid":"1_43","label":"abstract,art,drawing,pattern"},
+            {"docid":"1_44","label":"drawing"},
+            {"docid":"1_45","label":"art"},
+            {"docid":"1_46","label":"abstract,colorfulness,pattern"},
+            {"docid":"1_47","label":"abstract,pattern"},
+            {"docid":"1_52","label":"abstract,cartoon"},
+            {"docid":"1_57","label":"abstract,drawing,pattern"},
+            {"docid":"1_58","label":"abstract,art,cartoon"},
+            {"docid":"1_68","label":"design"},
+            {"docid":"1_69","label":"geometry"}
+        ]);
+
+        insert_documents(&mut wtxn, &index, content);
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
+
+        // Placeholder search
+        let results = index.search(&wtxn).execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn search_should_not_return_deleted_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key(S("docid"));
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!([
+            {"docid":"1_4","label":"sign"},
+            {"docid":"1_5","label":"letter"},
+            {"docid":"1_7","label":"abstract,cartoon,design,pattern"},
+            {"docid":"1_36","label":"drawing,painting,pattern"},
+            {"docid":"1_37","label":"art,drawing,outdoor"},
+            {"docid":"1_38","label":"aquarium,art,drawing"},
+            {"docid":"1_39","label":"abstract"},
+            {"docid":"1_40","label":"cartoon"},
+            {"docid":"1_41","label":"art,drawing"},
+            {"docid":"1_42","label":"art,pattern"},
+            {"docid":"1_43","label":"abstract,art,drawing,pattern"},
+            {"docid":"1_44","label":"drawing"},
+            {"docid":"1_45","label":"art"},
+            {"docid":"1_46","label":"abstract,colorfulness,pattern"},
+            {"docid":"1_47","label":"abstract,pattern"},
+            {"docid":"1_52","label":"abstract,cartoon"},
+            {"docid":"1_57","label":"abstract,drawing,pattern"},
+            {"docid":"1_58","label":"abstract,art,cartoon"},
+            {"docid":"1_68","label":"design"},
+            {"docid":"1_69","label":"geometry"}
+        ]);
+
+        insert_documents(&mut wtxn, &index, content);
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+
+        // search for abstract
+        let results = index.search(&wtxn).query("abstract").execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
@@ -768,82 +896,166 @@ mod tests {
         builder.execute(|_| ()).unwrap();
 
         let content = documents!([
-            {"id":"1","city":"Lille",             "_geo": { "lat": 50.629973371633746, "lng": 3.0569447399419570 } },
-            {"id":"2","city":"Mons-en-Barœul",    "_geo": { "lat": 50.641586120121050, "lng": 3.1106593480348670 } },
-            {"id":"3","city":"Hellemmes",         "_geo": { "lat": 50.631220965518080, "lng": 3.1106399673339933 } },
-            {"id":"4","city":"Villeneuve-d'Ascq", "_geo": { "lat": 50.622468098014565, "lng": 3.1476425513437140 } },
-            {"id":"5","city":"Hem",               "_geo": { "lat": 50.655250871381355, "lng": 3.1897297266244130 } },
-            {"id":"6","city":"Roubaix",           "_geo": { "lat": 50.692473451896710, "lng": 3.1763326737747650 } },
-            {"id":"7","city":"Tourcoing",         "_geo": { "lat": 50.726397466736480, "lng": 3.1541653659578670 } },
-            {"id":"8","city":"Mouscron",          "_geo": { "lat": 50.745325554908610, "lng": 3.2206407854429853 } },
-            {"id":"9","city":"Tournai",           "_geo": { "lat": 50.605342528602630, "lng": 3.3758586941351414 } },
-            {"id":"10","city":"Ghent",            "_geo": { "lat": 51.053777403679035, "lng": 3.6957733119926930 } },
-            {"id":"11","city":"Brussels",         "_geo": { "lat": 50.846640974544690, "lng": 4.3370663564281840 } },
-            {"id":"12","city":"Charleroi",        "_geo": { "lat": 50.409570138889480, "lng": 4.4347354315085520 } },
-            {"id":"13","city":"Mons",             "_geo": { "lat": 50.450294178855420, "lng": 3.9623722870904690 } },
-            {"id":"14","city":"Valenciennes",     "_geo": { "lat": 50.351817774473545, "lng": 3.5326283646928800 } },
-            {"id":"15","city":"Arras",            "_geo": { "lat": 50.284487528579950, "lng": 2.7637515844478160 } },
-            {"id":"16","city":"Cambrai",          "_geo": { "lat": 50.179340577906700, "lng": 3.2189409952502930 } },
-            {"id":"17","city":"Bapaume",          "_geo": { "lat": 50.111276127236400, "lng": 2.8547894666083120 } },
-            {"id":"18","city":"Amiens",           "_geo": { "lat": 49.931472529669996, "lng": 2.2710499758317080 } },
-            {"id":"19","city":"Compiègne",        "_geo": { "lat": 49.444980887725656, "lng": 2.7913841281529015 } },
-            {"id":"20","city":"Paris",            "_geo": { "lat": 48.902100060895480, "lng": 2.3708400867406930 } }
+            {"id":"1","city":"Lille",             "_geo": { "lat": 50.6299 as f32, "lng": 3.0569 as f32 } },
+            {"id":"2","city":"Mons-en-Barœul",    "_geo": { "lat": 50.6415 as f32, "lng": 3.1106 as f32 } },
+            {"id":"3","city":"Hellemmes",         "_geo": { "lat": 50.6312 as f32, "lng": 3.1106 as f32 } },
+            {"id":"4","city":"Villeneuve-d'Ascq", "_geo": { "lat": 50.6224 as f32, "lng": 3.1476 as f32 } },
+            {"id":"5","city":"Hem",               "_geo": { "lat": 50.6552 as f32, "lng": 3.1897 as f32 } },
+            {"id":"6","city":"Roubaix",           "_geo": { "lat": 50.6924 as f32, "lng": 3.1763 as f32 } },
+            {"id":"7","city":"Tourcoing",         "_geo": { "lat": 50.7263 as f32, "lng": 3.1541 as f32 } },
+            {"id":"8","city":"Mouscron",          "_geo": { "lat": 50.7453 as f32, "lng": 3.2206 as f32 } },
+            {"id":"9","city":"Tournai",           "_geo": { "lat": 50.6053 as f32, "lng": 3.3758 as f32 } },
+            {"id":"10","city":"Ghent",            "_geo": { "lat": 51.0537 as f32, "lng": 3.6957 as f32 } },
+            {"id":"11","city":"Brussels",         "_geo": { "lat": 50.8466 as f32, "lng": 4.3370 as f32 } },
+            {"id":"12","city":"Charleroi",        "_geo": { "lat": 50.4095 as f32, "lng": 4.4347 as f32 } },
+            {"id":"13","city":"Mons",             "_geo": { "lat": 50.4502 as f32, "lng": 3.9623 as f32 } },
+            {"id":"14","city":"Valenciennes",     "_geo": { "lat": 50.3518 as f32, "lng": 3.5326 as f32 } },
+            {"id":"15","city":"Arras",            "_geo": { "lat": 50.2844 as f32, "lng": 2.7637 as f32 } },
+            {"id":"16","city":"Cambrai",          "_geo": { "lat": 50.1793 as f32, "lng": 3.2189 as f32 } },
+            {"id":"17","city":"Bapaume",          "_geo": { "lat": 50.1112 as f32, "lng": 2.8547 as f32 } },
+            {"id":"18","city":"Amiens",           "_geo": { "lat": 49.9314 as f32, "lng": 2.2710 as f32 } },
+            {"id":"19","city":"Compiègne",        "_geo": { "lat": 49.4449 as f32, "lng": 2.7913 as f32 } },
+            {"id":"20","city":"Paris",            "_geo": { "lat": 48.9021 as f32, "lng": 2.3708 as f32 } }
         ]);
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
 
-        let indexing_config = IndexDocumentsConfig::default();
+        insert_documents(&mut wtxn, &index, content);
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
 
-        let mut builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        builder.add_documents(content).unwrap();
-        builder.execute().unwrap();
-
-        let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
-        let ids_to_delete: Vec<u32> = external_ids_to_delete
-            .iter()
-            .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
-            .collect();
-
-        // Delete some documents.
-        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        external_ids_to_delete.iter().for_each(|id| drop(builder.delete_external_id(id)));
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let rtree = index.geo_rtree(&rtxn).unwrap().unwrap();
-        let geo_faceted_doc_ids = index.geo_faceted_documents_ids(&rtxn).unwrap();
-
-        let all_geo_ids = rtree.iter().map(|point| point.data).collect::<Vec<_>>();
-        let all_geo_documents = index
-            .documents(&rtxn, all_geo_ids.iter().map(|(id, _)| id).copied())
-            .unwrap()
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<HashSet<_>>();
-
-        let all_geo_faceted_ids = geo_faceted_doc_ids.iter().collect::<Vec<_>>();
-        let all_geo_faceted_documents = index
-            .documents(&rtxn, all_geo_faceted_ids.iter().copied())
-            .unwrap()
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<HashSet<_>>();
-
-        assert_eq!(
-            all_geo_documents, all_geo_faceted_documents,
-            "There is an inconsistency between the geo_faceted database and the rtree"
-        );
-
-        for id in all_geo_documents.iter() {
-            assert!(!ids_to_delete.contains(&id), "The document {} was supposed to be deleted", id);
+        // Placeholder search with geo filter
+        let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
+        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        assert!(!results.documents_ids.is_empty());
+        for id in results.documents_ids.iter() {
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
         }
 
-        assert_eq!(
-            all_geo_ids.len(),
-            all_geo_documents.len(),
-            "We deleted documents that were not supposed to be deleted"
-        );
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn get_documents_should_not_return_deleted_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key(S("docid"));
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!([
+            {"docid":"1_4","label":"sign"},
+            {"docid":"1_5","label":"letter"},
+            {"docid":"1_7","label":"abstract,cartoon,design,pattern"},
+            {"docid":"1_36","label":"drawing,painting,pattern"},
+            {"docid":"1_37","label":"art,drawing,outdoor"},
+            {"docid":"1_38","label":"aquarium,art,drawing"},
+            {"docid":"1_39","label":"abstract"},
+            {"docid":"1_40","label":"cartoon"},
+            {"docid":"1_41","label":"art,drawing"},
+            {"docid":"1_42","label":"art,pattern"},
+            {"docid":"1_43","label":"abstract,art,drawing,pattern"},
+            {"docid":"1_44","label":"drawing"},
+            {"docid":"1_45","label":"art"},
+            {"docid":"1_46","label":"abstract,colorfulness,pattern"},
+            {"docid":"1_47","label":"abstract,pattern"},
+            {"docid":"1_52","label":"abstract,cartoon"},
+            {"docid":"1_57","label":"abstract,drawing,pattern"},
+            {"docid":"1_58","label":"abstract,art,cartoon"},
+            {"docid":"1_68","label":"design"},
+            {"docid":"1_69","label":"geometry"}
+        ]);
+
+        insert_documents(&mut wtxn, &index, content);
+        let deleted_external_ids = ["1_7", "1_52"];
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
+
+        // list all documents
+        let results = index.all_documents(&wtxn).unwrap();
+        for result in results {
+            let (id, _) = result.unwrap();
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        // list internal document ids
+        let results = index.documents_ids(&wtxn).unwrap();
+        for id in results {
+            assert!(
+                !deleted_internal_ids.contains(&id),
+                "The document {} was supposed to be deleted",
+                id
+            );
+        }
+
+        // get internal docids from deleted external document ids
+        let results = index.external_documents_ids(&wtxn).unwrap();
+        for id in deleted_external_ids {
+            assert!(results.get(id).is_none(), "The document {} was supposed to be deleted", id);
+        }
+
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn stats_should_not_return_deleted_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let config = IndexerConfig::default();
+        let mut builder = Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key(S("docid"));
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!([
+            {"docid":"1_4","label":"sign"},
+            {"docid":"1_5","label":"letter"},
+            {"docid":"1_7","label":"abstract,cartoon,design,pattern", "title": "Mickey Mouse"},
+            {"docid":"1_36","label":"drawing,painting,pattern"},
+            {"docid":"1_37","label":"art,drawing,outdoor"},
+            {"docid":"1_38","label":"aquarium,art,drawing", "title": "Nemo"},
+            {"docid":"1_39","label":"abstract"},
+            {"docid":"1_40","label":"cartoon"},
+            {"docid":"1_41","label":"art,drawing"},
+            {"docid":"1_42","label":"art,pattern"},
+            {"docid":"1_43","label":"abstract,art,drawing,pattern", "number": 32i32},
+            {"docid":"1_44","label":"drawing", "number": 44i32},
+            {"docid":"1_45","label":"art"},
+            {"docid":"1_46","label":"abstract,colorfulness,pattern"},
+            {"docid":"1_47","label":"abstract,pattern"},
+            {"docid":"1_52","label":"abstract,cartoon"},
+            {"docid":"1_57","label":"abstract,drawing,pattern"},
+            {"docid":"1_58","label":"abstract,art,cartoon"},
+            {"docid":"1_68","label":"design"},
+            {"docid":"1_69","label":"geometry"}
+        ]);
+
+        insert_documents(&mut wtxn, &index, content);
+        delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+
+        // count internal documents
+        let results = index.number_of_documents(&wtxn).unwrap();
+        assert_eq!(18, results);
+
+        // count field distribution
+        let results = index.field_distribution(&wtxn).unwrap();
+        assert_eq!(Some(&18), results.get("label"));
+        assert_eq!(Some(&1), results.get("title"));
+        assert_eq!(Some(&2), results.get("number"));
+
+        wtxn.commit().unwrap();
     }
 }
