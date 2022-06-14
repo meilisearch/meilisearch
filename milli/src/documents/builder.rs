@@ -1,157 +1,159 @@
-use std::collections::BTreeMap;
-use std::io;
-use std::io::{Cursor, Write};
+use std::io::{self, Write};
 
-use byteorder::{BigEndian, WriteBytesExt};
-use serde::Deserializer;
-use serde_json::Value;
+use grenad::{CompressionType, WriterBuilder};
+use serde_json::{to_writer, Map, Value};
 
-use super::serde_impl::DocumentVisitor;
-use super::{ByteCounter, DocumentsBatchIndex, DocumentsMetadata, Error};
-use crate::FieldId;
+use super::{DocumentsBatchIndex, Error, DOCUMENTS_BATCH_INDEX_KEY};
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
 /// format used by milli.
 ///
-/// The writer used by the DocumentBatchBuilder can be read using a `DocumentBatchReader` to
-/// iterate over the documents.
+/// The writer used by the `DocumentsBatchBuilder` can be read using a `DocumentsBatchReader`
+/// to iterate over the documents.
 ///
 /// ## example:
 /// ```
-/// use milli::documents::DocumentBatchBuilder;
 /// use serde_json::json;
-/// use std::io::Cursor;
+/// use milli::documents::DocumentsBatchBuilder;
 ///
-/// let json = r##"{"id": 1, "name": "foo"}"##;
-/// let mut writer = Cursor::new(Vec::new());
-/// let mut builder = DocumentBatchBuilder::new(&mut writer).unwrap();
-/// builder.extend_from_json(&mut json.as_bytes()).unwrap();
-/// builder.finish().unwrap();
+/// let json = json!({ "id": 1, "name": "foo" });
+///
+/// let mut builder = DocumentsBatchBuilder::new(Vec::new());
+/// builder.append_json_object(json.as_object().unwrap()).unwrap();
+/// let _vector = builder.into_inner().unwrap();
 /// ```
-pub struct DocumentBatchBuilder<W> {
-    inner: ByteCounter<W>,
-    index: DocumentsBatchIndex,
+pub struct DocumentsBatchBuilder<W> {
+    /// The inner grenad writer, the last value must always be the `DocumentsBatchIndex`.
+    writer: grenad::Writer<W>,
+    /// A map that creates the relation between field ids and field names.
+    fields_index: DocumentsBatchIndex,
+    /// The number of documents that were added to this builder,
+    /// it doesn't take the primary key of the documents into account at this point.
+    documents_count: u32,
+
+    /// A buffer to store a temporary obkv buffer and avoid reallocating.
     obkv_buffer: Vec<u8>,
+    /// A buffer to serialize the values and avoid reallocating,
+    /// serialized values are stored in an obkv.
     value_buffer: Vec<u8>,
-    values: BTreeMap<FieldId, Value>,
-    count: usize,
 }
 
-impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
-    pub fn new(writer: W) -> Result<Self, Error> {
-        let index = DocumentsBatchIndex::default();
-        let mut writer = ByteCounter::new(writer);
-        // add space to write the offset of the metadata at the end of the writer
-        writer.write_u64::<BigEndian>(0)?;
-
-        Ok(Self {
-            inner: writer,
-            index,
+impl<W: Write> DocumentsBatchBuilder<W> {
+    pub fn new(writer: W) -> DocumentsBatchBuilder<W> {
+        DocumentsBatchBuilder {
+            writer: WriterBuilder::new().compression_type(CompressionType::None).build(writer),
+            fields_index: DocumentsBatchIndex::default(),
+            documents_count: 0,
             obkv_buffer: Vec::new(),
             value_buffer: Vec::new(),
-            values: BTreeMap::new(),
-            count: 0,
-        })
+        }
     }
 
-    /// Returns the number of documents that have been written to the builder.
-    pub fn len(&self) -> usize {
-        self.count
+    /// Returns the number of documents inserted into this builder.
+    pub fn documents_count(&self) -> u32 {
+        self.documents_count
     }
 
-    /// This method must be called after the document addition is terminated. It will put the
-    /// metadata at the end of the file, and write the metadata offset at the beginning on the
-    /// file.
-    pub fn finish(self) -> Result<usize, Error> {
-        let Self { inner: ByteCounter { mut writer, count: offset }, index, count, .. } = self;
+    /// Appends a new JSON object into the batch and updates the `DocumentsBatchIndex` accordingly.
+    pub fn append_json_object(&mut self, object: &Map<String, Value>) -> io::Result<()> {
+        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
+        let mut fields_ids: Vec<_> = object.keys().map(|k| self.fields_index.insert(&k)).collect();
+        fields_ids.sort_unstable();
 
-        let meta = DocumentsMetadata { count, index };
+        self.obkv_buffer.clear();
+        let mut writer = obkv::KvWriter::new(&mut self.obkv_buffer);
+        for field_id in fields_ids {
+            let key = self.fields_index.name(field_id).unwrap();
+            self.value_buffer.clear();
+            to_writer(&mut self.value_buffer, &object[key])?;
+            writer.insert(field_id, &self.value_buffer)?;
+        }
 
-        bincode::serialize_into(&mut writer, &meta)?;
+        let internal_id = self.documents_count.to_be_bytes();
+        let document_bytes = writer.into_inner()?;
+        self.writer.insert(internal_id, &document_bytes)?;
+        self.documents_count += 1;
 
-        writer.seek(io::SeekFrom::Start(0))?;
-        writer.write_u64::<BigEndian>(offset as u64)?;
-
-        writer.flush()?;
-
-        Ok(count)
+        Ok(())
     }
 
-    /// Extends the builder with json documents from a reader.
-    pub fn extend_from_json<R: io::Read>(&mut self, reader: R) -> Result<(), Error> {
-        let mut de = serde_json::Deserializer::from_reader(reader);
-
-        let mut visitor = DocumentVisitor {
-            inner: &mut self.inner,
-            index: &mut self.index,
-            obkv_buffer: &mut self.obkv_buffer,
-            value_buffer: &mut self.value_buffer,
-            values: &mut self.values,
-            count: &mut self.count,
-        };
-
-        de.deserialize_any(&mut visitor).map_err(Error::JsonError)?
-    }
-
-    /// Creates a builder from a reader of CSV documents.
-    ///
-    /// Since all fields in a csv documents are guaranteed to be ordered, we are able to perform
-    /// optimisations, and extending from another CSV is not allowed.
-    pub fn from_csv<R: io::Read>(reader: R, writer: W) -> Result<Self, Error> {
-        let mut this = Self::new(writer)?;
-        // Ensure that this is the first and only addition made with this builder
-        debug_assert!(this.index.is_empty());
-
-        let mut records = csv::Reader::from_reader(reader);
-
-        let headers = records
+    /// Appends a new CSV file into the batch and updates the `DocumentsBatchIndex` accordingly.
+    pub fn append_csv<R: io::Read>(&mut self, mut reader: csv::Reader<R>) -> Result<(), Error> {
+        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
+        let mut typed_fields_ids: Vec<_> = reader
             .headers()?
             .into_iter()
             .map(parse_csv_header)
-            .map(|(k, t)| (this.index.insert(k), t))
-            .collect::<BTreeMap<_, _>>();
+            .map(|(k, t)| (self.fields_index.insert(k), t))
+            .enumerate()
+            .collect();
+        typed_fields_ids.sort_unstable_by_key(|(_, (fid, _))| *fid);
 
-        for (i, record) in records.into_records().enumerate() {
-            let record = record?;
-            this.obkv_buffer.clear();
-            let mut writer = obkv::KvWriter::new(&mut this.obkv_buffer);
-            for (value, (fid, ty)) in record.into_iter().zip(headers.iter()) {
-                let value = match ty {
+        let mut record = csv::StringRecord::new();
+        let mut line = 0;
+        while reader.read_record(&mut record)? {
+            // We increment here and not at the end of the while loop to take
+            // the header offset into account.
+            line += 1;
+
+            self.obkv_buffer.clear();
+            let mut writer = obkv::KvWriter::new(&mut self.obkv_buffer);
+
+            for (i, (field_id, type_)) in typed_fields_ids.iter() {
+                self.value_buffer.clear();
+
+                let value = &record[*i];
+                match type_ {
                     AllowedType::Number => {
                         if value.trim().is_empty() {
-                            Value::Null
+                            to_writer(&mut self.value_buffer, &Value::Null)?;
                         } else {
-                            value.trim().parse::<f64>().map(Value::from).map_err(|error| {
-                                Error::ParseFloat {
-                                    error,
-                                    // +1 for the header offset.
-                                    line: i + 1,
-                                    value: value.to_string(),
+                            match value.trim().parse::<f64>() {
+                                Ok(float) => {
+                                    to_writer(&mut self.value_buffer, &float)?;
                                 }
-                            })?
+                                Err(error) => {
+                                    return Err(Error::ParseFloat {
+                                        error,
+                                        line,
+                                        value: value.to_string(),
+                                    });
+                                }
+                            }
                         }
                     }
                     AllowedType::String => {
                         if value.is_empty() {
-                            Value::Null
+                            to_writer(&mut self.value_buffer, &Value::Null)?;
                         } else {
-                            Value::String(value.to_string())
+                            to_writer(&mut self.value_buffer, value)?;
                         }
                     }
-                };
+                }
 
-                this.value_buffer.clear();
-                serde_json::to_writer(Cursor::new(&mut this.value_buffer), &value)?;
-                writer.insert(*fid, &this.value_buffer)?;
+                // We insert into the obkv writer the value buffer that has been filled just above.
+                writer.insert(*field_id, &self.value_buffer)?;
             }
 
-            this.inner.write_u32::<BigEndian>(this.obkv_buffer.len() as u32)?;
-            this.inner.write_all(&this.obkv_buffer)?;
-
-            this.count += 1;
+            let internal_id = self.documents_count.to_be_bytes();
+            let document_bytes = writer.into_inner()?;
+            self.writer.insert(internal_id, &document_bytes)?;
+            self.documents_count += 1;
         }
 
-        Ok(this)
+        Ok(())
+    }
+
+    /// Flushes the content on disk and stores the final version of the `DocumentsBatchIndex`.
+    pub fn into_inner(mut self) -> io::Result<W> {
+        let DocumentsBatchBuilder { mut writer, fields_index, .. } = self;
+
+        // We serialize and insert the `DocumentsBatchIndex` as the last key of the grenad writer.
+        self.value_buffer.clear();
+        to_writer(&mut self.value_buffer, &fields_index)?;
+        writer.insert(DOCUMENTS_BATCH_INDEX_KEY, &self.value_buffer)?;
+
+        writer.into_inner()
     }
 }
 

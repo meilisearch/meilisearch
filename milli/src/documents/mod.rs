@@ -1,24 +1,22 @@
 mod builder;
-/// The documents module defines an intermediary document format that milli uses for indexation, and
-/// provides an API to easily build and read such documents.
-///
-/// The `DocumentBatchBuilder` interface allows to write batches of documents to a writer, that can
-/// later be read by milli using the `DocumentBatchReader` interface.
 mod reader;
-mod serde_impl;
 
 use std::fmt::{self, Debug};
 use std::io;
 
 use bimap::BiHashMap;
-pub use builder::DocumentBatchBuilder;
-pub use reader::DocumentBatchReader;
+pub use builder::DocumentsBatchBuilder;
+pub use reader::{DocumentsBatchCursor, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
 use crate::FieldId;
 
+/// The key that is used to store the `DocumentsBatchIndex` datastructure,
+/// it is the absolute last key of the list.
+const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
+
 /// A bidirectional map that links field ids to their name in a document batch.
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct DocumentsBatchIndex(pub BiHashMap<FieldId, String>);
 
 impl DocumentsBatchIndex {
@@ -46,8 +44,8 @@ impl DocumentsBatchIndex {
         self.0.iter()
     }
 
-    pub fn name(&self, id: FieldId) -> Option<&String> {
-        self.0.get_by_left(&id)
+    pub fn name(&self, id: FieldId) -> Option<&str> {
+        self.0.get_by_left(&id).map(AsRef::as_ref)
     }
 
     pub fn recreate_json(
@@ -69,50 +67,20 @@ impl DocumentsBatchIndex {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DocumentsMetadata {
-    count: usize,
-    index: DocumentsBatchIndex,
-}
-
-pub struct ByteCounter<W> {
-    count: usize,
-    writer: W,
-}
-
-impl<W> ByteCounter<W> {
-    fn new(writer: W) -> Self {
-        Self { count: 0, writer }
-    }
-}
-
-impl<W: io::Write> io::Write for ByteCounter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let count = self.writer.write(buf)?;
-        self.count += count;
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
-    }
-}
-
 #[derive(Debug)]
 pub enum Error {
     ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
     InvalidDocumentFormat,
-    Custom(String),
-    JsonError(serde_json::Error),
-    CsvError(csv::Error),
-    Serialize(bincode::Error),
+    Csv(csv::Error),
+    Json(serde_json::Error),
+    Serialize(serde_json::Error),
+    Grenad(grenad::Error),
     Io(io::Error),
-    DocumentTooLarge,
 }
 
 impl From<csv::Error> for Error {
     fn from(e: csv::Error) -> Self {
-        Self::CsvError(e)
+        Self::Csv(e)
     }
 }
 
@@ -122,15 +90,15 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<bincode::Error> for Error {
-    fn from(other: bincode::Error) -> Self {
-        Self::Serialize(other)
+impl From<serde_json::Error> for Error {
+    fn from(other: serde_json::Error) -> Self {
+        Self::Json(other)
     }
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(other: serde_json::Error) -> Self {
-        Self::JsonError(other)
+impl From<grenad::Error> for Error {
+    fn from(other: grenad::Error) -> Self {
+        Self::Grenad(other)
     }
 }
 
@@ -140,13 +108,14 @@ impl fmt::Display for Error {
             Error::ParseFloat { error, line, value } => {
                 write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
             }
-            Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
-            Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
-            Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),
+            Error::InvalidDocumentFormat => {
+                f.write_str("Invalid document addition format, missing the documents batch index.")
+            }
             Error::Io(e) => write!(f, "{}", e),
-            Error::DocumentTooLarge => f.write_str("Provided document is too large (>2Gib)"),
             Error::Serialize(e) => write!(f, "{}", e),
-            Error::CsvError(e) => write!(f, "{}", e),
+            Error::Grenad(e) => write!(f, "{}", e),
+            Error::Csv(e) => write!(f, "{}", e),
+            Error::Json(e) => write!(f, "{}", e),
         }
     }
 }
@@ -158,15 +127,25 @@ impl std::error::Error for Error {}
 macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
-        let mut writer = std::io::Cursor::new(Vec::new());
-        let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-        let documents = serde_json::to_vec(&documents).unwrap();
-        builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
-        builder.finish().unwrap();
+        let documents = match documents {
+            object @ serde_json::Value::Object(_) => vec![object],
+            serde_json::Value::Array(objects) => objects,
+            invalid => {
+                panic!("an array of objects must be specified, {:#?} is not an array", invalid)
+            }
+        };
 
-        writer.set_position(0);
+        let mut builder = crate::documents::DocumentsBatchBuilder::new(Vec::new());
+        for document in documents {
+            let object = match document {
+                serde_json::Value::Object(object) => object,
+                invalid => panic!("an object must be specified, {:#?} is not an object", invalid),
+            };
+            builder.append_json_object(&object).unwrap();
+        }
 
-        crate::documents::DocumentBatchReader::from_reader(writer).unwrap()
+        let vector = builder.into_inner().unwrap();
+        crate::documents::DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap()
     }};
 }
 
