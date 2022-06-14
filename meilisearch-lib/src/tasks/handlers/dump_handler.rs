@@ -76,62 +76,76 @@ mod test {
         fn test_handle_dump_success(
             task in any::<Task>(),
         ) {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let handle = rt.spawn(async {
-                let batch = task_to_batch(task);
-                let should_accept = matches!(batch.content, BatchContent::Dump { .. });
+            if !task.is_aborted() {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let handle = rt.spawn(async {
+                    let batch = task_to_batch(task);
+                    let should_accept = matches!(batch.content, BatchContent::Dump { .. });
 
-                let mocker = Mocker::default();
-                if should_accept {
-                    mocker.when::<String, DumpResult<()>>("run")
-                    .once()
-                    .then(|_| Ok(()));
+                    let mocker = Mocker::default();
+                    if should_accept {
+                        mocker.when::<String, DumpResult<()>>("run")
+                            .once()
+                            .then(|_| Ok(()));
+                    }
+
+                    let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+
+                    let accept = dump_handler.accept(&batch);
+                    assert_eq!(accept, should_accept);
+
+                    if accept {
+                        let batch = dump_handler.process_batch(batch).await;
+                        let last_event = batch.content.first().unwrap().events.last().unwrap();
+                        assert!(matches!(last_event, TaskEvent::Succeeded { .. }), "{:?}", last_event);
+                    }
+                });
+
+                if let Err(e) = rt.block_on(handle) {
+                    if e.is_panic() {
+                        std::panic::resume_unwind(e.into_panic());
+                    }
                 }
 
-                let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
-
-                let accept = dump_handler.accept(&batch);
-                assert_eq!(accept, should_accept);
-
-                if accept {
-                    let batch = dump_handler.process_batch(batch).await;
-                    let last_event = batch.content.first().unwrap().events.last().unwrap();
-                    assert!(matches!(last_event, TaskEvent::Succeeded { .. }));
-                }
-            });
-
-            rt.block_on(handle).unwrap();
+            }
         }
 
         #[test]
         fn test_handle_dump_error(
             task in any::<Task>(),
         ) {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let handle = rt.spawn(async {
-                let batch = task_to_batch(task);
-                let should_accept = matches!(batch.content, BatchContent::Dump { .. });
+            if !task.is_aborted() {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let handle = rt.spawn(async move {
+                    let batch = task_to_batch(task.clone());
+                    let should_accept = matches!(batch.content, BatchContent::Dump { .. });
 
-                let mocker = Mocker::default();
-                if should_accept {
-                    mocker.when::<String, DumpResult<()>>("run")
-                    .once()
-                    .then(|_| Err(DumpError::Internal("error".into())));
+                    let mocker = Mocker::default();
+                    if should_accept {
+                        mocker.when::<String, DumpResult<()>>("run")
+                            .once()
+                            .then(|_| Err(DumpError::Internal("error".into())));
+                    }
+
+                    let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
+
+                    let accept = dump_handler.accept(&batch);
+                    assert_eq!(accept, should_accept);
+
+                    if accept {
+                        let batch = dump_handler.process_batch(batch).await;
+                        let last_event = batch.content.first().unwrap().events.last().unwrap();
+                        assert!(matches!(last_event, TaskEvent::Failed { .. }), "{:?}", last_event);
+                    }
+                });
+
+                if let Err(e) = rt.block_on(handle) {
+                    if e.is_panic() {
+                        std::panic::resume_unwind(e.into_panic());
+                    }
                 }
 
-                let dump_handler = DumpHandler::<MockIndexMetaStore, MockIndexStore>::mock(mocker);
-
-                let accept = dump_handler.accept(&batch);
-                assert_eq!(accept, should_accept);
-
-                if accept {
-                    let batch = dump_handler.process_batch(batch).await;
-                    let last_event = batch.content.first().unwrap().events.last().unwrap();
-                    assert!(matches!(last_event, TaskEvent::Failed { .. }));
-                }
-            });
-
-            rt.block_on(handle).unwrap();
+            }
         }
     }
 
