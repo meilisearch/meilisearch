@@ -17,7 +17,7 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.4.1"
-grenad = { version = "0.4.1", default-features = false, features = ["tempfile"] }
+grenad = { version = "0.4.2", default-features = false, features = ["tempfile"] }
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
