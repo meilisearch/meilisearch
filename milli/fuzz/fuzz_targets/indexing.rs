@@ -7,10 +7,10 @@ use anyhow::{bail, Result};
 use arbitrary_json::ArbitraryValue;
 use heed::EnvOpenOptions;
 use libfuzzer_sys::fuzz_target;
-use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::Index;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -19,21 +19,26 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 /// reads json from input and write an obkv batch to writer.
 pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
-    let mut builder = DocumentBatchBuilder::new(writer)?;
-    builder.extend_from_json(input)?;
+    let mut builder = DocumentsBatchBuilder::new(writer);
 
-    if builder.len() == 0 {
+    let values: Vec<Map<String, Value>> = serde_json::from_reader(input)?;
+    if builder.documents_count() == 0 {
         bail!("Empty payload");
     }
 
-    let count = builder.finish()?;
+    for object in values {
+        builder.append_json_object(&object)?;
+    }
 
-    Ok(count)
+    let count = builder.documents_count();
+    let vector = builder.into_inner()?;
+
+    Ok(count as usize)
 }
 
 fn index_documents(
     index: &mut milli::Index,
-    documents: DocumentBatchReader<Cursor<Vec<u8>>>,
+    documents: DocumentsBatchReader<Cursor<Vec<u8>>>,
 ) -> Result<()> {
     let config = IndexerConfig::default();
     let mut wtxn = index.write_txn()?;
@@ -98,7 +103,7 @@ fuzz_target!(|batches: Vec<Vec<ArbitraryValue>>| {
             // We ignore all malformed documents
             if let Ok(_) = read_json(json.as_bytes(), &mut documents) {
                 documents.rewind().unwrap();
-                let documents = DocumentBatchReader::from_reader(documents).unwrap();
+                let documents = DocumentsBatchReader::from_reader(documents).unwrap();
                 // A lot of errors can come out of milli and we don't know which ones are normal or not
                 // so we are only going to look for the unexpected panics.
                 let _ = index_documents(&mut index, documents);
