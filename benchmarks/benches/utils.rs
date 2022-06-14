@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
 use std::fs::{create_dir_all, remove_dir_all, File};
-use std::io::{self, BufRead, BufReader, Cursor, Read, Seek};
+use std::io::{self, BufReader, Cursor, Read, Seek};
 use std::num::ParseFloatError;
 use std::path::Path;
 
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
-use milli::documents::DocumentBatchReader;
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };
@@ -150,39 +150,38 @@ pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<imp
         "jsonl" => documents_from_jsonl(reader).unwrap(),
         otherwise => panic!("invalid update format {:?}", otherwise),
     };
-    DocumentBatchReader::from_reader(Cursor::new(documents)).unwrap()
+    DocumentsBatchReader::from_reader(Cursor::new(documents)).unwrap()
 }
 
-fn documents_from_jsonl(mut reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+fn documents_from_jsonl(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
 
-    let mut buf = String::new();
-
-    while reader.read_line(&mut buf)? > 0 {
-        documents.extend_from_json(&mut buf.as_bytes())?;
-        buf.clear();
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+        let object = result?;
+        documents.append_json_object(&object)?;
     }
-    documents.finish()?;
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_json(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
 
-    documents.extend_from_json(reader)?;
-    documents.finish()?;
+    for object in list {
+        documents.append_json_object(&object)?;
+    }
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_csv(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
+    let csv = csv::Reader::from_reader(reader);
 
-    Ok(writer.into_inner())
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    documents.append_csv(csv)?;
+
+    documents.into_inner().map_err(Into::into)
 }
 
 enum AllowedType {
