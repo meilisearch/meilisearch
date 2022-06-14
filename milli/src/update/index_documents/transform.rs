@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 use smartstring::SmartString;
 
 use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_obkvs, MergeFn};
-use super::{IndexDocumentsMethod, IndexerConfig};
+use super::{validate_document_id, IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
