@@ -114,7 +114,7 @@ impl Task {
         self.events.last().map_or(false, |event| {
             matches!(
                 event,
-                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
+                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. } | TaskEvent::Aborted { .. }
             )
         })
     }
