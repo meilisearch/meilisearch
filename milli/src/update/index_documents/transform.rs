@@ -14,7 +14,7 @@ use smartstring::SmartString;
 
 use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_obkvs, MergeFn};
 use super::{IndexDocumentsMethod, IndexerConfig};
-use crate::documents::{DocumentBatchReader, DocumentsBatchIndex};
+use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
@@ -152,7 +152,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
     pub fn read_documents<R, F>(
         &mut self,
-        mut reader: DocumentBatchReader<R>,
+        reader: DocumentsBatchReader<R>,
         wtxn: &mut heed::RwTxn,
         progress_callback: F,
     ) -> Result<usize>
@@ -160,7 +160,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         R: Read + Seek,
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        let fields_index = reader.index();
+        let mut cursor = reader.into_cursor();
+        let fields_index = cursor.documents_batch_index();
         let external_documents_ids = self.index.external_documents_ids(wtxn)?;
 
         let mapping = create_fields_mapping(&mut self.fields_ids_map, fields_index)?;
@@ -186,7 +187,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut documents_count = 0;
         let mut external_id_buffer = Vec::new();
         let mut field_buffer: Vec<(u16, Cow<[u8]>)> = Vec::new();
-        while let Some((addition_index, document)) = reader.next_document_with_index()? {
+        let addition_index = cursor.documents_batch_index().clone();
+        while let Some(document) = cursor.next_document()? {
             let mut field_buffer_cache = drop_and_reuse(field_buffer);
             if self.indexer_settings.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::RemapDocumentAddition {
@@ -840,7 +842,7 @@ fn update_primary_key<'a>(
         None => {
             let mut json = Map::new();
             for (key, value) in document.iter() {
-                let key = addition_index.name(key).cloned();
+                let key = addition_index.name(key).map(ToString::to_string);
                 let value = serde_json::from_slice::<Value>(&value).ok();
 
                 if let Some((k, v)) = key.zip(value) {

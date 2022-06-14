@@ -183,7 +183,8 @@ mod test {
     use serde_json::{json, Map};
 
     use super::*;
-    use crate::documents::DocumentBatchReader;
+    use crate::documents::DocumentsBatchReader;
+    use crate::FieldId;
 
     fn obkv_to_value(obkv: &obkv::KvReader<FieldId>, index: &DocumentsBatchIndex) -> Value {
         let mut map = Map::new();
@@ -192,7 +193,7 @@ mod test {
             let field_name = index.name(fid).unwrap().clone();
             let value: Value = serde_json::from_slice(value).unwrap();
 
-            map.insert(field_name, value);
+            map.insert(field_name.to_string(), value);
         }
 
         Value::Object(map)
@@ -200,15 +201,13 @@ mod test {
 
     #[test]
     fn add_single_documents_json() {
-        let mut cursor = Cursor::new(Vec::new());
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
         let json = serde_json::json!({
             "id": 1,
             "field": "hello!",
         });
 
-        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(json.as_object().unwrap()).unwrap();
 
         let json = serde_json::json!({
             "blabla": false,
@@ -216,100 +215,64 @@ mod test {
             "id": 1,
         });
 
-        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
+        builder.append_json_object(json.as_object().unwrap()).unwrap();
 
-        assert_eq!(builder.len(), 2);
+        assert_eq!(builder.documents_count(), 2);
+        let vector = builder.into_inner().unwrap();
 
-        builder.finish().unwrap();
-
-        cursor.set_position(0);
-
-        let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
-
-        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
         assert_eq!(index.len(), 3);
+
+        let document = cursor.next_document().unwrap().unwrap();
         assert_eq!(document.iter().count(), 2);
 
-        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
-        assert_eq!(index.len(), 3);
+        let document = cursor.next_document().unwrap().unwrap();
         assert_eq!(document.iter().count(), 3);
 
-        assert!(reader.next_document_with_index().unwrap().is_none());
-    }
-
-    #[test]
-    fn add_documents_seq_json() {
-        let mut cursor = Cursor::new(Vec::new());
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        let json = serde_json::json!([{
-            "id": 1,
-            "field": "hello!",
-        },{
-            "blabla": false,
-            "field": "hello!",
-            "id": 1,
-        }
-        ]);
-
-        builder.extend_from_json(Cursor::new(serde_json::to_vec(&json).unwrap())).unwrap();
-
-        assert_eq!(builder.len(), 2);
-
-        builder.finish().unwrap();
-
-        cursor.set_position(0);
-
-        let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
-
-        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
-        assert_eq!(index.len(), 3);
-        assert_eq!(document.iter().count(), 2);
-
-        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
-        assert_eq!(index.len(), 3);
-        assert_eq!(document.iter().count(), 3);
-
-        assert!(reader.next_document_with_index().unwrap().is_none());
+        assert!(cursor.next_document().unwrap().is_none());
     }
 
     #[test]
     fn add_documents_csv() {
-        let mut cursor = Cursor::new(Vec::new());
+        let csv_content = "id:number,field:string\n1,hello!\n2,blabla";
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let csv = "id:number,field:string\n1,hello!\n2,blabla";
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        assert_eq!(builder.documents_count(), 2);
+        let vector = builder.into_inner().unwrap();
 
-        let builder =
-            DocumentBatchBuilder::from_csv(Cursor::new(csv.as_bytes()), &mut cursor).unwrap();
-        builder.finish().unwrap();
-
-        cursor.set_position(0);
-
-        let mut reader = DocumentBatchReader::from_reader(cursor).unwrap();
-
-        let (index, document) = reader.next_document_with_index().unwrap().unwrap();
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
         assert_eq!(index.len(), 2);
+
+        let document = cursor.next_document().unwrap().unwrap();
         assert_eq!(document.iter().count(), 2);
 
-        let (_index, document) = reader.next_document_with_index().unwrap().unwrap();
+        let document = cursor.next_document().unwrap().unwrap();
         assert_eq!(document.iter().count(), 2);
 
-        assert!(reader.next_document_with_index().unwrap().is_none());
+        assert!(cursor.next_document().unwrap().is_none());
     }
 
     #[test]
     fn simple_csv_document() {
-        let documents = r#"city,country,pop
+        let csv_content = r#"city,country,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -320,22 +283,25 @@ mod test {
             })
         );
 
-        assert!(reader.next_document_with_index().unwrap().is_none());
+        assert!(cursor.next_document().unwrap().is_none());
     }
 
     #[test]
     fn coma_in_field() {
-        let documents = r#"city,country,pop
+        let csv_content = r#"city,country,pop
 "Boston","United, States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -349,17 +315,20 @@ mod test {
 
     #[test]
     fn quote_in_field() {
-        let documents = r#"city,country,pop
+        let csv_content = r#"city,country,pop
 "Boston","United"" States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -373,17 +342,20 @@ mod test {
 
     #[test]
     fn integer_in_field() {
-        let documents = r#"city,country,pop:number
+        let csv_content = r#"city,country,pop:number
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -397,17 +369,20 @@ mod test {
 
     #[test]
     fn float_in_field() {
-        let documents = r#"city,country,pop:number
+        let csv_content = r#"city,country,pop:number
 "Boston","United States","4628910.01""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -421,17 +396,20 @@ mod test {
 
     #[test]
     fn several_colon_in_header() {
-        let documents = r#"city:love:string,country:state,pop
+        let csv_content = r#"city:love:string,country:state,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -445,17 +423,20 @@ mod test {
 
     #[test]
     fn ending_by_colon_in_header() {
-        let documents = r#"city:,country,pop
+        let csv_content = r#"city:,country,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -469,17 +450,20 @@ mod test {
 
     #[test]
     fn starting_by_colon_in_header() {
-        let documents = r#":city,country,pop
+        let csv_content = r#":city,country,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -494,32 +478,36 @@ mod test {
     #[ignore]
     #[test]
     fn starting_by_colon_in_header2() {
-        let documents = r#":string,country,pop
+        let csv_content = r#":string,country,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
 
-        assert!(reader.next_document_with_index().is_err());
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+
+        assert!(cursor.next_document().is_err());
     }
 
     #[test]
     fn double_colon_in_header() {
-        let documents = r#"city::string,country,pop
+        let csv_content = r#"city::string,country,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf))
-            .unwrap()
-            .finish()
-            .unwrap();
-        let mut reader = DocumentBatchReader::from_reader(Cursor::new(buf)).unwrap();
-        let (index, doc) = reader.next_document_with_index().unwrap().unwrap();
-        let val = obkv_to_value(&doc, index);
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let mut cursor =
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let index = cursor.documents_batch_index().clone();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_value(&doc, &index);
 
         assert_eq!(
             val,
@@ -533,34 +521,32 @@ mod test {
 
     #[test]
     fn bad_type_in_header() {
-        let documents = r#"city,country:number,pop
+        let csv_content = r#"city,country:number,pop
 "Boston","United States","4628910""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        assert!(
-            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
-        );
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        assert!(builder.append_csv(csv).is_err());
     }
 
     #[test]
     fn bad_column_count1() {
-        let documents = r#"city,country,pop
-"Boston","United States","4628910", "too much""#;
+        let csv_content = r#"city,country,pop
+"Boston","United States","4628910", "too much
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content"#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        assert!(
-            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
-        );
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        assert!(builder.append_csv(csv).is_err());
     }
 
     #[test]
     fn bad_column_count2() {
-        let documents = r#"city,country,pop
+        let csv_content = r#"city,country,pop
 "Boston","United States""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
 
-        let mut buf = Vec::new();
-        assert!(
-            DocumentBatchBuilder::from_csv(documents.as_bytes(), Cursor::new(&mut buf)).is_err()
-        );
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        assert!(builder.append_csv(csv).is_err());
     }
 }

@@ -35,7 +35,7 @@ mod test {
     use roaring::RoaringBitmap;
     use serde_json::{json, Value};
 
-    use crate::documents::{DocumentBatchBuilder, DocumentBatchReader};
+    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
     use crate::index::Index;
     use crate::update::{
@@ -43,14 +43,11 @@ mod test {
     };
     use crate::{DocumentId, FieldId, BEU32};
 
-    static JSON: Lazy<Vec<u8>> = Lazy::new(generate_documents);
-
-    fn generate_documents() -> Vec<u8> {
+    static JSON: Lazy<Vec<u8>> = Lazy::new(|| {
         let mut rng = rand::thread_rng();
         let num_docs = rng.gen_range(10..30);
 
-        let mut cursor = Cursor::new(Vec::new());
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
         let txts = ["Toto", "Titi", "Tata"];
         let cats = (1..10).map(|i| i.to_string()).collect::<Vec<_>>();
         let cat_ints = (1..10).collect::<Vec<_>>();
@@ -63,7 +60,7 @@ mod test {
             let mut sample_ints = cat_ints.clone();
             sample_ints.shuffle(&mut rng);
 
-            let doc = json!({
+            let json = json!({
                 "id": i,
                 "txt": txt,
                 "cat-int": rng.gen_range(0..3),
@@ -71,13 +68,16 @@ mod test {
                 "cat-ints": sample_ints[..(rng.gen_range(0..3))],
             });
 
-            let doc = Cursor::new(serde_json::to_vec(&doc).unwrap());
-            builder.extend_from_json(doc).unwrap();
+            let object = match json {
+                Value::Object(object) => object,
+                _ => panic!(),
+            };
+
+            builder.append_json_object(&object).unwrap();
         }
 
-        builder.finish().unwrap();
-        cursor.into_inner()
-    }
+        builder.into_inner().unwrap()
+    });
 
     /// Returns a temporary index populated with random test documents, the FieldId for the
     /// distinct attribute, and the RoaringBitmap with the document ids.
@@ -101,7 +101,8 @@ mod test {
             IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
 
         let reader =
-            crate::documents::DocumentBatchReader::from_reader(Cursor::new(&*JSON)).unwrap();
+            crate::documents::DocumentsBatchReader::from_reader(Cursor::new(JSON.as_slice()))
+                .unwrap();
 
         addition.add_documents(reader).unwrap();
         addition.execute().unwrap();
@@ -109,8 +110,8 @@ mod test {
         let fields_map = index.fields_ids_map(&txn).unwrap();
         let fid = fields_map.id(&distinct).unwrap();
 
-        let documents = DocumentBatchReader::from_reader(Cursor::new(&*JSON)).unwrap();
-        let map = (0..documents.len() as u32).collect();
+        let documents = DocumentsBatchReader::from_reader(Cursor::new(JSON.as_slice())).unwrap();
+        let map = (0..documents.documents_count() as u32).collect();
 
         txn.commit().unwrap();
 

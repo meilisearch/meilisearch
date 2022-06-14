@@ -6,10 +6,11 @@ use big_s::S;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
-use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::{AscDesc, Criterion, DocumentId, Index, Member};
 use serde::Deserialize;
+use serde_json::{Deserializer, Map, Value};
 use slice_group_by::GroupBy;
 
 mod distinct;
@@ -62,21 +63,18 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     let mut builder =
         IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-    let mut cursor = Cursor::new(Vec::new());
-    let mut documents_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+    let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(CONTENT.as_bytes());
 
-    for doc in serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>() {
-        let doc = Cursor::new(serde_json::to_vec(&doc.unwrap()).unwrap());
-        documents_builder.extend_from_json(doc).unwrap();
+    for result in Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+        let object = result.unwrap();
+        documents_builder.append_json_object(&object).unwrap();
     }
 
-    documents_builder.finish().unwrap();
-
-    cursor.set_position(0);
+    let vector = documents_builder.into_inner().unwrap();
 
     // index documents
-    let content = DocumentBatchReader::from_reader(cursor).unwrap();
+    let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
     builder.add_documents(content).unwrap();
     builder.execute().unwrap();
 

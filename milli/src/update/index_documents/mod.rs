@@ -25,7 +25,7 @@ pub use self::helpers::{
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::DocumentBatchReader;
+use crate::documents::DocumentsBatchReader;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
@@ -121,7 +121,7 @@ where
     /// builder, and the builder must be discarded.
     ///
     /// Returns the number of documents added to the builder.
-    pub fn add_documents<R>(&mut self, reader: DocumentBatchReader<R>) -> Result<u64>
+    pub fn add_documents<R>(&mut self, reader: DocumentsBatchReader<R>) -> Result<u64>
     where
         R: Read + Seek,
     {
@@ -590,9 +590,8 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
-    use crate::documents::DocumentBatchBuilder;
+    use crate::documents::DocumentsBatchBuilder;
     use crate::update::DeleteDocuments;
-    use crate::HashMap;
 
     #[test]
     fn simple_document_replacement() {
@@ -1252,21 +1251,17 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
 
-        let mut big_object = HashMap::new();
-        big_object.insert(S("id"), "wow");
+        let mut big_object = serde_json::Map::new();
+        big_object.insert(S("id"), serde_json::Value::from("wow"));
         for i in 0..1000 {
             let key = i.to_string();
-            big_object.insert(key, "I am a text!");
+            big_object.insert(key, serde_json::Value::from("I am a text!"));
         }
 
-        let mut cursor = Cursor::new(Vec::new());
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-        let big_object = Cursor::new(serde_json::to_vec(&big_object).unwrap());
-        builder.extend_from_json(big_object).unwrap();
-        builder.finish().unwrap();
-        cursor.set_position(0);
-        let content = DocumentBatchReader::from_reader(cursor).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(&big_object).unwrap();
+        let vector = builder.into_inner().unwrap();
+        let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
@@ -1288,23 +1283,19 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
 
-        let mut big_object = HashMap::new();
-        big_object.insert(S("id"), "wow");
+        let mut big_object = serde_json::Map::new();
+        big_object.insert(S("id"), serde_json::Value::from("wow"));
         let content: String = (0..=u16::MAX)
             .into_iter()
             .map(|p| p.to_string())
             .reduce(|a, b| a + " " + b.as_ref())
             .unwrap();
-        big_object.insert("content".to_string(), &content);
+        big_object.insert("content".to_string(), serde_json::Value::from(content));
 
-        let mut cursor = Cursor::new(Vec::new());
-
-        let big_object = serde_json::to_string(&big_object).unwrap();
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-        builder.extend_from_json(&mut big_object.as_bytes()).unwrap();
-        builder.finish().unwrap();
-        cursor.set_position(0);
-        let content = DocumentBatchReader::from_reader(cursor).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(&big_object).unwrap();
+        let vector = builder.into_inner().unwrap();
+        let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
@@ -1843,18 +1834,20 @@ mod tests {
 
         // Create 200 documents with a long text
         let content = {
-            let documents: Vec<_> = (0..200i32)
+            let documents_iter = (0..200i32)
                 .into_iter()
                 .map(|i| serde_json::json!({ "id": i, "script": script }))
-                .collect();
+                .filter_map(|json| match json {
+                    serde_json::Value::Object(object) => Some(object),
+                    _ => None,
+                });
 
-            let mut writer = std::io::Cursor::new(Vec::new());
-            let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-            let documents = serde_json::to_vec(&documents).unwrap();
-            builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
-            builder.finish().unwrap();
-            writer.set_position(0);
-            crate::documents::DocumentBatchReader::from_reader(writer).unwrap()
+            let mut builder = crate::documents::DocumentsBatchBuilder::new(Vec::new());
+            for object in documents_iter {
+                builder.append_json_object(&object).unwrap();
+            }
+            let vector = builder.into_inner().unwrap();
+            crate::documents::DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap()
         };
 
         // Index those 200 long documents

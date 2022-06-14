@@ -159,7 +159,7 @@ mod test {
 
     #[test]
     fn create_documents_no_errors() {
-        let json = json!({
+        let value = json!({
             "number": 1,
             "string": "this is a field",
             "array": ["an", "array"],
@@ -169,26 +169,17 @@ mod test {
             "bool": true
         });
 
-        let json = serde_json::to_vec(&json).unwrap();
-
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(json)).unwrap();
-
-        builder.finish().unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(value.as_object().unwrap()).unwrap();
+        let vector = builder.into_inner().unwrap();
 
         let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
+            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
 
-        assert_eq!(documents.index().iter().count(), 5);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 5);
-        assert!(documents.next_document_with_index().unwrap().is_none());
+        assert_eq!(documents.documents_batch_index().iter().count(), 5);
+        let reader = documents.next_document().unwrap().unwrap();
+        assert_eq!(reader.iter().count(), 5);
+        assert!(documents.next_document().unwrap().is_none());
     }
 
     #[test]
@@ -200,101 +191,55 @@ mod test {
             "toto": false,
         });
 
-        let doc1 = serde_json::to_vec(&doc1).unwrap();
-        let doc2 = serde_json::to_vec(&doc2).unwrap();
-
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(doc1)).unwrap();
-        builder.extend_from_json(Cursor::new(doc2)).unwrap();
-
-        builder.finish().unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(doc1.as_object().unwrap()).unwrap();
+        builder.append_json_object(doc2.as_object().unwrap()).unwrap();
+        let vector = builder.into_inner().unwrap();
 
         let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
-
-        assert_eq!(documents.index().iter().count(), 2);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 1);
-        assert!(documents.next_document_with_index().unwrap().is_some());
-        assert!(documents.next_document_with_index().unwrap().is_none());
-    }
-
-    #[test]
-    fn add_documents_array() {
-        let docs = json!([
-            { "toto": false },
-            { "tata": "hello" },
-        ]);
-
-        let docs = serde_json::to_vec(&docs).unwrap();
-
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(docs)).unwrap();
-
-        builder.finish().unwrap();
-
-        let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
-
-        assert_eq!(documents.index().iter().count(), 2);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 1);
-        assert!(documents.next_document_with_index().unwrap().is_some());
-        assert!(documents.next_document_with_index().unwrap().is_none());
-    }
-
-    #[test]
-    fn add_invalid_document_format() {
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        let docs = json!([[
-            { "toto": false },
-            { "tata": "hello" },
-        ]]);
-
-        let docs = serde_json::to_vec(&docs).unwrap();
-        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
-
-        let docs = json!("hello");
-        let docs = serde_json::to_vec(&docs).unwrap();
-
-        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
+            DocumentsBatchReader::from_reader(io::Cursor::new(vector)).unwrap().into_cursor();
+        assert_eq!(documents.documents_batch_index().iter().count(), 2);
+        let reader = documents.next_document().unwrap().unwrap();
+        assert_eq!(reader.iter().count(), 1);
+        assert!(documents.next_document().unwrap().is_some());
+        assert!(documents.next_document().unwrap().is_none());
     }
 
     #[test]
     fn test_nested() {
-        let mut docs = documents!([{
+        let docs_reader = documents!([{
             "hello": {
                 "toto": ["hello"]
             }
         }]);
 
-        let (_index, doc) = docs.next_document_with_index().unwrap().unwrap();
-
+        let mut cursor = docs_reader.into_cursor();
+        let doc = cursor.next_document().unwrap().unwrap();
         let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
         assert_eq!(nested, json!({ "toto": ["hello"] }));
     }
 
     #[test]
-    fn out_of_order_fields() {
+    fn out_of_order_json_fields() {
         let _documents = documents!([
             {"id": 1,"b": 0},
             {"id": 2,"a": 0,"b": 0},
         ]);
+    }
+
+    #[test]
+    fn out_of_order_csv_fields() {
+        let csv1_content = "id:number,b\n1,0";
+        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
+
+        let csv2_content = "id:number,a,b\n2,0,0";
+        let csv2 = csv::Reader::from_reader(Cursor::new(csv2_content));
+
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv1).unwrap();
+        builder.append_csv(csv2).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
     }
 }
