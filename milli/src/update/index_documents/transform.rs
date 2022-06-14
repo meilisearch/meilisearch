@@ -17,6 +17,7 @@ use super::{validate_document_id, IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
+use crate::update::index_documents::validate_document_id_from_json;
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{
     ExternalDocumentsIds, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index,
@@ -782,14 +783,6 @@ fn compute_primary_key_pair(
     }
 }
 
-fn validate_document_id(document_id: &str) -> Option<&str> {
-    let document_id = document_id.trim();
-    Some(document_id).filter(|id| {
-        !id.is_empty()
-            && id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
-    })
-}
-
 /// Drops all the value of type `U` in vec, and reuses the allocation to create a `Vec<T>`.
 ///
 /// The size and alignment of T and U must match.
@@ -813,22 +806,7 @@ fn update_primary_key<'a>(
 ) -> Result<Cow<'a, str>> {
     match field_buffer_cache.iter_mut().find(|(id, _)| *id == primary_key_id) {
         Some((_, bytes)) => {
-            let value = match serde_json::from_slice(bytes).map_err(InternalError::SerdeJson)? {
-                Value::String(string) => match validate_document_id(&string) {
-                    Some(s) if s.len() == string.len() => string,
-                    Some(s) => s.to_string(),
-                    None => {
-                        return Err(UserError::InvalidDocumentId {
-                            document_id: Value::String(string),
-                        }
-                        .into())
-                    }
-                },
-                Value::Number(number) => number.to_string(),
-                content => {
-                    return Err(UserError::InvalidDocumentId { document_id: content.clone() }.into())
-                }
-            };
+            let value = validate_document_id_from_json(bytes)??;
             serde_json::to_writer(external_id_buffer, &value).map_err(InternalError::SerdeJson)?;
             Ok(Cow::Owned(value))
         }

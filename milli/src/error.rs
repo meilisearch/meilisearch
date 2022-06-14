@@ -141,10 +141,16 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 
 #[derive(Error, Debug)]
 pub enum GeoError {
+    #[error("The `_geo` field in the document with the id: `{document_id}` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `{value}`.")]
+    NotAnObject { document_id: Value, value: Value },
+    #[error("Could not find latitude nor longitude in the document with the id: `{document_id}`. Was expecting `_geo.lat` and `_geo.lng` fields.")]
+    MissingLatitudeAndLongitude { document_id: Value },
     #[error("Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")]
     MissingLatitude { document_id: Value },
     #[error("Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")]
     MissingLongitude { document_id: Value },
+    #[error("Could not parse latitude nor longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{lat}` and `{lng}`.")]
+    BadLatitudeAndLongitude { document_id: Value, lat: Value, lng: Value },
     #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
     BadLatitude { document_id: Value, value: Value },
     #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]

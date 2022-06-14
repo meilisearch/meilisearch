@@ -2,11 +2,13 @@ mod extract;
 mod helpers;
 mod transform;
 mod typed_chunk;
+mod validate;
 
 use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::result::Result as StdResult;
 
 use crossbeam_channel::{Receiver, Sender};
 use heed::types::Str;
@@ -25,13 +27,19 @@ pub use self::helpers::{
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::DocumentsBatchReader;
+use self::validate::validate_documents_batch;
+pub use self::validate::{
+    extract_float_from_value, validate_document_id, validate_document_id_from_json,
+    validate_geo_from_json,
+};
+use crate::documents::{obkv_to_object, DocumentsBatchReader};
+use crate::error::UserError;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
     WordPrefixPairProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
-use crate::{Index, Result, RoaringBitmapCodec, UserError};
+use crate::{Index, Result, RoaringBitmapCodec};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 5;
@@ -117,18 +125,26 @@ where
 
     /// Adds a batch of documents to the current builder.
     ///
-    /// Since the documents are progressively added to the writer, a failure will cause a stale
-    /// builder, and the builder must be discarded.
+    /// Since the documents are progressively added to the writer, a failure will cause only
+    /// return an error and not the `IndexDocuments` struct as it is invalid to use it afterward.
     ///
     /// Returns the number of documents added to the builder.
-    pub fn add_documents<R>(&mut self, reader: DocumentsBatchReader<R>) -> Result<u64>
-    where
-        R: Read + Seek,
-    {
+    pub fn add_documents<R: Read + Seek>(
+        mut self,
+        reader: DocumentsBatchReader<R>,
+    ) -> Result<(Self, StdResult<u64, UserError>)> {
         // Early return when there is no document to add
         if reader.is_empty() {
-            return Ok(0);
+            return Ok((self, Ok(0)));
         }
+
+        // We check for user errors in this validator and if there is one, we can return
+        // the `IndexDocument` struct as it is valid to send more documents into it.
+        // However, if there is an internal error we throw it away!
+        let reader = match validate_documents_batch(self.wtxn, self.index, reader)? {
+            Ok(reader) => reader,
+            Err(user_error) => return Ok((self, Err(user_error))),
+        };
 
         let indexed_documents = self
             .transform
@@ -139,7 +155,7 @@ where
 
         self.added_documents += indexed_documents;
 
-        Ok(indexed_documents)
+        Ok((self, Ok(indexed_documents)))
     }
 
     #[logging_timer::time("IndexDocuments::{}")]

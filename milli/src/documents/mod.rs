@@ -6,14 +6,29 @@ use std::io;
 
 use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
+use obkv::KvReader;
 pub use reader::{DocumentsBatchCursor, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
-use crate::FieldId;
+use crate::error::{FieldIdMapMissingEntry, InternalError};
+use crate::{FieldId, Object, Result};
 
 /// The key that is used to store the `DocumentsBatchIndex` datastructure,
 /// it is the absolute last key of the list.
 const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
+
+/// Helper function to convert an obkv reader into a JSON object.
+pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
+    obkv.iter()
+        .map(|(field_id, value)| {
+            let field_name = index.name(field_id).ok_or_else(|| {
+                FieldIdMapMissingEntry::FieldId { field_id, process: "obkv_to_object" }
+            })?;
+            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+            Ok((field_name.to_string(), value))
+        })
+        .collect()
+}
 
 /// A bidirectional map that links field ids to their name in a document batch.
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
@@ -48,11 +63,12 @@ impl DocumentsBatchIndex {
         self.0.get_by_left(&id).map(AsRef::as_ref)
     }
 
-    pub fn recreate_json(
-        &self,
-        document: &obkv::KvReaderU16,
-    ) -> Result<serde_json::Map<String, serde_json::Value>, crate::Error> {
-        let mut map = serde_json::Map::new();
+    pub fn id(&self, name: &str) -> Option<FieldId> {
+        self.0.get_by_right(name).cloned()
+    }
+
+    pub fn recreate_json(&self, document: &obkv::KvReaderU16) -> Result<Object> {
+        let mut map = Object::new();
 
         for (k, v) in document.iter() {
             // TODO: TAMO: update the error type

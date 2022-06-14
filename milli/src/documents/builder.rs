@@ -180,24 +180,10 @@ fn parse_csv_header(header: &str) -> (&str, AllowedType) {
 mod test {
     use std::io::Cursor;
 
-    use serde_json::{json, Map};
+    use serde_json::json;
 
     use super::*;
-    use crate::documents::DocumentsBatchReader;
-    use crate::FieldId;
-
-    fn obkv_to_value(obkv: &obkv::KvReader<FieldId>, index: &DocumentsBatchIndex) -> Value {
-        let mut map = Map::new();
-
-        for (fid, value) in obkv.iter() {
-            let field_name = index.name(fid).unwrap().clone();
-            let value: Value = serde_json::from_slice(value).unwrap();
-
-            map.insert(field_name.to_string(), value);
-        }
-
-        Value::Object(map)
-    }
+    use crate::documents::{obkv_to_object, DocumentsBatchReader};
 
     #[test]
     fn add_single_documents_json() {
@@ -272,7 +258,7 @@ mod test {
             DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
         let index = cursor.documents_batch_index().clone();
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -301,7 +287,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -328,7 +314,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -355,7 +341,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -382,7 +368,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -409,7 +395,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -436,7 +422,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -463,7 +449,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,
@@ -507,7 +493,7 @@ mod test {
         let index = cursor.documents_batch_index().clone();
 
         let doc = cursor.next_document().unwrap().unwrap();
-        let val = obkv_to_value(&doc, &index);
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
         assert_eq!(
             val,

@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::GeoError;
+use crate::update::index_documents::extract_float_from_value;
 use crate::{FieldId, InternalError, Result};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
@@ -60,12 +61,4 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
     }
 
     Ok(writer_into_reader(writer)?)
-}
-
-fn extract_float_from_value(value: Value) -> StdResult<f64, Value> {
-    match value {
-        Value::Number(ref n) => n.as_f64().ok_or(value),
-        Value::String(ref s) => s.parse::<f64>().map_err(|_| value),
-        value => Err(value),
-    }
 }
