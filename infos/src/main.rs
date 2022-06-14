@@ -410,7 +410,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         // Fetch the words FST
         let words_fst = index.words_fst(rtxn)?;
         let length = words_fst.as_fst().as_bytes().len();
-        heap.push(Reverse((length, format!("words-fst"), main_name)));
+        heap.push(Reverse((length, "words-fst".to_string(), main_name)));
         if heap.len() > limit {
             heap.pop();
         }
@@ -418,13 +418,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         // Fetch the word prefix FST
         let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
         let length = words_prefixes_fst.as_fst().as_bytes().len();
-        heap.push(Reverse((length, format!("words-prefixes-fst"), main_name)));
+        heap.push(Reverse((length, "words-prefixes-fst".to_string(), main_name)));
         if heap.len() > limit {
             heap.pop();
         }
 
         let documents_ids = index.documents_ids(rtxn)?;
-        heap.push(Reverse((documents_ids.len() as usize, format!("documents-ids"), main_name)));
+        heap.push(Reverse((documents_ids.len() as usize, "documents-ids".to_string(), main_name)));
         if heap.len() > limit {
             heap.pop();
         }
