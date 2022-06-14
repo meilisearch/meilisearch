@@ -380,7 +380,6 @@ impl Scheduler {
             .await?
             .into_iter()
             .for_each(|t| {
-                self.next_fetched_task_id = t.id + 1;
                 self.register_task(t);
             });
 

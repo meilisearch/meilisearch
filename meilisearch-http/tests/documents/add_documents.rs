@@ -1020,7 +1020,7 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(2).await;
     let (response, code) = index.get_task(2).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["status"], "succeeded", "{response}");
 }
 
 #[actix_rt::test]

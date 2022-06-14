@@ -99,7 +99,7 @@ mod real {
 
             let content_uuids = tasks
                 .iter()
-                .filter(|t| t.is_aborted())
+                .filter(|t| !t.is_aborted())
                 .map(get_content_uuid)
                 .collect::<Vec<_>>();
 
@@ -172,7 +172,7 @@ mod real {
                     };
 
                     // do not push event to aborted tasks
-                    for task in tasks.iter_mut().filter(|t| t.is_aborted()) {
+                    for task in tasks.iter_mut().filter(|t| !t.is_aborted()) {
                         task.events.push(event.clone());
                     }
                 }
