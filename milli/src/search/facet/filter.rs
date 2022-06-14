@@ -309,11 +309,12 @@ impl<'a> Filter<'a> {
                 return Ok(string_docids | number_docids);
             }
             Condition::NotEqual(val) => {
-                let all_numbers_ids = index.number_faceted_documents_ids(rtxn, field_id)?;
-                let all_strings_ids = index.string_faceted_documents_ids(rtxn, field_id)?;
                 let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(rtxn, index, field_id, &operator)?;
-                return Ok((all_numbers_ids | all_strings_ids) - docids);
+                let docids = Self::evaluate_operator(
+                    rtxn, index, field_id, &operator,
+                )?;
+                let all_ids = index.documents_ids(rtxn)?;
+                return Ok(all_ids - docids);
             }
         };
 
