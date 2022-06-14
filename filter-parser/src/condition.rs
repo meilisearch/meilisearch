@@ -19,8 +19,8 @@ pub enum Condition<'a> {
     GreaterThanOrEqual(Token<'a>),
     Equal(Token<'a>),
     NotEqual(Token<'a>),
-    Exist,
-    NotExist,
+    Exists,
+    NotExists,
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
@@ -35,8 +35,8 @@ impl<'a> Condition<'a> {
             GreaterThanOrEqual(n) => (LowerThan(n), None),
             Equal(s) => (NotEqual(s), None),
             NotEqual(s) => (Equal(s), None),
-            Exist => (NotExist, None),
-            NotExist => (Exist, None),
+            Exists => (NotExists, None),
+            NotExists => (Exists, None),
             LowerThan(n) => (GreaterThanOrEqual(n), None),
             LowerThanOrEqual(n) => (GreaterThan(n), None),
             Between { from, to } => (LowerThan(from), Some(GreaterThan(to))),
@@ -62,11 +62,17 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     Ok((input, condition))
 }
 
-/// exist          = value EXIST
-pub fn parse_exist(input: Span) -> IResult<FilterCondition> {
-    let (input, key) = terminated(parse_value, tag("EXIST"))(input)?;
+/// exist          = value NOT EXISTS
+pub fn parse_exists(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = terminated(parse_value, tag("EXISTS"))(input)?;
 
-    Ok((input, FilterCondition::Condition { fid: key.into(), op: Exist }))
+    Ok((input, FilterCondition::Condition { fid: key.into(), op: Exists }))
+}
+/// exist          = value NOT EXISTS
+pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = terminated(parse_value, tag("NOT EXISTS"))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid: key.into(), op: NotExists }))
 }
 
 /// to             = value value TO value

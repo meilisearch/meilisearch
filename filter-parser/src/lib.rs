@@ -3,23 +3,24 @@
 //! ```text
 //! filter         = expression ~ EOF
 //! expression     = or
-//! or             = and (~ "OR" ~ and)
-//! and            = not (~ "AND" not)*
-//! not            = ("NOT" ~ not) | primary
-//! primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | exist | to
+//! or             = and ("OR" and)
+//! and            = not ("AND" not)*
+//! not            = ("NOT" not) | primary
+//! primary        = (WS* "("  expression ")" WS*) | geoRadius | condition | exists | not_exists | to
 //! condition      = value ("==" | ">" ...) value
-//! exist          = value EXIST
+//! exists         = value EXISTS
+//! not_exists     = value NOT EXISTS
 //! to             = value value TO value
-//! value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
+//! value          = WS* ( word | singleQuoted | doubleQuoted) ~ WS*
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
-//! geoRadius      = WS* ~ "_geoRadius(" ~ WS* ~ float ~ WS* ~ "," ~ WS* ~ float ~ WS* ~ "," float ~ WS* ~ ")"
+//! geoRadius      = WS* ~ "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
 //! ```text
-//! geoPoint       = WS* ~ "_geoPoint(" ~ (float ~ ",")* ~ ")"
+//! geoPoint       = WS* "_geoPoint(" (float ",")* ")"
 //! ```
 //!
 //! Specific errors:
@@ -43,8 +44,8 @@ mod value;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use condition::parse_exist;
 pub use condition::{parse_condition, parse_to, Condition};
+use condition::{parse_exists, parse_not_exists};
 use error::{cut_with_err, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
@@ -250,7 +251,8 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
         ),
         parse_geo_radius,
         parse_condition,
-        parse_exist,
+        parse_exists,
+        parse_not_exists,
         parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo_point,
@@ -424,17 +426,24 @@ pub mod tests {
                 },
             ),
             (
-                "subscribers EXIST",
+                "subscribers EXISTS",
                 Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Condition::Exist,
+                    op: Condition::Exists,
                 },
             ),
             (
-                "NOT subscribers EXIST",
+                "NOT subscribers EXISTS",
                 Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::NotExist,
+                    op: Condition::NotExists,
+                },
+            ),
+            (
+                "subscribers NOT EXISTS",
+                Fc::Condition {
+                    fid: rtok("", "subscribers"),
+                    op: Condition::NotExists,
                 },
             ),
             (
@@ -594,10 +603,10 @@ pub mod tests {
             ("channel =    ", "Was expecting a value but instead got nothing."),
             ("channel = 🐻", "Was expecting a value but instead got `🐻`."),
             ("channel = 🐻 AND followers < 100", "Was expecting a value but instead got `🐻`."),
-            ("OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` at `OR`."),
-            ("AND", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` at `AND`."),
-            ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` at `channel Ponce`."),
-            ("channel = Ponce OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXIST`, or `_geoRadius` but instead got nothing."),
+            ("OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `OR`."),
+            ("AND", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `AND`."),
+            ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`."),
+            ("channel = Ponce OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing."),
             ("_geoRadius", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
             ("_geoRadius = 12", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
             ("_geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
