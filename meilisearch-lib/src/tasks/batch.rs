@@ -30,12 +30,17 @@ impl BatchContent {
 
     pub fn push_event(&mut self, event: TaskEvent) {
         match self {
-            BatchContent::DocumentsAdditionBatch(ts) => {
-                ts.iter_mut().for_each(|t| t.events.push(event.clone()))
-            }
+            BatchContent::DocumentsAdditionBatch(ts) => ts
+                .iter_mut()
+                .filter(|t| !t.is_aborted())
+                .for_each(|t| t.events.push(event.clone())),
             BatchContent::IndexUpdate(t)
             | BatchContent::Dump(t)
-            | BatchContent::TaskAbortion(t) => t.events.push(event),
+            | BatchContent::TaskAbortion(t) => {
+                if !t.is_aborted() {
+                    t.events.push(event)
+                }
+            }
             BatchContent::Snapshot(_) | BatchContent::Empty => (),
         }
     }

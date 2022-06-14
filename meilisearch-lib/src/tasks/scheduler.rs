@@ -341,6 +341,10 @@ impl Scheduler {
                 let mut tasks = self.store.update_tasks(vec![t]).await?;
                 Ok(BatchContent::Dump(tasks.remove(0)))
             }
+            BatchContent::TaskAbortion(t) => {
+                let mut tasks = self.store.update_tasks(vec![t]).await?;
+                Ok(BatchContent::TaskAbortion(tasks.remove(0)))
+            }
             other => Ok(other),
         }
     }
@@ -441,6 +445,7 @@ pub enum Processing {
     DocumentAdditions(Vec<TaskId>),
     IndexUpdate(TaskId),
     Dump(TaskId),
+    TaskAbortion(TaskId),
     /// Variant used when there is nothing to process.
     Nothing,
 }
@@ -475,7 +480,9 @@ impl Processing {
     pub fn ids(&self) -> impl Iterator<Item = TaskId> + '_ {
         match self {
             Processing::DocumentAdditions(v) => ProcessingIter::Many(v.iter()),
-            Processing::IndexUpdate(id) | Processing::Dump(id) => ProcessingIter::Single(Some(*id)),
+            Processing::IndexUpdate(id) | Processing::Dump(id) | Self::TaskAbortion(id) => {
+                ProcessingIter::Single(Some(*id))
+            }
             Processing::Nothing => ProcessingIter::Single(None),
         }
     }
@@ -483,7 +490,7 @@ impl Processing {
     pub fn len(&self) -> usize {
         match self {
             Processing::DocumentAdditions(v) => v.len(),
-            Processing::IndexUpdate(_) | Processing::Dump(_) => 1,
+            Processing::IndexUpdate(_) | Processing::Dump(_) | Processing::TaskAbortion(_) => 1,
             Processing::Nothing => 0,
         }
     }
@@ -510,6 +517,13 @@ fn make_batch(tasks: &mut TaskQueue, config: &SchedulerConfig) -> Processing {
             }) => {
                 list.pop();
                 Processing::Dump(id)
+            }
+            Some(PendingTask {
+                kind: TaskType::TaskAbortion,
+                id,
+            }) => {
+                list.pop();
+                Processing::TaskAbortion(id)
             }
             Some(PendingTask { kind, .. }) => {
                 let mut task_list = Vec::new();

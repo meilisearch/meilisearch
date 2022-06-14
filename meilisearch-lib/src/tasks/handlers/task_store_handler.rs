@@ -38,11 +38,10 @@ impl BatchHandler for TaskStore {
                 ..
             }) => {
                 if !events.iter().any(TaskEvent::is_aborted) {
-                    match self.abort_updates(tasks).await {
+                    match dbg!(self.abort_updates(tasks).await) {
                         Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
                         Err(e) => events.push(TaskEvent::failed(e)),
                     }
-                    events.push(TaskEvent::succeeded(TaskResult::Other));
                 }
             }
             _ => unreachable!(),

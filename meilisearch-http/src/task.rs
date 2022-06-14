@@ -346,6 +346,7 @@ impl From<Task> for TaskView {
                 }
                 (TaskStatus::Succeeded, None, Some(*timestamp))
             }
+            TaskEvent::Aborted { timestamp } => (TaskStatus::Aborted, None, Some(*timestamp)),
             TaskEvent::Failed { timestamp, error } => {
                 match details {
                     Some(TaskDetails::DocumentDeletion {
@@ -370,7 +371,6 @@ impl From<Task> for TaskView {
                 }
                 (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
             }
-            TaskEvent::Aborted { timestamp } => (TaskStatus::Aborted, None, Some(*timestamp)),
         };
 
         let enqueued_at = match events.first() {

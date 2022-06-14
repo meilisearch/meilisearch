@@ -20,8 +20,8 @@ const DEFAULT_LIMIT: fn() -> usize = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
-        .service(web::resource("/abort").route(web::post().to(SeqHandler(abort_task))));
+        .service(web::resource("/abort").route(web::post().to(SeqHandler(abort_task))))
+        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
 #[derive(Deserialize, Debug)]

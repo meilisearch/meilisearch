@@ -157,6 +157,11 @@ impl TaskStore {
                     debug_assert!(matches!(task.content, TaskContent::Dump { .. }));
                     BatchContent::Dump(task)
                 }
+                Processing::TaskAbortion(id) => {
+                    let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
+                    debug_assert!(matches!(task.content, TaskContent::TaskAbortion { .. }));
+                    BatchContent::TaskAbortion(task)
+                }
                 Processing::Nothing => BatchContent::Empty,
             };
 
