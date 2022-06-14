@@ -21,7 +21,7 @@ const DEFAULT_LIMIT: fn() -> usize = || 20;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
         .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
-        .service(web::resource("/{task_id}/abort").route(web::get().to(SeqHandler(abort_task))));
+        .service(web::resource("/abort").route(web::post().to(SeqHandler(abort_task))));
 }
 
 #[derive(Deserialize, Debug)]
@@ -201,11 +201,11 @@ async fn get_task(
 
 async fn abort_task(
     meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_ABORT }>, MeiliSearch>,
-    task_id: web::Path<TaskId>,
+    task_ids: web::Json<Vec<TaskId>>,
     _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let task = meilisearch
-        .register_abort_task(vec![task_id.into_inner()])
+        .register_abort_task(task_ids.into_inner())
         .await?;
 
     let view: SummarizedTaskView = task.into();
