@@ -8,6 +8,7 @@ use std::time::Instant;
 use byte_unit::Byte;
 use eyre::Result;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
@@ -225,9 +226,9 @@ impl Performer for DocumentAddition {
             DocumentAdditionFormat::Jsonl => documents_from_jsonl(reader)?,
         };
 
-        let reader = milli::documents::DocumentBatchReader::from_reader(Cursor::new(documents))?;
+        let reader = DocumentsBatchReader::from_reader(Cursor::new(documents))?;
 
-        println!("Adding {} documents to the index.", reader.len());
+        println!("Adding {} documents to the index.", reader.documents_count());
 
         let mut txn = index.write_txn()?;
         let config = milli::update::IndexerConfig { log_every_n: Some(100), ..Default::default() };
@@ -321,35 +322,35 @@ fn indexing_callback(step: milli::update::UpdateIndexingStep, bars: &[ProgressBa
 }
 
 fn documents_from_jsonl(reader: impl Read) -> Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    let reader = BufReader::new(reader);
 
-    let mut buf = String::new();
-    let mut reader = BufReader::new(reader);
-
-    while reader.read_line(&mut buf)? > 0 {
-        documents.extend_from_json(&mut buf.as_bytes())?;
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+        let object = result?;
+        documents.append_json_object(&object)?;
     }
-    documents.finish()?;
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_json(reader: impl Read) -> Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
 
-    documents.extend_from_json(reader)?;
-    documents.finish()?;
+    for object in list {
+        documents.append_json_object(&object)?;
+    }
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_csv(reader: impl Read) -> Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
+    let csv = csv::Reader::from_reader(reader);
 
-    Ok(writer.into_inner())
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    documents.append_csv(csv)?;
+
+    documents.into_inner().map_err(Into::into)
 }
 
 #[derive(Debug, StructOpt)]
