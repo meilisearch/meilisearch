@@ -276,14 +276,6 @@ impl<'a> Filter<'a> {
                 let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
                 return Ok(exist);
             }
-            Condition::NotExists => {
-                let all_ids = index.documents_ids(rtxn)?;
-
-                let exist = Self::evaluate_operator(rtxn, index, field_id, &Condition::Exists)?;
-
-                let notexist = all_ids - exist;
-                return Ok(notexist);
-            }
             Condition::Equal(val) => {
                 let (_original_value, string_docids) = strings_db
                     .get(rtxn, &(field_id, &val.value().to_lowercase()))?
@@ -459,17 +451,6 @@ impl<'a> Filter<'a> {
                         filterable_fields: filterable_fields.clone(),
                     }))?;
                 }
-            }
-            FilterCondition::GeoGreaterThan { point, radius } => {
-                let result = Self::inner_evaluate(
-                    &FilterCondition::GeoLowerThan { point: point.clone(), radius: radius.clone() }
-                        .into(),
-                    rtxn,
-                    index,
-                    filterable_fields,
-                )?;
-                let geo_faceted_doc_ids = index.geo_faceted_documents_ids(rtxn)?;
-                Ok(geo_faceted_doc_ids - result)
             }
         }
     }

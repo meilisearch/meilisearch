@@ -117,7 +117,6 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
-    GeoGreaterThan { point: [Token<'a>; 2], radius: Token<'a> },
 }
 
 impl<'a> FilterCondition<'a> {
@@ -144,7 +143,6 @@ impl<'a> FilterCondition<'a> {
                 None
             }
             FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
-            FilterCondition::GeoGreaterThan { point: [point, _], .. } if depth == 0 => Some(point),
             _ => None,
         }
     }
@@ -443,17 +441,17 @@ pub mod tests {
             ),
             (
                 "NOT subscribers EXISTS",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::NotExists,
-                },
+                    op: Condition::Exists,
+                })),
             ),
             (
                 "subscribers NOT EXISTS",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Condition::NotExists,
-                },
+                    op: Condition::Exists,
+                })),
             ),
             (
                 "NOT subscribers NOT EXISTS",
@@ -464,10 +462,10 @@ pub mod tests {
             ),
             (
                 "subscribers NOT   EXISTS",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("", "subscribers"),
-                    op: Condition::NotExists,
-                },
+                    op: Condition::Exists,
+                })),
             ),
             (
                 "subscribers 100 TO 1000",
@@ -503,10 +501,10 @@ pub mod tests {
             ),
             (
                 "NOT _geoRadius(12, 13, 14)",
-                Fc::GeoGreaterThan {
+                Fc::Not(Box::new(Fc::GeoLowerThan {
                     point: [rtok("NOT _geoRadius(", "12"), rtok("NOT _geoRadius(12, ", "13")],
                     radius: rtok("NOT _geoRadius(12, 13, ", "14"),
-                },
+                })),
             ),
             // test simple `or` and `and`
             (
