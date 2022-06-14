@@ -112,6 +112,7 @@ impl<'a> From<Span<'a>> for Token<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
+    Not(Box<Self>),
     Condition { fid: Token<'a>, op: Condition<'a> },
     Or(Vec<Self>),
     And(Vec<Self>),
@@ -145,24 +146,6 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
             FilterCondition::GeoGreaterThan { point: [point, _], .. } if depth == 0 => Some(point),
             _ => None,
-        }
-    }
-
-    pub fn negate(self) -> FilterCondition<'a> {
-        use FilterCondition::*;
-
-        match self {
-            Condition { fid, op } => match op.negate() {
-                (op, None) => Condition { fid, op },
-                (a, Some(b)) => Or(vec![
-                    Condition { fid: fid.clone(), op: a }.into(),
-                    Condition { fid, op: b }.into(),
-                ]),
-            },
-            Or(subfilters) => And(subfilters.into_iter().map(|x| x.negate().into()).collect()),
-            And(subfilters) => Or(subfilters.into_iter().map(|x| x.negate().into()).collect()),
-            GeoLowerThan { point, radius } => GeoGreaterThan { point, radius },
-            GeoGreaterThan { point, radius } => GeoLowerThan { point, radius },
         }
     }
 
@@ -219,7 +202,9 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((
-        map(preceded(ws(tuple((tag("NOT"), multispace1))), cut(parse_not)), |e| e.negate()),
+        map(preceded(ws(tuple((tag("NOT"), multispace1))), cut(parse_not)), |e| {
+            FilterCondition::Not(Box::new(e))
+        }),
         parse_primary,
     ))(input)
 }

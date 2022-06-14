@@ -360,6 +360,16 @@ impl<'a> Filter<'a> {
         filterable_fields: &HashSet<String>,
     ) -> Result<RoaringBitmap> {
         match &self.condition {
+            FilterCondition::Not(f) => {
+                let all_ids = index.documents_ids(rtxn)?;
+                let selected = Self::inner_evaluate(
+                    &(f.as_ref().clone()).into(),
+                    rtxn,
+                    index,
+                    filterable_fields,
+                )?;
+                return Ok(all_ids - selected);
+            }
             FilterCondition::Condition { fid, op } => {
                 if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
