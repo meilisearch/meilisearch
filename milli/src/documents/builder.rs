@@ -108,7 +108,7 @@ impl<W: io::Write + io::Seek> DocumentBatchBuilder<W> {
             .headers()?
             .into_iter()
             .map(parse_csv_header)
-            .map(|(k, t)| (this.index.insert(&k), t))
+            .map(|(k, t)| (this.index.insert(k), t))
             .collect::<BTreeMap<_, _>>();
 
         for (i, record) in records.into_records().enumerate() {
@@ -161,16 +161,16 @@ enum AllowedType {
     Number,
 }
 
-fn parse_csv_header(header: &str) -> (String, AllowedType) {
+fn parse_csv_header(header: &str) -> (&str, AllowedType) {
     // if there are several separators we only split on the last one.
     match header.rsplit_once(':') {
         Some((field_name, field_type)) => match field_type {
-            "string" => (field_name.to_string(), AllowedType::String),
-            "number" => (field_name.to_string(), AllowedType::Number),
+            "string" => (field_name, AllowedType::String),
+            "number" => (field_name, AllowedType::Number),
             // if the pattern isn't reconized, we keep the whole field.
-            _otherwise => (header.to_string(), AllowedType::String),
+            _otherwise => (header, AllowedType::String),
         },
-        None => (header.to_string(), AllowedType::String),
+        None => (header, AllowedType::String),
     }
 }
 
