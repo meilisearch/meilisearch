@@ -24,6 +24,7 @@ pub enum TaskType {
     DocumentDeletion,
     SettingsUpdate,
     DumpCreation,
+    TaskAbortion,
 }
 
 impl From<TaskContent> for TaskType {
@@ -36,7 +37,7 @@ impl From<TaskContent> for TaskType {
             TaskContent::DocumentDeletion { .. } => TaskType::DocumentDeletion,
             TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
             TaskContent::Dump { .. } => TaskType::DumpCreation,
-            TaskContent::TaskAbortion { .. } => todo!(),
+            TaskContent::TaskAbortion { .. } => TaskType::TaskAbortion,
         }
     }
 }
@@ -93,6 +94,7 @@ pub enum TaskStatus {
     Processing,
     Succeeded,
     Failed,
+    Aborted,
 }
 
 #[derive(Debug)]
@@ -296,7 +298,7 @@ impl From<Task> for TaskView {
                 TaskType::DumpCreation,
                 Some(TaskDetails::Dump { dump_uid: uid }),
             ),
-            TaskContent::TaskAbortion { .. } => todo!(),
+            TaskContent::TaskAbortion { .. } => (TaskType::TaskAbortion, None),
         };
 
         // An event always has at least one event: "Created"
@@ -368,7 +370,7 @@ impl From<Task> for TaskView {
                 }
                 (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
             }
-            TaskEvent::Aborted { .. } => todo!(),
+            TaskEvent::Aborted { timestamp } => (TaskStatus::Aborted, None, Some(*timestamp)),
         };
 
         let enqueued_at = match events.first() {
