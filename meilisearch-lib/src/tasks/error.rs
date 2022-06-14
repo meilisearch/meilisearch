@@ -31,7 +31,7 @@ impl ErrorCode for TaskError {
         match self {
             TaskError::UnexistingTask(_) => Code::TaskNotFound,
             TaskError::Internal(_) => Code::Internal,
-            TaskError::AbortProcessedTask => Code::BadRequest,
+            TaskError::AbortProcessedTask => Code::InvalidTaskAbort,
         }
     }
 }
