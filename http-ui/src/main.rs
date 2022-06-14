@@ -3,7 +3,7 @@ mod update_store;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{create_dir_all, File};
-use std::io::{BufRead, BufReader, Cursor, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::net::SocketAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ use either::Either;
 use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
 use heed::EnvOpenOptions;
-use milli::documents::DocumentBatchReader;
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::tokenizer::TokenizerBuilder;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{
@@ -399,7 +399,7 @@ async fn main() -> anyhow::Result<()> {
                         otherwise => panic!("invalid update format {:?}", otherwise),
                     };
 
-                    let documents = DocumentBatchReader::from_reader(Cursor::new(documents))?;
+                    let documents = DocumentsBatchReader::from_reader(Cursor::new(documents))?;
 
                     builder.add_documents(documents)?;
 
@@ -1032,35 +1032,36 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn documents_from_jsonl(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    let reader = BufReader::new(reader);
 
-    for result in BufReader::new(reader).lines() {
-        let line = result?;
-        documents.extend_from_json(Cursor::new(line))?;
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+        let object = result?;
+        documents.append_json_object(&object)?;
     }
 
-    documents.finish()?;
-
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
-fn documents_from_json(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+fn documents_from_json(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
 
-    documents.extend_from_json(reader)?;
-    documents.finish()?;
+    for object in list {
+        documents.append_json_object(&object)?;
+    }
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
-fn documents_from_csv(reader: impl io::Read) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
+fn documents_from_csv(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+    let csv = csv::Reader::from_reader(reader);
 
-    Ok(writer.into_inner())
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    documents.append_csv(csv)?;
+
+    documents.into_inner().map_err(Into::into)
 }
 
 #[cfg(test)]
