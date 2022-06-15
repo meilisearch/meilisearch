@@ -729,7 +729,7 @@ mod tests {
         map_leaf_values(
             value.as_object_mut().unwrap(),
             ["jean.race.name"],
-            |key, value| match (value, dbg!(key)) {
+            |key, value| match (value, key) {
                 (Value::String(name), "jean.race.name") => *name = S("patou"),
                 _ => unreachable!(),
             },

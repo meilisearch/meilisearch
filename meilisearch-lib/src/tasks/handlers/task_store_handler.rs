@@ -11,7 +11,7 @@ impl TaskStore {
             // Since updates are processed sequentially, no updates can be in an undecided state
             // here, therefore it's ok to only check for completion.
             if !task.is_finished() {
-                task.events.push(TaskEvent::abort());
+                task.events.push(TaskEvent::aborted());
                 tasks.push(task);
             } else {
                 return Err(TaskError::AbortProcessedTask);
@@ -38,7 +38,7 @@ impl BatchHandler for TaskStore {
                 ..
             }) => {
                 if !events.iter().any(TaskEvent::is_aborted) {
-                    match dbg!(self.abort_updates(tasks).await) {
+                    match self.abort_updates(tasks).await {
                         Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
                         Err(e) => events.push(TaskEvent::failed(e)),
                     }

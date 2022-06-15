@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use time::OffsetDateTime;
 use tokio::sync::{watch, RwLock};
 use tokio::time::interval_at;
 
@@ -63,9 +62,7 @@ impl UpdateLoop {
             .expect("No performer found for batch")
             .clone();
 
-        batch
-            .content
-            .push_event(TaskEvent::Processing(OffsetDateTime::now_utc()));
+        batch.content.push_event(TaskEvent::processing());
 
         batch.content = {
             self.scheduler

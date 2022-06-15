@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use clap::Parser;
+use meilisearch_lib::tasks::task::TaskId;
 use std::path::Path;
 
 use actix_web::http::StatusCode;
@@ -143,6 +144,10 @@ impl Server {
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
         self.service.get(format!("/dumps/{}/status", uid)).await
+    }
+
+    pub async fn abort_task(&self, ids: Vec<TaskId>) -> (Value, StatusCode) {
+        self.service.post("/tasks/abort", ids.into()).await
     }
 }
 

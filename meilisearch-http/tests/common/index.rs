@@ -95,7 +95,10 @@ impl Index<'_> {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(200, status_code, "response: {}", response);
 
-            if response["status"] == "succeeded" || response["status"] == "failed" {
+            if response["status"] == "succeeded"
+                || response["status"] == "failed"
+                || response["status"] == "aborted"
+            {
                 return response;
             }
 

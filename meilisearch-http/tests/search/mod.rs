@@ -708,9 +708,7 @@ async fn faceting_max_values_per_facet() {
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
-                let numbers = dbg!(&response)["facetDistribution"]["number"]
-                    .as_object()
-                    .unwrap();
+                let numbers = &response["facetDistribution"]["number"].as_object().unwrap();
                 assert_eq!(numbers.len(), 10_000);
             },
         )

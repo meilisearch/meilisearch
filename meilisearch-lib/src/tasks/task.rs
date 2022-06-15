@@ -80,10 +80,25 @@ impl TaskEvent {
         }
     }
 
-    pub fn abort() -> Self {
+    pub fn created() -> Self {
+        Self::Created(OffsetDateTime::now_utc())
+    }
+
+    pub fn batched(batch_id: BatchId) -> Self {
+        Self::Batched {
+            timestamp: OffsetDateTime::now_utc(),
+            batch_id,
+        }
+    }
+
+    pub fn aborted() -> Self {
         Self::Aborted {
             timestamp: OffsetDateTime::now_utc(),
         }
+    }
+
+    pub fn processing() -> Self {
+        Self::Processing(OffsetDateTime::now_utc())
     }
 
     pub fn is_aborted(&self) -> bool {
@@ -203,6 +218,8 @@ pub enum TaskContent {
 mod test {
     use proptest::prelude::*;
 
+    use crate::index::error::IndexError;
+
     use super::*;
 
     pub(super) fn index_document_method_strategy() -> impl Strategy<Value = IndexDocumentsMethod> {
@@ -214,5 +231,70 @@ mod test {
 
     pub(super) fn datetime_strategy() -> impl Strategy<Value = OffsetDateTime> {
         Just(OffsetDateTime::now_utc())
+    }
+
+    #[test]
+    fn task_is_finished() {
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::aborted()],
+        };
+
+        assert!(task.is_finished());
+
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::failed(IndexError::DocumentNotFound(
+                "test".to_string(),
+            ))],
+        };
+
+        assert!(task.is_finished());
+
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::succeeded(TaskResult::Other)],
+        };
+
+        assert!(task.is_finished());
+
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::created()],
+        };
+
+        assert!(!task.is_finished());
+
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::batched(1)],
+        };
+
+        assert!(!task.is_finished());
+
+        let task = Task {
+            id: 1,
+            content: TaskContent::Dump {
+                uid: "uid".to_string(),
+            },
+            events: vec![TaskEvent::processing()],
+        };
+
+        assert!(!task.is_finished());
     }
 }

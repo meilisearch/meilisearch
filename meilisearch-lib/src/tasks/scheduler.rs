@@ -636,8 +636,13 @@ mod test {
         queue.insert(gen_task(6, gen_doc_addition_task_content("test2")));
         queue.insert(gen_task(7, gen_doc_addition_task_content("test1")));
         queue.insert(gen_task(8, TaskContent::Dump { uid: "adump".to_owned() }));
+        queue.insert(gen_task(9, TaskContent::TaskAbortion { tasks: vec![10] }));
 
         let config = SchedulerConfig::default();
+
+        // Make sure that the task abortion is processed before everybody else.
+        let batch = make_batch(&mut queue, &config);
+        assert_eq!(batch, Processing::TaskAbortion(9));
 
         // Make sure that the dump is processed before everybody else.
         let batch = make_batch(&mut queue, &config);

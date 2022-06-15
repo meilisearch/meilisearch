@@ -156,7 +156,7 @@ mod test {
             content: TaskContent::Dump {
                 uid: "test".to_string(),
             },
-            events: vec![TaskEvent::abort()],
+            events: vec![TaskEvent::aborted()],
         };
 
         assert!(task.is_aborted());

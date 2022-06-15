@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use log::debug;
 use milli::heed::{Env, RwTxn};
-use time::OffsetDateTime;
 
 use super::batch::BatchContent;
 use super::error::TaskError;
@@ -80,7 +79,7 @@ impl TaskStore {
         let task = tokio::task::spawn_blocking(move || -> Result<Task> {
             let mut txn = store.wtxn()?;
             let next_task_id = store.next_task_id(&mut txn)?;
-            let created_at = TaskEvent::Created(OffsetDateTime::now_utc());
+            let created_at = TaskEvent::created();
             let task = Task {
                 id: next_task_id,
                 content,

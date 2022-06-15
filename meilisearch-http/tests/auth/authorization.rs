@@ -16,6 +16,7 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/indexes/products/documents/0") =>                    hashset!{"documents.get", "*"},
             ("DELETE",  "/indexes/products/documents/0") =>                    hashset!{"documents.delete", "*"},
             ("GET",     "/tasks") =>                                           hashset!{"tasks.get", "*"},
+            ("POST",    "/tasks/abort") =>                                     hashset!{"tasks.abort", "*"},
             ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "*"},
             ("GET",     "/tasks/0") =>                                         hashset!{"tasks.get", "*"},
             ("PATCH",   "/indexes/products/") =>                               hashset!{"indexes.update", "*"},

@@ -231,3 +231,56 @@ async fn test_summarized_task_view() {
     let (response, _) = index.delete().await;
     assert_valid_summarized_task!(response, "indexDeletion", "test");
 }
+
+#[actix_rt::test]
+async fn abort_processed_task() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+    index.wait_task(0).await;
+
+    let (_, code) = server.abort_task(vec![0]).await;
+    assert_eq!(code, 200);
+    let ret = index.wait_task(1).await;
+    assert_eq!(ret["status"], "failed");
+}
+
+#[actix_rt::test]
+async fn abort_task() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+    index
+        .add_documents(
+            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
+            None,
+        )
+        .await;
+    let (_, code) = server.abort_task(vec![1, 2]).await;
+    assert_eq!(code, 200);
+
+    let ret = index.wait_task(3).await;
+    assert_eq!(ret["status"], "succeeded");
+
+    let ret = index.wait_task(1).await;
+    assert_eq!(ret["status"], "aborted");
+
+    let ret = index.wait_task(2).await;
+    assert_eq!(ret["status"], "aborted");
+}

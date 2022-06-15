@@ -210,7 +210,7 @@ mod test {
                 index_uid: IndexUid::new_unchecked("hello"),
                 primary_key: None,
             },
-            events: vec![TaskEvent::abort()],
+            events: vec![TaskEvent::aborted()],
         };
 
         let batch = task_to_batch(task.clone());
@@ -239,7 +239,7 @@ mod test {
                 documents_count: 10,
                 allow_index_creation: true,
             },
-            events: vec![TaskEvent::abort()],
+            events: vec![TaskEvent::aborted()],
         };
 
         let batch = task_to_batch(task.clone());

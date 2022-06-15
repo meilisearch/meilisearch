@@ -60,6 +60,7 @@ impl Action {
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
             TASKS_GET => Some(Self::TasksGet),
+            TASKS_ABORT => Some(Self::TasksAbort),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             STATS_GET => Some(Self::StatsGet),
