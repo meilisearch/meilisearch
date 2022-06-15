@@ -12,7 +12,7 @@ use nom::combinator::cut;
 use nom::sequence::{terminated, tuple};
 use Condition::*;
 
-use crate::{parse_value, ws, FilterCondition, IResult, Span, Token};
+use crate::{parse_value, FilterCondition, IResult, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition<'a> {
