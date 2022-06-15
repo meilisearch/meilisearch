@@ -27,7 +27,13 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     map.insert(
         "faceting",
         json!({
-            "maxValuesByFacet": json!(100),
+            "maxValuesPerFacet": json!(100),
+        }),
+    );
+    map.insert(
+        "pagination",
+        json!({
+            "limitedTo": json!(1000),
         }),
     );
     map
@@ -206,7 +212,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
 }
 
 macro_rules! test_setting_routes {
-    ($($setting:ident), *) => {
+    ($($setting:ident $write_method:ident), *) => {
         $(
             mod $setting {
                 use crate::common::Server;
@@ -232,7 +238,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.put(url, serde_json::Value::Null).await;
+                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null).await;
                     assert_eq!(code, 202, "{}", response);
                     server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;
@@ -276,13 +282,15 @@ macro_rules! test_setting_routes {
 }
 
 test_setting_routes!(
-    filterable_attributes,
-    displayed_attributes,
-    searchable_attributes,
-    distinct_attribute,
-    stop_words,
-    ranking_rules,
-    synonyms
+    filterable_attributes put,
+    displayed_attributes put,
+    searchable_attributes put,
+    distinct_attribute put,
+    stop_words put,
+    ranking_rules put,
+    synonyms put,
+    pagination patch,
+    faceting patch
 );
 
 #[actix_rt::test]
