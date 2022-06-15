@@ -26,9 +26,10 @@ pub fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
     }
 }
 
-use crate::{try_split_array_at, DocumentId, FieldId};
 use std::borrow::Cow;
 use std::convert::TryInto;
+
+use crate::{try_split_array_at, DocumentId, FieldId};
 
 pub struct FieldIdCodec;
 
