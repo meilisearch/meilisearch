@@ -108,7 +108,7 @@ pub fn validate_document_id_from_json(bytes: &[u8]) -> Result<StdResult<String, 
                 return Ok(Err(UserError::InvalidDocumentId { document_id: Value::String(string) }))
             }
         },
-        Value::Number(number) => Ok(Ok(number.to_string())),
+        Value::Number(number) if number.is_i64() => Ok(Ok(number.to_string())),
         content => return Ok(Err(UserError::InvalidDocumentId { document_id: content.clone() })),
     }
 }
