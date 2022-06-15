@@ -20,7 +20,8 @@ const DEFAULT_LIMIT: fn() -> usize = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/abort").route(web::post().to(SeqHandler(abort_task))))
+        .service(web::resource("/abort").route(web::post().to(SeqHandler(abort_tasks))))
+        .service(web::resource("/clear").route(web::post().to(SeqHandler(clear_tasks))))
         .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
@@ -199,14 +200,25 @@ async fn get_task(
     Ok(HttpResponse::Ok().json(task))
 }
 
-async fn abort_task(
+async fn abort_tasks(
     meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_ABORT }>, MeiliSearch>,
     task_ids: web::Json<Vec<TaskId>>,
     _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let task = meilisearch
-        .register_abort_task(task_ids.into_inner())
+        .register_abort_tasks(task_ids.into_inner())
         .await?;
+
+    let view: SummarizedTaskView = task.into();
+
+    Ok(HttpResponse::Ok().json(view))
+}
+
+async fn clear_tasks(
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_ABORT }>, MeiliSearch>,
+    _analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let task = meilisearch.register_clear_tasks().await?;
 
     let view: SummarizedTaskView = task.into();
 

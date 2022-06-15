@@ -449,8 +449,14 @@ where
         self.register_task_content(content).await
     }
 
-    pub async fn register_abort_task(&self, tasks: Vec<TaskId>) -> Result<Task> {
+    pub async fn register_abort_tasks(&self, tasks: Vec<TaskId>) -> Result<Task> {
         let content = TaskContent::TasksAbortion { tasks };
+
+        self.register_task_content(content).await
+    }
+
+    pub async fn register_clear_tasks(&self) -> Result<Task> {
+        let content = TaskContent::TasksClear;
 
         self.register_task_content(content).await
     }

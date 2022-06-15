@@ -153,9 +153,9 @@ impl Task {
             | TaskContent::IndexDeletion { index_uid }
             | TaskContent::IndexCreation { index_uid, .. }
             | TaskContent::IndexUpdate { index_uid, .. } => Some(index_uid.as_str()),
-            TaskContent::Dump { .. } => None,
-            TaskContent::TasksAbortion { .. } => None,
-            TaskContent::TasksClear => todo!(),
+            TaskContent::Dump { .. }
+            | TaskContent::TasksAbortion { .. }
+            | TaskContent::TasksClear => None,
         }
     }
 
