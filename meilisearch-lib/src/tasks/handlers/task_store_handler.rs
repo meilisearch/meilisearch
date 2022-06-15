@@ -9,8 +9,7 @@ impl TaskStore {
 
         for id in ids {
             let mut task = self.get_task(*id, None).await?;
-            // Since updates are processed sequentially, no updates can be in an undecided state
-            // here, therefore it's ok to only check for completion.
+            // we ignore any task that is not pending
             if task.is_pending() {
                 task.events.push(TaskEvent::aborted());
                 tasks.push(task);
@@ -84,4 +83,27 @@ impl BatchHandler for TaskStore {
     }
 
     async fn finish(&self, _: &Batch) {}
+}
+
+#[cfg(test)]
+mod test {
+    use crate::tasks::handlers::test::task_to_batch;
+
+    use super::*;
+
+    use nelson::Mocker;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn accept_task(
+            task in any::<Task>(),
+        ) {
+            let mocker = Mocker::default();
+            let task_store = TaskStore::mock(mocker);
+            let accept = matches!(task.content, TaskContent::TasksClear | TaskContent::TasksAbortion { .. });
+            let batch = task_to_batch(task);
+            assert_eq!(accept, task_store.accept(&batch));
+        }
+    }
 }

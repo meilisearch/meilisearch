@@ -247,7 +247,7 @@ async fn abort_processed_task() {
     let (_, code) = server.abort_task(vec![0]).await;
     assert_eq!(code, 200);
     let ret = index.wait_task(1).await;
-    assert_eq!(ret["status"], "failed");
+    assert_eq!(ret["status"], "succeeded");
 }
 
 #[actix_rt::test]
