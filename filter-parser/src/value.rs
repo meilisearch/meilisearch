@@ -71,9 +71,17 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
         _ => (),
     }
 
-    // word           = (alphanumeric | _ | - | .)+
+    // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
     let word = |input: Span<'a>| -> IResult<Token<'a>> {
-        take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))
+        let (input, word): (_, Token<'a>) =
+            take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
+        if is_keyword(word.value()) {
+            return Err(nom::Err::Error(Error::new_from_kind(
+                input,
+                ErrorKind::ReservedKeyword(word.value().to_owned()),
+            )));
+        }
+        Ok((input, word))
     };
 
     // this parser is only used when an error is encountered and it parse the
@@ -85,7 +93,7 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
     // when we create the errors from the output of the alt we have spaces everywhere
     let error_word = take_till::<_, _, Error>(is_syntax_component);
 
-    terminated(
+    let (input, value) = terminated(
         alt((
             delimited(char('\''), cut(|input| quoted_by('\'', input)), cut(char('\''))),
             delimited(char('"'), cut(|input| quoted_by('"', input)), cut(char('"'))),
@@ -107,7 +115,9 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
                 failure
             }
         })
-    })
+    })?;
+
+    Ok((input, value))
 }
 
 fn is_value_component(c: char) -> bool {
@@ -116,6 +126,10 @@ fn is_value_component(c: char) -> bool {
 
 fn is_syntax_component(c: char) -> bool {
     c.is_whitespace() || ['(', ')', '=', '<', '>', '!'].contains(&c)
+}
+
+fn is_keyword(s: &str) -> bool {
+    matches!(s, "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "_geoRadius")
 }
 
 #[cfg(test)]
