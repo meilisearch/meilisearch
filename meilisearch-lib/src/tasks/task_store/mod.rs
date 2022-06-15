@@ -122,7 +122,7 @@ impl TaskStore {
     }
 
     /// This methods takes a `Processing` which contains the next task ids to process, and returns
-    /// the coresponding tasks along with the ownership to the passed processing.
+    /// the corresponding tasks along with the ownership to the passed processing.
     ///
     /// We need get_processing_tasks to take ownership over `Processing` because we need it to be
     /// valid for 'static.
