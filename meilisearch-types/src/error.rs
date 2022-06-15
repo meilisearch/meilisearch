@@ -170,8 +170,6 @@ pub enum Code {
     InvalidApiKeyUid,
     ImmutableField,
     ApiKeyAlreadyExists,
-
-    InvalidTaskAbort,
 }
 
 impl Code {
@@ -285,7 +283,6 @@ impl Code {
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
             }
-            InvalidTaskAbort => ErrCode::invalid("invalid_task_abort", StatusCode::BAD_REQUEST),
         }
     }
 
