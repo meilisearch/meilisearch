@@ -778,7 +778,8 @@ mod tests {
         let indexing_config = IndexDocumentsConfig::default();
         let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        assert!(builder.add_documents(content).is_err());
+        let (_builder, user_error) = builder.add_documents(content).unwrap();
+        assert!(user_error.is_err());
         wtxn.commit().unwrap();
 
         // Check that there is no document.
@@ -943,7 +944,8 @@ mod tests {
         let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        assert!(builder.add_documents(content).is_err());
+        let (_builder, user_error) = builder.add_documents(content).unwrap();
+        assert!(user_error.is_err());
         wtxn.commit().unwrap();
 
         // First we send 1 document with a valid id.

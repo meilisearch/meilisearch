@@ -19,20 +19,20 @@ pub fn validate_documents_batch<R: Read + Seek>(
     reader: DocumentsBatchReader<R>,
 ) -> Result<StdResult<DocumentsBatchReader<R>, UserError>> {
     let mut cursor = reader.into_cursor();
-    let documents_batch_index = cursor.documents_batch_index().clone();
+    let mut documents_batch_index = cursor.documents_batch_index().clone();
 
     // The primary key *field id* that has already been set for this index or the one
     // we will guess by searching for the first key that contains "id" as a substring.
     let (primary_key, primary_key_id) = match index.primary_key(rtxn)? {
         Some(primary_key) => match documents_batch_index.id(primary_key) {
             Some(id) => (primary_key, id),
+            None if autogenerate_docids => (primary_key, documents_batch_index.insert(primary_key)),
             None => {
                 return match cursor.next_document()? {
                     Some(first_document) => Ok(Err(UserError::MissingDocumentId {
                         primary_key: primary_key.to_string(),
                         document: obkv_to_object(&first_document, &documents_batch_index)?,
                     })),
-                    // If there is no document in this batch the best we can do is to return this error.
                     None => Ok(Err(UserError::MissingPrimaryKey)),
                 };
             }
@@ -40,10 +40,11 @@ pub fn validate_documents_batch<R: Read + Seek>(
         None => {
             let guessed = documents_batch_index
                 .iter()
-                .filter(|(_, name)| name.contains("id"))
+                .filter(|(_, name)| name.to_lowercase().contains("id"))
                 .min_by_key(|(fid, _)| *fid);
             match guessed {
                 Some((id, name)) => (name.as_str(), *id),
+                None if autogenerate_docids => ("id", documents_batch_index.insert("id")),
                 None => return Ok(Err(UserError::MissingPrimaryKey)),
             }
         }
@@ -56,12 +57,16 @@ pub fn validate_documents_batch<R: Read + Seek>(
         _otherwise => None,
     };
 
+    let mut count = 0;
     while let Some(document) = cursor.next_document()? {
         let document_id = match document.get(primary_key_id) {
             Some(document_id_bytes) => match validate_document_id_from_json(document_id_bytes)? {
                 Ok(document_id) => document_id,
                 Err(user_error) => return Ok(Err(user_error)),
             },
+            None if autogenerate_docids => {
+                format!("{{auto-generated id of the {}nth document}}", count)
+            }
             None => {
                 return Ok(Err(UserError::MissingDocumentId {
                     primary_key: primary_key.to_string(),
@@ -75,6 +80,7 @@ pub fn validate_documents_batch<R: Read + Seek>(
                 return Ok(Err(UserError::from(user_error)));
             }
         }
+        count += 1;
     }
 
     Ok(Ok(cursor.into_reader()))
