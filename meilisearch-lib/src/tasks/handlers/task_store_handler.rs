@@ -3,7 +3,7 @@ use crate::tasks::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
 use crate::tasks::{error::TaskError, BatchHandler, Result, TaskStore};
 
 impl TaskStore {
-    async fn abort_updates(&self, ids: &[TaskId]) -> Result<()> {
+    async fn abort_tasks(&self, ids: &[TaskId]) -> Result<()> {
         let mut tasks = Vec::with_capacity(ids.len());
 
         for id in ids {
@@ -51,7 +51,7 @@ impl BatchHandler for TaskStore {
                 ..
             }) => {
                 if !events.iter().any(TaskEvent::is_aborted) {
-                    match self.abort_updates(tasks).await {
+                    match self.abort_tasks(tasks).await {
                         Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
                         Err(e) => events.push(TaskEvent::failed(e)),
                     }
