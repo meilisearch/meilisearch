@@ -160,8 +160,9 @@ impl From<&Task> for TaskListIdentifier {
                 TaskListIdentifier::Index(index_uid.as_str().to_string())
             }
             TaskContent::Dump { .. } => TaskListIdentifier::Dump,
-            TaskContent::TasksAbortion { .. } => TaskListIdentifier::TaskAbortion,
-            TaskContent::TasksClear => todo!(),
+            TaskContent::TasksAbortion { .. } | TaskContent::TasksClear => {
+                TaskListIdentifier::TaskAbortion
+            }
         }
     }
 }
@@ -200,7 +201,7 @@ impl TaskQueue {
             | TaskContent::IndexDeletion { .. }
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            TaskContent::TasksAbortion { .. } => TaskType::TaskAbortion,
+            TaskContent::TasksAbortion { .. } | TaskContent::TasksClear => TaskType::TaskAbortion,
             _ => unreachable!("unhandled task type"),
         };
 
