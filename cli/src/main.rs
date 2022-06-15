@@ -255,7 +255,7 @@ impl Performer for DocumentAddition {
             let bar = progesses.add(bar);
             bars.push(bar);
         }
-        let mut addition = milli::update::IndexDocuments::new(
+        let addition = milli::update::IndexDocuments::new(
             &mut txn,
             &index,
             &config,
@@ -263,7 +263,10 @@ impl Performer for DocumentAddition {
             |step| indexing_callback(step, &bars),
         )
         .unwrap();
-        addition.add_documents(reader)?;
+        let (addition, user_error) = addition.add_documents(reader)?;
+        if let Err(error) = user_error {
+            return Err(error.into());
+        }
 
         std::thread::spawn(move || {
             progesses.join().unwrap();

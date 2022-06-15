@@ -15,6 +15,7 @@ use crate::{Index, Result};
 pub fn validate_documents_batch<R: Read + Seek>(
     rtxn: &heed::RoTxn,
     index: &Index,
+    autogenerate_docids: bool,
     reader: DocumentsBatchReader<R>,
 ) -> Result<StdResult<DocumentsBatchReader<R>, UserError>> {
     let mut cursor = reader.into_cursor();

@@ -374,7 +374,7 @@ async fn main() -> anyhow::Result<()> {
                         });
                     };
 
-                    let mut builder = milli::update::IndexDocuments::new(
+                    let builder = milli::update::IndexDocuments::new(
                         &mut wtxn,
                         &index_cloned,
                         GLOBAL_CONFIG.get().unwrap(),
@@ -397,8 +397,8 @@ async fn main() -> anyhow::Result<()> {
 
                     let documents = DocumentsBatchReader::from_reader(Cursor::new(documents))?;
 
-                    builder.add_documents(documents)?;
-
+                    let (builder, user_error) = builder.add_documents(documents)?;
+                    let _count = user_error?;
                     let result = builder.execute();
 
                     match result {

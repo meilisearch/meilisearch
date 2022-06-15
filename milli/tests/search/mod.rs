@@ -61,8 +61,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
 
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
     let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(CONTENT.as_bytes());
 
@@ -75,7 +74,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     // index documents
     let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    builder.add_documents(content).unwrap();
+    let (builder, user_error) = builder.add_documents(content).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
 
     wtxn.commit().unwrap();

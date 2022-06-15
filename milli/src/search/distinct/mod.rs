@@ -97,14 +97,15 @@ mod test {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             ..Default::default()
         };
-        let mut addition =
+        let addition =
             IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
 
         let reader =
             crate::documents::DocumentsBatchReader::from_reader(Cursor::new(JSON.as_slice()))
                 .unwrap();
 
-        addition.add_documents(reader).unwrap();
+        let (addition, user_error) = addition.add_documents(reader).unwrap();
+        user_error.unwrap();
         addition.execute().unwrap();
 
         let fields_map = index.fields_ids_map(&txn).unwrap();
