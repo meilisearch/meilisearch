@@ -38,7 +38,7 @@ impl BatchContent {
 
 #[derive(Debug)]
 pub struct Batch {
-    // Only batches that contains a persistant tasks are given an id. Snapshot batches don't have
+    // Only batches that contains a persistent tasks are given an id. Snapshot batches don't have
     // an id.
     pub id: Option<BatchId>,
     pub created_at: OffsetDateTime,
