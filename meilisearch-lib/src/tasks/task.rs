@@ -16,6 +16,7 @@ pub enum TaskResult {
     DocumentAddition { indexed_documents: u64 },
     DocumentDeletion { deleted_documents: u64 },
     ClearAll { deleted_documents: u64 },
+    TaskAbortion { aborted_tasks: u64 },
     Other,
 }
 
@@ -132,6 +133,15 @@ impl Task {
                 TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. } | TaskEvent::Aborted { .. }
             )
         })
+    }
+
+    /// Returns whether the task is pending.
+    ///
+    /// A task is pending if it is nor finished nor processing.
+    pub fn is_pending(&self) -> bool {
+        self.events
+            .last()
+            .map_or(false, |event| matches!(event, TaskEvent::Created { .. }))
     }
 
     /// Return the content_uuid of the `Task` if there is one.

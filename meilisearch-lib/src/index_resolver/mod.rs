@@ -103,6 +103,10 @@ mod real {
                 .map(get_content_uuid)
                 .collect::<Vec<_>>();
 
+            if content_uuids.is_empty() {
+                return;
+            }
+
             match tasks.first() {
                 Some(Task {
                     id,

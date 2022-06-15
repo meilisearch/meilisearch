@@ -160,6 +160,8 @@ enum TaskDetails {
     ClearAll { deleted_documents: Option<u64> },
     #[serde(rename_all = "camelCase")]
     Dump { dump_uid: String },
+    #[serde(rename_all = "camelCase")]
+    TaskAbortion { aborted_tasks: Option<u64> },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -298,9 +300,12 @@ impl From<Task> for TaskView {
                 TaskType::DumpCreation,
                 Some(TaskDetails::Dump { dump_uid: uid }),
             ),
-            TaskContent::TasksAbortion { .. } | TaskContent::TasksClear => {
-                (TaskType::TaskAbortion, None)
-            }
+            TaskContent::TasksAbortion { .. } | TaskContent::TasksClear => (
+                TaskType::TaskAbortion,
+                Some(TaskDetails::TaskAbortion {
+                    aborted_tasks: None,
+                }),
+            ),
         };
 
         // An event always has at least one event: "Created"
@@ -343,6 +348,14 @@ impl From<Task> for TaskView {
                         }),
                     ) => {
                         deleted_documents.replace(*docs);
+                    }
+                    (
+                        TaskResult::TaskAbortion { aborted_tasks: num },
+                        Some(TaskDetails::TaskAbortion {
+                            ref mut aborted_tasks,
+                        }),
+                    ) => {
+                        aborted_tasks.replace(*num);
                     }
                     _ => (),
                 }

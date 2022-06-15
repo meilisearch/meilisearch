@@ -1,39 +1,39 @@
 use crate::tasks::batch::{Batch, BatchContent};
 use crate::tasks::task::{Task, TaskContent, TaskEvent, TaskId, TaskResult};
-use crate::tasks::{error::TaskError, BatchHandler, Result, TaskStore};
+use crate::tasks::{BatchHandler, Result, TaskFilter, TaskStore};
 
 impl TaskStore {
-    async fn abort_tasks(&self, ids: &[TaskId]) -> Result<()> {
+    /// returns the number of aborted tasks
+    async fn abort_tasks(&self, ids: &[TaskId]) -> Result<usize> {
         let mut tasks = Vec::with_capacity(ids.len());
 
         for id in ids {
             let mut task = self.get_task(*id, None).await?;
             // Since updates are processed sequentially, no updates can be in an undecided state
             // here, therefore it's ok to only check for completion.
-            if !task.is_finished() {
+            if task.is_pending() {
                 task.events.push(TaskEvent::aborted());
                 tasks.push(task);
-            } else {
-                return Err(TaskError::AbortProcessedTask);
             }
         }
 
-        self.update_tasks(tasks).await?;
+        let tasks = self.update_tasks(tasks).await?;
 
-        Ok(())
+        Ok(tasks.len())
     }
 
-    async fn abort_pending_tasks(&self) -> Result<()> {
-        // no tasks should be in processing phase here, so we can get all the unfinished tasks, and
-        // mark them as aborted.
-        let mut pending_tasks = self.fetch_unfinished_tasks(None).await?;
-        for task in pending_tasks.iter_mut() {
-            task.events.push(TaskEvent::aborted());
-        }
+    async fn abort_pending_tasks(&self) -> Result<usize> {
+        let mut filter = TaskFilter::default();
+        filter.filter_fn(|t| t.is_pending());
+        let mut pending_tasks = self.list_tasks(None, Some(filter), None).await?;
 
-        self.update_tasks(pending_tasks).await?;
+        pending_tasks.iter_mut().for_each(|t| {
+            t.events.push(TaskEvent::aborted());
+        });
 
-        Ok(())
+        let tasks = self.update_tasks(pending_tasks).await?;
+
+        Ok(tasks.len())
     }
 }
 
@@ -52,7 +52,11 @@ impl BatchHandler for TaskStore {
             }) => {
                 if !events.iter().any(TaskEvent::is_aborted) {
                     match self.abort_tasks(tasks).await {
-                        Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
+                        Ok(aborted) => {
+                            events.push(TaskEvent::succeeded(TaskResult::TaskAbortion {
+                                aborted_tasks: aborted as u64,
+                            }))
+                        }
                         Err(e) => events.push(TaskEvent::failed(e)),
                     }
                 }
@@ -64,7 +68,11 @@ impl BatchHandler for TaskStore {
             }) => {
                 if !events.iter().any(TaskEvent::is_aborted) {
                     match self.abort_pending_tasks().await {
-                        Ok(_) => events.push(TaskEvent::succeeded(TaskResult::Other)),
+                        Ok(aborted) => {
+                            events.push(TaskEvent::succeeded(TaskResult::TaskAbortion {
+                                aborted_tasks: aborted as u64,
+                            }))
+                        }
                         Err(e) => events.push(TaskEvent::failed(e)),
                     }
                 }
