@@ -349,7 +349,9 @@ generate_configure!(
     stop_words,
     synonyms,
     ranking_rules,
-    typo_tolerance
+    typo_tolerance,
+    pagination,
+    faceting
 );
 
 pub async fn update_all(
@@ -408,6 +410,18 @@ pub async fn update_all(
                         .set()
                         .map(|s| s.two_typos.set()))
                     .flatten(),
+            },
+            "faceting": {
+                "max_values_per_facet": settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.max_values_per_facet.as_ref().set()),
+            },
+            "pagination": {
+                "limited_to": settings.pagination
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.limited_to.as_ref().set()),
             },
         }),
         Some(&req),
