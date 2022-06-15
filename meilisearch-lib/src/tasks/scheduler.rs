@@ -160,7 +160,7 @@ impl From<&Task> for TaskListIdentifier {
                 TaskListIdentifier::Index(index_uid.as_str().to_string())
             }
             TaskContent::Dump { .. } => TaskListIdentifier::Dump,
-            TaskContent::TaskAbortion { .. } => TaskListIdentifier::TaskAbortion,
+            TaskContent::TasksAbortion { .. } => TaskListIdentifier::TaskAbortion,
         }
     }
 }
@@ -199,7 +199,7 @@ impl TaskQueue {
             | TaskContent::IndexDeletion { .. }
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            TaskContent::TaskAbortion { .. } => TaskType::TaskAbortion,
+            TaskContent::TasksAbortion { .. } => TaskType::TaskAbortion,
             _ => unreachable!("unhandled task type"),
         };
 
@@ -636,7 +636,7 @@ mod test {
         queue.insert(gen_task(6, gen_doc_addition_task_content("test2")));
         queue.insert(gen_task(7, gen_doc_addition_task_content("test1")));
         queue.insert(gen_task(8, TaskContent::Dump { uid: "adump".to_owned() }));
-        queue.insert(gen_task(9, TaskContent::TaskAbortion { tasks: vec![10] }));
+        queue.insert(gen_task(9, TaskContent::TasksAbortion { tasks: vec![10] }));
 
         let config = SchedulerConfig::default();
 

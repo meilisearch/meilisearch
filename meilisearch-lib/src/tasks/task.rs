@@ -154,7 +154,7 @@ impl Task {
             | TaskContent::IndexCreation { index_uid, .. }
             | TaskContent::IndexUpdate { index_uid, .. } => Some(index_uid.as_str()),
             TaskContent::Dump { .. } => None,
-            TaskContent::TaskAbortion { .. } => None,
+            TaskContent::TasksAbortion { .. } => None,
         }
     }
 
@@ -209,7 +209,7 @@ pub enum TaskContent {
     Dump {
         uid: String,
     },
-    TaskAbortion {
+    TasksAbortion {
         tasks: Vec<TaskId>,
     },
 }

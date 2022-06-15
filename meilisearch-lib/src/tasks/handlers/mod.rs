@@ -24,7 +24,7 @@ mod test {
             | TaskContent::IndexCreation { .. }
             | TaskContent::IndexUpdate { .. } => BatchContent::IndexUpdate(task),
             TaskContent::Dump { .. } => BatchContent::Dump(task),
-            TaskContent::TaskAbortion { .. } => BatchContent::TaskAbortion(task),
+            TaskContent::TasksAbortion { .. } => BatchContent::TaskAbortion(task),
         };
 
         Batch {

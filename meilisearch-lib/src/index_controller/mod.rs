@@ -450,7 +450,7 @@ where
     }
 
     pub async fn register_abort_task(&self, tasks: Vec<TaskId>) -> Result<Task> {
-        let content = TaskContent::TaskAbortion { tasks };
+        let content = TaskContent::TasksAbortion { tasks };
 
         self.register_task_content(content).await
     }

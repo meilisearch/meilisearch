@@ -158,7 +158,7 @@ impl TaskStore {
                 }
                 Processing::TaskAbortion(id) => {
                     let task = store.get(&txn, id)?.ok_or(TaskError::UnexistingTask(id))?;
-                    debug_assert!(matches!(task.content, TaskContent::TaskAbortion { .. }));
+                    debug_assert!(matches!(task.content, TaskContent::TasksAbortion { .. }));
                     BatchContent::TaskAbortion(task)
                 }
                 Processing::Nothing => BatchContent::Empty,

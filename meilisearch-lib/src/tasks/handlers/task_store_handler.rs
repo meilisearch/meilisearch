@@ -33,7 +33,7 @@ impl BatchHandler for TaskStore {
     async fn process_batch(&self, mut batch: Batch) -> Batch {
         match batch.content {
             BatchContent::TaskAbortion(Task {
-                content: TaskContent::TaskAbortion { ref tasks },
+                content: TaskContent::TasksAbortion { ref tasks },
                 ref mut events,
                 ..
             }) => {
