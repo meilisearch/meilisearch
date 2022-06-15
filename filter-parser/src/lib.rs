@@ -371,10 +371,10 @@ pub mod tests {
             ),
             (
                 "NOT channel = ponce",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "channel"),
-                    op: Condition::NotEqual(rtok("NOT channel = ", "ponce")),
-                },
+                    op: Condition::Equal(rtok("NOT channel = ", "ponce")),
+                })),
             ),
             (
                 "subscribers < 1000",
@@ -406,31 +406,31 @@ pub mod tests {
             ),
             (
                 "NOT subscribers < 1000",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::GreaterThanOrEqual(rtok("NOT subscribers < ", "1000")),
-                },
+                    op: Condition::LowerThan(rtok("NOT subscribers < ", "1000")),
+                })),
             ),
             (
                 "NOT subscribers > 1000",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::LowerThanOrEqual(rtok("NOT subscribers > ", "1000")),
-                },
+                    op: Condition::GreaterThan(rtok("NOT subscribers > ", "1000")),
+                })),
             ),
             (
                 "NOT subscribers <= 1000",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::GreaterThan(rtok("NOT subscribers <= ", "1000")),
-                },
+                    op: Condition::LowerThanOrEqual(rtok("NOT subscribers <= ", "1000")),
+                })),
             ),
             (
                 "NOT subscribers >= 1000",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
-                    op: Condition::LowerThan(rtok("NOT subscribers >= ", "1000")),
-                },
+                    op: Condition::GreaterThanOrEqual(rtok("NOT subscribers >= ", "1000")),
+                })),
             ),
             (
                 "subscribers EXISTS",
@@ -455,10 +455,10 @@ pub mod tests {
             ),
             (
                 "NOT subscribers NOT EXISTS",
-                Fc::Condition {
+                Fc::Not(Box::new(Fc::Not(Box::new(Fc::Condition {
                     fid: rtok("NOT ", "subscribers"),
                     op: Condition::Exists,
-                },
+                })))),
             ),
             (
                 "subscribers NOT   EXISTS",
@@ -479,18 +479,13 @@ pub mod tests {
             ),
             (
                 "NOT subscribers 100 TO 1000",
-                Fc::Or(
-                    vec![Fc::Condition {
-                        fid: rtok("NOT ", "subscribers"),
-                        op: Condition::LowerThan(rtok("NOT subscribers ", "100")),
-                    }
-                    .into(),
-                    Fc::Condition {
-                        fid: rtok("NOT ", "subscribers"),
-                        op: Condition::GreaterThan(rtok("NOT subscribers 100 TO ", "1000")),
-                    }
-                    .into()],
-                ),
+                Fc::Not(Box::new(Fc::Condition {
+                    fid: rtok("NOT ", "subscribers"),
+                    op: Condition::Between {
+                        from: rtok("NOT subscribers ", "100"),
+                        to: rtok("NOT subscribers 100 TO ", "1000"),
+                    },
+                })),
             ),
             (
                 "_geoRadius(12, 13, 14)",
