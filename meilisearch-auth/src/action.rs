@@ -8,7 +8,7 @@ pub enum Action {
     All = actions::ALL,
     #[serde(rename = "search")]
     Search = actions::SEARCH,
-    #[serde(rename = "documents.*")] 
+    #[serde(rename = "documents.*")]
     DocumentsAll = actions::DOCUMENTS_ALL,
     #[serde(rename = "documents.add")]
     DocumentsAdd = actions::DOCUMENTS_ADD,
