@@ -29,7 +29,7 @@ use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
 use self::validate::validate_documents_batch;
 pub use self::validate::{
-    extract_float_from_value, validate_document_id, validate_document_id_from_json,
+    extract_float_from_value, validate_document_id, validate_document_id_value,
     validate_geo_from_json,
 };
 use crate::documents::{obkv_to_object, DocumentsBatchReader};

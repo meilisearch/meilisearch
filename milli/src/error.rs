@@ -121,6 +121,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     MaxDatabaseSizeReached,
     #[error("Document doesn't have a `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
     MissingDocumentId { primary_key: String, document: Object },
+    #[error("Document have too many matching `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
+    TooManyDocumentIds { primary_key: String, document: Object },
     #[error("The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.")]
     MissingPrimaryKey,
     #[error("There is no more space left on the device. Consider increasing the size of the disk/partition.")]

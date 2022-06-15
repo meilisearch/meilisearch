@@ -17,7 +17,7 @@ use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
-use crate::update::index_documents::validate_document_id_from_json;
+use crate::update::index_documents::validate_document_id_value;
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use crate::{
     ExternalDocumentsIds, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index,
@@ -806,7 +806,8 @@ fn update_primary_key<'a>(
 ) -> Result<Cow<'a, str>> {
     match field_buffer_cache.iter_mut().find(|(id, _)| *id == primary_key_id) {
         Some((_, bytes)) => {
-            let value = validate_document_id_from_json(bytes)??;
+            let document_id = serde_json::from_slice(bytes).map_err(InternalError::SerdeJson)?;
+            let value = validate_document_id_value(document_id)??;
             serde_json::to_writer(external_id_buffer, &value).map_err(InternalError::SerdeJson)?;
             Ok(Cow::Owned(value))
         }
