@@ -90,6 +90,11 @@ impl HeedAuthStore {
         let actions = if key.actions.contains(&Action::All) {
             // if key.actions contains All, we iterate over all actions.
             Action::into_enum_iter().collect()
+        } else if key.actions.contains(&Action::DocumentsAll) {
+            // if key.actions.contains.DocumentsAll add all actions related to documents.
+            let mut actions = key.actions.clone();
+            actions.append(&mut vec![Action::DocumentsAdd, Action::DocumentsGet, Action::DocumentsDelete]);
+            actions
         } else {
             key.actions.clone()
         };
