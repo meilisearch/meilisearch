@@ -48,7 +48,7 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
     ))
 }
 
-/// value          = WS* ~ ( word | singleQuoted | doubleQuoted) ~ WS*
+/// value          = WS* ( word | singleQuoted | doubleQuoted) WS*
 pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
     let (input, _) = take_while(char::is_whitespace)(input)?;

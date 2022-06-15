@@ -1,21 +1,21 @@
 //! BNF grammar:
 //!
 //! ```text
-//! filter         = expression ~ EOF
+//! filter         = expression EOF
 //! expression     = or
 //! or             = and ("OR" and)
 //! and            = not ("AND" not)*
 //! not            = ("NOT" not) | primary
 //! primary        = (WS* "("  expression ")" WS*) | geoRadius | condition | exists | not_exists | to
 //! condition      = value ("==" | ">" ...) value
-//! exists         = value EXISTS
-//! not_exists     = value NOT EXISTS
-//! to             = value value TO value
-//! value          = WS* ( word | singleQuoted | doubleQuoted) ~ WS*
+//! exists         = value "EXISTS"
+//! not_exists     = value "NOT" WS* "EXISTS"
+//! to             = value value "TO" value
+//! value          = WS* ( word | singleQuoted | doubleQuoted) WS*
 //! singleQuoted   = "'" .* all but quotes "'"
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
-//! geoRadius      = WS* ~ "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
+//! geoRadius      = WS* "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -31,7 +31,7 @@
 //! field < 12 AND _geoPoint(1, 2)
 //! ```
 //!
-//! - If a user try to use a geoRadius as a value we must throw an error.
+//! - If a user try to use a geoRadius as a value we must throw an error.
 //! ```text
 //! field = _geoRadius(12, 13, 14)
 //! ```
@@ -170,7 +170,7 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
     delimited(multispace0, inner, multispace0)
 }
 
-/// or             = and (~ "OR" ~ and)
+/// or             = and ("OR" and)
 fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_and(input)?;
     // if we found a `OR` then we MUST find something next
@@ -182,7 +182,7 @@ fn parse_or(input: Span) -> IResult<FilterCondition> {
     Ok((input, expr))
 }
 
-/// and            = not (~ "AND" not)*
+/// and            = not ("AND" not)*
 fn parse_and(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_not(input)?;
     // if we found a `AND` then we MUST find something next
@@ -193,14 +193,14 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
     Ok((input, expr))
 }
 
-/// not            = ("NOT" ~ not) | primary
+/// not            = ("NOT" not) | primary
 /// We can have multiple consecutive not, eg: `NOT NOT channel = mv`.
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((map(preceded(tag("NOT"), cut(parse_not)), |e| e.negate()), parse_primary))(input)
 }
 
-/// geoRadius      = WS* ~ "_geoRadius(float ~ "," ~ float ~ "," float)
+/// geoRadius      = WS* "_geoRadius(float "," float "," float)
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoRadius but not after
@@ -224,7 +224,7 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
-/// geoPoint      = WS* ~ "_geoPoint(float ~ "," ~ float ~ "," float)
+/// geoPoint      = WS* "_geoPoint(float "," float "," float)
 fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoPoint but not after
     tuple((
@@ -238,7 +238,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
 }
 
-/// primary        = (WS* ~ "("  expression ")" ~ WS*) | geoRadius | condition | to
+/// primary        = (WS* "("  expression ")" WS*) | geoRadius | condition | to
 fn parse_primary(input: Span) -> IResult<FilterCondition> {
     alt((
         // if we find a first parenthesis, then we must parse an expression and find the closing parenthesis
@@ -266,7 +266,7 @@ pub fn parse_expression(input: Span) -> IResult<FilterCondition> {
     parse_or(input)
 }
 
-/// filter     = expression ~ EOF
+/// filter     = expression EOF
 pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(parse_expression, eof)(input)
 }
@@ -447,6 +447,20 @@ pub mod tests {
                 },
             ),
             (
+                "NOT subscribers NOT EXISTS",
+                Fc::Condition {
+                    fid: rtok("NOT ", "subscribers"),
+                    op: Condition::Exists,
+                },
+            ),
+            (
+                "subscribers NOT   EXISTS",
+                Fc::Condition {
+                    fid: rtok("", "subscribers"),
+                    op: Condition::NotExists,
+                },
+            ),
+            (
                 "subscribers 100 TO 1000",
                 Fc::Condition {
                     fid: rtok("", "subscribers"),
@@ -616,6 +630,7 @@ pub mod tests {
             ("channel = \"ponce", "Expression `\\\"ponce` is missing the following closing delimiter: `\"`."),
             ("channel = mv OR (followers >= 1000", "Expression `(followers >= 1000` is missing the following closing delimiter: `)`."),
             ("channel = mv OR followers >= 1000)", "Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule."),
+            ("colour NOT EXIST", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`."),
         ];
 
         for (input, expected) in test_case {

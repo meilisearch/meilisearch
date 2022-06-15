@@ -7,11 +7,12 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::character::complete::multispace1;
 use nom::combinator::cut;
 use nom::sequence::{terminated, tuple};
 use Condition::*;
 
-use crate::{parse_value, FilterCondition, IResult, Span, Token};
+use crate::{parse_value, ws, FilterCondition, IResult, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition<'a> {
@@ -62,16 +63,17 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     Ok((input, condition))
 }
 
-/// exist          = value NOT EXISTS
+/// exist          = value "EXISTS"
 pub fn parse_exists(input: Span) -> IResult<FilterCondition> {
     let (input, key) = terminated(parse_value, tag("EXISTS"))(input)?;
 
     Ok((input, FilterCondition::Condition { fid: key.into(), op: Exists }))
 }
-/// exist          = value NOT EXISTS
+/// exist          = value "NOT" WS* "EXISTS"
 pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
-    let (input, key) = terminated(parse_value, tag("NOT EXISTS"))(input)?;
+    let (input, key) = parse_value(input)?;
 
+    let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
     Ok((input, FilterCondition::Condition { fid: key.into(), op: NotExists }))
 }
 
