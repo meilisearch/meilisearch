@@ -155,6 +155,7 @@ impl Task {
             | TaskContent::IndexUpdate { index_uid, .. } => Some(index_uid.as_str()),
             TaskContent::Dump { .. } => None,
             TaskContent::TasksAbortion { .. } => None,
+            TaskContent::TasksClear => todo!(),
         }
     }
 
@@ -212,6 +213,7 @@ pub enum TaskContent {
     TasksAbortion {
         tasks: Vec<TaskId>,
     },
+    TasksClear,
 }
 
 #[cfg(test)]

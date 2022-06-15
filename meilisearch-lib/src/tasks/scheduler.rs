@@ -161,6 +161,7 @@ impl From<&Task> for TaskListIdentifier {
             }
             TaskContent::Dump { .. } => TaskListIdentifier::Dump,
             TaskContent::TasksAbortion { .. } => TaskListIdentifier::TaskAbortion,
+            TaskContent::TasksClear => todo!(),
         }
     }
 }
