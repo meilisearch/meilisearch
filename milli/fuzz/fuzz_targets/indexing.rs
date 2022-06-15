@@ -21,7 +21,7 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let writer = BufWriter::new(writer);
     let mut builder = DocumentsBatchBuilder::new(writer);
 
-    let values: Vec<Map<String, Value>> = serde_json::from_reader(input)?;
+    let values: Vec<Object> = serde_json::from_reader(input)?;
     if builder.documents_count() == 0 {
         bail!("Empty payload");
     }

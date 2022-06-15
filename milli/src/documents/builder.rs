@@ -1,9 +1,10 @@
 use std::io::{self, Write};
 
 use grenad::{CompressionType, WriterBuilder};
-use serde_json::{to_writer, Map, Value};
+use serde_json::{to_writer, Value};
 
 use super::{DocumentsBatchIndex, Error, DOCUMENTS_BATCH_INDEX_KEY};
+use crate::Object;
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
 /// format used by milli.
@@ -55,7 +56,7 @@ impl<W: Write> DocumentsBatchBuilder<W> {
     }
 
     /// Appends a new JSON object into the batch and updates the `DocumentsBatchIndex` accordingly.
-    pub fn append_json_object(&mut self, object: &Map<String, Value>) -> io::Result<()> {
+    pub fn append_json_object(&mut self, object: &Object) -> io::Result<()> {
         // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
         let mut fields_ids: Vec<_> = object.keys().map(|k| self.fields_index.insert(&k)).collect();
         fields_ids.sort_unstable();

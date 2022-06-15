@@ -8,9 +8,9 @@ use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member};
+use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object};
 use serde::Deserialize;
-use serde_json::{Deserializer, Map, Value};
+use serde_json::Deserializer;
 use slice_group_by::GroupBy;
 
 mod distinct;
@@ -66,7 +66,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(CONTENT.as_bytes());
 
-    for result in Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+    for result in Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result.unwrap();
         documents_builder.append_json_object(&object).unwrap();
     }

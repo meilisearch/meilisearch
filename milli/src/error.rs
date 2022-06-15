@@ -4,12 +4,10 @@ use std::{io, str};
 
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use thiserror::Error;
 
-use crate::{CriterionError, DocumentId, FieldId, SortError};
-
-pub type Object = Map<String, Value>;
+use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
     ["_geo", "_geoDistance", "_geoPoint", "_geoRadius"].contains(&keyword)

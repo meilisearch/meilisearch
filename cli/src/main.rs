@@ -13,8 +13,7 @@ use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
 use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
-use milli::Index;
-use serde_json::{Map, Value};
+use milli::{Index, Object};
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -325,7 +324,7 @@ fn documents_from_jsonl(reader: impl Read) -> Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
     let reader = BufReader::new(reader);
 
-    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result?;
         documents.append_json_object(&object)?;
     }
@@ -335,7 +334,7 @@ fn documents_from_jsonl(reader: impl Read) -> Result<Vec<u8>> {
 
 fn documents_from_json(reader: impl Read) -> Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
-    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
+    let list: Vec<Object> = serde_json::from_reader(reader)?;
 
     for object in list {
         documents.append_json_object(&object)?;
@@ -424,7 +423,7 @@ impl Search {
         filter: &Option<String>,
         offset: &Option<usize>,
         limit: &Option<usize>,
-    ) -> Result<Vec<Map<String, Value>>> {
+    ) -> Result<Vec<Object>> {
         let txn = index.read_txn()?;
         let mut search = index.search(&txn);
 

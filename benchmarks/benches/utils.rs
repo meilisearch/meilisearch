@@ -11,8 +11,8 @@ use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };
-use milli::{Filter, Index};
-use serde_json::{Map, Value};
+use milli::{Filter, Index, Object};
+use serde_json::Value;
 
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
@@ -96,12 +96,10 @@ pub fn base_setup(conf: &Conf) -> Index {
         update_method: IndexDocumentsMethod::ReplaceDocuments,
         ..Default::default()
     };
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
     let documents = documents_from(conf.dataset, conf.dataset_format);
-
-    builder.add_documents(documents).unwrap();
-
+    let (builder, user_error) = builder.add_documents(documents).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
     wtxn.commit().unwrap();
 
@@ -156,7 +154,7 @@ pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<imp
 fn documents_from_jsonl(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
 
-    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result?;
         documents.append_json_object(&object)?;
     }
@@ -166,7 +164,7 @@ fn documents_from_jsonl(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
 
 fn documents_from_json(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
-    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
+    let list: Vec<Object> = serde_json::from_reader(reader)?;
 
     for object in list {
         documents.append_json_object(&object)?;
@@ -221,14 +219,14 @@ impl<R: Read> CSVDocumentDeserializer<R> {
 }
 
 impl<R: Read> Iterator for CSVDocumentDeserializer<R> {
-    type Item = anyhow::Result<Map<String, Value>>;
+    type Item = anyhow::Result<Object>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let csv_document = self.documents.next()?;
 
         match csv_document {
             Ok(csv_document) => {
-                let mut document = Map::new();
+                let mut document = Object::new();
 
                 for ((field_name, field_type), value) in
                     self.headers.iter().zip(csv_document.into_iter())

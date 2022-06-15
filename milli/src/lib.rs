@@ -20,7 +20,7 @@ use std::hash::BuildHasherDefault;
 pub use filter_parser::{Condition, FilterCondition};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
-use serde_json::{Map, Value};
+use serde_json::Value;
 pub use {charabia as tokenizer, heed};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
@@ -43,20 +43,21 @@ pub use self::search::{
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 
+pub type Attribute = u32;
+pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
+pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
+pub type DocumentId = u32;
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
+pub type FieldDistribution = BTreeMap<String, u64>;
+pub type FieldId = u16;
+pub type Object = serde_json::Map<String, serde_json::Value>;
+pub type Position = u32;
+pub type RelativePosition = u16;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
-pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
-pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
-pub type Attribute = u32;
-pub type DocumentId = u32;
-pub type FieldId = u16;
-pub type Position = u32;
-pub type RelativePosition = u16;
-pub type FieldDistribution = BTreeMap<String, u64>;
 
 /// A GeoPoint is a point in cartesian plan, called xyz_point in the code. Its metadata
 /// is a tuple composed of 1. the DocumentId of the associated document and 2. the original point
@@ -82,7 +83,7 @@ pub fn obkv_to_json(
     displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReaderU16,
-) -> Result<Map<String, Value>> {
+) -> Result<Object> {
     displayed_fields
         .iter()
         .copied()

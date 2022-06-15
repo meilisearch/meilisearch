@@ -26,11 +26,11 @@ use milli::update::{
 };
 use milli::{
     obkv_to_json, CompressionType, Filter as MilliFilter, FilterCondition, FormatOptions, Index,
-    MatcherBuilder, SearchResult, SortError,
+    MatcherBuilder, Object, SearchResult, SortError,
 };
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
@@ -169,11 +169,7 @@ impl<'s, A: AsRef<[u8]>> Highlighter<'s, A> {
         }
     }
 
-    fn highlight_record(
-        &self,
-        object: &mut Map<String, Value>,
-        attributes_to_highlight: &HashSet<String>,
-    ) {
+    fn highlight_record(&self, object: &mut Object, attributes_to_highlight: &HashSet<String>) {
         // TODO do we need to create a string for element that are not and needs to be highlight?
         for (key, value) in object.iter_mut() {
             if attributes_to_highlight.contains(key) {
@@ -708,7 +704,7 @@ async fn main() -> anyhow::Result<()> {
     #[derive(Debug, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Answer {
-        documents: Vec<Map<String, Value>>,
+        documents: Vec<Object>,
         number_of_candidates: u64,
         facets: BTreeMap<String, BTreeMap<String, u64>>,
     }
@@ -1036,7 +1032,7 @@ fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
     let reader = BufReader::new(reader);
 
-    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result?;
         documents.append_json_object(&object)?;
     }
@@ -1046,7 +1042,7 @@ fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
 
 fn documents_from_json(reader: impl Read) -> anyhow::Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
-    let list: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
+    let list: Vec<Object> = serde_json::from_reader(reader)?;
 
     for object in list {
         documents.append_json_object(&object)?;

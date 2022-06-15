@@ -5,8 +5,8 @@ use heed::EnvOpenOptions;
 use maplit::hashset;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{FacetDistribution, Index};
-use serde_json::{Deserializer, Map, Value};
+use milli::{FacetDistribution, Index, Object};
+use serde_json::Deserializer;
 
 #[test]
 fn test_facet_distribution_with_no_facet_values() {
@@ -46,7 +46,7 @@ fn test_facet_distribution_with_no_facet_values() {
         }"#,
     );
 
-    for result in Deserializer::from_reader(reader).into_iter::<Map<String, Value>>() {
+    for result in Deserializer::from_reader(reader).into_iter::<Object>() {
         let object = result.unwrap();
         documents_builder.append_json_object(&object).unwrap();
     }

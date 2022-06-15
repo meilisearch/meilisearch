@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io;
-use std::result::Result as StdResult;
 
 use concat_arrays::concat_arrays;
 use serde_json::Value;
