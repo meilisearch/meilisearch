@@ -192,6 +192,19 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
     let filter = FilterCondition::In { fid: value, els: content };
     Ok((input, filter))
 }
+/// in = value "NOT" WS* "IN" "[" value_list "]"
+fn parse_not_in(input: Span) -> IResult<FilterCondition> {
+    let (input, value) = parse_value(input)?;
+    let (input, _) = tag("NOT")(input)?;
+    let (input, _) = multispace1(input)?;
+    let (input, _) = ws(tag("IN"))(input)?;
+
+    let mut els_parser = delimited(tag("["), parse_value_list, tag("]"));
+
+    let (input, content) = els_parser(input)?;
+    let filter = FilterCondition::Not(Box::new(FilterCondition::In { fid: value, els: content }));
+    Ok((input, filter))
+}
 
 /// or             = and ("OR" and)
 fn parse_or(input: Span) -> IResult<FilterCondition> {
@@ -290,6 +303,7 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
         ),
         parse_geo_radius,
         parse_in,
+        parse_not_in,
         parse_condition,
         parse_exists,
         parse_not_exists,
@@ -360,6 +374,16 @@ pub mod tests {
                         rtok("colour IN[green, ", "blue"),
                     ] 
                 }
+            ),
+            (
+                "colour NOT IN[green,blue]",
+                Fc::Not(Box::new(Fc::In { 
+                    fid: rtok("", "colour"), 
+                    els: vec![
+                        rtok("colour NOT IN[", "green"),
+                        rtok("colour NOT IN[green, ", "blue"),
+                    ] 
+                }))
             ),
             (
                 " colour IN [  green , blue , ]",
