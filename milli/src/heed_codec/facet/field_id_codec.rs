@@ -1,6 +1,9 @@
-use crate::{FieldId, BEU16};
+use std::borrow::Cow;
+use std::convert::TryInto;
+
 use heed::zerocopy::AsBytes;
-use std::{borrow::Cow, convert::TryInto};
+
+use crate::{FieldId, BEU16};
 
 pub struct FieldIdCodec;
 

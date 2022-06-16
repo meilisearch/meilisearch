@@ -1,10 +1,11 @@
-use heed::zerocopy::AsBytes;
-use serde_json::Value;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 use std::mem::size_of;
+
+use heed::zerocopy::AsBytes;
+use serde_json::Value;
 
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
