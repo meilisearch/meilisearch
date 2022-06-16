@@ -49,6 +49,7 @@ pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
+pub type BEU16 = heed::zerocopy::U16<heed::byteorder::BE>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type Attribute = u32;

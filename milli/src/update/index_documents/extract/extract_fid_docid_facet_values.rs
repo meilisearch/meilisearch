@@ -1,15 +1,16 @@
+use heed::zerocopy::AsBytes;
+use serde_json::Value;
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 use std::mem::size_of;
 
-use heed::zerocopy::AsBytes;
-use serde_json::Value;
-
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::{DocumentId, FieldId, Result};
+use crate::update::index_documents::merge_cbo_roaring_bitmaps;
+use crate::{DocumentId, FieldId, Result, BEU32};
 
 /// Extracts the facet values of each faceted field of each document.
 ///
@@ -40,7 +41,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     );
 
     let mut fid_docid_facet_exists_sorter = create_sorter(
-        keep_first,
+        merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -56,12 +57,17 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
             if faceted_fields.contains(&field_id) {
                 key_buffer.clear();
 
-                // here, we know already that the document must be added to the “field id exists” database
-                // prefix key with the field_id and the document_id
-
+                // Set key to the field_id
+                // Note: this encoding is consistent with FieldIdCodec
                 key_buffer.extend_from_slice(&field_id.to_be_bytes());
+
+                // Here, we know already that the document must be added to the “field id exists” database
+                let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
+                let document = BEU32::from(document).get();
+                fid_docid_facet_exists_sorter.insert(&key_buffer, document.to_ne_bytes())?;
+
+                // For the other extraction tasks, prefix the key with the field_id and the document_id
                 key_buffer.extend_from_slice(&docid_bytes);
-                fid_docid_facet_exists_sorter.insert(&key_buffer, ().as_bytes())?;
 
                 let value =
                     serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;

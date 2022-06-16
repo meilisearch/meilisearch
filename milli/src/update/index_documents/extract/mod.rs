@@ -1,5 +1,4 @@
 mod extract_docid_word_positions;
-mod extract_facet_exists_docids;
 mod extract_facet_number_docids;
 mod extract_facet_string_docids;
 mod extract_fid_docid_facet_values;
@@ -17,7 +16,6 @@ use log::debug;
 use rayon::prelude::*;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
-use self::extract_facet_exists_docids::extract_facet_exists_docids;
 use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
@@ -142,15 +140,12 @@ pub(crate) fn data_from_obkv_documents(
         TypedChunk::FieldIdFacetNumberDocids,
         "field-id-facet-number-docids",
     );
-    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
-        docid_fid_facet_exists_chunks.clone(),
-        indexer.clone(),
-        lmdb_writer_sx.clone(),
-        extract_facet_exists_docids,
-        merge_cbo_roaring_bitmaps,
-        TypedChunk::FieldIdFacetExistsDocids,
-        "field-id-facet-exists-docids",
-    );
+
+    // spawn extraction task for field-id-facet-exists-docids
+    rayon::spawn(move || {
+        let reader = docid_fid_facet_exists_chunks.merge(merge_cbo_roaring_bitmaps, &indexer);
+        let _ = lmdb_writer_sx.send(reader.map(TypedChunk::FieldIdFacetExistsDocids));
+    });
 
     Ok(())
 }
@@ -226,7 +221,7 @@ fn send_and_extract_flattened_documents_data(
     grenad::Reader<CursorClonableMmap>,
     (
         grenad::Reader<CursorClonableMmap>,
-        (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
+        (grenad::Reader<CursorClonableMmap>, grenad::Reader<File>),
     ),
 )> {
     let flattened_documents_chunk =
@@ -293,9 +288,6 @@ fn send_and_extract_flattened_documents_data(
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
                     docid_fid_facet_strings_chunk.clone(),
                 )));
-
-                let docid_fid_facet_exists_chunk =
-                    unsafe { as_cloneable_grenad(&docid_fid_facet_exists_chunk)? };
 
                 Ok((
                     docid_fid_facet_numbers_chunk,
