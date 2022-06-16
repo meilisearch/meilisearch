@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use indexmap::IndexMap;
-use milli::documents::DocumentBatchReader;
+use milli::documents::DocumentsBatchReader;
 use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexDocumentsConfig, IndexerConfig};
 use serde::{Deserialize, Serialize};
@@ -135,19 +135,20 @@ impl Index {
         if !empty {
             tmp_doc_file.seek(SeekFrom::Start(0))?;
 
-            let documents_reader = DocumentBatchReader::from_reader(tmp_doc_file)?;
+            let documents_reader = DocumentsBatchReader::from_reader(tmp_doc_file)?;
 
             //If the document file is empty, we don't perform the document addition, to prevent
             //a primary key error to be thrown.
             let config = IndexDocumentsConfig::default();
-            let mut builder = milli::update::IndexDocuments::new(
+            let builder = milli::update::IndexDocuments::new(
                 &mut txn,
                 &index,
                 indexer_config,
                 config,
                 |_| (),
             )?;
-            builder.add_documents(documents_reader)?;
+            let (builder, user_error) = builder.add_documents(documents_reader)?;
+            user_error?;
             builder.execute()?;
         }
 

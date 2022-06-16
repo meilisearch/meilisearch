@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
-use milli::documents::DocumentBatchReader;
+use milli::documents::DocumentsBatchReader;
 use milli::update::{
     DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
     Setting,
@@ -315,7 +315,7 @@ impl Index {
         };
 
         let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
-        let mut builder = milli::update::IndexDocuments::new(
+        let builder = milli::update::IndexDocuments::new(
             &mut txn,
             self,
             self.indexer_config.as_ref(),
@@ -325,8 +325,9 @@ impl Index {
 
         for content_uuid in contents.into_iter() {
             let content_file = file_store.get_update(content_uuid)?;
-            let reader = DocumentBatchReader::from_reader(content_file)?;
-            builder.add_documents(reader)?;
+            let reader = DocumentsBatchReader::from_reader(content_file)?;
+            let (builder, user_error) = builder.add_documents(reader)?;
+            todo!("use the user_error here");
         }
 
         let addition = builder.execute()?;
