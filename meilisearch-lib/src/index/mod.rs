@@ -24,12 +24,12 @@ pub use test::MockIndex as Index;
 /// code for unit testing, in places where an index would normally be used.
 #[cfg(test)]
 pub mod test {
-    use std::path::Path;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
-    use milli::update::IndexerConfig;
-    use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
+    use milli::update::{
+        DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod, IndexerConfig,
+    };
     use nelson::Mocker;
     use uuid::Uuid;
 
@@ -162,7 +162,7 @@ pub mod test {
             primary_key: Option<String>,
             file_store: UpdateFileStore,
             contents: impl Iterator<Item = Uuid>,
-        ) -> Result<DocumentAdditionResult> {
+        ) -> Result<Vec<Result<DocumentAdditionResult>>> {
             match self {
                 MockIndex::Real(index) => {
                     index.update_documents(method, primary_key, file_store, contents)

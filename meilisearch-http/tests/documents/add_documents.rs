@@ -326,7 +326,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789", expected a documents, or a sequence of documents. at line 1 column 102`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789012345678901234567890123456789", expected a sequence at line 1 column 102`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -349,9 +349,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...90123456789m", expected a documents, or a sequence of documents. at line 1 column 103`."#
-        )
+        json!("The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string \"0123456789012345678901234567...90123456789012345678901234567890123456789m\", expected a sequence at line 1 column 103`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
@@ -388,7 +386,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -411,9 +409,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
-        )
+        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
@@ -1020,7 +1016,7 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(2).await;
     let (response, code) = index.get_task(2).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["status"], "failed");
 }
 
 #[actix_rt::test]
