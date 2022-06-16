@@ -5,9 +5,18 @@ on:
 name: Publish binaries to release
 
 jobs:
+  check-version:
+    name: Check the version validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check release validity
+        run: sh .github/scripts/check-release.sh
+
   publish:
     name: Publish binary for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: check-version
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +50,7 @@ jobs:
   publish-aarch64:
     name: Publish binary for aarch64
     runs-on: ${{ matrix.os }}
+    needs: check-version
     continue-on-error: false
     strategy:
       fail-fast: false
