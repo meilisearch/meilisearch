@@ -151,7 +151,7 @@ mod store {
             let update_file = File::open(update_file_path)?;
             let mut dst_file = NamedTempFile::new_in(&dump_path)?;
             let mut document_cursor = DocumentsBatchReader::from_reader(update_file)?.into_cursor();
-            let index = document_cursor.documents_batch_index();
+            let index = document_cursor.documents_batch_index().clone();
 
             let mut document_buffer = Map::new();
             // TODO: we need to find a way to do this more efficiently. (create a custom serializer

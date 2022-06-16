@@ -98,7 +98,7 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
 /// Reads JSON Lines from input and write an obkv batch to writer.
 pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mut reader = BufReader::new(input);
+    let reader = BufReader::new(input);
 
     for result in serde_json::Deserializer::from_reader(reader).into_iter() {
         let object = result
@@ -122,7 +122,7 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
 /// Reads JSON from input and write an obkv batch to writer.
 pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mut reader = BufReader::new(input);
+    let reader = BufReader::new(input);
 
     let objects: Vec<_> = serde_json::from_reader(reader)
         .map_err(Error::Json)

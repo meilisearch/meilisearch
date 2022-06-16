@@ -6,16 +6,16 @@ use std::path::Path;
 use std::sync::Arc;
 
 use fst::IntoStreamer;
-use milli::heed::{EnvOpenOptions, RoTxn};
+use milli::heed::{CompactionOption, EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 use uuid::Uuid;
+use walkdir::WalkDir;
 
 use crate::index::search::DEFAULT_PAGINATION_LIMITED_TO;
-use crate::EnvSizer;
 
 use super::error::IndexError;
 use super::error::Result;
@@ -245,11 +245,8 @@ impl Index {
         let fields_ids_map = self.fields_ids_map(&txn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
-
         let mut documents = Vec::new();
-
-        for entry in iter {
+        for entry in self.all_documents(&txn)?.skip(offset).take(limit) {
             let (_id, obkv) = entry?;
             let document = obkv_to_json(&all_fields, &fields_ids_map, obkv)?;
             let document = match &attributes_to_retrieve {
@@ -302,7 +299,12 @@ impl Index {
     }
 
     pub fn size(&self) -> u64 {
-        self.env.size()
+        WalkDir::new(self.path())
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|metadata| metadata.is_file())
+            .fold(0, |acc, m| acc + m.len())
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
@@ -310,9 +312,8 @@ impl Index {
         create_dir_all(&dst)?;
         dst.push("data.mdb");
         let _txn = self.write_txn()?;
-        self.inner
-            .env
-            .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
+        self.inner.copy_to_path(dst, CompactionOption::Enabled)?;
+
         Ok(())
     }
 }

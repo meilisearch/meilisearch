@@ -181,9 +181,7 @@ impl SnapshotJob {
             let mut options = milli::heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
             let index = milli::Index::new(options, entry.path())?;
-            index
-                .env
-                .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
+            index.copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
         }
 
         Ok(())

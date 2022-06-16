@@ -32,7 +32,9 @@ impl ErrorCode for MilliError<'_> {
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::InvalidDocumentId { .. } => Code::InvalidDocumentId,
+                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                        Code::InvalidDocumentId
+                    }
                     UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
                     UserError::SortRankingRuleMissing => Code::Sort,

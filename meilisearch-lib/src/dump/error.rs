@@ -11,7 +11,7 @@ pub enum DumpError {
     #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
-    IndexResolver(#[from] IndexResolverError),
+    IndexResolver(#[from] Box<IndexResolverError>),
 }
 
 internal_error!(

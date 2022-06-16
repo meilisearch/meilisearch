@@ -27,7 +27,7 @@ const DATA_FILE_NAME: &str = "documents.jsonl";
 impl Index {
     pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
         // acquire write txn make sure any ongoing write is finished before we start.
-        let txn = self.env.write_txn()?;
+        let txn = self.write_txn()?;
         let path = path.as_ref().join(format!("indexes/{}", self.uuid));
 
         create_dir_all(&path)?;
