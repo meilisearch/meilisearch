@@ -262,7 +262,11 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                         (Some(before_token_kind), Some(after_token_kind)) => {
                             if before_token_kind == after_token_kind {
                                 before_tokens.next();
-                                after_tokens.next();
+
+                                // this avoid having an ending separator before crop marker.
+                                if remaining_words > 1 {
+                                    after_tokens.next();
+                                }
                             } else if before_token_kind == SeparatorKind::Hard {
                                 after_tokens.next();
                             } else {
