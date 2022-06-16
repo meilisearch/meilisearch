@@ -150,7 +150,7 @@ fn indexing_songs_default(c: &mut Criterion) {
 fn deleting_songs_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
-    group.bench_function("Deleting songs in batches with default settings", |b| {
+    group.bench_function("-songs-delete-facetedString-facetedNumber-searchable-", |b| {
         b.iter_with_setup(
             move || {
                 let primary_key = "id";
@@ -381,7 +381,7 @@ fn indexing_wiki(c: &mut Criterion) {
 fn deleting_wiki_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
-    group.bench_function("Deleting wiki in batches with default settings", |b| {
+    group.bench_function("-wiki-delete-searchable-", |b| {
         b.iter_with_setup(
             move || {
                 let primary_key = "id";
@@ -544,7 +544,7 @@ fn indexing_movies_default(c: &mut Criterion) {
 fn deleting_movies_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
-    group.bench_function("Deleting movies in batches with default settings", |b| {
+    group.bench_function("-movies-delete-facetedString-facetedNumber-searchable-", |b| {
         b.iter_with_setup(
             move || {
                 let primary_key = "id";
@@ -723,7 +723,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
 fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
-    group.bench_function("Deleting nested movies in batches with default settings", |b| {
+    group.bench_function("-movies-delete-facetedString-facetedNumber-searchable-nested-", |b| {
         b.iter_with_setup(
             move || {
                 let primary_key = "id";
@@ -884,7 +884,7 @@ fn indexing_geo(c: &mut Criterion) {
 fn deleting_geo_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
-    group.bench_function("Deleting geo_point in batches with default settings", |b| {
+    group.bench_function("-geo-delete-facetedNumber-facetedGeo-searchable-", |b| {
         b.iter_with_setup(
             move || {
                 let primary_key = "geonameid";
