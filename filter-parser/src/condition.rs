@@ -44,8 +44,7 @@ impl<'a> Condition<'a> {
         }
     }
 }
-
-/// condition      = value ("==" | ">" ...) value
+/// condition      = value ("=" | "!=" | ">" | ">=" | "<" | "<=") value
 pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
     let (input, (fid, op, value)) = tuple((parse_value, operator, cut(parse_value)))(input)?;
@@ -69,7 +68,7 @@ pub fn parse_exists(input: Span) -> IResult<FilterCondition> {
 
     Ok((input, FilterCondition::Condition { fid: key.into(), op: Exists }))
 }
-/// exist          = value "NOT" WS* "EXISTS"
+/// exist          = value "NOT" WS+ "EXISTS"
 pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
     let (input, key) = parse_value(input)?;
 
@@ -77,10 +76,10 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
     Ok((input, FilterCondition::Condition { fid: key.into(), op: NotExists }))
 }
 
-/// to             = value value TO value
+/// to             = value value "TO" WS+ value
 pub fn parse_to(input: Span) -> IResult<FilterCondition> {
-    let (input, (key, from, _, to)) =
-        tuple((parse_value, parse_value, tag("TO"), cut(parse_value)))(input)?;
+    let (input, (key, from, _, _, to)) =
+        tuple((parse_value, parse_value, tag("TO"), multispace1, cut(parse_value)))(input)?;
 
     Ok((input, FilterCondition::Condition { fid: key, op: Between { from, to } }))
 }
