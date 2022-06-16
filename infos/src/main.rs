@@ -551,7 +551,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let db = facet_id_exists_docids.remap_data_type::<ByteSlice>();
             for result in facet_values_iter(rtxn, db, facet_id)? {
                 let (_fid, value) = result?;
-                let key = format!("{}", facet_name);
+                let key = facet_name.to_string();
                 heap.push(Reverse((value.len(), key, facet_id_exists_docids_name)));
                 if heap.len() > limit {
                     heap.pop();

@@ -170,7 +170,7 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
     delimited(multispace0, inner, multispace0)
 }
 
-/// or             = and ("OR" and)
+/// or             = and ("OR" and)*
 fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, lhs) = parse_and(input)?;
     // if we found a `OR` then we MUST find something next
@@ -200,7 +200,7 @@ fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((map(preceded(tag("NOT"), cut(parse_not)), |e| e.negate()), parse_primary))(input)
 }
 
-/// geoRadius      = WS* "_geoRadius(float "," float "," float)
+/// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoRadius but not after
@@ -224,7 +224,7 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
-/// geoPoint      = WS* "_geoPoint(float "," float "," float)
+/// geoPoint      = WS* "_geoPoint(float WS* "," WS* float WS* "," WS* float)
 fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoPoint but not after
     tuple((

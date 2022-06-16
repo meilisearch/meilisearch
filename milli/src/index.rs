@@ -156,8 +156,7 @@ impl Index {
         let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
-        let facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec> =
-            env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
+        let facet_id_exists_docids = env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
 
         let field_id_docid_facet_f64s = env.create_database(Some(FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =

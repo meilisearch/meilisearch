@@ -32,9 +32,7 @@ pub fn extract_facet_exists_docids<R: io::Read + io::Seek>(
     let mut cursor = docid_fid_facet_number.into_cursor()?;
     while let Some((key_bytes, _)) = cursor.move_on_next()? {
         let (field_id, document_id) = FieldIdDocIdCodec::bytes_decode(key_bytes).unwrap();
-
         let key_bytes = FieldIdCodec::bytes_encode(&field_id).unwrap();
-
         facet_exists_docids_sorter.insert(key_bytes, document_id.to_ne_bytes())?;
     }
 
