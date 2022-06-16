@@ -7,7 +7,7 @@ use std::io;
 use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
 use obkv::KvReader;
-pub use reader::{DocumentsBatchCursor, DocumentsBatchReader};
+pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{FieldIdMapMissingEntry, InternalError};

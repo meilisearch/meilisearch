@@ -1,5 +1,5 @@
 use std::convert::TryInto;
-use std::io;
+use std::{error, fmt, io};
 
 use obkv::KvReader;
 
@@ -79,12 +79,40 @@ impl<R> DocumentsBatchCursor<R> {
 impl<R: io::Read + io::Seek> DocumentsBatchCursor<R> {
     /// Returns the next document, starting from the first one. Subsequent calls to
     /// `next_document` advance the document reader until all the documents have been read.
-    pub fn next_document(&mut self) -> Result<Option<KvReader<FieldId>>, grenad::Error> {
+    pub fn next_document(
+        &mut self,
+    ) -> Result<Option<KvReader<FieldId>>, DocumentsBatchCursorError> {
         match self.cursor.move_on_next()? {
             Some((key, value)) if key != DOCUMENTS_BATCH_INDEX_KEY => {
                 Ok(Some(KvReader::new(value)))
             }
             _otherwise => Ok(None),
         }
+    }
+}
+
+/// The possible error thrown by the `DocumentsBatchCursor` when iterating on the documents.
+#[derive(Debug)]
+pub struct DocumentsBatchCursorError {
+    inner: grenad::Error,
+}
+
+impl From<grenad::Error> for DocumentsBatchCursorError {
+    fn from(error: grenad::Error) -> DocumentsBatchCursorError {
+        DocumentsBatchCursorError { inner: error }
+    }
+}
+
+impl Into<grenad::Error> for DocumentsBatchCursorError {
+    fn into(self) -> grenad::Error {
+        self.inner
+    }
+}
+
+impl error::Error for DocumentsBatchCursorError {}
+
+impl fmt::Display for DocumentsBatchCursorError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }

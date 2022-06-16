@@ -7,6 +7,7 @@ use rayon::ThreadPoolBuildError;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::documents::DocumentsBatchCursorError;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
@@ -206,6 +207,12 @@ where
                 Error::InternalError(InternalError::GrenadInvalidFormatVersion)
             }
         }
+    }
+}
+
+impl From<DocumentsBatchCursorError> for Error {
+    fn from(error: DocumentsBatchCursorError) -> Error {
+        Error::from(Into::<grenad::Error>::into(error))
     }
 }
 
