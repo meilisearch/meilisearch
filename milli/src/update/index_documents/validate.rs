@@ -4,27 +4,28 @@ use std::result::Result as StdResult;
 
 use serde_json::Value;
 
-use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
+use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader, EnrichedDocumentsBatchReader};
 use crate::error::{GeoError, InternalError, UserError};
-use crate::update::index_documents::obkv_to_object;
+use crate::update::index_documents::{obkv_to_object, writer_into_reader};
 use crate::{FieldId, Index, Object, Result};
 
 /// The symbol used to define levels in a nested primary key.
 const PRIMARY_KEY_SPLIT_SYMBOL: char = '.';
 
-/// This function validates a documents by checking that:
+/// This function validates and enrich the documents by checking that:
 ///  - we can infer a primary key,
-///  - all the documents id exist and,
+///  - all the documents id exist and are extracted,
 ///  - the validity of them but also,
 ///  - the validity of the `_geo` field depending on the settings.
-pub fn validate_documents_batch<R: Read + Seek>(
+pub fn validate_and_enrich_documents_batch<R: Read + Seek>(
     rtxn: &heed::RoTxn,
     index: &Index,
     autogenerate_docids: bool,
     reader: DocumentsBatchReader<R>,
-) -> Result<StdResult<DocumentsBatchReader<R>, UserError>> {
+) -> Result<StdResult<EnrichedDocumentsBatchReader<R>, UserError>> {
     let mut cursor = reader.into_cursor();
     let mut documents_batch_index = cursor.documents_batch_index().clone();
+    let mut external_ids = tempfile::tempfile().map(grenad::Writer::new)?;
 
     // The primary key *field id* that has already been set for this index or the one
     // we will guess by searching for the first key that contains "id" as a substring.
@@ -82,6 +83,8 @@ pub fn validate_documents_batch<R: Read + Seek>(
             Err(user_error) => return Ok(Err(user_error)),
         };
 
+        external_ids.insert(count.to_be_bytes(), &document_id)?;
+
         if let Some(geo_value) = geo_field_id.and_then(|fid| document.get(fid)) {
             if let Err(user_error) = validate_geo_from_json(Value::from(document_id), geo_value)? {
                 return Ok(Err(UserError::from(user_error)));
@@ -90,7 +93,10 @@ pub fn validate_documents_batch<R: Read + Seek>(
         count += 1;
     }
 
-    Ok(Ok(cursor.into_reader()))
+    let external_ids = writer_into_reader(external_ids)?;
+    let reader = EnrichedDocumentsBatchReader::new(cursor.into_reader(), external_ids)?;
+
+    Ok(Ok(reader))
 }
 
 /// Retrieve the document id after validating it, returning a `UserError`
@@ -100,7 +106,7 @@ fn fetch_document_id(
     documents_batch_index: &DocumentsBatchIndex,
     primary_key: PrimaryKey,
     autogenerate_docids: bool,
-    count: usize,
+    count: u32,
 ) -> Result<StdResult<String, UserError>> {
     match primary_key {
         PrimaryKey::Flat { name: primary_key, field_id: primary_key_id } => {

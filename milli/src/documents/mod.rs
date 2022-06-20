@@ -1,11 +1,14 @@
 mod builder;
+mod enriched;
 mod reader;
 
 use std::fmt::{self, Debug};
 use std::io;
+use std::str::Utf8Error;
 
 use bimap::BiHashMap;
 pub use builder::DocumentsBatchBuilder;
+pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
 use obkv::KvReader;
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
@@ -87,6 +90,8 @@ impl DocumentsBatchIndex {
 pub enum Error {
     ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
     InvalidDocumentFormat,
+    InvalidEnrichedData,
+    InvalidUtf8(Utf8Error),
     Csv(csv::Error),
     Json(serde_json::Error),
     Serialize(serde_json::Error),
@@ -118,6 +123,12 @@ impl From<grenad::Error> for Error {
     }
 }
 
+impl From<Utf8Error> for Error {
+    fn from(other: Utf8Error) -> Self {
+        Self::InvalidUtf8(other)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -127,6 +138,8 @@ impl fmt::Display for Error {
             Error::InvalidDocumentFormat => {
                 f.write_str("Invalid document addition format, missing the documents batch index.")
             }
+            Error::InvalidEnrichedData => f.write_str("Invalid enriched data."),
+            Error::InvalidUtf8(e) => write!(f, "{}", e),
             Error::Io(e) => write!(f, "{}", e),
             Error::Serialize(e) => write!(f, "{}", e),
             Error::Grenad(e) => write!(f, "{}", e),

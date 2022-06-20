@@ -7,7 +7,7 @@ use rayon::ThreadPoolBuildError;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::documents::DocumentsBatchCursorError;
+use crate::documents::{self, DocumentsBatchCursorError};
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
@@ -36,6 +36,8 @@ pub enum InternalError {
     FieldIdMappingMissingEntry { key: FieldId },
     #[error(transparent)]
     Fst(#[from] fst::Error),
+    #[error(transparent)]
+    DocumentsError(#[from] documents::Error),
     #[error("Invalid compression type have been specified to grenad.")]
     GrenadInvalidCompressionType,
     #[error("Invalid grenad file with an invalid version format.")]
@@ -185,6 +187,7 @@ macro_rules! error_from_sub_error {
 error_from_sub_error! {
     FieldIdMapMissingEntry => InternalError,
     fst::Error => InternalError,
+    documents::Error => InternalError,
     str::Utf8Error => InternalError,
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
@@ -212,7 +215,10 @@ where
 
 impl From<DocumentsBatchCursorError> for Error {
     fn from(error: DocumentsBatchCursorError) -> Error {
-        Error::from(Into::<grenad::Error>::into(error))
+        match error {
+            DocumentsBatchCursorError::Grenad(e) => Error::from(e),
+            DocumentsBatchCursorError::Utf8(e) => Error::from(e),
+        }
     }
 }
 

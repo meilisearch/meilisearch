@@ -27,7 +27,7 @@ pub use self::helpers::{
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use self::validate::validate_documents_batch;
+use self::validate::validate_and_enrich_documents_batch;
 pub use self::validate::{
     extract_float_from_value, validate_document_id, validate_document_id_value,
     validate_geo_from_json,
@@ -141,7 +141,7 @@ where
         // We check for user errors in this validator and if there is one, we can return
         // the `IndexDocument` struct as it is valid to send more documents into it.
         // However, if there is an internal error we throw it away!
-        let reader = match validate_documents_batch(
+        let enriched_documents_reader = match validate_and_enrich_documents_batch(
             self.wtxn,
             self.index,
             self.config.autogenerate_docids,
@@ -155,7 +155,7 @@ where
             .transform
             .as_mut()
             .expect("Invalid document addition state")
-            .read_documents(reader, self.wtxn, &self.progress)?
+            .read_documents(enriched_documents_reader, self.wtxn, &self.progress)?
             as u64;
 
         self.added_documents += indexed_documents;

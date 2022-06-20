@@ -14,7 +14,7 @@ use smartstring::SmartString;
 
 use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_obkvs, MergeFn};
 use super::{IndexDocumentsMethod, IndexerConfig};
-use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader};
+use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
 use crate::update::index_documents::validate_document_id_value;
@@ -153,7 +153,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
     pub fn read_documents<R, F>(
         &mut self,
-        reader: DocumentsBatchReader<R>,
+        reader: EnrichedDocumentsBatchReader<R>,
         wtxn: &mut heed::RwTxn,
         progress_callback: F,
     ) -> Result<usize>
@@ -189,7 +189,9 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut external_id_buffer = Vec::new();
         let mut field_buffer: Vec<(u16, Cow<[u8]>)> = Vec::new();
         let addition_index = cursor.documents_batch_index().clone();
-        while let Some(document) = cursor.next_document()? {
+        while let Some(enriched_document) = cursor.next_enriched_document()? {
+            let EnrichedDocument { document, external_id } = enriched_document;
+
             let mut field_buffer_cache = drop_and_reuse(field_buffer);
             if self.indexer_settings.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::RemapDocumentAddition {

@@ -1,5 +1,5 @@
 use std::convert::TryInto;
-use std::{error, fmt, io};
+use std::{error, fmt, io, str};
 
 use obkv::KvReader;
 
@@ -93,19 +93,20 @@ impl<R: io::Read + io::Seek> DocumentsBatchCursor<R> {
 
 /// The possible error thrown by the `DocumentsBatchCursor` when iterating on the documents.
 #[derive(Debug)]
-pub struct DocumentsBatchCursorError {
-    inner: grenad::Error,
+pub enum DocumentsBatchCursorError {
+    Grenad(grenad::Error),
+    Utf8(str::Utf8Error),
 }
 
 impl From<grenad::Error> for DocumentsBatchCursorError {
     fn from(error: grenad::Error) -> DocumentsBatchCursorError {
-        DocumentsBatchCursorError { inner: error }
+        DocumentsBatchCursorError::Grenad(error)
     }
 }
 
-impl Into<grenad::Error> for DocumentsBatchCursorError {
-    fn into(self) -> grenad::Error {
-        self.inner
+impl From<str::Utf8Error> for DocumentsBatchCursorError {
+    fn from(error: str::Utf8Error) -> DocumentsBatchCursorError {
+        DocumentsBatchCursorError::Utf8(error)
     }
 }
 
@@ -113,6 +114,9 @@ impl error::Error for DocumentsBatchCursorError {}
 
 impl fmt::Display for DocumentsBatchCursorError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.inner.fmt(f)
+        match self {
+            DocumentsBatchCursorError::Grenad(e) => e.fmt(f),
+            DocumentsBatchCursorError::Utf8(e) => e.fmt(f),
+        }
     }
 }
