@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-version = "0.29.3"
+version = "0.30.0"
 edition = "2018"
 description = "A CLI to interact with a milli index"
 publish = false
