@@ -745,10 +745,9 @@ async fn main() -> anyhow::Result<()> {
             };
 
             let condition = match (filters, facet_filters) {
-                (Some(filters), Some(facet_filters)) => Some(FilterCondition::And(
-                    Box::new(filters.into()),
-                    Box::new(facet_filters.into()),
-                )),
+                (Some(filters), Some(facet_filters)) => {
+                    Some(FilterCondition::And(vec![filters.into(), facet_filters.into()]))
+                }
                 (Some(condition), None) | (None, Some(condition)) => Some(condition.into()),
                 _otherwise => None,
             };

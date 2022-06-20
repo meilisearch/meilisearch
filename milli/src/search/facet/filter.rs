@@ -89,52 +89,44 @@ impl<'a> Filter<'a> {
         I: IntoIterator<Item = Either<J, &'a str>>,
         J: IntoIterator<Item = &'a str>,
     {
-        let mut ands: Option<FilterCondition> = None;
+        let mut ands = vec![];
 
         for either in array {
             match either {
                 Either::Left(array) => {
-                    let mut ors = None;
+                    let mut ors = vec![];
                     for rule in array {
                         if let Some(filter) = Self::from_str(rule.as_ref())? {
-                            let condition = filter.condition;
-                            ors = match ors.take() {
-                                Some(ors) => {
-                                    Some(FilterCondition::Or(Box::new(ors), Box::new(condition)))
-                                }
-                                None => Some(condition),
-                            };
+                            ors.push(filter.condition);
                         }
                     }
 
-                    if let Some(rule) = ors {
-                        ands = match ands.take() {
-                            Some(ands) => {
-                                Some(FilterCondition::And(Box::new(ands), Box::new(rule)))
-                            }
-                            None => Some(rule),
-                        };
+                    if ors.len() > 1 {
+                        ands.push(FilterCondition::Or(ors));
+                    } else if ors.len() == 1 {
+                        ands.push(ors[0].clone());
                     }
                 }
                 Either::Right(rule) => {
                     if let Some(filter) = Self::from_str(rule.as_ref())? {
-                        let condition = filter.condition;
-                        ands = match ands.take() {
-                            Some(ands) => {
-                                Some(FilterCondition::And(Box::new(ands), Box::new(condition)))
-                            }
-                            None => Some(condition),
-                        };
+                        ands.push(filter.condition);
                     }
                 }
             }
         }
+        let and = if ands.is_empty() {
+            return Ok(None);
+        } else if ands.len() == 1 {
+            ands[0].clone()
+        } else {
+            FilterCondition::And(ands)
+        };
 
-        if let Some(token) = ands.as_ref().and_then(|fc| fc.token_at_depth(MAX_FILTER_DEPTH)) {
+        if let Some(token) = and.token_at_depth(MAX_FILTER_DEPTH) {
             return Err(token.as_external_error(FilterError::TooDeep).into());
         }
 
-        Ok(ands.map(|ands| Self { condition: ands }))
+        Ok(Some(Self { condition: and }))
     }
 
     pub fn from_str(expression: &'a str) -> Result<Option<Self>> {
@@ -397,38 +389,28 @@ impl<'a> Filter<'a> {
                     }
                 }
             }
-            FilterCondition::Or(lhs, rhs) => {
-                let lhs = Self::inner_evaluate(
-                    &(lhs.as_ref().clone()).into(),
-                    rtxn,
-                    index,
-                    filterable_fields,
-                )?;
-                let rhs = Self::inner_evaluate(
-                    &(rhs.as_ref().clone()).into(),
-                    rtxn,
-                    index,
-                    filterable_fields,
-                )?;
-                Ok(lhs | rhs)
-            }
-            FilterCondition::And(lhs, rhs) => {
-                let lhs = Self::inner_evaluate(
-                    &(lhs.as_ref().clone()).into(),
-                    rtxn,
-                    index,
-                    filterable_fields,
-                )?;
-                if lhs.is_empty() {
-                    return Ok(lhs);
+            FilterCondition::Or(subfilters) => {
+                let mut bitmap = RoaringBitmap::new();
+                for f in subfilters {
+                    bitmap |= Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
                 }
-                let rhs = Self::inner_evaluate(
-                    &(rhs.as_ref().clone()).into(),
-                    rtxn,
-                    index,
-                    filterable_fields,
-                )?;
-                Ok(lhs & rhs)
+                Ok(bitmap)
+            }
+            FilterCondition::And(subfilters) => {
+                let mut subfilters_iter = subfilters.iter();
+                if let Some(first_subfilter) = subfilters_iter.next() {
+                    let mut bitmap =
+                        Self::inner_evaluate(&(first_subfilter.clone()).into(), rtxn, index, filterable_fields)?;
+                    for f in subfilters_iter {
+                        if bitmap.is_empty() {
+                            return Ok(bitmap);
+                        }
+                        bitmap &= Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
+                    }
+                    Ok(bitmap)
+                } else {
+                    Ok(RoaringBitmap::new())
+                }
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 if filterable_fields.contains("_geo") {
@@ -732,12 +714,10 @@ mod tests {
             }
         }
 
-        let error = Filter::from_str(&filter_string).unwrap_err();
-        assert!(
-            error.to_string().starts_with("Too many filter conditions"),
-            "{}",
-            error.to_string()
-        );
+        // Note: the filter used to be rejected for being too deep, but that is
+        // no longer the case
+        let filter = Filter::from_str(&filter_string).unwrap();
+        assert!(filter.is_some());
     }
 
     #[test]

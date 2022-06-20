@@ -113,8 +113,8 @@ impl<'a> From<Span<'a>> for Token<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Condition { fid: Token<'a>, op: Condition<'a> },
-    Or(Box<Self>, Box<Self>),
-    And(Box<Self>, Box<Self>),
+    Or(Vec<Self>),
+    And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
     GeoGreaterThan { point: [Token<'a>; 2], radius: Token<'a> },
 }
@@ -124,13 +124,23 @@ impl<'a> FilterCondition<'a> {
     pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
         match self {
             FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
-            FilterCondition::Or(left, right) => {
+            FilterCondition::Or(subfilters) => {
                 let depth = depth.saturating_sub(1);
-                right.token_at_depth(depth).or_else(|| left.token_at_depth(depth))
+                for f in subfilters.iter() {
+                    if let Some(t) = f.token_at_depth(depth) {
+                        return Some(t);
+                    }
+                }
+                None
             }
-            FilterCondition::And(left, right) => {
+            FilterCondition::And(subfilters) => {
                 let depth = depth.saturating_sub(1);
-                right.token_at_depth(depth).or_else(|| left.token_at_depth(depth))
+                for f in subfilters.iter() {
+                    if let Some(t) = f.token_at_depth(depth) {
+                        return Some(t);
+                    }
+                }
+                None
             }
             FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
             FilterCondition::GeoGreaterThan { point: [point, _], .. } if depth == 0 => Some(point),
@@ -144,13 +154,13 @@ impl<'a> FilterCondition<'a> {
         match self {
             Condition { fid, op } => match op.negate() {
                 (op, None) => Condition { fid, op },
-                (a, Some(b)) => Or(
+                (a, Some(b)) => Or(vec![
                     Condition { fid: fid.clone(), op: a }.into(),
                     Condition { fid, op: b }.into(),
-                ),
+                ]),
             },
-            Or(a, b) => And(a.negate().into(), b.negate().into()),
-            And(a, b) => Or(a.negate().into(), b.negate().into()),
+            Or(subfilters) => And(subfilters.into_iter().map(|x| x.negate().into()).collect()),
+            And(subfilters) => Or(subfilters.into_iter().map(|x| x.negate().into()).collect()),
             GeoLowerThan { point, radius } => GeoGreaterThan { point, radius },
             GeoGreaterThan { point, radius } => GeoLowerThan { point, radius },
         }
@@ -172,26 +182,36 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
 
 /// or             = and ("OR" WS+ and)*
 fn parse_or(input: Span) -> IResult<FilterCondition> {
-    let (input, lhs) = parse_and(input)?;
+    let (input, first_filter) = parse_and(input)?;
     // if we found a `OR` then we MUST find something next
-    let (input, ors) = many0(preceded(ws(tuple((tag("OR"), multispace1))), cut(parse_and)))(input)?;
+    let (input, mut ors) =
+        many0(preceded(ws(tuple((tag("OR"), multispace1))), cut(parse_and)))(input)?;
 
-    let expr = ors
-        .into_iter()
-        .fold(lhs, |acc, branch| FilterCondition::Or(Box::new(acc), Box::new(branch)));
-    Ok((input, expr))
+    let filter = if ors.is_empty() {
+        first_filter
+    } else {
+        ors.insert(0, first_filter);
+        FilterCondition::Or(ors)
+    };
+
+    Ok((input, filter))
 }
 
 /// and            = not ("AND" not)*
 fn parse_and(input: Span) -> IResult<FilterCondition> {
-    let (input, lhs) = parse_not(input)?;
+    let (input, first_filter) = parse_not(input)?;
     // if we found a `AND` then we MUST find something next
-    let (input, ors) =
+    let (input, mut ands) =
         many0(preceded(ws(tuple((tag("AND"), multispace1))), cut(parse_not)))(input)?;
-    let expr = ors
-        .into_iter()
-        .fold(lhs, |acc, branch| FilterCondition::And(Box::new(acc), Box::new(branch)));
-    Ok((input, expr))
+
+    let filter = if ands.is_empty() {
+        first_filter
+    } else {
+        ands.insert(0, first_filter);
+        FilterCondition::And(ands)
+    };
+
+    Ok((input, filter))
 }
 
 /// not            = ("NOT" WS+ not) | primary
@@ -477,7 +497,7 @@ pub mod tests {
             (
                 "NOT subscribers 100 TO 1000",
                 Fc::Or(
-                    Fc::Condition {
+                    vec![Fc::Condition {
                         fid: rtok("NOT ", "subscribers"),
                         op: Condition::LowerThan(rtok("NOT subscribers ", "100")),
                     }
@@ -486,7 +506,7 @@ pub mod tests {
                         fid: rtok("NOT ", "subscribers"),
                         op: Condition::GreaterThan(rtok("NOT subscribers 100 TO ", "1000")),
                     }
-                    .into(),
+                    .into()],
                 ),
             ),
             (
@@ -506,7 +526,7 @@ pub mod tests {
             // test simple `or` and `and`
             (
                 "channel = ponce AND 'dog race' != 'bernese mountain'",
-                Fc::And(
+                Fc::And(vec![
                     Fc::Condition {
                         fid: rtok("", "channel"),
                         op: Condition::Equal(rtok("channel = ", "ponce")),
@@ -520,11 +540,11 @@ pub mod tests {
                         )),
                     }
                     .into(),
-                ),
+                ]),
             ),
             (
                 "channel = ponce OR 'dog race' != 'bernese mountain'",
-                Fc::Or(
+                Fc::Or(vec![
                     Fc::Condition {
                         fid: rtok("", "channel"),
                         op: Condition::Equal(rtok("channel = ", "ponce")),
@@ -538,12 +558,12 @@ pub mod tests {
                         )),
                     }
                     .into(),
-                ),
+                ]),
             ),
             (
                 "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000",
-                Fc::Or(
-                    Fc::And(
+                Fc::Or(vec![
+                    Fc::And(vec![
                         Fc::Condition {
                             fid: rtok("", "channel"),
                             op: Condition::Equal(rtok("channel = ", "ponce")),
@@ -557,7 +577,7 @@ pub mod tests {
                             )),
                         }
                         .into(),
-                    )
+                    ])
                     .into(),
                     Fc::Condition {
                         fid: rtok(
@@ -570,30 +590,30 @@ pub mod tests {
                         )),
                     }
                     .into(),
-                ),
+                ]),
             ),
             // test parenthesis
             (
                     "channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )",
-                    Fc::And(
+                    Fc::And(vec![
                         Fc::Condition { fid: rtok("", "channel"), op: Condition::Equal(rtok("channel = ", "ponce")) }.into(),
-                        Fc::Or(
-                            Fc::Condition { fid: rtok("channel = ponce AND ( '", "dog race"), op: Condition::NotEqual(rtok("channel = ponce AND ( 'dog race' != '", "bernese mountain"))}.into(),
-                            Fc::Condition { fid: rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
-                    ).into()),
+                        Fc::Or(vec![
+                          Fc::Condition { fid: rtok("channel = ponce AND ( '", "dog race"), op: Condition::NotEqual(rtok("channel = ponce AND ( 'dog race' != '", "bernese mountain"))}.into(),
+                            Fc::Condition { fid: rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),]
+                    ).into()]),
             ),
             (
                 "(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)",
-                Fc::And(
-                    Fc::Or(
-                        Fc::And(
+                Fc::And(vec![
+                    Fc::Or(vec![
+                        Fc::And(vec![
                             Fc::Condition { fid: rtok("(", "channel"), op: Condition::Equal(rtok("(channel = ", "ponce")) }.into(),
                             Fc::Condition { fid: rtok("(channel = ponce AND '", "dog race"), op: Condition::NotEqual(rtok("(channel = ponce AND 'dog race' != '", "bernese mountain")) }.into(),
-                        ).into(),
+                        ]).into(),
                         Fc::Condition { fid: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
-                    ).into(),
+                    ]).into(),
                     Fc::GeoLowerThan { point: [rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(", "12"), rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, ", "13")], radius: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, ", "14") }.into()
-                )
+                ])
             )
         ];
 
@@ -657,6 +677,15 @@ pub mod tests {
     #[test]
     fn depth() {
         let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 OR account_ids=3 OR account_ids=4 OR account_ids=5 OR account_ids=6").unwrap().unwrap();
-        assert!(filter.token_at_depth(5).is_some());
+        assert!(filter.token_at_depth(1).is_some());
+        assert!(filter.token_at_depth(2).is_none());
+
+        let filter = FilterCondition::parse("(account_ids=1 OR (account_ids=2 AND account_ids=3) OR (account_ids=4 AND account_ids=5) OR account_ids=6)").unwrap().unwrap();
+        assert!(filter.token_at_depth(2).is_some());
+        assert!(filter.token_at_depth(3).is_none());
+
+        let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 AND account_ids=3 OR account_ids=4 AND account_ids=5 OR account_ids=6").unwrap().unwrap();
+        assert!(filter.token_at_depth(2).is_some());
+        assert!(filter.token_at_depth(3).is_none());
     }
 }
