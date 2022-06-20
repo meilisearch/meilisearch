@@ -5,6 +5,7 @@ First, thank you for contributing to Meilisearch! The goal of this document is t
 Remember that there are many ways to contribute other than writing code: writing [tutorials or blog posts](https://github.com/meilisearch/awesome-meilisearch), improving [the documentation](https://github.com/meilisearch/documentation), submitting [bug reports](https://github.com/meilisearch/meilisearch/issues/new?assignees=&labels=&template=bug_report.md&title=) and [feature requests](https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal)...
 
 ## Table of Contents
+
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
@@ -13,7 +14,7 @@ Remember that there are many ways to contribute other than writing code: writing
 
 ## Assumptions
 
-1. **You're familiar with [Github](https://github.com) and the [Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(PR) workflow.**
+1. **You're familiar with [GitHub](https://github.com) and the [Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(PR) workflow.**
 2. **You've read the Meilisearch [documentation](https://docs.meilisearch.com).**
 3. **You know about the [Meilisearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
    Please use this for help.**
@@ -23,7 +24,7 @@ Remember that there are many ways to contribute other than writing code: writing
 1. Ensure your change has an issue! Find an
    [existing issue](https://github.com/meilisearch/meilisearch/issues/) or [open a new issue](https://github.com/meilisearch/meilisearch/issues/new).
    * This is where you can get a feel if the change will be accepted or not.
-2. Once approved, [fork the Meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own Github account.
+2. Once approved, [fork the Meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own GitHub account.
 3. [Create a new Git branch](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository)
 4. Review the [Development Workflow](#development-workflow) section that describes the steps to maintain the repository.
 5. Make your changes on your branch.
@@ -44,6 +45,8 @@ We recommend using the `--release` flag to test the full performance of Meilisea
 ```bash
 cargo test
 ```
+
+This command will be triggered to each PR as a requirement for merging it.
 
 If you get a "Too many open files" error you might want to increase the open file limit using this command:
 
@@ -69,7 +72,7 @@ As minimal requirements, your commit message should:
 
 We don't follow any other convention, but if you want to use one, we recommend [the Chris Beams one](https://chris.beams.io/posts/git-commit/).
 
-### Github Pull Requests
+### GitHub Pull Requests
 
 Some notes on GitHub PRs:
 
@@ -91,6 +94,16 @@ _[Read more about this](https://github.com/meilisearch/integration-guides/blob/m
 ### How to Publish a new Release
 
 The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/core-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
+
+### Release assets
+
+For each release, the following assets are created:
+- Binaries for differents platforms (Linux, MacOS, Windows and ARM architectures) are attached to the GitHub release
+- Binaries are pushed to HomeBrew and APT (not published for RC)
+- Docker tags are created/updated:
+  - `vX.Y.Z`
+  - `vX.Y` (not published for RC)
+  - `latest` (not published for RC)
 
 <hr>
 
