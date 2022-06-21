@@ -17,17 +17,20 @@ use crate::FieldId;
 /// `FieldId`. The mapping between the field ids and the field names is done thanks to the index.
 pub struct EnrichedDocumentsBatchReader<R> {
     documents: DocumentsBatchReader<R>,
+    primary_key: String,
     external_ids: grenad::ReaderCursor<File>,
 }
 
 impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
     pub fn new(
         documents: DocumentsBatchReader<R>,
+        primary_key: String,
         external_ids: grenad::Reader<File>,
     ) -> Result<Self, Error> {
         if documents.documents_count() as u64 == external_ids.len() {
             Ok(EnrichedDocumentsBatchReader {
                 documents,
+                primary_key,
                 external_ids: external_ids.into_cursor()?,
             })
         } else {
@@ -37,6 +40,10 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
 
     pub fn documents_count(&self) -> u32 {
         self.documents.documents_count()
+    }
+
+    pub fn primary_key(&self) -> &str {
+        &self.primary_key
     }
 
     pub fn is_empty(&self) -> bool {
@@ -49,9 +56,13 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
 
     /// This method returns a forward cursor over the enriched documents.
     pub fn into_cursor(self) -> EnrichedDocumentsBatchCursor<R> {
-        let EnrichedDocumentsBatchReader { documents, mut external_ids } = self;
+        let EnrichedDocumentsBatchReader { documents, primary_key, mut external_ids } = self;
         external_ids.reset();
-        EnrichedDocumentsBatchCursor { documents: documents.into_cursor(), external_ids }
+        EnrichedDocumentsBatchCursor {
+            documents: documents.into_cursor(),
+            primary_key,
+            external_ids,
+        }
     }
 }
 
@@ -63,13 +74,22 @@ pub struct EnrichedDocument<'a> {
 
 pub struct EnrichedDocumentsBatchCursor<R> {
     documents: DocumentsBatchCursor<R>,
+    primary_key: String,
     external_ids: grenad::ReaderCursor<File>,
 }
 
 impl<R> EnrichedDocumentsBatchCursor<R> {
     pub fn into_reader(self) -> EnrichedDocumentsBatchReader<R> {
-        let EnrichedDocumentsBatchCursor { documents, external_ids } = self;
-        EnrichedDocumentsBatchReader { documents: documents.into_reader(), external_ids }
+        let EnrichedDocumentsBatchCursor { documents, primary_key, external_ids } = self;
+        EnrichedDocumentsBatchReader {
+            documents: documents.into_reader(),
+            primary_key,
+            external_ids,
+        }
+    }
+
+    pub fn primary_key(&self) -> &str {
+        &self.primary_key
     }
 
     pub fn documents_batch_index(&self) -> &DocumentsBatchIndex {

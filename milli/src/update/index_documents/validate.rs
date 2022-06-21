@@ -94,7 +94,11 @@ pub fn validate_and_enrich_documents_batch<R: Read + Seek>(
     }
 
     let external_ids = writer_into_reader(external_ids)?;
-    let reader = EnrichedDocumentsBatchReader::new(cursor.into_reader(), external_ids)?;
+    let reader = EnrichedDocumentsBatchReader::new(
+        cursor.into_reader(),
+        primary_key.primary_key().to_string(),
+        external_ids,
+    )?;
 
     Ok(Ok(reader))
 }
