@@ -2,6 +2,7 @@ use std::io::{Read, Seek};
 use std::result::Result as StdResult;
 use std::{fmt, iter};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::documents::{DocumentsBatchIndex, DocumentsBatchReader, EnrichedDocumentsBatchReader};
@@ -89,13 +90,14 @@ pub fn enrich_documents_batch<R: Read + Seek>(
             Err(user_error) => return Ok(Err(user_error)),
         };
 
-        external_ids.insert(count.to_be_bytes(), document_id.value())?;
-
         if let Some(geo_value) = geo_field_id.and_then(|fid| document.get(fid)) {
             if let Err(user_error) = validate_geo_from_json(&document_id, geo_value)? {
                 return Ok(Err(UserError::from(user_error)));
             }
         }
+
+        let document_id = serde_json::to_vec(&document_id).map_err(InternalError::SerdeJson)?;
+        external_ids.insert(count.to_be_bytes(), document_id)?;
 
         count += 1;
     }
@@ -210,7 +212,7 @@ impl PrimaryKey<'_> {
 ///
 /// In case the document id has been auto-generated, the document nth is kept to help
 /// users debug if there is an issue with the document itself.
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum DocumentId {
     Retrieved { value: String },
     Generated { value: String, document_nth: u32 },
@@ -225,15 +227,19 @@ impl DocumentId {
         DocumentId::Generated { value, document_nth }
     }
 
-    fn value(&self) -> &str {
+    fn debug(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    pub fn is_generated(&self) -> bool {
+        matches!(self, DocumentId::Generated { .. })
+    }
+
+    pub fn value(&self) -> &str {
         match self {
             DocumentId::Retrieved { value } => value,
             DocumentId::Generated { value, .. } => value,
         }
-    }
-
-    fn debug(&self) -> String {
-        format!("{:?}", self)
     }
 }
 

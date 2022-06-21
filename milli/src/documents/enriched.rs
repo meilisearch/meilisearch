@@ -7,6 +7,7 @@ use super::{
     DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchIndex, DocumentsBatchReader,
     Error,
 };
+use crate::update::DocumentId;
 use crate::FieldId;
 
 /// The `EnrichedDocumentsBatchReader` provides a way to iterate over documents that have
@@ -66,10 +67,10 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct EnrichedDocument<'a> {
     pub document: KvReader<'a, FieldId>,
-    pub external_id: &'a str,
+    pub document_id: DocumentId,
 }
 
 pub struct EnrichedDocumentsBatchCursor<R> {
@@ -110,13 +111,13 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchCursor<R> {
         &mut self,
     ) -> Result<Option<EnrichedDocument>, DocumentsBatchCursorError> {
         let document = self.documents.next_document()?;
-        let external_id = match self.external_ids.move_on_next()? {
-            Some((_, bytes)) => Some(str::from_utf8(bytes)?),
+        let document_id = match self.external_ids.move_on_next()? {
+            Some((_, bytes)) => serde_json::from_slice(bytes).map(Some)?,
             None => None,
         };
 
-        match document.zip(external_id) {
-            Some((document, external_id)) => Ok(Some(EnrichedDocument { document, external_id })),
+        match document.zip(document_id) {
+            Some((document, document_id)) => Ok(Some(EnrichedDocument { document, document_id })),
             None => Ok(None),
         }
     }

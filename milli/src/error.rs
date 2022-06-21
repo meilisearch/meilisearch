@@ -217,7 +217,7 @@ impl From<DocumentsBatchCursorError> for Error {
     fn from(error: DocumentsBatchCursorError) -> Error {
         match error {
             DocumentsBatchCursorError::Grenad(e) => Error::from(e),
-            DocumentsBatchCursorError::Utf8(e) => Error::from(e),
+            DocumentsBatchCursorError::SerdeJson(e) => Error::from(InternalError::from(e)),
         }
     }
 }

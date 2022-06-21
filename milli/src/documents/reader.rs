@@ -1,5 +1,5 @@
 use std::convert::TryInto;
-use std::{error, fmt, io, str};
+use std::{error, fmt, io};
 
 use obkv::KvReader;
 
@@ -95,7 +95,7 @@ impl<R: io::Read + io::Seek> DocumentsBatchCursor<R> {
 #[derive(Debug)]
 pub enum DocumentsBatchCursorError {
     Grenad(grenad::Error),
-    Utf8(str::Utf8Error),
+    SerdeJson(serde_json::Error),
 }
 
 impl From<grenad::Error> for DocumentsBatchCursorError {
@@ -104,9 +104,9 @@ impl From<grenad::Error> for DocumentsBatchCursorError {
     }
 }
 
-impl From<str::Utf8Error> for DocumentsBatchCursorError {
-    fn from(error: str::Utf8Error) -> DocumentsBatchCursorError {
-        DocumentsBatchCursorError::Utf8(error)
+impl From<serde_json::Error> for DocumentsBatchCursorError {
+    fn from(error: serde_json::Error) -> DocumentsBatchCursorError {
+        DocumentsBatchCursorError::SerdeJson(error)
     }
 }
 
@@ -116,7 +116,7 @@ impl fmt::Display for DocumentsBatchCursorError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DocumentsBatchCursorError::Grenad(e) => e.fmt(f),
-            DocumentsBatchCursorError::Utf8(e) => e.fmt(f),
+            DocumentsBatchCursorError::SerdeJson(e) => e.fmt(f),
         }
     }
 }
