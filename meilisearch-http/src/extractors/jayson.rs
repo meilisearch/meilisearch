@@ -1,7 +1,6 @@
 use actix_web::{dev::Payload, web::Json, FromRequest, HttpRequest};
 use futures::ready;
-use jayson::{DeserializeError, DeserializeFromValue, MergeWithError, ValuePointer};
-use meilisearch_lib::milli::AscDescError;
+use jayson::{DeserializeError, DeserializeFromValue};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use std::{
     fmt::Debug,
@@ -10,66 +9,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
-// pub struct MeilisearchDeserializeError {
-//     pub Vec<(ValuePointer, Box<dyn Error>)>,
-// }
-// impl MergeWithError<AscDescError> for MeilisearchDeserializeError {
-//     fn merge(self_: Option<Self>, other: AscDescError, merge_location: jayson::ValuePointerRef) -> Result<Self, Self> {
-//         todo!()
-//     }
-// }
-// /*
-// {
-//     !
-//     x: {
-//         y: {
-//             z: {
-//                 a: 2
-//             }
-//         }
-//     }
-// }
-
-//  */
-//  impl MergeWithError<MeilisearchDeserializeError> for MeilisearchDeserializeError {
-
-//  }
-// impl DeserializeError for MeilisearchDeserializeError{
-//     fn location(&self) -> Option<jayson::ValuePointer> {
-//         todo!()
-//     }
-
-//     fn incorrect_value_kind(
-//         self_: Option<Self>,
-//         actual: jayson::ValueKind,
-//         accepted: &[jayson::ValueKind],
-//         location: jayson::ValuePointerRef,
-//     ) -> Result<Self, Self> {
-//         todo!()
-//     }
-
-//     fn missing_field(
-//         self_: Option<Self>,
-//         field: &str,
-//         location: jayson::ValuePointerRef,
-//     ) -> Result<Self, Self> {
-//         todo!()
-//     }
-
-//     fn unknown_key(
-//         self_: Option<Self>,
-//         key: &str,
-//         accepted: &[&str],
-//         location: jayson::ValuePointerRef,
-//     ) -> Result<Self, Self> {
-//         todo!()
-//     }
-
-//     fn unexpected(self_: Option<Self>, msg: &str, location: jayson::ValuePointerRef) -> Result<Self, Self> {
-//         todo!()
-//     }
-// }
 
 /// Extractor for typed data from Json request payloads
 /// deserialised by Jayson.

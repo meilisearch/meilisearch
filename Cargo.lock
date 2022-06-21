@@ -2099,6 +2099,7 @@ dependencies = [
  "meilisearch-auth",
  "meilisearch-lib",
  "meilisearch-types",
+ "milli 0.29.3",
  "mime",
  "num_cpus",
  "obkv",

@@ -36,10 +36,10 @@ impl ErrorCode for MeiliDeserError {
         Code::MalformedPayload
     }
 }
-impl jayson::MergeWithError<milli::AscDescError> for MeiliDeserError {
+impl jayson::MergeWithError<milli::CriterionError> for MeiliDeserError {
     fn merge(
-        self_: Option<Self>,
-        other: milli::AscDescError,
+        _self_: Option<Self>,
+        other: milli::CriterionError,
         merge_location: jayson::ValuePointerRef,
     ) -> Result<Self, Self> {
         let pointer = merge_location.to_owned();
@@ -49,9 +49,9 @@ impl jayson::MergeWithError<milli::AscDescError> for MeiliDeserError {
 
 impl jayson::MergeWithError<MeiliDeserError> for MeiliDeserError {
     fn merge(
-        self_: Option<Self>,
+        _self_: Option<Self>,
         other: MeiliDeserError,
-        merge_location: ValuePointerRef,
+        _merge_location: ValuePointerRef,
     ) -> Result<Self, Self> {
         Err(other)
     }
@@ -65,10 +65,10 @@ impl jayson::DeserializeError for MeiliDeserError {
     ///
     /// Return `Ok` to continue deserializing or `Err` to fail early.
     fn incorrect_value_kind(
-        self_: Option<Self>,
+        _self_: Option<Self>,
         actual: ValueKind,
-        accepted: &[ValueKind],
-        location: ValuePointerRef,
+        _accepted: &[ValueKind],
+        _location: ValuePointerRef,
     ) -> Result<Self, Self> {
         Err(MeiliDeserError(format!("incorrect value kind {actual}")))
     }
@@ -76,9 +76,9 @@ impl jayson::DeserializeError for MeiliDeserError {
     ///
     /// Return `Ok` to continue deserializing or `Err` to fail early.
     fn missing_field(
-        self_: Option<Self>,
+        _self_: Option<Self>,
         field: &str,
-        location: ValuePointerRef,
+        _location: ValuePointerRef,
     ) -> Result<Self, Self> {
         Err(MeiliDeserError(format!("missing field {field}")))
     }
@@ -86,17 +86,21 @@ impl jayson::DeserializeError for MeiliDeserError {
     ///
     /// Return `Ok` to continue deserializing or `Err` to fail early.
     fn unknown_key(
-        self_: Option<Self>,
+        _self_: Option<Self>,
         key: &str,
-        accepted: &[&str],
-        location: ValuePointerRef,
+        _accepted: &[&str],
+        _location: ValuePointerRef,
     ) -> Result<Self, Self> {
         Err(MeiliDeserError(format!("unknown key {key}")))
     }
     /// Create a new error with the custom message.
     ///
     /// Return `Ok` to continue deserializing or `Err` to fail early.
-    fn unexpected(self_: Option<Self>, msg: &str, location: ValuePointerRef) -> Result<Self, Self> {
+    fn unexpected(
+        _self_: Option<Self>,
+        msg: &str,
+        _location: ValuePointerRef,
+    ) -> Result<Self, Self> {
         Err(MeiliDeserError(format!("unexpected {msg}")))
     }
 }

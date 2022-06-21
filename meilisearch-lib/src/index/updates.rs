@@ -5,8 +5,7 @@ use milli::update::{
     DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
     Setting,
 };
-use milli::{AscDesc, Criterion};
-use rayon::vec;
+use milli::Criterion;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
@@ -43,8 +42,8 @@ where
     E: jayson::DeserializeError,
 {
     fn deserialize_from_value<V>(
-        value: jayson::Value<V>,
-        location: jayson::ValuePointerRef,
+        _value: jayson::Value<V>,
+        _location: jayson::ValuePointerRef,
     ) -> std::result::Result<Self, E>
     where
         V: jayson::IntoValue,
@@ -147,7 +146,7 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[jayson(needs_predicate)]
-    pub ranking_rules: Setting<Vec<AscDesc>>,
+    pub ranking_rules: Setting<Vec<Criterion>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub stop_words: Setting<BTreeSet<String>>,

@@ -8,7 +8,6 @@ use meilisearch_types::error::{MeiliDeserError, ResponseError};
 use serde_json::json;
 
 use crate::analytics::Analytics;
-use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::jayson::ValidatedJson;
 use crate::task::SummarizedTaskView;
@@ -262,27 +261,27 @@ make_setting_route!(
     "distinctAttribute"
 );
 
-// make_setting_route!(
-//     "/ranking-rules",
-//     put,
-//     Vec<String>,
-//     ranking_rules,
-//     "rankingRules",
-//     analytics,
-//     |setting: &Option<Vec<milli::AscDesc>>, req: &HttpRequest| {
-//         use serde_json::json;
+make_setting_route!(
+    "/ranking-rules",
+    put,
+    Vec<milli::Criterion>,
+    ranking_rules,
+    "rankingRules",
+    analytics,
+    |setting: &Option<Vec<milli::Criterion>>, req: &HttpRequest| {
+        use serde_json::json;
 
-//         analytics.publish(
-//             "RankingRules Updated".to_string(),
-//             json!({
-//                 "ranking_rules": {
-//                     "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
-//                 }
-//             }),
-//             Some(req),
-//         );
-//     }
-// );
+        analytics.publish(
+            "RankingRules Updated".to_string(),
+            json!({
+                "ranking_rules": {
+                    "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| matches!(s, milli::Criterion::Sort))),
+                }
+            }),
+            Some(req),
+        );
+    }
+);
 
 make_setting_route!(
     "/faceting",
@@ -350,7 +349,7 @@ generate_configure!(
     distinct_attribute,
     stop_words,
     synonyms,
-    // ranking_rules,
+    ranking_rules,
     typo_tolerance
 );
 
@@ -367,7 +366,7 @@ pub async fn update_all(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| true /*TODO*/)),
+                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| matches!(s, milli::Criterion::Sort))),
             },
             "searchable_attributes": {
                 "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),

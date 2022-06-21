@@ -48,6 +48,7 @@ log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib" }
+milli = { path = "../../milli/milli" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
