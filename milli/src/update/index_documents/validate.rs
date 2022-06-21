@@ -12,6 +12,9 @@ use crate::{FieldId, Index, Object, Result};
 /// The symbol used to define levels in a nested primary key.
 const PRIMARY_KEY_SPLIT_SYMBOL: char = '.';
 
+/// The default primary that is used when not specified.
+const DEFAULT_PRIMARY_KEY: &str = "id";
+
 /// This function validates and enrich the documents by checking that:
 ///  - we can infer a primary key,
 ///  - all the documents id exist and are extracted,
@@ -51,13 +54,14 @@ pub fn validate_and_enrich_documents_batch<R: Read + Seek>(
         None => {
             let guessed = documents_batch_index
                 .iter()
-                .filter(|(_, name)| name.to_lowercase().contains("id"))
+                .filter(|(_, name)| name.to_lowercase().contains(DEFAULT_PRIMARY_KEY))
                 .min_by_key(|(fid, _)| *fid);
             match guessed {
                 Some((id, name)) => PrimaryKey::flat(name.as_str(), *id),
-                None if autogenerate_docids => {
-                    PrimaryKey::flat("id", documents_batch_index.insert("id"))
-                }
+                None if autogenerate_docids => PrimaryKey::flat(
+                    DEFAULT_PRIMARY_KEY,
+                    documents_batch_index.insert(DEFAULT_PRIMARY_KEY),
+                ),
                 None => return Ok(Err(UserError::MissingPrimaryKey)),
             }
         }
