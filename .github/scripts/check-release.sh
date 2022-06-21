@@ -2,11 +2,8 @@
 
 # Checking if current tag matches the package version
 current_tag=$(echo $GITHUB_REF | tr -d 'refs/tags/v')
-file1='meilisearch-auth/Cargo.toml'
-file2='meilisearch-http/Cargo.toml'
-file3='meilisearch-lib/Cargo.toml'
-file4='meilisearch-types/Cargo.toml'
-file5='Cargo.lock'
+files='*/Cargo.toml'
+lock_file='Cargo.lock'
 
 
 file5=$(grep -A 1 'name = "meilisearch-auth"' $file5 | grep version)
