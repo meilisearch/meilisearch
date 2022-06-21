@@ -20,7 +20,7 @@ const DEFAULT_PRIMARY_KEY: &str = "id";
 ///  - all the documents id exist and are extracted,
 ///  - the validity of them but also,
 ///  - the validity of the `_geo` field depending on the settings.
-pub fn validate_and_enrich_documents_batch<R: Read + Seek>(
+pub fn enrich_documents_batch<R: Read + Seek>(
     rtxn: &heed::RoTxn,
     index: &Index,
     autogenerate_docids: bool,

@@ -1,8 +1,8 @@
+mod enrich;
 mod extract;
 mod helpers;
 mod transform;
 mod typed_chunk;
-mod validate;
 
 use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek};
@@ -19,6 +19,11 @@ use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
 use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
+use self::enrich::enrich_documents_batch;
+pub use self::enrich::{
+    extract_float_from_value, validate_document_id, validate_document_id_value,
+    validate_geo_from_json,
+};
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
     fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
@@ -27,11 +32,6 @@ pub use self::helpers::{
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
-use self::validate::validate_and_enrich_documents_batch;
-pub use self::validate::{
-    extract_float_from_value, validate_document_id, validate_document_id_value,
-    validate_geo_from_json,
-};
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::UserError;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
@@ -141,7 +141,7 @@ where
         // We check for user errors in this validator and if there is one, we can return
         // the `IndexDocument` struct as it is valid to send more documents into it.
         // However, if there is an internal error we throw it away!
-        let enriched_documents_reader = match validate_and_enrich_documents_batch(
+        let enriched_documents_reader = match enrich_documents_batch(
             self.wtxn,
             self.index,
             self.config.autogenerate_docids,
