@@ -36,7 +36,7 @@ pub mod test {
     use super::error::Result;
     use super::index::Index;
     use super::Document;
-    use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
+    use super::{IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
     use crate::update_file_store::UpdateFileStore;
 
     #[derive(Clone)]

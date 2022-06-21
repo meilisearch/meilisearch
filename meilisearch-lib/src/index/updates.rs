@@ -67,6 +67,7 @@ pub struct TypoSettings {
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, DeserializeFromValue)]
+#[jayson(rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct FacetingSettings {
@@ -79,6 +80,7 @@ pub struct FacetingSettings {
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
 )]
+#[jayson(rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationSettings {
@@ -92,10 +94,10 @@ pub struct PaginationSettings {
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
 )]
+#[jayson(rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[jayson(rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings {
     #[serde(
         default,
@@ -122,7 +124,7 @@ pub struct Settings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[cfg_attr(test, proptest(strategy = "test::criteria_setting_strategy()"))]
     #[jayson(needs_predicate)]
     pub ranking_rules: Setting<Vec<Criterion>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -162,9 +164,7 @@ impl Settings {
         }
     }
 }
-pub fn map_searchable_or_displayed_attributes(
-    setting: Setting<Vec<String>>,
-) -> Setting<Vec<String>> {
+fn map_searchable_or_displayed_attributes(setting: Setting<Vec<String>>) -> Setting<Vec<String>> {
     match setting {
         Setting::Set(fields) => {
             if fields.iter().any(|f| f == "*") {
@@ -422,10 +422,33 @@ pub fn apply_settings_to_builder(settings: &Settings, builder: &mut milli::updat
 
 #[cfg(test)]
 pub(crate) mod test {
+    use super::*;
+    use milli::Criterion;
     use proptest::prelude::*;
 
-    use super::*;
+    fn criteria_strategy() -> impl Strategy<Value = Vec<Criterion>> {
+        proptest::collection::vec(
+            prop_oneof![
+                Just(Criterion::Words),
+                Just(Criterion::Typo),
+                Just(Criterion::Proximity),
+                Just(Criterion::Attribute),
+                Just(Criterion::Sort),
+                Just(Criterion::Exactness),
+                any::<String>().prop_map(Criterion::Asc),
+                any::<String>().prop_map(Criterion::Desc),
+            ],
+            0..100,
+        )
+    }
 
+    pub(super) fn criteria_setting_strategy() -> impl Strategy<Value = Setting<Vec<Criterion>>> {
+        prop_oneof![
+            Just(Setting::NotSet),
+            Just(Setting::Reset),
+            criteria_strategy().prop_map(Setting::Set),
+        ]
+    }
     pub(super) fn setting_strategy<T: Arbitrary + Clone>() -> impl Strategy<Value = Setting<T>> {
         prop_oneof![
             Just(Setting::NotSet),
@@ -451,11 +474,10 @@ pub(crate) mod test {
             pagination: Setting::NotSet,
         };
 
-        let checked = settings.clone().check();
-        assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
+        assert_eq!(settings.displayed_attributes, settings.displayed_attributes);
         assert_eq!(
             settings.searchable_attributes,
-            checked.searchable_attributes
+            settings.searchable_attributes
         );
 
         // test wildcard
@@ -474,8 +496,7 @@ pub(crate) mod test {
             pagination: Setting::NotSet,
         };
 
-        let checked = settings.check();
-        assert_eq!(checked.displayed_attributes, Setting::Reset);
-        assert_eq!(checked.searchable_attributes, Setting::Reset);
+        assert_eq!(settings.displayed_attributes, Setting::Reset);
+        assert_eq!(settings.searchable_attributes, Setting::Reset);
     }
 }

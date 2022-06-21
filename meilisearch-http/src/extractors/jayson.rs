@@ -1,7 +1,7 @@
 use actix_web::{dev::Payload, web::Json, FromRequest, HttpRequest};
 use futures::ready;
 use jayson::{DeserializeError, DeserializeFromValue};
-use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::error::{ErrorCode, ResponseError};
 use std::{
     fmt::Debug,
     future::Future,
@@ -34,7 +34,7 @@ where
     E: DeserializeError + ErrorCode + 'static,
     T: DeserializeFromValue<E>,
 {
-    type Error = ResponseError;
+    type Error = actix_web::Error;
     type Future = ValidatedJsonExtractFut<T, E>;
 
     #[inline]
@@ -56,7 +56,7 @@ where
     T: DeserializeFromValue<E>,
     E: DeserializeError + ErrorCode + 'static,
 {
-    type Output = Result<ValidatedJson<T, E>, ResponseError>;
+    type Output = Result<ValidatedJson<T, E>, actix_web::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -64,13 +64,10 @@ where
         let res = ready!(Pin::new(&mut this.fut).poll(cx));
 
         let res = match res {
-            Err(err) => Err(ResponseError::from_msg(
-                format!("{err}"),
-                Code::MalformedPayload,
-            )),
+            Err(err) => Err(err),
             Ok(data) => match jayson::deserialize::<_, _, E>(data.into_inner()) {
                 Ok(data) => Ok(ValidatedJson::new(data)),
-                Err(e) => Err(e.into()),
+                Err(e) => Err(ResponseError::from(e).into()),
             },
         };
 

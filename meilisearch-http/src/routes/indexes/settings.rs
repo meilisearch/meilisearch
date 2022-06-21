@@ -1,16 +1,15 @@
 use log::debug;
 
+use crate::analytics::Analytics;
+use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::jayson::ValidatedJson;
+use crate::task::SummarizedTaskView;
 use actix_web::{web, HttpRequest, HttpResponse};
 use meilisearch_lib::index::Settings;
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::{MeiliDeserError, ResponseError};
 use serde_json::json;
-
-use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::extractors::jayson::ValidatedJson;
-use crate::task::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -55,7 +54,10 @@ macro_rules! make_setting_route {
             pub async fn update(
                 meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
-                body: actix_web::web::Json<Option<$type>>,
+                body: crate::extractors::jayson::ValidatedJson<
+                    Option<$type>,
+                    meilisearch_types::error::MeiliDeserError,
+                >,
                 req: HttpRequest,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
