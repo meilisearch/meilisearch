@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use time::OffsetDateTime;
 
-use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::index::Settings;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::star_or::StarOr;
@@ -140,7 +140,7 @@ pub enum UpdateType {
         number: Option<usize>,
     },
     Settings {
-        settings: Settings<Unchecked>,
+        settings: Settings,
     },
 }
 

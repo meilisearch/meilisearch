@@ -6,7 +6,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::batch::BatchId;
-use crate::index::{Settings, Unchecked};
+use crate::index::Settings;
 
 pub type TaskId = u32;
 
@@ -155,7 +155,7 @@ pub enum TaskContent {
     },
     SettingsUpdate {
         index_uid: IndexUid,
-        settings: Settings<Unchecked>,
+        settings: Settings,
         /// Indicates whether the task was a deletion
         is_deletion: bool,
         allow_index_creation: bool,

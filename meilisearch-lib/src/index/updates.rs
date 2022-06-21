@@ -8,7 +8,6 @@ use milli::update::{
 use milli::Criterion;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{BTreeMap, BTreeSet};
-use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use uuid::Uuid;
 
@@ -30,26 +29,6 @@ where
         Setting::NotSet => None,
     }
     .serialize(s)
-}
-
-#[derive(Clone, Default, Debug, Serialize, PartialEq)]
-pub struct Checked;
-
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Unchecked;
-impl<E> DeserializeFromValue<E> for Unchecked
-where
-    E: jayson::DeserializeError,
-{
-    fn deserialize_from_value<V>(
-        _value: jayson::Value<V>,
-        _location: jayson::ValuePointerRef,
-    ) -> std::result::Result<Self, E>
-    where
-        V: jayson::IntoValue,
-    {
-        Ok(Unchecked)
-    }
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -108,25 +87,23 @@ pub struct PaginationSettings {
     pub limited_to: Setting<usize>,
 }
 
-/// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
-/// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
-/// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-
+/// Holds all the settings for an index. The settings are validated by the implementation of
+/// jayson::DeserializeFromValue.
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
 )]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[jayson(rename_all = camelCase, deny_unknown_fields)]
-pub struct Settings<T> {
+pub struct Settings {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[jayson(map = map_searchable_or_displayed_attributes)]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -135,6 +112,7 @@ pub struct Settings<T> {
         skip_serializing_if = "Setting::is_not_set"
     )]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[jayson(map = map_searchable_or_displayed_attributes)]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -165,13 +143,10 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub pagination: Setting<PaginationSettings>,
-
-    #[serde(skip)]
-    pub _kind: PhantomData<T>,
 }
 
-impl Settings<Checked> {
-    pub fn cleared() -> Settings<Checked> {
+impl Settings {
+    pub fn cleared() -> Settings {
         Settings {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
@@ -184,81 +159,21 @@ impl Settings<Checked> {
             typo_tolerance: Setting::Reset,
             faceting: Setting::Reset,
             pagination: Setting::Reset,
-            _kind: PhantomData,
-        }
-    }
-
-    pub fn into_unchecked(self) -> Settings<Unchecked> {
-        let Self {
-            displayed_attributes,
-            searchable_attributes,
-            filterable_attributes,
-            sortable_attributes,
-            ranking_rules,
-            stop_words,
-            synonyms,
-            distinct_attribute,
-            typo_tolerance,
-            faceting,
-            pagination,
-            ..
-        } = self;
-
-        Settings {
-            displayed_attributes,
-            searchable_attributes,
-            filterable_attributes,
-            sortable_attributes,
-            ranking_rules,
-            stop_words,
-            synonyms,
-            distinct_attribute,
-            typo_tolerance,
-            faceting,
-            pagination,
-            _kind: PhantomData,
         }
     }
 }
-
-impl Settings<Unchecked> {
-    pub fn check(self) -> Settings<Checked> {
-        let displayed_attributes = match self.displayed_attributes {
-            Setting::Set(fields) => {
-                if fields.iter().any(|f| f == "*") {
-                    Setting::Reset
-                } else {
-                    Setting::Set(fields)
-                }
+pub fn map_searchable_or_displayed_attributes(
+    setting: Setting<Vec<String>>,
+) -> Setting<Vec<String>> {
+    match setting {
+        Setting::Set(fields) => {
+            if fields.iter().any(|f| f == "*") {
+                Setting::Reset
+            } else {
+                Setting::Set(fields)
             }
-            otherwise => otherwise,
-        };
-
-        let searchable_attributes = match self.searchable_attributes {
-            Setting::Set(fields) => {
-                if fields.iter().any(|f| f == "*") {
-                    Setting::Reset
-                } else {
-                    Setting::Set(fields)
-                }
-            }
-            otherwise => otherwise,
-        };
-
-        Settings {
-            displayed_attributes,
-            searchable_attributes,
-            filterable_attributes: self.filterable_attributes,
-            sortable_attributes: self.sortable_attributes,
-            ranking_rules: self.ranking_rules,
-            stop_words: self.stop_words,
-            synonyms: self.synonyms,
-            distinct_attribute: self.distinct_attribute,
-            typo_tolerance: self.typo_tolerance,
-            faceting: self.faceting,
-            pagination: self.pagination,
-            _kind: PhantomData,
         }
+        otherwise => otherwise,
     }
 }
 
@@ -362,7 +277,7 @@ impl Index {
         Ok(addition)
     }
 
-    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
+    pub fn update_settings(&self, settings: &Settings) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut txn = self.write_txn()?;
         let mut builder =
@@ -378,10 +293,7 @@ impl Index {
     }
 }
 
-pub fn apply_settings_to_builder(
-    settings: &Settings<Checked>,
-    builder: &mut milli::update::Settings,
-) {
+pub fn apply_settings_to_builder(settings: &Settings, builder: &mut milli::update::Settings) {
     match settings.searchable_attributes {
         Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
         Setting::Reset => builder.reset_searchable_fields(),
@@ -537,7 +449,6 @@ pub(crate) mod test {
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
-            _kind: PhantomData::<Unchecked>,
         };
 
         let checked = settings.clone().check();
@@ -561,7 +472,6 @@ pub(crate) mod test {
             typo_tolerance: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
-            _kind: PhantomData::<Unchecked>,
         };
 
         let checked = settings.check();

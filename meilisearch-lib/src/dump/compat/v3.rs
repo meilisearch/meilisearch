@@ -6,7 +6,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::v4::{Task, TaskContent, TaskEvent};
-use crate::index::{Settings, Unchecked};
+use crate::index::Settings;
 use crate::tasks::task::{DocumentDeletion, TaskId, TaskResult};
 
 use super::v2;
@@ -55,7 +55,7 @@ pub enum Update {
         method: IndexDocumentsMethod,
         content_uuid: Uuid,
     },
-    Settings(Settings<Unchecked>),
+    Settings(Settings),
     ClearDocuments,
 }
 
@@ -100,7 +100,7 @@ pub enum UpdateMeta {
     DeleteDocuments {
         ids: Vec<String>,
     },
-    Settings(Settings<Unchecked>),
+    Settings(Settings),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

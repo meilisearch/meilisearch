@@ -225,7 +225,7 @@ mod real {
                     };
 
                     let settings = settings.clone();
-                    spawn_blocking(move || index.update_settings(&settings.check())).await??;
+                    spawn_blocking(move || index.update_settings(&settings)).await??;
 
                     Ok(TaskResult::Other)
                 }

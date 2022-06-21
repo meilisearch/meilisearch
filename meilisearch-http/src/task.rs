@@ -3,7 +3,7 @@ use std::fmt::{self, Write};
 use std::str::FromStr;
 use std::write;
 
-use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::index::Settings;
 use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
@@ -144,7 +144,7 @@ enum TaskDetails {
     #[serde(rename_all = "camelCase")]
     Settings {
         #[serde(flatten)]
-        settings: Settings<Unchecked>,
+        settings: Settings,
     },
     #[serde(rename_all = "camelCase")]
     IndexInfo { primary_key: Option<String> },

@@ -13,11 +13,11 @@ use crate::document_formats::read_ndjson;
 use crate::index::updates::apply_settings_to_builder;
 
 use super::error::Result;
-use super::{index::Index, Settings, Unchecked};
+use super::{index::Index, Settings};
 
 #[derive(Serialize, Deserialize)]
 struct DumpMeta {
-    settings: Settings<Unchecked>,
+    settings: Settings,
     primary_key: Option<String>,
 }
 
@@ -69,7 +69,7 @@ impl Index {
         let meta_file_path = path.as_ref().join(META_FILE_NAME);
         let mut meta_file = File::create(&meta_file_path)?;
 
-        let settings = self.settings_txn(txn)?.into_unchecked();
+        let settings = self.settings_txn(txn)?;
         let primary_key = self.primary_key(txn)?.map(String::from);
         let meta = DumpMeta {
             settings,
@@ -101,7 +101,6 @@ impl Index {
             settings,
             primary_key,
         } = serde_json::from_reader(meta_file)?;
-        let settings = settings.check();
 
         let mut options = EnvOpenOptions::new();
         options.map_size(size);

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::index::{Settings, Unchecked};
+use crate::index::Settings;
 use crate::tasks::batch::BatchId;
 use crate::tasks::task::{
     DocumentDeletion, TaskContent as NewTaskContent, TaskEvent as NewTaskEvent, TaskId, TaskResult,
@@ -82,7 +82,7 @@ pub enum TaskContent {
     },
     DocumentDeletion(DocumentDeletion),
     SettingsUpdate {
-        settings: Settings<Unchecked>,
+        settings: Settings,
         /// Indicates whether the task was a deletion
         is_deletion: bool,
         allow_index_creation: bool,

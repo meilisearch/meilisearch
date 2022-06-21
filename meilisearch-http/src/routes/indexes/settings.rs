@@ -1,7 +1,7 @@
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_lib::index::{Settings, Unchecked};
+use meilisearch_lib::index::Settings;
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::{MeiliDeserError, ResponseError};
@@ -356,7 +356,7 @@ generate_configure!(
 pub async fn update_all(
     meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<Settings<Unchecked>, MeiliDeserError>,
+    body: ValidatedJson<Settings, MeiliDeserError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -442,7 +442,7 @@ pub async fn delete_all(
     data: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = Settings::cleared().into_unchecked();
+    let settings = Settings::cleared();
 
     let allow_index_creation = data.filters().allow_index_creation;
     let update = Update::Settings {

@@ -2,7 +2,7 @@ pub use search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
-pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
+pub use updates::{apply_settings_to_builder, Facets, Settings};
 
 mod dump;
 pub mod error;
@@ -89,7 +89,7 @@ pub mod test {
                 MockIndex::Mock(_) => todo!(),
             }
         }
-        pub fn settings(&self) -> Result<Settings<Checked>> {
+        pub fn settings(&self) -> Result<Settings> {
             match self {
                 MockIndex::Real(index) => index.settings(),
                 MockIndex::Mock(_) => todo!(),
@@ -175,7 +175,7 @@ pub mod test {
             }
         }
 
-        pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
+        pub fn update_settings(&self, settings: &Settings) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.update_settings(settings),
                 MockIndex::Mock(m) => unsafe { m.get("update_settings").call(settings) },

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::index::{Settings, Unchecked};
+use crate::index::Settings;
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdateEntry {
@@ -43,7 +43,7 @@ pub enum UpdateMeta {
     DeleteDocuments {
         ids: Vec<String>,
     },
-    Settings(Settings<Unchecked>),
+    Settings(Settings),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

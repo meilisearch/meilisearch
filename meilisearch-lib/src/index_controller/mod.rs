@@ -22,9 +22,7 @@ use uuid::Uuid;
 
 use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::dump::{self, load_dump, DumpHandler};
-use crate::index::{
-    Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
-};
+use crate::index::{Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
 use crate::index_resolver::error::IndexResolverError;
 use crate::options::{IndexerOpts, SchedulerConfig};
 use crate::snapshot::{load_snapshot, SnapshotService};
@@ -126,7 +124,7 @@ pub enum Update {
     DeleteDocuments(Vec<String>),
     ClearDocuments,
     Settings {
-        settings: Settings<Unchecked>,
+        settings: Settings,
         /// Indicates whether the update was a deletion
         is_deletion: bool,
         allow_index_creation: bool,
@@ -530,7 +528,7 @@ where
         Ok(ret)
     }
 
-    pub async fn settings(&self, uid: String) -> Result<Settings<Checked>> {
+    pub async fn settings(&self, uid: String) -> Result<Settings> {
         let index = self.index_resolver.get_index(uid).await?;
         let settings = spawn_blocking(move || index.settings()).await??;
         Ok(settings)

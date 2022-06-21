@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::fs::create_dir_all;
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -20,7 +19,7 @@ use crate::EnvSizer;
 use super::error::IndexError;
 use super::error::Result;
 use super::updates::{FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, TypoSettings};
-use super::{Checked, Settings};
+use super::Settings;
 
 pub type Document = Map<String, Value>;
 
@@ -121,7 +120,7 @@ impl Index {
     pub fn meta(&self) -> Result<IndexMeta> {
         IndexMeta::new(self)
     }
-    pub fn settings(&self) -> Result<Settings<Checked>> {
+    pub fn settings(&self) -> Result<Settings> {
         let txn = self.read_txn()?;
         self.settings_txn(&txn)
     }
@@ -130,7 +129,7 @@ impl Index {
         self.uuid
     }
 
-    pub fn settings_txn(&self, txn: &RoTxn) -> Result<Settings<Checked>> {
+    pub fn settings_txn(&self, txn: &RoTxn) -> Result<Settings> {
         let displayed_attributes = self
             .displayed_fields(txn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
@@ -225,7 +224,6 @@ impl Index {
             typo_tolerance: Setting::Set(typo_tolerance),
             faceting: Setting::Set(faceting),
             pagination: Setting::Set(pagination),
-            _kind: PhantomData,
         })
     }
 
