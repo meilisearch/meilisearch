@@ -1,13 +1,13 @@
 #!/bin/sh
 
-# Checks if the current tag should be the latest (in terms of semver and not of release date).
-# Ex: previous tag -> v0.10.1
-#     new tag -> v0.8.12
-#     The new tag should not be the latest
-#     So it returns "false", the CI should not run for the release v0.8.2
-
-# Used in GHA in publish-docker-latest.yml
+# Was used in our CIs to publish the latest docker image. Not used anymore, will be used again when v1 and v2 will be out and we will want to maintain multiple stable versions.
 # Returns "true" or "false" (as a string) to be used in the `if` in GHA
+
+# Checks if the current tag should be the latest (in terms of semver and not of release date).
+# Ex: previous tag -> v2.1.1
+#     new tag -> v1.20.3
+#     The new tag (v1.20.3) should NOT be the latest
+#     So it returns "false", the `latest tag` should not be updated for the release v1.20.3 and still need to correspond to v2.1.1
 
 # GLOBAL
 GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]
