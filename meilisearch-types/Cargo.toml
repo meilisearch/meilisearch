@@ -10,6 +10,8 @@ proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
+jayson = { path = "../../jayson" }
+milli = { path = "../../milli/milli" }
 
 [features]
 test-traits = ["proptest", "proptest-derive"]

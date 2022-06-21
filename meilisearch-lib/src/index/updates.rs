@@ -1,14 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::marker::PhantomData;
-use std::num::NonZeroUsize;
-
+use jayson::DeserializeFromValue;
 use log::{debug, info, trace};
 use milli::documents::DocumentBatchReader;
 use milli::update::{
     DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
     Setting,
 };
+use milli::{AscDesc, Criterion};
+use rayon::vec;
 use serde::{Deserialize, Serialize, Serializer};
+use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 use uuid::Uuid;
 
 use super::error::Result;
@@ -36,9 +38,23 @@ pub struct Checked;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Unchecked;
+impl<E> DeserializeFromValue<E> for Unchecked
+where
+    E: jayson::DeserializeError,
+{
+    fn deserialize_from_value<V>(
+        value: jayson::Value<V>,
+        location: jayson::ValuePointerRef,
+    ) -> std::result::Result<Self, E>
+    where
+        V: jayson::IntoValue,
+    {
+        Ok(Unchecked)
+    }
+}
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct MinWordSizeTyposSetting {
@@ -51,7 +67,9 @@ pub struct MinWordSizeTyposSetting {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
+)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct TypoSettings {
@@ -70,7 +88,7 @@ pub struct TypoSettings {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct FacetingSettings {
@@ -80,7 +98,9 @@ pub struct FacetingSettings {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
+)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationSettings {
@@ -92,11 +112,15 @@ pub struct PaginationSettings {
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
+)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[jayson(rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings<T> {
     #[serde(
         default,
@@ -122,7 +146,8 @@ pub struct Settings<T> {
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
-    pub ranking_rules: Setting<Vec<String>>,
+    #[jayson(needs_predicate)]
+    pub ranking_rules: Setting<Vec<AscDesc>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub stop_words: Setting<BTreeSet<String>>,

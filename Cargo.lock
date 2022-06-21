@@ -1130,6 +1130,14 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.29.3"
+dependencies = [
+ "nom",
+ "nom_locate",
+]
+
+[[package]]
+name = "filter-parser"
+version = "0.29.3"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
 dependencies = [
  "nom",
@@ -1150,6 +1158,13 @@ checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flatten-serde-json"
+version = "0.29.3"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -1686,6 +1701,13 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.29.3"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "json-depth-checker"
+version = "0.29.3"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
 dependencies = [
  "serde_json",
@@ -2031,7 +2053,7 @@ dependencies = [
  "enum-iterator",
  "hmac",
  "meilisearch-types",
- "milli",
+ "milli 0.29.3 (git+https://github.com/meilisearch/milli.git?tag=v0.29.3)",
  "rand",
  "serde",
  "serde_json",
@@ -2140,11 +2162,12 @@ dependencies = [
  "http",
  "indexmap",
  "itertools",
+ "jayson",
  "lazy_static",
  "log",
  "meilisearch-auth",
  "meilisearch-types",
- "milli",
+ "milli 0.29.3",
  "mime",
  "mockall",
  "nelson",
@@ -2182,6 +2205,8 @@ name = "meilisearch-types"
 version = "0.28.0"
 dependencies = [
  "actix-web",
+ "jayson",
+ "milli 0.29.3",
  "proptest",
  "proptest-derive",
  "serde",
@@ -2215,6 +2240,51 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.29.3"
+dependencies = [
+ "bimap",
+ "bincode",
+ "bstr",
+ "byteorder",
+ "charabia",
+ "concat-arrays",
+ "crossbeam-channel",
+ "csv",
+ "either",
+ "filter-parser 0.29.3",
+ "flatten-serde-json 0.29.3",
+ "fst",
+ "fxhash",
+ "geoutils",
+ "grenad",
+ "heed",
+ "itertools",
+ "jayson",
+ "json-depth-checker 0.29.3",
+ "levenshtein_automata",
+ "log",
+ "logging_timer",
+ "memmap2",
+ "obkv",
+ "once_cell",
+ "ordered-float",
+ "rayon",
+ "roaring",
+ "rstar",
+ "serde",
+ "serde_json",
+ "slice-group-by",
+ "smallstr",
+ "smallvec",
+ "smartstring",
+ "tempfile",
+ "thiserror",
+ "time 0.3.9",
+ "uuid",
+]
+
+[[package]]
+name = "milli"
+version = "0.29.3"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
 dependencies = [
  "bimap",
@@ -2226,15 +2296,15 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser",
- "flatten-serde-json",
+ "filter-parser 0.29.3 (git+https://github.com/meilisearch/milli.git?tag=v0.29.3)",
+ "flatten-serde-json 0.29.3 (git+https://github.com/meilisearch/milli.git?tag=v0.29.3)",
  "fst",
  "fxhash",
  "geoutils",
  "grenad",
  "heed",
  "itertools",
- "json-depth-checker",
+ "json-depth-checker 0.29.3 (git+https://github.com/meilisearch/milli.git?tag=v0.29.3)",
  "levenshtein_automata",
  "log",
  "logging_timer",

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use fst::IntoStreamer;
 use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
-use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
+use milli::{obkv_to_json, AscDesc, FieldDistribution, Member, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
@@ -146,7 +146,7 @@ impl Index {
         let criteria = self
             .criteria(txn)?
             .into_iter()
-            .map(|c| c.to_string())
+            .map(|c| AscDesc::Asc(Member::Field("todo".to_string())))
             .collect();
 
         let stop_words = self

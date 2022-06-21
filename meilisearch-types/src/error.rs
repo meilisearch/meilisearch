@@ -1,6 +1,7 @@
 use std::fmt;
 
 use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
+use jayson::{ValueKind, ValuePointerRef};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -20,6 +21,84 @@ pub struct ResponseError {
     error_type: String,
     #[serde(rename = "link")]
     error_link: String,
+}
+
+#[derive(Debug)]
+pub struct MeiliDeserError(String);
+impl std::fmt::Display for MeiliDeserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl std::error::Error for MeiliDeserError {}
+impl ErrorCode for MeiliDeserError {
+    fn error_code(&self) -> Code {
+        Code::MalformedPayload
+    }
+}
+impl jayson::MergeWithError<milli::AscDescError> for MeiliDeserError {
+    fn merge(
+        self_: Option<Self>,
+        other: milli::AscDescError,
+        merge_location: jayson::ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let pointer = merge_location.to_owned();
+        Err(MeiliDeserError(format!("{pointer:?} -> {other} ")))
+    }
+}
+
+impl jayson::MergeWithError<MeiliDeserError> for MeiliDeserError {
+    fn merge(
+        self_: Option<Self>,
+        other: MeiliDeserError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+impl jayson::DeserializeError for MeiliDeserError {
+    /// Return the origin of the error, if it can be found
+    fn location(&self) -> Option<jayson::ValuePointer> {
+        None
+    }
+    /// Create a new error due to an unexpected value kind.
+    ///
+    /// Return `Ok` to continue deserializing or `Err` to fail early.
+    fn incorrect_value_kind(
+        self_: Option<Self>,
+        actual: ValueKind,
+        accepted: &[ValueKind],
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(MeiliDeserError(format!("incorrect value kind {actual}")))
+    }
+    /// Create a new error due to a missing key.
+    ///
+    /// Return `Ok` to continue deserializing or `Err` to fail early.
+    fn missing_field(
+        self_: Option<Self>,
+        field: &str,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(MeiliDeserError(format!("missing field {field}")))
+    }
+    /// Create a new error due to finding an unknown key.
+    ///
+    /// Return `Ok` to continue deserializing or `Err` to fail early.
+    fn unknown_key(
+        self_: Option<Self>,
+        key: &str,
+        accepted: &[&str],
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(MeiliDeserError(format!("unknown key {key}")))
+    }
+    /// Create a new error with the custom message.
+    ///
+    /// Return `Ok` to continue deserializing or `Err` to fail early.
+    fn unexpected(self_: Option<Self>, msg: &str, location: ValuePointerRef) -> Result<Self, Self> {
+        Err(MeiliDeserError(format!("unexpected {msg}")))
+    }
 }
 
 impl ResponseError {
