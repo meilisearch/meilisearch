@@ -7,7 +7,7 @@
 # Ex: previous tag -> v2.1.1
 #     new tag -> v1.20.3
 #     The new tag (v1.20.3) should NOT be the latest
-#     So it returns "false", the `latest tag` should not be updated for the release v1.20.3 and still need to correspond to v2.1.1
+#     So it returns "false", the `latest` tag should not be updated for the release v1.20.3 and still need to correspond to v2.1.1
 
 # GLOBAL
 GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]

@@ -1,6 +1,6 @@
 [package]
 name = "permissive-json-pointer"
-version = "0.2.0"
+version = "0.28.0"
 edition = "2021"
 description = "A permissive json pointer"
 readme = "README.md"
