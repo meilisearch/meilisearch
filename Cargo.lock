@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.28.0"
+version = "0.0.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -2154,7 +2154,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.28.0"
+version = "0.0.0"
 dependencies = [
  "actix-web",
  "proptest",
@@ -2515,7 +2515,7 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.28.0"
+version = "0.0.0"
 dependencies = [
  "big_s",
  "serde_json",
