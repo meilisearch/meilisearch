@@ -57,7 +57,7 @@ pub mod main_key {
     pub const EXACT_WORDS: &str = "exact-words";
     pub const EXACT_ATTRIBUTES: &str = "exact-attributes";
     pub const MAX_VALUES_PER_FACET: &str = "max-values-per-facet";
-    pub const PAGINATION_LIMITED_TO: &str = "pagination-limited-to";
+    pub const PAGINATION_MAX_TOTAL_HITS: &str = "pagination-max-total-hits";
 }
 
 pub mod db_name {
@@ -1102,20 +1102,20 @@ impl Index {
         self.main.delete::<_, Str>(txn, main_key::MAX_VALUES_PER_FACET)
     }
 
-    pub fn pagination_limited_to(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
-        self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_LIMITED_TO)
+    pub fn pagination_max_total_hits(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
+        self.main.get::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 
-    pub(crate) fn put_pagination_limited_to(
+    pub(crate) fn put_pagination_max_total_hits(
         &self,
         txn: &mut RwTxn,
         val: usize,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_LIMITED_TO, &val)
+        self.main.put::<_, Str, OwnedType<usize>>(txn, main_key::PAGINATION_MAX_TOTAL_HITS, &val)
     }
 
-    pub(crate) fn delete_pagination_limited_to(&self, txn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(txn, main_key::PAGINATION_LIMITED_TO)
+    pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
     }
 }
 
