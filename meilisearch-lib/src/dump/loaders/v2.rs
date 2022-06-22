@@ -78,11 +78,17 @@ fn patch_updates(dir: impl AsRef<Path>, path: impl AsRef<Path>) -> anyhow::Resul
     let mut output_update_file = NamedTempFile::new_in(&dir)?;
     let update_file = File::open(&path)?;
 
-    let stream = Deserializer::from_reader(update_file).into_iter::<v2::UpdateEntry>();
+    let updates = Deserializer::from_reader(update_file).into_iter::<serde_json::Value>();
+    for update_entry in updates {
+        let mut update_entry = update_entry?;
+        println!("{:?}", update_entry);
 
-    for update in stream {
-        let update_entry = update?;
-
+        // We first deserialize the dump meta into a serde_json::Value and change
+        // the custom ranking rules settings from the old format to the new format.
+        if let Some(ranking_rules) = update_entry.pointer_mut("/update/meta/rankingRules") {
+            patch_custom_ranking_rules(ranking_rules);
+        }
+        let update_entry: v2::UpdateEntry = serde_json::from_value(update_entry)?;
         let update_entry = v3::UpdateEntry::from(update_entry);
 
         serde_json::to_writer(&mut output_update_file, &update_entry)?;
