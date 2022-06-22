@@ -105,7 +105,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     /// Attributes on which typo tolerance is disabled.
     exact_attributes: Setting<HashSet<String>>,
     max_values_per_facet: Setting<usize>,
-    pagination_limited_to: Setting<usize>,
+    pagination_max_total_hits: Setting<usize>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -132,7 +132,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             min_word_len_one_typo: Setting::NotSet,
             exact_attributes: Setting::NotSet,
             max_values_per_facet: Setting::NotSet,
-            pagination_limited_to: Setting::NotSet,
+            pagination_max_total_hits: Setting::NotSet,
             indexer_config,
         }
     }
@@ -258,12 +258,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.max_values_per_facet = Setting::Reset;
     }
 
-    pub fn set_pagination_limited_to(&mut self, value: usize) {
-        self.pagination_limited_to = Setting::Set(value);
+    pub fn set_pagination_max_total_hits(&mut self, value: usize) {
+        self.pagination_max_total_hits = Setting::Set(value);
     }
 
-    pub fn reset_pagination_limited_to(&mut self) {
-        self.pagination_limited_to = Setting::Reset;
+    pub fn reset_pagination_max_total_hits(&mut self) {
+        self.pagination_max_total_hits = Setting::Reset;
     }
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
@@ -646,13 +646,13 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
-    fn update_pagination_limited_to(&mut self) -> Result<()> {
-        match self.pagination_limited_to {
+    fn update_pagination_max_total_hits(&mut self) -> Result<()> {
+        match self.pagination_max_total_hits {
             Setting::Set(max) => {
-                self.index.put_pagination_limited_to(&mut self.wtxn, max)?;
+                self.index.put_pagination_max_total_hits(&mut self.wtxn, max)?;
             }
             Setting::Reset => {
-                self.index.delete_pagination_limited_to(&mut self.wtxn)?;
+                self.index.delete_pagination_max_total_hits(&mut self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -679,7 +679,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.update_min_typo_word_len()?;
         self.update_exact_words()?;
         self.update_max_values_per_facet()?;
-        self.update_pagination_limited_to()?;
+        self.update_pagination_max_total_hits()?;
 
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
@@ -1576,7 +1576,7 @@ mod tests {
             exact_words,
             exact_attributes,
             max_values_per_facet,
-            pagination_limited_to,
+            pagination_max_total_hits,
         } = builder;
 
         assert!(matches!(searchable_fields, Setting::NotSet));
@@ -1594,6 +1594,6 @@ mod tests {
         assert!(matches!(exact_words, Setting::NotSet));
         assert!(matches!(exact_attributes, Setting::NotSet));
         assert!(matches!(max_values_per_facet, Setting::NotSet));
-        assert!(matches!(pagination_limited_to, Setting::NotSet));
+        assert!(matches!(pagination_max_total_hits, Setting::NotSet));
     }
 }
