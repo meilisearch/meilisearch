@@ -33,7 +33,7 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     map.insert(
         "pagination",
         json!({
-            "limitedTo": json!(1000),
+            "maxTotalHits": json!(1000),
         }),
     );
     map
@@ -82,7 +82,7 @@ async fn get_settings() {
     assert_eq!(
         settings["pagination"],
         json!({
-            "limitedTo": 1000,
+            "maxTotalHits": 1000,
         })
     );
 }

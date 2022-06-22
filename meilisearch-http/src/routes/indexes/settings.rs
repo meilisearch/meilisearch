@@ -318,7 +318,7 @@ make_setting_route!(
             "Pagination Updated".to_string(),
             json!({
                 "pagination": {
-                    "limited_to": setting.as_ref().and_then(|s| s.limited_to.set()),
+                    "max_total_hits": setting.as_ref().and_then(|s| s.max_total_hits.set()),
                 },
             }),
             Some(req),
@@ -418,10 +418,10 @@ pub async fn update_all(
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
             },
             "pagination": {
-                "limited_to": settings.pagination
+                "max_total_hits": settings.pagination
                     .as_ref()
                     .set()
-                    .and_then(|s| s.limited_to.as_ref().set()),
+                    .and_then(|s| s.max_total_hits.as_ref().set()),
             },
         }),
         Some(&req),
