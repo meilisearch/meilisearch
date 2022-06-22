@@ -5,9 +5,18 @@ on:
     types: [released]
 
 jobs:
+  check-version:
+    name: Check the version validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check release validity
+        run: sh .github/scripts/check-release.sh
+
   debian:
     name: Publish debian packagge
     runs-on: ubuntu-18.04
+    needs: check-version
     steps:
     - uses: hecrj/setup-rust-action@master
       with:
@@ -30,6 +39,7 @@ jobs:
   homebrew:
     name: Bump Homebrew formula
     runs-on: ubuntu-18.04
+    needs: check-version
     steps:
       - name: Create PR to Homebrew
         uses: mislav/bump-homebrew-formula-action@v1

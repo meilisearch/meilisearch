@@ -5,8 +5,6 @@ on:
   push:
     tags:
       - '*'
-  release:
-    types: [released]
 
 name: Publish tagged images to Docker Hub
 
@@ -14,45 +12,54 @@ jobs:
   docker:
     runs-on: docker
     steps:
+      - uses: actions/checkout@v2
+
+      # Check if the tag has the v<nmumber>.<number>.<number> format. If yes, it means we are publishing an official release.
+      # In this situation, we need to set `output.stable` to create/update the following tags (additionally to the `vX.Y.Z` Docker tag):
+      # - a `vX.Y` (without patch version) Docker tag
+      # - a `latest` Docker tag
+      - name: Check tag format
+        if: github.event_name != 'schedule'
+        id: check-tag-format
+        run: |
+          escaped_tag=$(printf "%q" ${{ github.ref_name }})
+
+          if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo ::set-output name=stable::true
+          else
+            echo ::set-output name=stable::false
+          fi
+
+      # Check only the validity of the tag for official releases (not for pre-releases or other tags)
+      - name: Check release validity
+        if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable
+        run: sh .github/scripts/check-release.sh
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         if: github.event_name != 'schedule'
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Check tag format
-        id: check-tag-format
-        run: |
-          # Escape submitted tag name
-          escaped_tag=$(printf "%q" ${{ github.ref_name }})
-
-          # Check if tag has format v<nmumber>.<number>.<number> and set output.match
-          # to create a vX.Y (without patch version) Docker tag
-          if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo ::set-output name=match::true
-          else
-            echo ::set-output name=match::false
-          fi
-
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v3
         with:
           images: getmeili/meilisearch
-          # The lastest tag is only pushed for the official Meilisearch release
+          # The lastest and `vX.Y` tags are only pushed for the official Meilisearch releases
           # See https://github.com/docker/metadata-action#latest-tag
           flavor: latest=false
           tags: |
             type=ref,event=tag
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.match }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable }}
+            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable }}
 
       - name: Build and push
         id: docker_build
