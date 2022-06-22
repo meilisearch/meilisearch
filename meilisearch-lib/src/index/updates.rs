@@ -8,6 +8,7 @@ use milli::update::{
 use milli::Criterion;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
 use std::num::NonZeroUsize;
 use uuid::Uuid;
 
@@ -94,7 +95,7 @@ pub struct PaginationSettings {
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, jayson::DeserializeFromValue,
 )]
-#[jayson(rename_all = camelCase, deny_unknown_fields)]
+#[jayson(rename_all = camelCase, deny_unknown_fields, validate = check_settings -> Infallible)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -105,7 +106,6 @@ pub struct Settings {
         skip_serializing_if = "Setting::is_not_set"
     )]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
-    #[jayson(map = map_searchable_or_displayed_attributes)]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -114,7 +114,6 @@ pub struct Settings {
         skip_serializing_if = "Setting::is_not_set"
     )]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
-    #[jayson(map = map_searchable_or_displayed_attributes)]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -164,8 +163,22 @@ impl Settings {
         }
     }
 }
-fn map_searchable_or_displayed_attributes(setting: Setting<Vec<String>>) -> Setting<Vec<String>> {
-    match setting {
+fn check_settings(settings: Settings) -> std::result::Result<Settings, Infallible> {
+    let Settings {
+        displayed_attributes,
+        searchable_attributes,
+        filterable_attributes,
+        sortable_attributes,
+        ranking_rules,
+        stop_words,
+        synonyms,
+        distinct_attribute,
+        typo_tolerance,
+        faceting,
+        pagination,
+    } = settings;
+
+    let displayed_attributes = match displayed_attributes {
         Setting::Set(fields) => {
             if fields.iter().any(|f| f == "*") {
                 Setting::Reset
@@ -174,7 +187,32 @@ fn map_searchable_or_displayed_attributes(setting: Setting<Vec<String>>) -> Sett
             }
         }
         otherwise => otherwise,
-    }
+    };
+
+    let searchable_attributes = match searchable_attributes {
+        Setting::Set(fields) => {
+            if fields.iter().any(|f| f == "*") {
+                Setting::Reset
+            } else {
+                Setting::Set(fields)
+            }
+        }
+        otherwise => otherwise,
+    };
+
+    Ok(Settings {
+        displayed_attributes,
+        searchable_attributes,
+        filterable_attributes,
+        sortable_attributes,
+        ranking_rules,
+        stop_words,
+        synonyms,
+        distinct_attribute,
+        typo_tolerance,
+        faceting,
+        pagination,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -477,5 +515,14 @@ pub(crate) mod test {
         });
         let settings: Settings = jayson::deserialize::<_, _, MeiliDeserError>(j).unwrap();
         assert_eq!(settings.displayed_attributes, Setting::Reset);
+
+        let j = json!({
+            "filterableAttributes": ["*"],
+        });
+        let settings: Settings = jayson::deserialize::<_, _, MeiliDeserError>(j).unwrap();
+        assert_eq!(
+            settings.filterable_attributes,
+            Setting::Set([String::from("*")].into_iter().collect())
+        );
     }
 }

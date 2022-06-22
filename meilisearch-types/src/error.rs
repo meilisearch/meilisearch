@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{convert::Infallible, fmt};
 
 use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
 use jayson::{ValueKind, ValuePointerRef};
@@ -34,6 +34,15 @@ impl std::error::Error for MeiliDeserError {}
 impl ErrorCode for MeiliDeserError {
     fn error_code(&self) -> Code {
         Code::MalformedPayload
+    }
+}
+impl jayson::MergeWithError<Infallible> for MeiliDeserError {
+    fn merge(
+        _self_: Option<Self>,
+        _other: Infallible,
+        _merge_location: jayson::ValuePointerRef,
+    ) -> Result<Self, Self> {
+        unreachable!()
     }
 }
 impl jayson::MergeWithError<milli::CriterionError> for MeiliDeserError {
