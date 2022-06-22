@@ -291,23 +291,20 @@ async fn error_set_invalid_ranking_rules() {
     let index = server.index("test");
     index.create(None).await;
 
-    let (_response, _code) = index
+    let (response, code) = index
         .update_settings(json!({ "rankingRules": [ "manyTheFish"]}))
         .await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
 
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
+    assert_eq!(code, 400);
 
     let expected_error = json!({
-        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules."#,
-        "code": "invalid_ranking_rule",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_ranking_rule"
+      "code": "malformed_payload",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload",
+      "message": "ValuePointer { path: [Key(\"rankingRules\"), Index(0)] } -> `manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. ",
+      "type": "invalid_request"
     });
 
-    assert_eq!(response["error"], expected_error);
+    assert_eq!(response, expected_error);
 }
 
 #[actix_rt::test]

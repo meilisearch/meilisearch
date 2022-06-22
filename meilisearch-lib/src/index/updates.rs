@@ -423,8 +423,10 @@ pub fn apply_settings_to_builder(settings: &Settings, builder: &mut milli::updat
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
+    use meilisearch_types::error::MeiliDeserError;
     use milli::Criterion;
     use proptest::prelude::*;
+    use serde_json::json;
 
     fn criteria_strategy() -> impl Strategy<Value = Vec<Criterion>> {
         proptest::collection::vec(
@@ -459,44 +461,21 @@ pub(crate) mod test {
 
     #[test]
     fn test_setting_check() {
-        // test no changes
-        let settings = Settings {
-            displayed_attributes: Setting::Set(vec![String::from("hello")]),
-            searchable_attributes: Setting::Set(vec![String::from("hello")]),
-            filterable_attributes: Setting::NotSet,
-            sortable_attributes: Setting::NotSet,
-            ranking_rules: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            synonyms: Setting::NotSet,
-            distinct_attribute: Setting::NotSet,
-            typo_tolerance: Setting::NotSet,
-            faceting: Setting::NotSet,
-            pagination: Setting::NotSet,
-        };
-
-        assert_eq!(settings.displayed_attributes, settings.displayed_attributes);
+        let j = json!({
+            "filterableAttributes": ["a", "b"],
+            "searchableAttributes": ["*", "b"],
+        });
+        let settings: Settings = jayson::deserialize::<_, _, MeiliDeserError>(j).unwrap();
         assert_eq!(
-            settings.searchable_attributes,
-            settings.searchable_attributes
+            settings.filterable_attributes,
+            Setting::Set([String::from("a"), String::from("b")].into_iter().collect())
         );
-
-        // test wildcard
-        // test no changes
-        let settings = Settings {
-            displayed_attributes: Setting::Set(vec![String::from("*")]),
-            searchable_attributes: Setting::Set(vec![String::from("hello"), String::from("*")]),
-            filterable_attributes: Setting::NotSet,
-            sortable_attributes: Setting::NotSet,
-            ranking_rules: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            synonyms: Setting::NotSet,
-            distinct_attribute: Setting::NotSet,
-            typo_tolerance: Setting::NotSet,
-            faceting: Setting::NotSet,
-            pagination: Setting::NotSet,
-        };
-
-        assert_eq!(settings.displayed_attributes, Setting::Reset);
         assert_eq!(settings.searchable_attributes, Setting::Reset);
+
+        let j = json!({
+            "displayedAttributes": ["c", "*"],
+        });
+        let settings: Settings = jayson::deserialize::<_, _, MeiliDeserError>(j).unwrap();
+        assert_eq!(settings.displayed_attributes, Setting::Reset);
     }
 }
