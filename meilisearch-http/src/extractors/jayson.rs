@@ -59,9 +59,10 @@ where
     type Output = Result<ValidatedJson<T, E>, actix_web::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
+        let ValidatedJsonExtractFut { fut, .. } = self.get_mut();
+        let fut = Pin::new(fut);
 
-        let res = ready!(Pin::new(&mut this.fut).poll(cx));
+        let res = ready!(fut.poll(cx));
 
         let res = match res {
             Err(err) => Err(err),
