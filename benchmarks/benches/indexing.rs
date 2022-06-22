@@ -1137,7 +1137,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
-                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "json");
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
                 let (builder, user_error) = builder.add_documents(documents).unwrap();
                 user_error.unwrap();
                 builder.execute().unwrap();
