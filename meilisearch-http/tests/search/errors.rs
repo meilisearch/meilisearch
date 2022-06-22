@@ -45,26 +45,18 @@ async fn search_invalid_highlight_and_crop_tags() {
 
     for field in fields {
         // object
-        index
-            .search(
-                json!({field.to_string(): {"marker": "<crop>"}}),
-                |response, code| {
-                    assert_eq!(code, 400, "field {} passing object: {}", &field, response);
-                    assert_eq!(response["code"], "bad_request");
-                },
-            )
+        let (response, code) = index
+            .search_post(json!({field.to_string(): {"marker": "<crop>"}}))
             .await;
+        assert_eq!(code, 400, "field {} passing object: {}", &field, response);
+        assert_eq!(response["code"], "bad_request");
 
         // array
-        index
-            .search(
-                json!({field.to_string(): ["marker", "<crop>"]}),
-                |response, code| {
-                    assert_eq!(code, 400, "field {} passing array: {}", &field, response);
-                    assert_eq!(response["code"], "bad_request");
-                },
-            )
+        let (response, code) = index
+            .search_post(json!({field.to_string(): ["marker", "<crop>"]}))
             .await;
+        assert_eq!(code, 400, "field {} passing array: {}", &field, response);
+        assert_eq!(response["code"], "bad_request");
     }
 }
 

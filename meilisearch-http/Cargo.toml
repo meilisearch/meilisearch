@@ -83,8 +83,8 @@ actix-rt = "2.7.0"
 assert-json-diff = "2.0.1"
 manifest-dir-macros = "0.1.14"
 maplit = "1.0.2"
-serde_url_params = "0.2.1"
 urlencoding = "2.1.0"
+yaup = "0.1.0"
 
 [features]
 default = ["analytics", "mini-dashboard"]
