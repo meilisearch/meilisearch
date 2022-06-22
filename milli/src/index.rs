@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
 use std::mem::size_of;
 use std::path::Path;
 
 use heed::flags::Flags;
 use heed::types::*;
-use heed::{Database, PolyDatabase, RoTxn, RwTxn};
+use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
@@ -212,6 +213,10 @@ impl Index {
     /// Returns the canonicalized path where the heed `Env` of this `Index` lives.
     pub fn path(&self) -> &Path {
         self.env.path()
+    }
+
+    pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
+        self.env.copy_to_path(path, option).map_err(Into::into)
     }
 
     /// Returns an `EnvClosingEvent` that can be used to wait for the closing event,
