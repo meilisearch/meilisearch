@@ -223,7 +223,6 @@ impl<'a> Search<'a> {
             debug!("Number of candidates found {}", candidates.len());
 
             let excluded = take(&mut excluded_candidates);
-
             let mut candidates = distinct.distinct(candidates, excluded);
 
             initial_candidates |= bucket_candidates;
@@ -236,10 +235,12 @@ impl<'a> Search<'a> {
             for candidate in candidates.by_ref().take(self.limit - documents_ids.len()) {
                 documents_ids.push(candidate?);
             }
+
+            excluded_candidates |= candidates.into_excluded();
+
             if documents_ids.len() == self.limit {
                 break;
             }
-            excluded_candidates = candidates.into_excluded();
         }
 
         Ok(SearchResult {
