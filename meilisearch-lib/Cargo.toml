@@ -30,8 +30,8 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { path = "../../milli/milli"  }
-jayson = { path = "../../jayson" }
+milli = { git = "https://github.com/meilisearch/milli", branch = "jayson-integration" }
+jayson = { git = "https://github.com/meilisearch/jayson", branch = "main" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"

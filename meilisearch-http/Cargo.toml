@@ -42,13 +42,13 @@ futures-util = "0.3.21"
 http = "0.2.6"
 indexmap = { version = "1.8.0", features = ["serde-1"] }
 itertools = "0.10.3"
-jayson = { path = "../../jayson", features = ["serde-json"] }
+jayson = { git = "https://github.com/meilisearch/jayson", branch = "main" }
 jsonwebtoken = "8.0.1"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib" }
-milli = { path = "../../milli/milli" }
+milli = { git = "https://github.com/meilisearch/milli", branch = "jayson-integration" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
