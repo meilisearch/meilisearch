@@ -2069,7 +2069,6 @@ dependencies = [
  "serde",
  "serde-cs",
  "serde_json",
- "serde_url_params",
  "sha-1",
  "sha2",
  "siphasher",
@@ -2087,6 +2086,7 @@ dependencies = [
  "uuid",
  "vergen",
  "walkdir",
+ "yaup",
  "zip",
 ]
 
@@ -3114,16 +3114,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_url_params"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c43307d0640738af32fe8d01e47119bc0fc8a686be470a44a586caff76dfb34"
-dependencies = [
- "serde",
- "url",
-]
-
-[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3993,6 +3983,16 @@ name = "yada"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d12cb7a57bbf2ab670ed9545bae3648048547f9039279a89ce000208e585c1"
+
+[[package]]
+name = "yaup"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f8e1d3d18db742c8b9ad2f5f3c5bf5b63aa67b9933617c8f8350d39a3c173c6"
+dependencies = [
+ "serde",
+ "url",
+]
 
 [[package]]
 name = "zerocopy"

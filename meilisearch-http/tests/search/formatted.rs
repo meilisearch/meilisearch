@@ -15,20 +15,23 @@ async fn formatted_contain_wildcard() {
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
 
-    let (response, code) = index
-        .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(
-        response["hits"][0],
-        json!({
-            "_formatted": {
-                "id": "852",
-                "cattos": "<em>pesti</em>",
-            },
-            "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
-        })
-    );
+    index.search(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
+        |response, code|
+        {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "_formatted": {
+                        "id": "852",
+                        "cattos": "<em>pesti</em>",
+                    },
+                    "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
+                })
+            );
+        }
+    )
+    .await;
 
     let (response, code) = index
         .search_post(json!({ "q": "pesti", "attributesToRetrieve": ["*"] }))

@@ -221,7 +221,7 @@ impl Index<'_> {
     }
 
     pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
-        let params = serde_url_params::to_string(&query).unwrap();
+        let params = yaup::to_string(&query).unwrap();
         let url = format!("/indexes/{}/search?{}", encode(self.uid.as_ref()), params);
         self.service.get(url).await
     }
