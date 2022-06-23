@@ -32,8 +32,8 @@ jobs:
 
       # Check only the validity of the tag for official releases (not for pre-releases or other tags)
       - name: Check release validity
-        if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable
-        run: sh .github/scripts/check-release.sh
+        if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable == 'true'
+        run: bash .github/scripts/check-release.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -58,8 +58,8 @@ jobs:
           flavor: latest=false
           tags: |
             type=ref,event=tag
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable }}
-            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
 
       - name: Build and push
         id: docker_build

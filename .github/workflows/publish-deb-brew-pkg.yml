@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Check release validity
-        run: sh .github/scripts/check-release.sh
+        run: bash .github/scripts/check-release.sh
 
   debian:
     name: Publish debian packagge
