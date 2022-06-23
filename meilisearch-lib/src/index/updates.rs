@@ -86,7 +86,7 @@ pub struct FacetingSettings {
 pub struct PaginationSettings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    pub limited_to: Setting<usize>,
+    pub max_total_hits: Setting<usize>,
 }
 
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
@@ -474,12 +474,12 @@ pub fn apply_settings_to_builder(
     }
 
     match settings.pagination {
-        Setting::Set(ref value) => match value.limited_to {
-            Setting::Set(val) => builder.set_pagination_limited_to(val),
-            Setting::Reset => builder.reset_pagination_limited_to(),
+        Setting::Set(ref value) => match value.max_total_hits {
+            Setting::Set(val) => builder.set_pagination_max_total_hits(val),
+            Setting::Reset => builder.reset_pagination_max_total_hits(),
             Setting::NotSet => (),
         },
-        Setting::Reset => builder.reset_pagination_limited_to(),
+        Setting::Reset => builder.reset_pagination_max_total_hits(),
         Setting::NotSet => (),
     }
 }

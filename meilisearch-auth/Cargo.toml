@@ -8,7 +8,7 @@ base64 = "0.13.0"
 enum-iterator = "0.7.0"
 hmac = "0.12.1"
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.29.3" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.31.1" }
 rand = "0.8.4"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }

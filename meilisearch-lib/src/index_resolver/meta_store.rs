@@ -3,6 +3,7 @@ use std::fs::{create_dir_all, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use walkdir::WalkDir;
 
 use milli::heed::types::{SerdeBincode, Str};
 use milli::heed::{CompactionOption, Database, Env};
@@ -11,7 +12,6 @@ use uuid::Uuid;
 
 use super::error::{IndexResolverError, Result};
 use crate::tasks::task::TaskId;
-use crate::EnvSizer;
 
 #[derive(Serialize, Deserialize)]
 pub struct DumpEntry {
@@ -131,7 +131,12 @@ impl HeedMetaStore {
     }
 
     fn get_size(&self) -> Result<u64> {
-        Ok(self.env.size())
+        Ok(WalkDir::new(self.env.path())
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|metadata| metadata.is_file())
+            .fold(0, |acc, m| acc + m.len()))
     }
 
     pub fn dump(&self, path: PathBuf) -> Result<()> {
