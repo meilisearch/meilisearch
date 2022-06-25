@@ -134,7 +134,7 @@ impl Processed {
     fn update_task(self, task: &mut Task) {
         self.from.update_task(task);
 
-        let event = TaskEvent::Succeded {
+        let event = TaskEvent::Succeeded {
             result: TaskResult::from(self.success),
             timestamp: self.processed_at,
         };

@@ -38,7 +38,7 @@ pub enum TaskEvent {
         batch_id: BatchId,
     },
     Processing(#[serde(with = "time::serde::rfc3339")] OffsetDateTime),
-    Succeded {
+    Succeeded {
         result: TaskResult,
         #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
@@ -62,7 +62,7 @@ impl From<TaskEvent> for NewTaskEvent {
                 batch_id,
             },
             TaskEvent::Processing(x) => NewTaskEvent::Processing(x),
-            TaskEvent::Succeded { result, timestamp } => {
+            TaskEvent::Succeeded { result, timestamp } => {
                 NewTaskEvent::Succeeded { result, timestamp }
             }
             TaskEvent::Failed { error, timestamp } => NewTaskEvent::Failed { error, timestamp },
