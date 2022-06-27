@@ -115,7 +115,7 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-macro_rules! compute_autorized_search {
+macro_rules! compute_authorized_search {
     ($tenant_tokens:expr, $filter:expr, $expected_count:expr) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
@@ -251,7 +251,7 @@ async fn search_authorized_simple_token() {
         },
     ];
 
-    compute_autorized_search!(tenant_tokens, {}, 5);
+    compute_authorized_search!(tenant_tokens, {}, 5);
 }
 
 #[actix_rt::test]
@@ -305,7 +305,7 @@ async fn search_authorized_filter_token() {
         },
     ];
 
-    compute_autorized_search!(tenant_tokens, {}, 3);
+    compute_authorized_search!(tenant_tokens, {}, 3);
 }
 
 #[actix_rt::test]
@@ -359,7 +359,7 @@ async fn filter_search_authorized_filter_token() {
         },
     ];
 
-    compute_autorized_search!(tenant_tokens, "color = yellow", 1);
+    compute_authorized_search!(tenant_tokens, "color = yellow", 1);
 }
 
 #[actix_rt::test]
