@@ -10,7 +10,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      # Check if the tag has the v<nmumber>.<number>.<number> format.
+      # If yes, it means we are publishing an official release.
+      # If no, we are releasing a RC, so no need to check the version.
+      - name: Check tag format
+        if: github.event_name != 'schedule'
+        id: check-tag-format
+        run: |
+          escaped_tag=$(printf "%q" ${{ github.ref_name }})
+
+          if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo ::set-output name=stable::true
+          else
+            echo ::set-output name=stable::false
+          fi
       - name: Check release validity
+        if: steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
   publish:
