@@ -306,12 +306,7 @@ impl<'a> Filter<'a> {
                 return Ok(string_docids | number_docids);
             }
             Condition::NotEqual(val) => {
-                let number = val.parse::<f64>().ok();
-                let all_numbers_ids = if number.is_some() {
-                    index.number_faceted_documents_ids(rtxn, field_id)?
-                } else {
-                    RoaringBitmap::new()
-                };
+                let all_numbers_ids = index.number_faceted_documents_ids(rtxn, field_id)?;
                 let all_strings_ids = index.string_faceted_documents_ids(rtxn, field_id)?;
                 let operator = Condition::Equal(val.clone());
                 let docids = Self::evaluate_operator(
