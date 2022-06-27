@@ -625,7 +625,7 @@ async fn add_documents_no_index_creation() {
         OffsetDateTime::parse(response["enqueuedAt"].as_str().unwrap(), &Rfc3339).unwrap();
     assert!(processed_at > enqueued_at);
 
-    // index was created, and primary key was infered.
+    // index was created, and primary key was inferred.
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
     assert_eq!(response["primaryKey"], "id");
