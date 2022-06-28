@@ -43,7 +43,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: getmeili/meilisearch
           # The lastest tag is only pushed for the official Meilisearch release
