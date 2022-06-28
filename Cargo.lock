@@ -3986,9 +3986,9 @@ checksum = "b6d12cb7a57bbf2ab670ed9545bae3648048547f9039279a89ce000208e585c1"
 
 [[package]]
 name = "yaup"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8e1d3d18db742c8b9ad2f5f3c5bf5b63aa67b9933617c8f8350d39a3c173c6"
+checksum = "3bc9ef6963f7e857050aabf31ebc44184f278bcfec4c3671552c1a916b152b45"
 dependencies = [
  "serde",
  "url",

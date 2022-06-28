@@ -84,7 +84,7 @@ assert-json-diff = "2.0.1"
 manifest-dir-macros = "0.1.14"
 maplit = "1.0.2"
 urlencoding = "2.1.0"
-yaup = "0.1.0"
+yaup = "0.2.0"
 
 [features]
 default = ["analytics", "mini-dashboard"]
