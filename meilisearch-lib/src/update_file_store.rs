@@ -4,7 +4,6 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
 use milli::documents::DocumentsBatchReader;
-use serde_json::Map;
 use tempfile::{NamedTempFile, PersistError};
 use uuid::Uuid;
 
@@ -151,23 +150,13 @@ mod store {
             let update_file = File::open(update_file_path)?;
             let mut dst_file = NamedTempFile::new_in(&dump_path)?;
             let mut document_cursor = DocumentsBatchReader::from_reader(update_file)?.into_cursor();
-            let index = document_cursor.documents_batch_index().clone();
 
-            let mut document_buffer = Map::new();
-            // TODO: we need to find a way to do this more efficiently. (create a custom serializer
-            // for jsonl for example...)
+            let mut dst_file_buf_writer = BufWriter::new(&mut dst_file);
             while let Some(document) = document_cursor.next_document()? {
-                for (field_id, content) in document.iter() {
-                    if let Some(field_name) = index.name(field_id) {
-                        let content = serde_json::from_slice(content)?;
-                        document_buffer.insert(field_name.to_string(), content);
-                    }
-                }
-
-                serde_json::to_writer(&mut dst_file, &document_buffer)?;
-                dst_file.write_all(b"\n")?;
-                document_buffer.clear();
+                serde_json::to_writer(&mut dst_file_buf_writer, &document)?;
+                dst_file_buf_writer.write_all(b"\n")?;
             }
+            drop(dst_file_buf_writer);
 
             dst_file.persist(dst)?;
 

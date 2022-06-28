@@ -124,16 +124,9 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let reader = BufReader::new(input);
 
-    let objects: Vec<_> = serde_json::from_reader(reader)
-        .map_err(Error::Json)
+    builder
+        .append_json(reader)
         .map_err(|e| (PayloadType::Json, e))?;
-
-    for object in objects {
-        builder
-            .append_json_object(&object)
-            .map_err(Into::into)
-            .map_err(DocumentFormatError::Internal)?;
-    }
 
     let count = builder.documents_count();
     let _ = builder

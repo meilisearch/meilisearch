@@ -83,17 +83,19 @@ pub fn configure_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)
                 .error_handler(|err, req: &HttpRequest| match err {
-                    JsonPayloadError::ContentType => match req.headers().get(CONTENT_TYPE) {
-                        Some(content_type) => MeilisearchHttpError::InvalidContentType(
-                            content_type.to_str().unwrap_or("unknown").to_string(),
-                            vec![mime::APPLICATION_JSON.to_string()],
-                        )
-                        .into(),
-                        None => MeilisearchHttpError::MissingContentType(vec![
-                            mime::APPLICATION_JSON.to_string(),
-                        ])
-                        .into(),
-                    },
+                    JsonPayloadError::ContentType => {
+                        match req.headers().get(CONTENT_TYPE) {
+                            Some(content_type) => MeilisearchHttpError::InvalidContentType(
+                                content_type.to_str().unwrap_or("unknown").to_string(),
+                                vec![mime::APPLICATION_JSON.to_string()],
+                            )
+                            .into(),
+                            None => MeilisearchHttpError::MissingContentType(vec![
+                                mime::APPLICATION_JSON.to_string(),
+                            ])
+                            .into(),
+                        }
+                    }
                     err => PayloadError::from(err).into(),
                 }),
         )

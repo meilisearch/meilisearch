@@ -1,7 +1,7 @@
 use meilisearch_auth::SearchRules;
 use std::collections::BTreeMap;
 use std::fmt;
-use std::io::Cursor;
+use std::io::{BufWriter, Cursor};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -392,6 +392,7 @@ where
                 }
                 let (content_uuid, mut update_file) = self.update_file_store.new_update()?;
                 let documents_count = tokio::task::spawn_blocking(move || -> Result<_> {
+                    let writer = BufWriter::new(&mut *update_file);
                     // check if the payload is empty, and return an error
                     if buffer.is_empty() {
                         return Err(IndexControllerError::MissingPayload(format));
@@ -399,9 +400,9 @@ where
 
                     let reader = Cursor::new(buffer);
                     let count = match format {
-                        DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Json => read_json(reader, writer)?,
+                        DocumentAdditionFormat::Csv => read_csv(reader, writer)?,
+                        DocumentAdditionFormat::Ndjson => read_ndjson(reader, writer)?,
                     };
 
                     update_file.persist()?;

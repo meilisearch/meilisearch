@@ -16,6 +16,7 @@ pub enum DumpError {
 
 internal_error!(
     DumpError: milli::heed::Error,
+    IndexResolverError,
     std::io::Error,
     tokio::task::JoinError,
     tokio::sync::oneshot::error::RecvError,

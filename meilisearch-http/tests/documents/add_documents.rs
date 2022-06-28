@@ -326,7 +326,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789012345678901234567890123456789", expected a sequence at line 1 column 102`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...7890123456789", expected a document, or a sequence of documents. at line 1 column 102`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -349,7 +349,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!("The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string \"0123456789012345678901234567...90123456789012345678901234567890123456789m\", expected a sequence at line 1 column 103`.")
+        json!("The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string \"0123456789012345678901234567...890123456789m\", expected a document, or a sequence of documents. at line 1 column 103`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
