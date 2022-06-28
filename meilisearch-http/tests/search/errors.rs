@@ -107,7 +107,7 @@ async fn filter_invalid_syntax_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["title & Glass"]]}), |response, code| {
+        .search(json!({"filter": ["title & Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -164,7 +164,7 @@ async fn filter_invalid_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["many = Glass"]]}), |response, code| {
+        .search(json!({"filter": ["many = Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -218,7 +218,7 @@ async fn filter_reserved_geo_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["_geo = Glass"]]}), |response, code| {
+        .search(json!({"filter": ["_geo = Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -273,7 +273,7 @@ async fn filter_reserved_attribute_array() {
     });
     index
         .search(
-            json!({"filter": [["_geoDistance = Glass"]]}),
+            json!({"filter": ["_geoDistance = Glass"]}),
             |response, code| {
                 assert_eq!(response, expected_response);
                 assert_eq!(code, 400);
