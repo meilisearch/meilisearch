@@ -14,6 +14,8 @@ pub enum TaskError {
     UnexistingTask(TaskId),
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Task id is out of bounds.")]
+    OutOfBounds,
 }
 
 internal_error!(
@@ -29,6 +31,7 @@ impl ErrorCode for TaskError {
         match self {
             TaskError::UnexistingTask(_) => Code::TaskNotFound,
             TaskError::Internal(_) => Code::Internal,
+            TaskError::OutOfBounds => Code::TaskNotFound,
         }
     }
 }

@@ -43,6 +43,24 @@ async fn get_task_status() {
 }
 
 #[actix_rt::test]
+async fn get_task_out_of_bounds() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.service.get("/tasks/99999999999999999").await;
+
+    let expected_response = json!({
+        "message": "Task id is out of bounds.",
+        "code": "task_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#task_not_found"
+    });
+
+    assert_eq!(code, 404);
+    assert_eq!(response, expected_response);
+}
+
+#[actix_rt::test]
 async fn list_tasks() {
     let server = Server::new().await;
     let index = server.index("test");
