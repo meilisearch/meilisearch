@@ -170,7 +170,7 @@ async fn get_tasks(
 
 async fn get_task(
     meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
-    task_id: Option<web::Path<TaskId>>,
+    task_id: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -191,7 +191,9 @@ async fn get_task(
         Some(filters)
     };
 
-    let id = task_id.ok_or(TaskError::OutOfBounds)?;
+    let id = task_id
+        .parse::<TaskId>()
+        .map_err(|_| TaskError::OutOfBounds)?;
 
     let task: TaskView = meilisearch.get_task(id.into_inner(), filters).await?.into();
 
