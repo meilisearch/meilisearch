@@ -8,6 +8,8 @@ pub enum Action {
     All = actions::ALL,
     #[serde(rename = "search")]
     Search = actions::SEARCH,
+    #[serde(rename = "documents.*")]
+    DocumentsAll = actions::DOCUMENTS_ALL,
     #[serde(rename = "documents.add")]
     DocumentsAdd = actions::DOCUMENTS_ADD,
     #[serde(rename = "documents.get")]
@@ -50,6 +52,7 @@ impl Action {
         match repr {
             ALL => Some(Self::All),
             SEARCH => Some(Self::Search),
+            DOCUMENTS_ALL => Some(Self::DocumentsAll),
             DOCUMENTS_ADD => Some(Self::DocumentsAdd),
             DOCUMENTS_GET => Some(Self::DocumentsGet),
             DOCUMENTS_DELETE => Some(Self::DocumentsDelete),
@@ -76,6 +79,7 @@ impl Action {
         match self {
             Self::All => ALL,
             Self::Search => SEARCH,
+            Self::DocumentsAll => DOCUMENTS_ALL,
             Self::DocumentsAdd => DOCUMENTS_ADD,
             Self::DocumentsGet => DOCUMENTS_GET,
             Self::DocumentsDelete => DOCUMENTS_DELETE,
@@ -100,18 +104,19 @@ impl Action {
 pub mod actions {
     pub(crate) const ALL: u8 = 0;
     pub const SEARCH: u8 = 1;
-    pub const DOCUMENTS_ADD: u8 = 2;
-    pub const DOCUMENTS_GET: u8 = 3;
-    pub const DOCUMENTS_DELETE: u8 = 4;
-    pub const INDEXES_CREATE: u8 = 5;
-    pub const INDEXES_GET: u8 = 6;
-    pub const INDEXES_UPDATE: u8 = 7;
-    pub const INDEXES_DELETE: u8 = 8;
-    pub const TASKS_GET: u8 = 9;
-    pub const SETTINGS_GET: u8 = 10;
-    pub const SETTINGS_UPDATE: u8 = 11;
-    pub const STATS_GET: u8 = 12;
-    pub const DUMPS_CREATE: u8 = 13;
+    pub const DOCUMENTS_ALL: u8 = 2;
+    pub const DOCUMENTS_ADD: u8 = 3;
+    pub const DOCUMENTS_GET: u8 = 4;
+    pub const DOCUMENTS_DELETE: u8 = 5;
+    pub const INDEXES_CREATE: u8 = 6;
+    pub const INDEXES_GET: u8 = 7;
+    pub const INDEXES_UPDATE: u8 = 8;
+    pub const INDEXES_DELETE: u8 = 9;
+    pub const TASKS_GET: u8 = 10;
+    pub const SETTINGS_GET: u8 = 11;
+    pub const SETTINGS_UPDATE: u8 = 12;
+    pub const STATS_GET: u8 = 13;
+    pub const DUMPS_CREATE: u8 = 14;
     pub const VERSION: u8 = 15;
     pub const KEYS_CREATE: u8 = 16;
     pub const KEYS_GET: u8 = 17;
