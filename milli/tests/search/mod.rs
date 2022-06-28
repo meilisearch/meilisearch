@@ -168,7 +168,15 @@ pub fn expected_order(
 
 fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     let mut id = None;
-    if let Some((field, filter)) = filter.split_once("=") {
+    if let Some((field, filter)) = filter.split_once("!=") {
+        if field == "tag" && document.tag != filter {
+            id = Some(document.id.clone())
+        } else if field == "asc_desc_rank"
+            && Ok(&document.asc_desc_rank) != filter.parse::<u32>().as_ref()
+        {
+            id = Some(document.id.clone())
+        }
+    } else if let Some((field, filter)) = filter.split_once("=") {
         if field == "tag" && document.tag == filter {
             id = Some(document.id.clone())
         } else if field == "asc_desc_rank"
