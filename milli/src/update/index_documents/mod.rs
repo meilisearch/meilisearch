@@ -719,7 +719,7 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        // Since the document has been deleted and re-inserted, its internal docid has has been incremented to 1
+        // Since the document has been deleted and re-inserted, its internal docid has been incremented to 1
         let docs = index.documents(&rtxn, Some(1)).unwrap();
         assert_eq!(docs.len(), 1);
         let (id, doc) = docs[0];

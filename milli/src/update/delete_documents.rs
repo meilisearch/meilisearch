@@ -20,6 +20,8 @@ use crate::{
     RoaringBitmapCodec, SmallString32, BEU32,
 };
 
+/// The threshold we use to determine after which number of documents we want to clear the
+/// soft-deleted database and delete documents for real.
 const DELETE_DOCUMENTS_THRESHOLD: u64 = 100_000;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
