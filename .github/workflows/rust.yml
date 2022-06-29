@@ -23,7 +23,7 @@ jobs:
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v1.3.0
     - name: Run cargo check without any default features
@@ -42,7 +42,7 @@ jobs:
     name: Run tests in debug
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -60,7 +60,7 @@ jobs:
     name: Run Clippy
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -79,7 +79,7 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
