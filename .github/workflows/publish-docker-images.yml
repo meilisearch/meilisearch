@@ -56,7 +56,7 @@ jobs:
 
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           # We do not push tags for the cron jobs, this is only for test purposes
           push: ${{ github.event_name != 'schedule' }}
