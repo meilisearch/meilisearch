@@ -21,7 +21,7 @@ use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
     FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, StrBEU32Codec, StrStrU8Codec, BEU32,
+    Search, StrBEU32Codec, StrStrU8Codec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -819,7 +819,7 @@ impl Index {
         rtxn: &RoTxn,
         field_id: FieldId,
     ) -> heed::Result<RoaringBitmap> {
-        match self.facet_id_exists_docids.get(rtxn, &field_id)? {
+        match self.facet_id_exists_docids.get(rtxn, &BEU16::new(field_id))? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
         }
