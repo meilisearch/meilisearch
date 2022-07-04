@@ -31,7 +31,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
 
     // enable autobatching?
-    let _ = AUTOBATCHING_ENABLED.store(
+    AUTOBATCHING_ENABLED.store(
         opt.scheduler_options.enable_auto_batching,
         std::sync::atomic::Ordering::Relaxed,
     );

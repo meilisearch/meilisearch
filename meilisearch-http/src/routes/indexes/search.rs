@@ -108,10 +108,9 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
             sort_parameters.push(current_sort.to_string());
             merge = true;
         } else if merge && !sort_parameters.is_empty() {
-            sort_parameters
-                .last_mut()
-                .unwrap()
-                .push_str(&format!(",{}", current_sort));
+            let s = sort_parameters.last_mut().unwrap();
+            s.push(',');
+            s.push_str(current_sort);
             if current_sort.ends_with("):desc") || current_sort.ends_with("):asc") {
                 merge = false;
             }
