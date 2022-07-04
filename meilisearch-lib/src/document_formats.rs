@@ -100,6 +100,10 @@ pub fn read_ndjson(mut input: impl BufRead, writer: impl Write + Seek) -> Result
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mut buf = String::with_capacity(1024);
     while input.read_line(&mut buf)? > 0 {
+        if buf == "\n" {
+            buf.clear();
+            continue;
+        }
         builder
             .append_unparsed_json_object(&buf)
             .map_err(Into::into)
