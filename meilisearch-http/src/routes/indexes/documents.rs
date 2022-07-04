@@ -46,7 +46,7 @@ fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, P
 }
 
 /// Extracts the mime type from the content type and return
-/// a meilisearch error if anyhthing bad happen.
+/// a meilisearch error if anything bad happen.
 fn extract_mime_type(req: &HttpRequest) -> Result<Option<Mime>, MeilisearchHttpError> {
     match req.mime_type() {
         Ok(Some(mime)) => Ok(Some(mime)),
