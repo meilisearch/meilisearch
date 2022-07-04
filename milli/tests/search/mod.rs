@@ -9,7 +9,7 @@ use maplit::{hashmap, hashset};
 use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::{AscDesc, Criterion, DocumentId, Index, Member};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
 mod distinct;
@@ -43,6 +43,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("tag"),
         S("asc_desc_rank"),
         S("_geo"),
+        S("opt1"),
+        S("opt1.opt2")
     });
     builder.set_sortable_fields(hashset! {
         S("tag"),
@@ -196,12 +198,44 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         id = (document.geo_rank < 100000).then(|| document.id.clone());
     } else if filter.starts_with("NOT _geoRadius") {
         id = (document.geo_rank > 1000000).then(|| document.id.clone());
+    } else if matches!(filter, "opt1 EXISTS" | "NOT opt1 NOT EXISTS") {
+        id = document.opt1.is_some().then(|| document.id.clone());
+    } else if matches!(filter, "NOT opt1 EXISTS" | "opt1 NOT EXISTS") {
+        id = document.opt1.is_none().then(|| document.id.clone());
+    } else if matches!(filter, "opt1.opt2 EXISTS") {
+        if document.opt1opt2.is_some() {
+            id = Some(document.id.clone());
+        } else if let Some(opt1) = &document.opt1 {
+            id = contains_key_rec(opt1, "opt2").then(|| document.id.clone());
+        }
     }
     id
 }
 
+pub fn contains_key_rec(v: &serde_json::Value, key: &str) -> bool {
+    match v {
+        serde_json::Value::Array(v) => {
+            for v in v.iter() {
+                if contains_key_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        serde_json::Value::Object(v) => {
+            for (k, v) in v.iter() {
+                if k == key || contains_key_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
 pub fn expected_filtered_ids(filters: Vec<Either<Vec<&str>, &str>>) -> HashSet<String> {
-    let dataset: HashSet<TestDocument> =
+    let dataset: Vec<TestDocument> =
         serde_json::Deserializer::from_str(CONTENT).into_iter().map(|r| r.unwrap()).collect();
 
     let mut filtered_ids: HashSet<_> = dataset.iter().map(|d| d.id.clone()).collect();
@@ -229,7 +263,7 @@ pub fn expected_filtered_ids(filters: Vec<Either<Vec<&str>, &str>>) -> HashSet<S
     filtered_ids
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct TestDocument {
     pub id: String,
     pub word_rank: u32,
@@ -243,4 +277,16 @@ pub struct TestDocument {
     pub title: String,
     pub description: String,
     pub tag: String,
+    #[serde(default, deserialize_with = "some_option")]
+    pub opt1: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "some_option", rename = "opt1.opt2")]
+    pub opt1opt2: Option<serde_json::Value>,
+}
+
+fn some_option<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let result = serde_json::Value::deserialize(deserializer)?;
+    Ok(Some(result))
 }
