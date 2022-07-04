@@ -959,7 +959,7 @@ impl Index {
 
         for id in ids {
             if soft_deleted_documents.contains(id) {
-                return Err(InternalError::AccessingSoftDeletedDocument { document_id: id })?;
+                return Err(UserError::AccessingSoftDeletedDocument { document_id: id })?;
             }
             let kv = self
                 .documents

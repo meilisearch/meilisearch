@@ -27,8 +27,6 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum InternalError {
-    #[error("Tried to access a soft deleted documents.")]
-    AccessingSoftDeletedDocument { document_id: DocumentId },
     #[error("{}", HeedError::DatabaseClosing)]
     DatabaseClosing,
     #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
@@ -85,6 +83,8 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error("A soft deleted internal document id have been used: `{document_id}`.")]
+    AccessingSoftDeletedDocument { document_id: DocumentId },
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
