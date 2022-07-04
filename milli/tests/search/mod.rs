@@ -44,7 +44,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("asc_desc_rank"),
         S("_geo"),
         S("opt1"),
-        S("opt1.opt2")
+        S("opt1.opt2"),
+        S("tag_in")
     });
     builder.set_sortable_fields(hashset! {
         S("tag"),
@@ -205,6 +206,15 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         } else if let Some(opt1) = &document.opt1 {
             id = contains_key_rec(opt1, "opt2").then(|| document.id.clone());
         }
+    } else if matches!(
+        filter,
+        "tag_in IN[1, 2, 3, four, five]" | "NOT tag_in NOT IN[1, 2, 3, four, five]"
+    ) {
+        id = matches!(document.id.as_str(), "A" | "B" | "C" | "D" | "E")
+            .then(|| document.id.clone());
+    } else if matches!(filter, "tag_in NOT IN[1, 2, 3, four, five]") {
+        id = (!matches!(document.id.as_str(), "A" | "B" | "C" | "D" | "E"))
+            .then(|| document.id.clone());
     }
     id
 }
