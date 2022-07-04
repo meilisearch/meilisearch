@@ -82,7 +82,7 @@ async fn filter_invalid_syntax_object() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
+        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
@@ -109,7 +109,7 @@ async fn filter_invalid_syntax_array() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO` or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
+        "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
