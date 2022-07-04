@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
-use std::io::{self, BufReader, Read, Seek, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
@@ -98,16 +98,14 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
 /// Reads JSON Lines from input and write an obkv batch to writer.
 pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let reader = BufReader::new(input);
-
-    for result in serde_json::Deserializer::from_reader(reader).into_iter() {
-        let object = result
-            .map_err(Error::Json)
-            .map_err(|e| (PayloadType::Ndjson, e))?;
+    let mut reader = BufReader::new(input);
+    let mut buf = String::with_capacity(1024);
+    while reader.read_line(&mut buf)? > 0 {
         builder
-            .append_json_object(&object)
+            .append_unparsed_json_object(&buf)
             .map_err(Into::into)
             .map_err(DocumentFormatError::Internal)?;
+        buf.clear();
     }
 
     let count = builder.documents_count();
