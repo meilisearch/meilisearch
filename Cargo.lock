@@ -409,15 +409,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "199edb7b90631283b10c2422e6a0bc8b7d987bf732995ba1de53b576c97e51a8"
 
 [[package]]
-name = "bimap"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc0455254eb5c6964c4545d8bac815e1a1be4f3afe0ae695ea539c12d728d44b"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1124,7 +1115,6 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli?branch=add-documents-ndjson#cf1c5588ea95f78160ec83de2e95161652cc10e2"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1149,7 +1139,6 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli?branch=add-documents-ndjson#cf1c5588ea95f78160ec83de2e95161652cc10e2"
 dependencies = [
  "serde_json",
 ]
@@ -1662,7 +1651,6 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli?branch=add-documents-ndjson#cf1c5588ea95f78160ec83de2e95161652cc10e2"
 dependencies = [
  "serde_json",
 ]
@@ -2190,9 +2178,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli?branch=add-documents-ndjson#cf1c5588ea95f78160ec83de2e95161652cc10e2"
 dependencies = [
- "bimap",
  "bincode",
  "bstr",
  "byteorder",
