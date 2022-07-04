@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
-use std::io::{self, BufRead, BufReader, Read, Seek, Write};
+use std::io::{self, BufRead, Seek, Write};
 
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
@@ -80,7 +80,7 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_csv(input: impl BufRead, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
 
     let csv = csv::Reader::from_reader(input);
@@ -96,11 +96,10 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
 }
 
 /// Reads JSON Lines from input and write an obkv batch to writer.
-pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_ndjson(mut input: impl BufRead, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mut reader = BufReader::new(input);
     let mut buf = String::with_capacity(1024);
-    while reader.read_line(&mut buf)? > 0 {
+    while input.read_line(&mut buf)? > 0 {
         builder
             .append_unparsed_json_object(&buf)
             .map_err(Into::into)
@@ -118,12 +117,11 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
 }
 
 /// Reads JSON from input and write an obkv batch to writer.
-pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_json(input: impl BufRead, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let reader = BufReader::new(input);
 
     builder
-        .append_json(reader)
+        .append_json(input)
         .map_err(|e| (PayloadType::Json, e))?;
 
     let count = builder.documents_count();
