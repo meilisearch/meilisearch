@@ -2145,6 +2145,7 @@ name = "meilisearch-types"
 version = "0.28.0"
 dependencies = [
  "actix-web",
+ "milli",
  "proptest",
  "proptest-derive",
  "serde",

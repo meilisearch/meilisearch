@@ -20,7 +20,6 @@ use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::document_formats::{read_csv, read_json, read_ndjson};
 use crate::dump::{self, load_dump, DumpHandler};
 use crate::index::{
     Checked, Document, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings, Unchecked,
@@ -34,6 +33,7 @@ use crate::tasks::{
     BatchHandler, EmptyBatchHandler, Scheduler, SnapshotHandler, TaskFilter, TaskStore,
 };
 use error::Result;
+use milli::documents::document_formats::{read_csv, read_json, read_ndjson};
 
 use self::error::IndexControllerError;
 use crate::index_resolver::index_store::{IndexStore, MapIndexStore};

@@ -18,7 +18,6 @@ pub use milli;
 pub use milli::heed;
 
 mod compression;
-pub mod document_formats;
 
 use walkdir::WalkDir;
 

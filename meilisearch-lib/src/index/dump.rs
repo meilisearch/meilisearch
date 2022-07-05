@@ -9,8 +9,8 @@ use milli::heed::{EnvOpenOptions, RoTxn};
 use milli::update::{IndexDocumentsConfig, IndexerConfig};
 use serde::{Deserialize, Serialize};
 
-use crate::document_formats::read_ndjson;
 use crate::index::updates::apply_settings_to_builder;
+use milli::documents::document_formats::read_ndjson;
 
 use super::error::Result;
 use super::{index::Index, Settings, Unchecked};

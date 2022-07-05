@@ -14,7 +14,7 @@ pub use test::MockUpdateFileStore as UpdateFileStore;
 
 const UPDATE_FILES_PATH: &str = "updates/updates_files";
 
-use crate::document_formats::read_ndjson;
+use milli::documents::document_formats::read_ndjson;
 
 pub struct UpdateFile {
     path: PathBuf,

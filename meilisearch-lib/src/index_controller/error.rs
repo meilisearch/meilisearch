@@ -6,11 +6,11 @@ use meilisearch_types::internal_error;
 use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
-use crate::document_formats::DocumentFormatError;
 use crate::dump::error::DumpError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
 use crate::update_file_store::UpdateFileStoreError;
+use milli::documents::document_formats::DocumentFormatError;
 
 use crate::index_resolver::error::IndexResolverError;
 

@@ -94,6 +94,17 @@ pub trait ErrorCode: std::error::Error {
     }
 }
 
+impl ErrorCode for milli::documents::document_formats::DocumentFormatError {
+    fn error_code(&self) -> Code {
+        match self {
+            milli::documents::document_formats::DocumentFormatError::Internal(_) => Code::Internal,
+            milli::documents::document_formats::DocumentFormatError::MalformedPayload(_, _) => {
+                Code::MalformedPayload
+            }
+        }
+    }
+}
+
 #[allow(clippy::enum_variant_names)]
 enum ErrorType {
     InternalError,
