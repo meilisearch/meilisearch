@@ -12,5 +12,3 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - run: gh issue create --title "Upgrade dependencies" --label "dependencies,maintenance" --body-file ".github/ISSUE_TEMPLATE/update_dependencies.md"
-      
-   
