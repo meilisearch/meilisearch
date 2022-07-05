@@ -13,8 +13,9 @@ use hmac::{Hmac, Mac};
 use meilisearch_types::star_or::StarOr;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use time::OffsetDateTime;
+use uuid::fmt::Hyphenated;
 use uuid::Uuid;
 
 use super::error::Result;
@@ -132,13 +133,16 @@ impl HeedAuthStore {
             .remap_data_type::<DecodeIgnore>()
             .iter(&rtxn)?
             .filter_map(|res| match res {
-                Ok((uid, _))
-                    if generate_key_as_base64(uid, master_key).as_bytes() == encoded_key =>
-                {
+                Ok((uid, _)) => {
                     let (uid, _) = try_split_array_at(uid)?;
-                    Some(Uuid::from_bytes(*uid))
+                    let uid = Uuid::from_bytes(*uid);
+                    if generate_key_as_hexa(uid, master_key).as_bytes() == encoded_key {
+                        Some(uid)
+                    } else {
+                        None
+                    }
                 }
-                _ => None,
+                Err(_) => None,
             })
             .next();
 
@@ -244,13 +248,17 @@ impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
     }
 }
 
-pub fn generate_key_as_base64(uid: &[u8], master_key: &[u8]) -> String {
-    let master_key_sha = Sha256::digest(master_key);
-    let mut mac = Hmac::<Sha256>::new_from_slice(master_key_sha.as_slice()).unwrap();
-    mac.update(uid);
+pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
+    // format uid as hyphenated allowing user to generate their own keys.
+    let mut uid_buffer = [0; Hyphenated::LENGTH];
+    let uid = uid.hyphenated().encode_lower(&mut uid_buffer);
+
+    // new_from_slice function never fail.
+    let mut mac = Hmac::<Sha256>::new_from_slice(master_key).unwrap();
+    mac.update(uid.as_bytes());
 
     let result = mac.finalize();
-    base64::encode_config(result.into_bytes(), base64::URL_SAFE_NO_PAD)
+    format!("{:x}", result.into_bytes())
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.

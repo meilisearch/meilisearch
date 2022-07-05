@@ -4,7 +4,6 @@ version = "0.28.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.13.0"
 enum-iterator = "0.7.0"
 hmac = "0.12.1"
 meilisearch-types = { path = "../meilisearch-types" }
@@ -15,4 +14,4 @@ serde_json = { version = "1.0.79", features = ["preserve_order"] }
 sha2 = "0.10.2"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }

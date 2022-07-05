@@ -18,7 +18,7 @@ pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
 pub use key::Key;
 use meilisearch_types::star_or::StarOr;
-use store::generate_key_as_base64;
+use store::generate_key_as_hexa;
 pub use store::open_auth_store_env;
 use store::HeedAuthStore;
 
@@ -139,7 +139,7 @@ impl AuthController {
     pub fn generate_key(&self, uid: Uuid) -> Option<String> {
         self.master_key
             .as_ref()
-            .map(|master_key| generate_key_as_base64(uid.as_bytes(), master_key.as_bytes()))
+            .map(|master_key| generate_key_as_hexa(uid, master_key.as_bytes()))
     }
 
     /// Check if the provided key is authorized to make a specific action

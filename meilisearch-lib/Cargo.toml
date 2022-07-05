@@ -51,7 +51,7 @@ tempfile = "3.3.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.17.0", features = ["full"] }
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 whoami = { version = "1.2.1", optional = true }
 
