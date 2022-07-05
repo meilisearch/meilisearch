@@ -1,4 +1,5 @@
 use std::{
+    fmt::Write,
     panic::{catch_unwind, resume_unwind, UnwindSafe},
     time::Duration,
 };
@@ -118,10 +119,10 @@ impl Index<'_> {
     pub async fn filtered_tasks(&self, type_: &[&str], status: &[&str]) -> (Value, StatusCode) {
         let mut url = format!("/tasks?indexUid={}", self.uid);
         if !type_.is_empty() {
-            url += &format!("&type={}", type_.join(","));
+            let _ = write!(url, "&type={}", type_.join(","));
         }
         if !status.is_empty() {
-            url += &format!("&status={}", status.join(","));
+            let _ = write!(url, "&status={}", status.join(","));
         }
         self.service.get(url).await
     }
@@ -133,7 +134,7 @@ impl Index<'_> {
     ) -> (Value, StatusCode) {
         let mut url = format!("/indexes/{}/documents/{}", encode(self.uid.as_ref()), id);
         if let Some(fields) = options.and_then(|o| o.fields) {
-            url.push_str(&format!("?fields={}", fields.join(",")));
+            let _ = write!(url, "?fields={}", fields.join(","));
         }
         self.service.get(url).await
     }
@@ -141,15 +142,15 @@ impl Index<'_> {
     pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
         let mut url = format!("/indexes/{}/documents?", encode(self.uid.as_ref()));
         if let Some(limit) = options.limit {
-            url.push_str(&format!("limit={}&", limit));
+            let _ = write!(url, "limit={}&", limit);
         }
 
         if let Some(offset) = options.offset {
-            url.push_str(&format!("offset={}&", offset));
+            let _ = write!(url, "offset={}&", offset);
         }
 
         if let Some(attributes_to_retrieve) = options.attributes_to_retrieve {
-            url.push_str(&format!("fields={}&", attributes_to_retrieve.join(",")));
+            let _ = write!(url, "fields={}&", attributes_to_retrieve.join(","));
         }
 
         self.service.get(url).await
