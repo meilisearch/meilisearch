@@ -22,7 +22,7 @@ use crate::{
 
 /// The threshold we use to determine after which number of documents we want to clear the
 /// soft-deleted database and delete documents for real.
-const DELETE_DOCUMENTS_THRESHOLD: u64 = 100_000;
+const DELETE_DOCUMENTS_THRESHOLD: u64 = 10_000;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
