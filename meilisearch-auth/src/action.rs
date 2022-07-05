@@ -17,7 +17,7 @@ pub enum Action {
     #[serde(rename = "documents.delete")]
     DocumentsDelete = actions::DOCUMENTS_DELETE,
     #[serde(rename = "indexes.*")]
-    IndexAll = actions::INDEXES_ALL,
+    IndexesAll = actions::INDEXES_ALL,
     #[serde(rename = "indexes.create")]
     IndexesAdd = actions::INDEXES_CREATE,
     #[serde(rename = "indexes.get")]
@@ -66,7 +66,7 @@ impl Action {
             DOCUMENTS_ADD => Some(Self::DocumentsAdd),
             DOCUMENTS_GET => Some(Self::DocumentsGet),
             DOCUMENTS_DELETE => Some(Self::DocumentsDelete),
-            INDEXES_ALL => Some(Self::IndexAll),
+            INDEXES_ALL => Some(Self::IndexesAll),
             INDEXES_CREATE => Some(Self::IndexesAdd),
             INDEXES_GET => Some(Self::IndexesGet),
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
@@ -98,7 +98,7 @@ impl Action {
             Self::DocumentsAdd => DOCUMENTS_ADD,
             Self::DocumentsGet => DOCUMENTS_GET,
             Self::DocumentsDelete => DOCUMENTS_DELETE,
-            Self::IndexAll => INDEXES_ALL,
+            Self::IndexesAll => INDEXES_ALL,
             Self::IndexesAdd => INDEXES_CREATE,
             Self::IndexesGet => INDEXES_GET,
             Self::IndexesUpdate => INDEXES_UPDATE,
