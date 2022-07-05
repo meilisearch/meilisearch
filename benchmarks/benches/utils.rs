@@ -161,6 +161,7 @@ fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
 
     while reader.read_line(&mut buf)? > 0 {
         documents.extend_from_json(&mut buf.as_bytes())?;
+        buf.clear();
     }
     documents.finish()?;
 
