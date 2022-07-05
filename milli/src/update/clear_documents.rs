@@ -35,6 +35,8 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             documents,
         } = self.index;
 
+        let empty_roaring = RoaringBitmap::default();
+
         // We retrieve the number of documents ids that we are deleting.
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
@@ -43,16 +45,16 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
-        self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
+        self.index.put_documents_ids(self.wtxn, &empty_roaring)?;
+        self.index.put_soft_deleted_documents_ids(self.wtxn, &empty_roaring)?;
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
 
         // We clean all the faceted documents ids.
-        let empty = RoaringBitmap::default();
         for field_id in faceted_fields {
-            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &empty)?;
-            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &empty)?;
+            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &empty_roaring)?;
+            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &empty_roaring)?;
         }
 
         // Clear the other databases.

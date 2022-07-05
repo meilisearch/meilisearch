@@ -83,6 +83,8 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error("A soft deleted internal document id have been used: `{document_id}`.")]
+    AccessingSoftDeletedDocument { document_id: DocumentId },
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]

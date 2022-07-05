@@ -5,26 +5,30 @@ use std::{fmt, str};
 
 use fst::map::IndexedValue;
 use fst::{IntoStreamer, Streamer};
+use roaring::RoaringBitmap;
 
 const DELETED_ID: u64 = u64::MAX;
 
 pub struct ExternalDocumentsIds<'a> {
     pub(crate) hard: fst::Map<Cow<'a, [u8]>>,
     pub(crate) soft: fst::Map<Cow<'a, [u8]>>,
+    soft_deleted_docids: RoaringBitmap,
 }
 
 impl<'a> ExternalDocumentsIds<'a> {
     pub fn new(
         hard: fst::Map<Cow<'a, [u8]>>,
         soft: fst::Map<Cow<'a, [u8]>>,
+        soft_deleted_docids: RoaringBitmap,
     ) -> ExternalDocumentsIds<'a> {
-        ExternalDocumentsIds { hard, soft }
+        ExternalDocumentsIds { hard, soft, soft_deleted_docids }
     }
 
     pub fn into_static(self) -> ExternalDocumentsIds<'static> {
         ExternalDocumentsIds {
             hard: self.hard.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
             soft: self.soft.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
+            soft_deleted_docids: self.soft_deleted_docids,
         }
     }
 
@@ -36,7 +40,9 @@ impl<'a> ExternalDocumentsIds<'a> {
     pub fn get<A: AsRef<[u8]>>(&self, external_id: A) -> Option<u32> {
         let external_id = external_id.as_ref();
         match self.soft.get(external_id).or_else(|| self.hard.get(external_id)) {
-            Some(id) if id != DELETED_ID => Some(id.try_into().unwrap()),
+            Some(id) if id != DELETED_ID && !self.soft_deleted_docids.contains(id as u32) => {
+                Some(id.try_into().unwrap())
+            }
             _otherwise => None,
         }
     }
@@ -134,6 +140,7 @@ impl Default for ExternalDocumentsIds<'static> {
         ExternalDocumentsIds {
             hard: fst::Map::default().map_data(Cow::Owned).unwrap(),
             soft: fst::Map::default().map_data(Cow::Owned).unwrap(),
+            soft_deleted_docids: RoaringBitmap::new(),
         }
     }
 }
