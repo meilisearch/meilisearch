@@ -1,4 +1,4 @@
-name: Create Issue "Upgrade dependencies"
+name: Create issue to upgrade dependencies
 on:
   schedule:
     - cron: '0 0 1 */3 *'
