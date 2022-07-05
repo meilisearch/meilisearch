@@ -21,7 +21,6 @@ jobs:
           (milli, charabia, heed...).
 
           ⚠️ This issue should only be done at the beginning of the sprint!     
-        
         labels: |
           dependencies
           maintenance 
