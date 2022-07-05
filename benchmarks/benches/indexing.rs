@@ -147,6 +147,58 @@ fn indexing_songs_default(c: &mut Criterion) {
     });
 }
 
+fn reindexing_songs_default(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(BENCHMARK_ITERATION);
+    group.bench_function("Reindexing songs with default settings", |b| {
+        b.iter_with_setup(
+            move || {
+                let primary_key = "id";
+                let searchable_fields = ["title", "album", "artist"];
+                let filterable_fields =
+                    ["released-timestamp", "duration-float", "genre", "country", "artist"];
+                let sortable_fields = [];
+
+                let index = setup_index_with_settings(
+                    &primary_key,
+                    &searchable_fields,
+                    &filterable_fields,
+                    &sortable_fields,
+                );
+
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn deleting_songs_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
@@ -378,6 +430,59 @@ fn indexing_wiki(c: &mut Criterion) {
     });
 }
 
+fn reindexing_wiki(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(BENCHMARK_ITERATION);
+    group.bench_function("Reindexing wiki", |b| {
+        b.iter_with_setup(
+            move || {
+                let primary_key = "id";
+                let searchable_fields = ["title", "body"];
+                let filterable_fields = [];
+                let sortable_fields = [];
+
+                let index = setup_index_with_settings(
+                    &primary_key,
+                    &searchable_fields,
+                    &filterable_fields,
+                    &sortable_fields,
+                );
+
+                let config = IndexerConfig::default();
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config =
+                    IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn deleting_wiki_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
@@ -521,6 +626,57 @@ fn indexing_movies_default(c: &mut Criterion) {
                     &filterable_fields,
                     &sortable_fields,
                 )
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
+fn reindexing_movies_default(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(BENCHMARK_ITERATION);
+    group.bench_function("Reindexing movies with default settings", |b| {
+        b.iter_with_setup(
+            move || {
+                let primary_key = "id";
+                let searchable_fields = ["title", "overview"];
+                let filterable_fields = ["released_date", "genres"];
+                let sortable_fields = [];
+
+                let index = setup_index_with_settings(
+                    &primary_key,
+                    &searchable_fields,
+                    &filterable_fields,
+                    &sortable_fields,
+                );
+
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::MOVIES, "json");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+                wtxn.commit().unwrap();
+
+                index
             },
             move |index| {
                 let config = IndexerConfig::default();
@@ -881,6 +1037,59 @@ fn indexing_geo(c: &mut Criterion) {
     });
 }
 
+fn reindexing_geo(c: &mut Criterion) {
+    let mut group = c.benchmark_group("indexing");
+    group.sample_size(BENCHMARK_ITERATION);
+    group.bench_function("Reindexing geo_point", |b| {
+        b.iter_with_setup(
+            move || {
+                let primary_key = "geonameid";
+                let searchable_fields = ["name", "alternatenames", "elevation"];
+                let filterable_fields = ["_geo", "population", "elevation"];
+                let sortable_fields = ["_geo", "population", "elevation"];
+
+                let index = setup_index_with_settings(
+                    &primary_key,
+                    &searchable_fields,
+                    &filterable_fields,
+                    &sortable_fields,
+                );
+
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index
+            },
+            move |index| {
+                let config = IndexerConfig::default();
+                let indexing_config = IndexDocumentsConfig::default();
+                let mut wtxn = index.write_txn().unwrap();
+                let mut builder =
+                    IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
+                        .unwrap();
+
+                let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
+                builder.add_documents(documents).unwrap();
+                builder.execute().unwrap();
+
+                wtxn.commit().unwrap();
+
+                index.prepare_for_closing().wait();
+            },
+        )
+    });
+}
+
 fn deleting_geo_in_batches_default(c: &mut Criterion) {
     let mut group = c.benchmark_group("indexing");
     group.sample_size(BENCHMARK_ITERATION);
@@ -939,20 +1148,24 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
 criterion_group!(
     benches,
     indexing_songs_default,
+    reindexing_songs_default,
     deleting_songs_in_batches_default,
     indexing_songs_without_faceted_numbers,
     indexing_songs_without_faceted_fields,
     indexing_songs_in_three_batches_default,
     indexing_wiki,
+    reindexing_wiki,
     deleting_wiki_in_batches_default,
     indexing_wiki_in_three_batches,
     indexing_movies_default,
+    reindexing_movies_default,
     deleting_movies_in_batches_default,
     indexing_movies_in_three_batches,
     indexing_nested_movies_default,
     deleting_nested_movies_in_batches_default,
     indexing_nested_movies_without_faceted_fields,
     indexing_geo,
+    reindexing_geo,
     deleting_geo_in_batches_default
 );
 criterion_main!(benches);
