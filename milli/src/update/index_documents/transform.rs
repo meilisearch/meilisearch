@@ -205,7 +205,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             // it, transform it into a string and validate it, and then update it in the
             // document. If none is found, and we were told to generate missing document ids, then
             // we create the missing field, and update the new document.
-            let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+            let mut uuid_buffer = [0; uuid::fmt::Hyphenated::LENGTH];
             let external_id = if primary_key_id_nested {
                 let mut field_buffer_cache = field_buffer_cache.clone();
                 self.flatten_from_field_mapping(
@@ -804,7 +804,7 @@ fn update_primary_key<'a>(
     addition_index: &DocumentsBatchIndex,
     primary_key_id: FieldId,
     primary_key_name: &str,
-    uuid_buffer: &'a mut [u8; uuid::adapter::Hyphenated::LENGTH],
+    uuid_buffer: &'a mut [u8; uuid::fmt::Hyphenated::LENGTH],
     field_buffer_cache: &mut Vec<(u16, Cow<'a, [u8]>)>,
     mut external_id_buffer: &'a mut Vec<u8>,
     autogenerate_docids: bool,
@@ -831,7 +831,7 @@ fn update_primary_key<'a>(
             Ok(Cow::Owned(value))
         }
         None if autogenerate_docids => {
-            let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(uuid_buffer);
+            let uuid = uuid::Uuid::new_v4().as_hyphenated().encode_lower(uuid_buffer);
             serde_json::to_writer(&mut external_id_buffer, &uuid)
                 .map_err(InternalError::SerdeJson)?;
             field_buffer_cache.push((primary_key_id, external_id_buffer.as_slice().into()));
