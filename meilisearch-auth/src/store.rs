@@ -7,6 +7,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
+use std::collections::HashSet;
 
 use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
@@ -87,76 +88,21 @@ impl HeedAuthStore {
         // create inverted database.
         let db = self.action_keyid_index_expiration;
 
-        let actions = if key.actions.contains(&Action::All) {
-            // if key.actions contains All, we iterate over all actions.
-            Action::into_enum_iter().collect()
-        } else if key.actions.contains(&Action::DocumentsAll) {
-            // if key.actions.contains.DocumentsAll add all actions related to documents.
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| {
-                    // Prevents duplicate entries in the actions vector
-                    *action != Action::DocumentsAdd
-                        && *action != Action::DocumentsDelete
-                        && *action != Action::DocumentsGet
-                })
-                .chain(vec![
-                    Action::DocumentsAdd,
-                    Action::DocumentsDelete,
-                    Action::DocumentsGet,
-                ])
-                .collect()
-        } else if key.actions.contains(&Action::IndexesAll) {
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| {
-                    *action != Action::IndexesAdd
-                        && *action != Action::IndexesGet
-                        && *action != Action::IndexesDelete
-                        && *action != Action::IndexesUpdate
-                })
-                .chain(vec![
-                    Action::IndexesAdd,
-                    Action::IndexesGet,
-                    Action::IndexesDelete,
-                    Action::IndexesUpdate,
-                ])
-                .collect()
-        } else if key.actions.contains(&Action::SettingsAll) {
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| {
-                    *action != Action::SettingsGet && *action != Action::SettingsUpdate
-                })
-                .chain(vec![Action::SettingsGet, Action::SettingsUpdate])
-                .collect()
-        } else if key.actions.contains(&Action::TasksAll) {
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| *action != Action::TasksGet)
-                .chain(vec![Action::TasksGet])
-                .collect()
-        } else if key.actions.contains(&Action::DumpsAll) {
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| *action != Action::DumpsCreate)
-                .chain(vec![Action::DumpsCreate])
-                .collect()
-        } else if key.actions.contains(&Action::StatsAll) {
-            key.actions
-                .iter()
-                .cloned()
-                .filter(|action| *action != Action::StatsGet)
-                .chain(vec![Action::StatsGet])
-                .collect()
-        } else {
-            key.actions.clone()
-        };
+        let mut actions = HashSet::new();
+        for action in &key.actions {
+            match action {
+                Action::All => actions.extend(Action::into_enum_iter()),
+                Action::DocumentsAll => { actions.extend([Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsGet].iter()); },
+                Action::IndexesAll => { actions.extend([Action::IndexesAdd, Action::IndexesDelete, Action::IndexesUpdate, Action::IndexesUpdate].iter()); },
+                Action::SettingsAll => { actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter()); },
+                Action::DumpsAll => { actions.insert(Action::DumpsCreate); },
+                Action::TasksAll => { actions.insert(Action::TasksGet); },
+                Action::StatsAll => { actions.insert(Action::StatsGet); },
+                other => { actions.insert(*other); }
+            }
+        }
+
+        let actions = actions.iter().collect::<Vec<&Action>>();
 
         let no_index_restriction = key.indexes.contains(&StarOr::Star);
         for action in actions {
