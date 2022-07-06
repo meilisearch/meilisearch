@@ -131,8 +131,6 @@ impl HeedAuthStore {
             }
         }
 
-        let actions = actions.iter().collect::<Vec<&Action>>();
-
         let no_index_restriction = key.indexes.contains(&StarOr::Star);
         for action in actions {
             if no_index_restriction {
