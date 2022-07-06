@@ -140,9 +140,10 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     }
 }
 
-pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<impl Read + Seek> {
+pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<impl BufRead + Seek> {
     let reader =
         File::open(filename).expect(&format!("could not find the dataset in: {}", filename));
+    let reader = BufReader::new(reader);
     let documents = match filetype {
         "csv" => documents_from_csv(reader).unwrap(),
         "json" => documents_from_json(reader).unwrap(),
@@ -152,12 +153,11 @@ pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<imp
     DocumentBatchReader::from_reader(Cursor::new(documents)).unwrap()
 }
 
-fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+fn documents_from_jsonl(mut reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
     let mut buf = String::new();
-    let mut reader = BufReader::new(reader);
 
     while reader.read_line(&mut buf)? > 0 {
         documents.extend_from_json(&mut buf.as_bytes())?;
@@ -168,7 +168,7 @@ fn documents_from_jsonl(reader: impl Read) -> anyhow::Result<Vec<u8>> {
     Ok(writer.into_inner())
 }
 
-fn documents_from_json(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+fn documents_from_json(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
 
@@ -178,7 +178,7 @@ fn documents_from_json(reader: impl Read) -> anyhow::Result<Vec<u8>> {
     Ok(writer.into_inner())
 }
 
-fn documents_from_csv(reader: impl Read) -> anyhow::Result<Vec<u8>> {
+fn documents_from_csv(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
     let mut writer = Cursor::new(Vec::new());
     milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
 
