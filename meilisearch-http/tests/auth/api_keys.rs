@@ -42,6 +42,7 @@ async fn add_valid_api_key() {
         "name": "indexing-key",
         "description": "Indexing API key",
         "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+        "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
         "indexes": ["products"],
         "actions": [
             "search",
