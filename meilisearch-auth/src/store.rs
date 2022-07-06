@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fs::create_dir_all;
@@ -7,7 +8,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
-use std::collections::HashSet;
 
 use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
@@ -92,13 +92,42 @@ impl HeedAuthStore {
         for action in &key.actions {
             match action {
                 Action::All => actions.extend(Action::into_enum_iter()),
-                Action::DocumentsAll => { actions.extend([Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsGet].iter()); },
-                Action::IndexesAll => { actions.extend([Action::IndexesAdd, Action::IndexesDelete, Action::IndexesUpdate, Action::IndexesUpdate].iter()); },
-                Action::SettingsAll => { actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter()); },
-                Action::DumpsAll => { actions.insert(Action::DumpsCreate); },
-                Action::TasksAll => { actions.insert(Action::TasksGet); },
-                Action::StatsAll => { actions.insert(Action::StatsGet); },
-                other => { actions.insert(*other); }
+                Action::DocumentsAll => {
+                    actions.extend(
+                        [
+                            Action::DocumentsGet,
+                            Action::DocumentsDelete,
+                            Action::DocumentsGet,
+                        ]
+                        .iter(),
+                    );
+                }
+                Action::IndexesAll => {
+                    actions.extend(
+                        [
+                            Action::IndexesAdd,
+                            Action::IndexesDelete,
+                            Action::IndexesUpdate,
+                            Action::IndexesUpdate,
+                        ]
+                        .iter(),
+                    );
+                }
+                Action::SettingsAll => {
+                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
+                }
+                Action::DumpsAll => {
+                    actions.insert(Action::DumpsCreate);
+                }
+                Action::TasksAll => {
+                    actions.insert(Action::TasksGet);
+                }
+                Action::StatsAll => {
+                    actions.insert(Action::StatsGet);
+                }
+                other => {
+                    actions.insert(*other);
+                }
             }
         }
 
