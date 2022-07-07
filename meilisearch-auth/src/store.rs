@@ -97,7 +97,7 @@ impl HeedAuthStore {
                         [
                             Action::DocumentsGet,
                             Action::DocumentsDelete,
-                            Action::DocumentsGet,
+                            Action::DocumentsAdd,
                         ]
                         .iter(),
                     );
@@ -107,7 +107,7 @@ impl HeedAuthStore {
                         [
                             Action::IndexesAdd,
                             Action::IndexesDelete,
-                            Action::IndexesUpdate,
+                            Action::IndexesGet,
                             Action::IndexesUpdate,
                         ]
                         .iter(),
