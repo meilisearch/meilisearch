@@ -411,11 +411,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         rtxn: &RoTxn,
         field_distribution: &mut FieldDistribution,
     ) -> Result<()> {
-        println!(
-            "The following documents are going to be deleted from the field distribution: {:?}",
-            self.replaced_documents_ids
-        );
-
         for deleted_docid in self.replaced_documents_ids.iter() {
             let obkv = self.index.documents.get(rtxn, &BEU32::new(deleted_docid))?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
@@ -483,7 +478,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut documents_count = 0;
 
         while let Some((key, val)) = iter.next()? {
-            println!("Reading a document");
             // send a callback to show at which step we are
             documents_count += 1;
             progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
