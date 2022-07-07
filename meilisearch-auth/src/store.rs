@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fs::create_dir_all;
@@ -87,21 +88,48 @@ impl HeedAuthStore {
         // create inverted database.
         let db = self.action_keyid_index_expiration;
 
-        let actions = if key.actions.contains(&Action::All) {
-            // if key.actions contains All, we iterate over all actions.
-            Action::into_enum_iter().collect()
-        } else if key.actions.contains(&Action::DocumentsAll) {
-            // if key.actions.contains.DocumentsAll add all actions related to documents.
-            let mut actions = key.actions.clone();
-            actions.append(&mut vec![
-                Action::DocumentsAdd,
-                Action::DocumentsGet,
-                Action::DocumentsDelete,
-            ]);
-            actions
-        } else {
-            key.actions.clone()
-        };
+        let mut actions = HashSet::new();
+        for action in &key.actions {
+            match action {
+                Action::All => actions.extend(Action::into_enum_iter()),
+                Action::DocumentsAll => {
+                    actions.extend(
+                        [
+                            Action::DocumentsGet,
+                            Action::DocumentsDelete,
+                            Action::DocumentsAdd,
+                        ]
+                        .iter(),
+                    );
+                }
+                Action::IndexesAll => {
+                    actions.extend(
+                        [
+                            Action::IndexesAdd,
+                            Action::IndexesDelete,
+                            Action::IndexesGet,
+                            Action::IndexesUpdate,
+                        ]
+                        .iter(),
+                    );
+                }
+                Action::SettingsAll => {
+                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
+                }
+                Action::DumpsAll => {
+                    actions.insert(Action::DumpsCreate);
+                }
+                Action::TasksAll => {
+                    actions.insert(Action::TasksGet);
+                }
+                Action::StatsAll => {
+                    actions.insert(Action::StatsGet);
+                }
+                other => {
+                    actions.insert(*other);
+                }
+            }
+        }
 
         let no_index_restriction = key.indexes.contains(&StarOr::Star);
         for action in actions {
