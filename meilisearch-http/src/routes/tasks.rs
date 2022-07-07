@@ -25,7 +25,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TaskFilterQuery {
+pub struct TasksFilterQuery {
     #[serde(rename = "type")]
     type_: Option<CS<StarOr<TaskType>>>,
     status: Option<CS<StarOr<TaskStatus>>>,
@@ -61,17 +61,11 @@ fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool
 
 async fn get_tasks(
     meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
-    params: web::Query<TaskFilterQuery>,
+    params: web::Query<TasksFilterQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish(
-        "Tasks Seen".to_string(),
-        json!({ "per_task_uid": false }),
-        Some(&req),
-    );
-
-    let TaskFilterQuery {
+    let TasksFilterQuery {
         type_,
         status,
         index_uid,
@@ -86,6 +80,16 @@ async fn get_tasks(
     let type_: Option<Vec<_>> = type_.and_then(fold_star_or);
     let status: Option<Vec<_>> = status.and_then(fold_star_or);
     let index_uid: Option<Vec<_>> = index_uid.and_then(fold_star_or);
+
+    analytics.publish(
+        "Tasks Seen".to_string(),
+        json!({
+            "filtered_by_index_uid": index_uid.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_type": type_.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_status": status.as_ref().map_or(false, |v| !v.is_empty()),
+        }),
+        Some(&req),
+    );
 
     // Then we filter on potential indexes and make sure that the search filter
     // restrictions are also applied.
