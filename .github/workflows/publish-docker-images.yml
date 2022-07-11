@@ -48,20 +48,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Check tag format
-        id: check-tag-format
-        run: |
-          # Escape submitted tag name
-          escaped_tag=$(printf "%q" ${{ github.ref_name }})
-
-          # Check if tag has format v<nmumber>.<number>.<number> and set output.match
-          # to create a vX.Y (without patch version) Docker tag
-          if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo ::set-output name=match::true
-          else
-            echo ::set-output name=match::false
-          fi
-
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
