@@ -1,16 +1,17 @@
 use std::error::Error;
 
-use meilisearch_error::Code;
-use meilisearch_error::{internal_error, ErrorCode};
+use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::internal_error;
 use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
+use crate::dump::error::DumpError;
 use crate::index::error::IndexError;
 use crate::tasks::error::TaskError;
 use crate::update_file_store::UpdateFileStoreError;
 
-use super::dump_actor::error::DumpActorError;
 use crate::index_resolver::error::IndexResolverError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
@@ -28,7 +29,7 @@ pub enum IndexControllerError {
     #[error("{0}")]
     TaskError(#[from] TaskError),
     #[error("{0}")]
-    DumpError(#[from] DumpActorError),
+    DumpError(#[from] DumpError),
     #[error("{0}")]
     DocumentFormatError(#[from] DocumentFormatError),
     #[error("A {0} payload is missing.")]
@@ -61,5 +62,11 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
             IndexControllerError::DumpError(e) => e.error_code(),
         }
+    }
+}
+
+impl From<IndexUidFormatError> for IndexControllerError {
+    fn from(err: IndexUidFormatError) -> Self {
+        IndexResolverError::from(err).into()
     }
 }

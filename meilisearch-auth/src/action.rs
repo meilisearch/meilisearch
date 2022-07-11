@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]
-    All = 0,
+    All = actions::ALL,
     #[serde(rename = "search")]
     Search = actions::SEARCH,
     #[serde(rename = "documents.add")]
@@ -32,17 +32,23 @@ pub enum Action {
     StatsGet = actions::STATS_GET,
     #[serde(rename = "dumps.create")]
     DumpsCreate = actions::DUMPS_CREATE,
-    #[serde(rename = "dumps.get")]
-    DumpsGet = actions::DUMPS_GET,
     #[serde(rename = "version")]
     Version = actions::VERSION,
+    #[serde(rename = "keys.create")]
+    KeysAdd = actions::KEYS_CREATE,
+    #[serde(rename = "keys.get")]
+    KeysGet = actions::KEYS_GET,
+    #[serde(rename = "keys.update")]
+    KeysUpdate = actions::KEYS_UPDATE,
+    #[serde(rename = "keys.delete")]
+    KeysDelete = actions::KEYS_DELETE,
 }
 
 impl Action {
     pub fn from_repr(repr: u8) -> Option<Self> {
         use actions::*;
         match repr {
-            0 => Some(Self::All),
+            ALL => Some(Self::All),
             SEARCH => Some(Self::Search),
             DOCUMENTS_ADD => Some(Self::DocumentsAdd),
             DOCUMENTS_GET => Some(Self::DocumentsGet),
@@ -56,8 +62,11 @@ impl Action {
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             STATS_GET => Some(Self::StatsGet),
             DUMPS_CREATE => Some(Self::DumpsCreate),
-            DUMPS_GET => Some(Self::DumpsGet),
             VERSION => Some(Self::Version),
+            KEYS_CREATE => Some(Self::KeysAdd),
+            KEYS_GET => Some(Self::KeysGet),
+            KEYS_UPDATE => Some(Self::KeysUpdate),
+            KEYS_DELETE => Some(Self::KeysDelete),
             _otherwise => None,
         }
     }
@@ -65,7 +74,7 @@ impl Action {
     pub fn repr(&self) -> u8 {
         use actions::*;
         match self {
-            Self::All => 0,
+            Self::All => ALL,
             Self::Search => SEARCH,
             Self::DocumentsAdd => DOCUMENTS_ADD,
             Self::DocumentsGet => DOCUMENTS_GET,
@@ -79,13 +88,17 @@ impl Action {
             Self::SettingsUpdate => SETTINGS_UPDATE,
             Self::StatsGet => STATS_GET,
             Self::DumpsCreate => DUMPS_CREATE,
-            Self::DumpsGet => DUMPS_GET,
             Self::Version => VERSION,
+            Self::KeysAdd => KEYS_CREATE,
+            Self::KeysGet => KEYS_GET,
+            Self::KeysUpdate => KEYS_UPDATE,
+            Self::KeysDelete => KEYS_DELETE,
         }
     }
 }
 
 pub mod actions {
+    pub(crate) const ALL: u8 = 0;
     pub const SEARCH: u8 = 1;
     pub const DOCUMENTS_ADD: u8 = 2;
     pub const DOCUMENTS_GET: u8 = 3;
@@ -99,6 +112,9 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u8 = 11;
     pub const STATS_GET: u8 = 12;
     pub const DUMPS_CREATE: u8 = 13;
-    pub const DUMPS_GET: u8 = 14;
     pub const VERSION: u8 = 15;
+    pub const KEYS_CREATE: u8 = 16;
+    pub const KEYS_GET: u8 = 17;
+    pub const KEYS_UPDATE: u8 = 18;
+    pub const KEYS_DELETE: u8 = 19;
 }

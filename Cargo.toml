@@ -2,8 +2,14 @@
 resolver = "2"
 members = [
     "meilisearch-http",
-    "meilisearch-error",
+    "meilisearch-types",
     "meilisearch-lib",
     "meilisearch-auth",
     "permissive-json-pointer",
 ]
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.milli]
+opt-level = 3

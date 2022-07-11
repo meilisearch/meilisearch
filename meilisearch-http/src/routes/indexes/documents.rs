@@ -6,13 +6,15 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::{Stream, StreamExt};
 use log::debug;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::star_or::StarOr;
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
+use serde_cs::vec::CS;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -21,10 +23,8 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::{fold_star_or, PaginationView};
 use crate::task::SummarizedTaskView;
-
-const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
-const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec![
@@ -86,14 +86,24 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetDocument {
+    fields: Option<CS<StarOr<String>>>,
+}
+
 pub async fn get_document(
     meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
     path: web::Path<DocumentParam>,
+    params: web::Query<GetDocument>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = path.index_uid.clone();
     let id = path.document_id.clone();
+    let GetDocument { fields } = params.into_inner();
+    let attributes_to_retrieve = fields.and_then(fold_star_or);
+
     let document = meilisearch
-        .document(index, id, None as Option<Vec<String>>)
+        .document(index, id, attributes_to_retrieve)
         .await?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
@@ -116,9 +126,11 @@ pub async fn delete_document(
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowseQuery {
-    offset: Option<usize>,
-    limit: Option<usize>,
-    attributes_to_retrieve: Option<String>,
+    #[serde(default)]
+    offset: usize,
+    #[serde(default = "crate::routes::PAGINATION_DEFAULT_LIMIT")]
+    limit: usize,
+    fields: Option<CS<StarOr<String>>>,
 }
 
 pub async fn get_all_documents(
@@ -127,27 +139,21 @@ pub async fn get_all_documents(
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let attributes_to_retrieve = params.attributes_to_retrieve.as_ref().and_then(|attrs| {
-        let mut names = Vec::new();
-        for name in attrs.split(',').map(String::from) {
-            if name == "*" {
-                return None;
-            }
-            names.push(name);
-        }
-        Some(names)
-    });
+    let BrowseQuery {
+        limit,
+        offset,
+        fields,
+    } = params.into_inner();
+    let attributes_to_retrieve = fields.and_then(fold_star_or);
 
-    let documents = meilisearch
-        .documents(
-            path.into_inner(),
-            params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
-            params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
-            attributes_to_retrieve,
-        )
+    let (total, documents) = meilisearch
+        .documents(path.into_inner(), offset, limit, attributes_to_retrieve)
         .await?;
-    debug!("returns: {:?}", documents);
-    Ok(HttpResponse::Ok().json(documents))
+
+    let ret = PaginationView::new(offset, limit, total as usize, documents);
+
+    debug!("returns: {:?}", ret);
+    Ok(HttpResponse::Ok().json(ret))
 }
 
 #[derive(Deserialize, Debug)]

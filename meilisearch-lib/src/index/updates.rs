@@ -68,6 +68,27 @@ pub struct TypoSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
+
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetingSettings {
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub max_values_per_facet: Setting<usize>,
+}
+
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PaginationSettings {
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub max_total_hits: Setting<usize>,
+}
+
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
@@ -114,6 +135,12 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     pub typo_tolerance: Setting<TypoSettings>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    pub faceting: Setting<FacetingSettings>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    pub pagination: Setting<PaginationSettings>,
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
@@ -131,6 +158,8 @@ impl Settings<Checked> {
             synonyms: Setting::Reset,
             distinct_attribute: Setting::Reset,
             typo_tolerance: Setting::Reset,
+            faceting: Setting::Reset,
+            pagination: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -146,6 +175,8 @@ impl Settings<Checked> {
             synonyms,
             distinct_attribute,
             typo_tolerance,
+            faceting,
+            pagination,
             ..
         } = self;
 
@@ -159,6 +190,8 @@ impl Settings<Checked> {
             synonyms,
             distinct_attribute,
             typo_tolerance,
+            faceting,
+            pagination,
             _kind: PhantomData,
         }
     }
@@ -198,6 +231,8 @@ impl Settings<Unchecked> {
             synonyms: self.synonyms,
             distinct_attribute: self.distinct_attribute,
             typo_tolerance: self.typo_tolerance,
+            faceting: self.faceting,
+            pagination: self.pagination,
             _kind: PhantomData,
         }
     }
@@ -427,6 +462,26 @@ pub fn apply_settings_to_builder(
         }
         Setting::NotSet => (),
     }
+
+    match settings.faceting {
+        Setting::Set(ref value) => match value.max_values_per_facet {
+            Setting::Set(val) => builder.set_max_values_per_facet(val),
+            Setting::Reset => builder.reset_max_values_per_facet(),
+            Setting::NotSet => (),
+        },
+        Setting::Reset => builder.reset_max_values_per_facet(),
+        Setting::NotSet => (),
+    }
+
+    match settings.pagination {
+        Setting::Set(ref value) => match value.max_total_hits {
+            Setting::Set(val) => builder.set_pagination_max_total_hits(val),
+            Setting::Reset => builder.reset_pagination_max_total_hits(),
+            Setting::NotSet => (),
+        },
+        Setting::Reset => builder.reset_pagination_max_total_hits(),
+        Setting::NotSet => (),
+    }
 }
 
 #[cfg(test)]
@@ -456,6 +511,8 @@ pub(crate) mod test {
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            faceting: Setting::NotSet,
+            pagination: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -478,6 +535,8 @@ pub(crate) mod test {
             synonyms: Setting::NotSet,
             distinct_attribute: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            faceting: Setting::NotSet,
+            pagination: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

@@ -2,7 +2,7 @@
 #[macro_use]
 pub mod error;
 pub mod analytics;
-mod task;
+pub mod task;
 #[macro_use]
 pub mod extractors;
 pub mod helpers;
@@ -31,7 +31,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
 
     // enable autobatching?
-    let _ = AUTOBATCHING_ENABLED.store(
+    AUTOBATCHING_ENABLED.store(
         opt.scheduler_options.enable_auto_batching,
         std::sync::atomic::Ordering::Relaxed,
     );
@@ -148,10 +148,10 @@ macro_rules! create_app {
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
-        use meilisearch_error::ResponseError;
         use meilisearch_http::error::MeilisearchHttpError;
         use meilisearch_http::routes;
         use meilisearch_http::{configure_data, dashboard};
+        use meilisearch_types::error::ResponseError;
 
         App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))

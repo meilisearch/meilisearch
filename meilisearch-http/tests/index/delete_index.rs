@@ -52,10 +52,10 @@ async fn loop_delete_add_documents() {
     let mut tasks = Vec::new();
     for _ in 0..50 {
         let (response, code) = index.add_documents(documents.clone(), None).await;
-        tasks.push(response["uid"].as_u64().unwrap());
+        tasks.push(response["taskUid"].as_u64().unwrap());
         assert_eq!(code, 202, "{}", response);
         let (response, code) = index.delete().await;
-        tasks.push(response["uid"].as_u64().unwrap());
+        tasks.push(response["taskUid"].as_u64().unwrap());
         assert_eq!(code, 202, "{}", response);
     }
 

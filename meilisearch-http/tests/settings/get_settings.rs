@@ -24,6 +24,18 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
     );
     map.insert("stop_words", json!([]));
     map.insert("synonyms", json!({}));
+    map.insert(
+        "faceting",
+        json!({
+            "maxValuesPerFacet": json!(100),
+        }),
+    );
+    map.insert(
+        "pagination",
+        json!({
+            "maxTotalHits": json!(1000),
+        }),
+    );
     map
 });
 
@@ -43,7 +55,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 9);
+    assert_eq!(settings.keys().len(), 11);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -61,6 +73,18 @@ async fn get_settings() {
         ])
     );
     assert_eq!(settings["stopWords"], json!([]));
+    assert_eq!(
+        settings["faceting"],
+        json!({
+            "maxValuesPerFacet": 100,
+        })
+    );
+    assert_eq!(
+        settings["pagination"],
+        json!({
+            "maxTotalHits": 1000,
+        })
+    );
 }
 
 #[actix_rt::test]
@@ -122,7 +146,7 @@ async fn reset_all_settings() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
     index.wait_task(0).await;
 
     index
@@ -179,7 +203,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     assert_eq!(code, 400);
 
     let expected = json!({
-        "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+        "message": "invalid index uid `test##!  `, the uid must be an integer or a string containing only alphanumeric characters a-z A-Z 0-9, hyphens - and underscores _.",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"});
@@ -188,7 +212,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
 }
 
 macro_rules! test_setting_routes {
-    ($($setting:ident), *) => {
+    ($($setting:ident $write_method:ident), *) => {
         $(
             mod $setting {
                 use crate::common::Server;
@@ -214,7 +238,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.post(url, serde_json::Value::Null).await;
+                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null).await;
                     assert_eq!(code, 202, "{}", response);
                     server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;
@@ -258,13 +282,15 @@ macro_rules! test_setting_routes {
 }
 
 test_setting_routes!(
-    filterable_attributes,
-    displayed_attributes,
-    searchable_attributes,
-    distinct_attribute,
-    stop_words,
-    ranking_rules,
-    synonyms
+    filterable_attributes put,
+    displayed_attributes put,
+    searchable_attributes put,
+    distinct_attribute put,
+    stop_words put,
+    ranking_rules put,
+    synonyms put,
+    pagination patch,
+    faceting patch
 );
 
 #[actix_rt::test]
@@ -283,7 +309,7 @@ async fn error_set_invalid_ranking_rules() {
     assert_eq!(response["status"], "failed");
 
     let expected_error = json!({
-        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are Words, Typo, Sort, Proximity, Attribute, Exactness and custom ranking rules."#,
+        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules."#,
         "code": "invalid_ranking_rule",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_ranking_rule"

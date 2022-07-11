@@ -41,7 +41,7 @@ async fn perform_snapshot() {
         ..default_settings(temp.path())
     };
 
-    let server = Server::new_with_options(options).await;
+    let server = Server::new_with_options(options).await.unwrap();
 
     let index = server.index("test");
     index
@@ -67,10 +67,10 @@ async fn perform_snapshot() {
         ..default_settings(temp.path())
     };
 
-    let snapshot_server = Server::new_with_options(options).await;
+    let snapshot_server = Server::new_with_options(options).await.unwrap();
 
     verify_snapshot!(server, snapshot_server, |server| =>
-        server.list_indexes(),
+        server.list_indexes(None, None),
         // for some reason the db sizes differ. this may be due to the compaction options we have
         // set when performing the snapshot
         //server.stats(),

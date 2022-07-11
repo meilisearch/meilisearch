@@ -206,7 +206,7 @@ fn create_value(value: &Document, mut selectors: HashSet<&str>) -> Document {
     new_value
 }
 
-fn create_array(array: &Vec<Value>, selectors: &HashSet<&str>) -> Vec<Value> {
+fn create_array(array: &[Value], selectors: &HashSet<&str>) -> Vec<Value> {
     let mut res = Vec::new();
 
     for value in array {

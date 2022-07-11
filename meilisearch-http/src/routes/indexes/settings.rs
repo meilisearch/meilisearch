@@ -1,10 +1,10 @@
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
 use crate::analytics::Analytics;
@@ -13,7 +13,7 @@ use crate::task::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
+    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
@@ -21,7 +21,7 @@ macro_rules! make_setting_route {
             use meilisearch_lib::milli::update::Setting;
             use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
 
-            use meilisearch_error::ResponseError;
+            use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::{policies::*, GuardedData};
             use $crate::extractors::sequential_extractor::SeqHandler;
@@ -100,18 +100,27 @@ macro_rules! make_setting_route {
             pub fn resources() -> Resource {
                 Resource::new($route)
                     .route(web::get().to(SeqHandler(get)))
-                    .route(web::post().to(SeqHandler(update)))
+                    .route(web::$update_verb().to(SeqHandler(update)))
                     .route(web::delete().to(SeqHandler(delete)))
             }
         }
     };
-    ($route:literal, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        make_setting_route!($route, $type, $attr, $camelcase_attr, _analytics, |_, _| {});
+    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal) => {
+        make_setting_route!(
+            $route,
+            $update_verb,
+            $type,
+            $attr,
+            $camelcase_attr,
+            _analytics,
+            |_, _| {}
+        );
     };
 }
 
 make_setting_route!(
     "/filterable-attributes",
+    put,
     std::collections::BTreeSet<String>,
     filterable_attributes,
     "filterableAttributes",
@@ -134,6 +143,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/sortable-attributes",
+    put,
     std::collections::BTreeSet<String>,
     sortable_attributes,
     "sortableAttributes",
@@ -156,6 +166,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/displayed-attributes",
+    put,
     Vec<String>,
     displayed_attributes,
     "displayedAttributes"
@@ -163,6 +174,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/typo-tolerance",
+    patch,
     meilisearch_lib::index::updates::TypoSettings,
     typo_tolerance,
     "typoTolerance",
@@ -204,6 +216,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/searchable-attributes",
+    put,
     Vec<String>,
     searchable_attributes,
     "searchableAttributes",
@@ -225,6 +238,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/stop-words",
+    put,
     std::collections::BTreeSet<String>,
     stop_words,
     "stopWords"
@@ -232,6 +246,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/synonyms",
+    put,
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
     "synonyms"
@@ -239,6 +254,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/distinct-attribute",
+    put,
     String,
     distinct_attribute,
     "distinctAttribute"
@@ -246,6 +262,7 @@ make_setting_route!(
 
 make_setting_route!(
     "/ranking-rules",
+    put,
     Vec<String>,
     ranking_rules,
     "rankingRules",
@@ -265,13 +282,57 @@ make_setting_route!(
     }
 );
 
+make_setting_route!(
+    "/faceting",
+    patch,
+    meilisearch_lib::index::updates::FacetingSettings,
+    faceting,
+    "faceting",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::FacetingSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Faceting Updated".to_string(),
+            json!({
+                "faceting": {
+                    "max_values_per_facet": setting.as_ref().and_then(|s| s.max_values_per_facet.set()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
+make_setting_route!(
+    "/pagination",
+    patch,
+    meilisearch_lib::index::updates::PaginationSettings,
+    pagination,
+    "pagination",
+    analytics,
+    |setting: &Option<meilisearch_lib::index::updates::PaginationSettings>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Pagination Updated".to_string(),
+            json!({
+                "pagination": {
+                    "max_total_hits": setting.as_ref().and_then(|s| s.max_total_hits.set()),
+                },
+            }),
+            Some(req),
+        );
+    }
+);
+
 macro_rules! generate_configure {
     ($($mod:ident),*) => {
         pub fn configure(cfg: &mut web::ServiceConfig) {
             use crate::extractors::sequential_extractor::SeqHandler;
             cfg.service(
                 web::resource("")
-                .route(web::post().to(SeqHandler(update_all)))
+                .route(web::patch().to(SeqHandler(update_all)))
                 .route(web::get().to(SeqHandler(get_all)))
                 .route(web::delete().to(SeqHandler(delete_all))))
                 $(.service($mod::resources()))*;
@@ -288,7 +349,9 @@ generate_configure!(
     stop_words,
     synonyms,
     ranking_rules,
-    typo_tolerance
+    typo_tolerance,
+    pagination,
+    faceting
 );
 
 pub async fn update_all(
@@ -347,6 +410,18 @@ pub async fn update_all(
                         .set()
                         .map(|s| s.two_typos.set()))
                     .flatten(),
+            },
+            "faceting": {
+                "max_values_per_facet": settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.max_values_per_facet.as_ref().set()),
+            },
+            "pagination": {
+                "max_total_hits": settings.pagination
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.max_total_hits.as_ref().set()),
             },
         }),
         Some(&req),

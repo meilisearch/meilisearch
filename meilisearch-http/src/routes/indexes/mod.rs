@@ -1,8 +1,8 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -12,10 +12,11 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::SummarizedTaskView;
 
+use super::Pagination;
+
 pub mod documents;
 pub mod search;
 pub mod settings;
-pub mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -28,30 +29,32 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(
                 web::resource("")
                     .route(web::get().to(SeqHandler(get_index)))
-                    .route(web::put().to(SeqHandler(update_index)))
+                    .route(web::patch().to(SeqHandler(update_index)))
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
-            .service(web::scope("/tasks").configure(tasks::configure))
             .service(web::scope("/settings").configure(settings::configure)),
     );
 }
 
 pub async fn list_indexes(
     data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
+    paginate: web::Query<Pagination>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &data.filters().search_rules;
-    let indexes: Vec<_> = data
-        .list_indexes()
-        .await?
+    let indexes: Vec<_> = data.list_indexes().await?;
+    let nb_indexes = indexes.len();
+    let iter = indexes
         .into_iter()
-        .filter(|i| search_rules.is_index_authorized(&i.uid))
-        .collect();
+        .filter(|i| search_rules.is_index_authorized(&i.uid));
+    let ret = paginate
+        .into_inner()
+        .auto_paginate_unsized(nb_indexes, iter);
 
-    debug!("returns: {:?}", indexes);
-    Ok(HttpResponse::Ok().json(indexes))
+    debug!("returns: {:?}", ret);
+    Ok(HttpResponse::Ok().json(ret))
 }
 
 #[derive(Debug, Deserialize)]

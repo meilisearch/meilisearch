@@ -1,60 +1,135 @@
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{self, Write};
+use std::str::FromStr;
 use std::write;
 
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{Settings, Unchecked};
-use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
-use serde::{Serialize, Serializer};
+use meilisearch_types::error::ResponseError;
+use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 
 use crate::AUTOBATCHING_ENABLED;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum TaskType {
+pub enum TaskType {
     IndexCreation,
     IndexUpdate,
     IndexDeletion,
-    DocumentAddition,
-    DocumentPartial,
+    DocumentAdditionOrUpdate,
     DocumentDeletion,
     SettingsUpdate,
-    ClearAll,
+    DumpCreation,
 }
 
 impl From<TaskContent> for TaskType {
     fn from(other: TaskContent) -> Self {
         match other {
-            TaskContent::DocumentAddition {
-                merge_strategy: IndexDocumentsMethod::ReplaceDocuments,
-                ..
-            } => TaskType::DocumentAddition,
-            TaskContent::DocumentAddition {
-                merge_strategy: IndexDocumentsMethod::UpdateDocuments,
-                ..
-            } => TaskType::DocumentPartial,
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => TaskType::ClearAll,
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(_)) => TaskType::DocumentDeletion,
-            TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
-            TaskContent::IndexDeletion => TaskType::IndexDeletion,
             TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
             TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            _ => unreachable!("unexpected task type"),
+            TaskContent::IndexDeletion { .. } => TaskType::IndexDeletion,
+            TaskContent::DocumentAddition { .. } => TaskType::DocumentAdditionOrUpdate,
+            TaskContent::DocumentDeletion { .. } => TaskType::DocumentDeletion,
+            TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
+            TaskContent::Dump { .. } => TaskType::DumpCreation,
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
+pub struct TaskTypeError {
+    invalid_type: String,
+}
+
+impl fmt::Display for TaskTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task type `{}`, expecting one of: \
+            indexCreation, indexUpdate, indexDeletion, documentAdditionOrUpdate, \
+            documentDeletion, settingsUpdate, dumpCreation",
+            self.invalid_type
+        )
+    }
+}
+
+impl Error for TaskTypeError {}
+
+impl FromStr for TaskType {
+    type Err = TaskTypeError;
+
+    fn from_str(type_: &str) -> Result<Self, TaskTypeError> {
+        if type_.eq_ignore_ascii_case("indexCreation") {
+            Ok(TaskType::IndexCreation)
+        } else if type_.eq_ignore_ascii_case("indexUpdate") {
+            Ok(TaskType::IndexUpdate)
+        } else if type_.eq_ignore_ascii_case("indexDeletion") {
+            Ok(TaskType::IndexDeletion)
+        } else if type_.eq_ignore_ascii_case("documentAdditionOrUpdate") {
+            Ok(TaskType::DocumentAdditionOrUpdate)
+        } else if type_.eq_ignore_ascii_case("documentDeletion") {
+            Ok(TaskType::DocumentDeletion)
+        } else if type_.eq_ignore_ascii_case("settingsUpdate") {
+            Ok(TaskType::SettingsUpdate)
+        } else if type_.eq_ignore_ascii_case("dumpCreation") {
+            Ok(TaskType::DumpCreation)
+        } else {
+            Err(TaskTypeError {
+                invalid_type: type_.to_string(),
+            })
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum TaskStatus {
+pub enum TaskStatus {
     Enqueued,
     Processing,
     Succeeded,
     Failed,
+}
+
+#[derive(Debug)]
+pub struct TaskStatusError {
+    invalid_status: String,
+}
+
+impl fmt::Display for TaskStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid task status `{}`, expecting one of: \
+            enqueued, processing, succeeded, or failed",
+            self.invalid_status,
+        )
+    }
+}
+
+impl Error for TaskStatusError {}
+
+impl FromStr for TaskStatus {
+    type Err = TaskStatusError;
+
+    fn from_str(status: &str) -> Result<Self, TaskStatusError> {
+        if status.eq_ignore_ascii_case("enqueued") {
+            Ok(TaskStatus::Enqueued)
+        } else if status.eq_ignore_ascii_case("processing") {
+            Ok(TaskStatus::Processing)
+        } else if status.eq_ignore_ascii_case("succeeded") {
+            Ok(TaskStatus::Succeeded)
+        } else if status.eq_ignore_ascii_case("failed") {
+            Ok(TaskStatus::Failed)
+        } else {
+            Err(TaskStatusError {
+                invalid_status: status.to_string(),
+            })
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +155,8 @@ enum TaskDetails {
     },
     #[serde(rename_all = "camelCase")]
     ClearAll { deleted_documents: Option<u64> },
+    #[serde(rename_all = "camelCase")]
+    Dump { dump_uid: String },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -136,8 +213,8 @@ fn serialize_duration<S: Serializer>(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
-    uid: TaskId,
-    index_uid: String,
+    pub uid: TaskId,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -159,46 +236,44 @@ pub struct TaskView {
 
 impl From<Task> for TaskView {
     fn from(task: Task) -> Self {
+        let index_uid = task.index_uid().map(String::from);
         let Task {
             id,
-            index_uid,
             content,
             events,
         } = task;
 
         let (task_type, mut details) = match content {
             TaskContent::DocumentAddition {
-                merge_strategy,
-                documents_count,
-                ..
+                documents_count, ..
             } => {
                 let details = TaskDetails::DocumentAddition {
                     received_documents: documents_count,
                     indexed_documents: None,
                 };
 
-                let task_type = match merge_strategy {
-                    IndexDocumentsMethod::UpdateDocuments => TaskType::DocumentPartial,
-                    IndexDocumentsMethod::ReplaceDocuments => TaskType::DocumentAddition,
-                    _ => unreachable!("Unexpected document merge strategy."),
-                };
-
-                (task_type, Some(details))
+                (TaskType::DocumentAdditionOrUpdate, Some(details))
             }
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => (
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Ids(ids),
+                ..
+            } => (
                 TaskType::DocumentDeletion,
                 Some(TaskDetails::DocumentDeletion {
                     received_document_ids: ids.len(),
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (
-                TaskType::ClearAll,
+            TaskContent::DocumentDeletion {
+                deletion: DocumentDeletion::Clear,
+                ..
+            } => (
+                TaskType::DocumentDeletion,
                 Some(TaskDetails::ClearAll {
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::IndexDeletion => (
+            TaskContent::IndexDeletion { .. } => (
                 TaskType::IndexDeletion,
                 Some(TaskDetails::ClearAll {
                     deleted_documents: None,
@@ -208,13 +283,17 @@ impl From<Task> for TaskView {
                 TaskType::SettingsUpdate,
                 Some(TaskDetails::Settings { settings }),
             ),
-            TaskContent::IndexCreation { primary_key } => (
+            TaskContent::IndexCreation { primary_key, .. } => (
                 TaskType::IndexCreation,
                 Some(TaskDetails::IndexInfo { primary_key }),
             ),
-            TaskContent::IndexUpdate { primary_key } => (
+            TaskContent::IndexUpdate { primary_key, .. } => (
                 TaskType::IndexUpdate,
                 Some(TaskDetails::IndexInfo { primary_key }),
+            ),
+            TaskContent::Dump { uid } => (
+                TaskType::DumpCreation,
+                Some(TaskDetails::Dump { dump_uid: uid }),
             ),
         };
 
@@ -223,7 +302,7 @@ impl From<Task> for TaskView {
             TaskEvent::Created(_) => (TaskStatus::Enqueued, None, None),
             TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
             TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
-            TaskEvent::Succeded { timestamp, result } => {
+            TaskEvent::Succeeded { timestamp, result } => {
                 match (result, &mut details) {
                     (
                         TaskResult::DocumentAddition {
@@ -313,7 +392,7 @@ impl From<Task> for TaskView {
 
         Self {
             uid: id,
-            index_uid: index_uid.into_inner(),
+            index_uid,
             status,
             task_type,
             details,
@@ -329,20 +408,17 @@ impl From<Task> for TaskView {
 
 #[derive(Debug, Serialize)]
 pub struct TaskListView {
-    results: Vec<TaskView>,
-}
-
-impl From<Vec<TaskView>> for TaskListView {
-    fn from(results: Vec<TaskView>) -> Self {
-        Self { results }
-    }
+    pub results: Vec<TaskView>,
+    pub limit: usize,
+    pub from: Option<TaskId>,
+    pub next: Option<TaskId>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
-    uid: TaskId,
-    index_uid: String,
+    task_uid: TaskId,
+    index_uid: Option<String>,
     status: TaskStatus,
     #[serde(rename = "type")]
     task_type: TaskType,
@@ -364,8 +440,8 @@ impl From<Task> for SummarizedTaskView {
         };
 
         Self {
-            uid: other.id,
-            index_uid: other.index_uid.to_string(),
+            task_uid: other.id,
+            index_uid: other.index_uid().map(String::from),
             status: TaskStatus::Enqueued,
             task_type: other.content.into(),
             enqueued_at,

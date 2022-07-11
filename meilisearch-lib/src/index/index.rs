@@ -1,24 +1,25 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fs::create_dir_all;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
+use walkdir::WalkDir;
 
 use fst::IntoStreamer;
-use milli::heed::{EnvOpenOptions, RoTxn};
+use milli::heed::{CompactionOption, EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
-use milli::{obkv_to_json, FieldDistribution, FieldId};
+use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::EnvSizer;
+use crate::index::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 
 use super::error::IndexError;
 use super::error::Result;
-use super::updates::{MinWordSizeTyposSetting, TypoSettings};
+use super::updates::{FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, TypoSettings};
 use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
@@ -175,12 +176,10 @@ impl Index {
             two_typos: Setting::Set(self.min_word_len_two_typos(txn)?),
         };
 
-        let disabled_words = self
-            .exact_words(txn)?
-            .into_stream()
-            .into_strs()?
-            .into_iter()
-            .collect();
+        let disabled_words = match self.exact_words(txn)? {
+            Some(fst) => fst.into_stream().into_strs()?.into_iter().collect(),
+            None => BTreeSet::new(),
+        };
 
         let disabled_attributes = self
             .exact_attributes(txn)?
@@ -193,6 +192,20 @@ impl Index {
             min_word_size_for_typos: Setting::Set(min_typo_word_len),
             disable_on_words: Setting::Set(disabled_words),
             disable_on_attributes: Setting::Set(disabled_attributes),
+        };
+
+        let faceting = FacetingSettings {
+            max_values_per_facet: Setting::Set(
+                self.max_values_per_facet(txn)?
+                    .unwrap_or(DEFAULT_VALUES_PER_FACET),
+            ),
+        };
+
+        let pagination = PaginationSettings {
+            max_total_hits: Setting::Set(
+                self.pagination_max_total_hits(txn)?
+                    .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+            ),
         };
 
         Ok(Settings {
@@ -214,46 +227,55 @@ impl Index {
             },
             synonyms: Setting::Set(synonyms),
             typo_tolerance: Setting::Set(typo_tolerance),
+            faceting: Setting::Set(faceting),
+            pagination: Setting::Set(pagination),
             _kind: PhantomData,
         })
     }
 
+    /// Return the total number of documents contained in the index + the selected documents.
     pub fn retrieve_documents<S: AsRef<str>>(
         &self,
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<S>>,
-    ) -> Result<Vec<Map<String, Value>>> {
+    ) -> Result<(u64, Vec<Document>)> {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-        let fields_to_display =
-            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
+        let iter = self.all_documents(&txn)?.skip(offset).take(limit);
 
         let mut documents = Vec::new();
 
         for entry in iter {
             let (_id, obkv) = entry?;
-            let object = obkv_to_json(&fields_to_display, &fields_ids_map, obkv)?;
-            documents.push(object);
+            let document = obkv_to_json(&all_fields, &fields_ids_map, obkv)?;
+            let document = match &attributes_to_retrieve {
+                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                    &document,
+                    attributes_to_retrieve.iter().map(|s| s.as_ref()),
+                ),
+                None => document,
+            };
+            documents.push(document);
         }
 
-        Ok(documents)
+        let number_of_documents = self.number_of_documents(&txn)?;
+
+        Ok((number_of_documents, documents))
     }
 
     pub fn retrieve_document<S: AsRef<str>>(
         &self,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<S>>,
-    ) -> Result<Map<String, Value>> {
+    ) -> Result<Document> {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-
-        let fields_to_display =
-            self.fields_to_display(&txn, &attributes_to_retrieve, &fields_ids_map)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -267,36 +289,25 @@ impl Index {
             .map(|(_, d)| d)
             .ok_or(IndexError::DocumentNotFound(doc_id))?;
 
-        let document = obkv_to_json(&fields_to_display, &fields_ids_map, document)?;
+        let document = obkv_to_json(&all_fields, &fields_ids_map, document)?;
+        let document = match &attributes_to_retrieve {
+            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                &document,
+                attributes_to_retrieve.iter().map(|s| s.as_ref()),
+            ),
+            None => document,
+        };
 
         Ok(document)
     }
 
     pub fn size(&self) -> u64 {
-        self.env.size()
-    }
-
-    fn fields_to_display<S: AsRef<str>>(
-        &self,
-        txn: &milli::heed::RoTxn,
-        attributes_to_retrieve: &Option<Vec<S>>,
-        fields_ids_map: &milli::FieldsIdsMap,
-    ) -> Result<Vec<FieldId>> {
-        let mut displayed_fields_ids = match self.displayed_fields_ids(txn)? {
-            Some(ids) => ids.into_iter().collect::<Vec<_>>(),
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
-
-        let attributes_to_retrieve_ids = match attributes_to_retrieve {
-            Some(attrs) => attrs
-                .iter()
-                .filter_map(|f| fields_ids_map.id(f.as_ref()))
-                .collect::<HashSet<_>>(),
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
-
-        displayed_fields_ids.retain(|fid| attributes_to_retrieve_ids.contains(fid));
-        Ok(displayed_fields_ids)
+        WalkDir::new(self.inner.path())
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|metadata| metadata.is_file())
+            .fold(0, |acc, m| acc + m.len())
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
@@ -304,9 +315,7 @@ impl Index {
         create_dir_all(&dst)?;
         dst.push("data.mdb");
         let _txn = self.write_txn()?;
-        self.inner
-            .env
-            .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
+        self.inner.copy_to_path(dst, CompactionOption::Enabled)?;
         Ok(())
     }
 }

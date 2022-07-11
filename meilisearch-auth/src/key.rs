@@ -1,20 +1,25 @@
 use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
-use crate::store::{KeyId, KEY_ID_LENGTH};
-use rand::Rng;
+use crate::store::KeyId;
+
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Key {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub id: KeyId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<String>,
+    pub indexes: Vec<StarOr<IndexUid>>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -25,16 +30,27 @@ pub struct Key {
 
 impl Key {
     pub fn create_from_value(value: Value) -> Result<Self> {
-        let description = match value.get("description") {
-            Some(Value::Null) => None,
-            Some(des) => Some(
-                from_value(des.clone())
-                    .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))?,
-            ),
-            None => None,
+        let name = match value.get("name") {
+            None | Some(Value::Null) => None,
+            Some(des) => from_value(des.clone())
+                .map(Some)
+                .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()))?,
         };
 
-        let id = generate_id();
+        let description = match value.get("description") {
+            None | Some(Value::Null) => None,
+            Some(des) => from_value(des.clone())
+                .map(Some)
+                .map_err(|_| AuthControllerError::InvalidApiKeyDescription(des.clone()))?,
+        };
+
+        let uid = value.get("uid").map_or_else(
+            || Ok(Uuid::new_v4()),
+            |uid| {
+                from_value(uid.clone())
+                    .map_err(|_| AuthControllerError::InvalidApiKeyUid(uid.clone()))
+            },
+        )?;
 
         let actions = value
             .get("actions")
@@ -61,8 +77,9 @@ impl Key {
         let updated_at = created_at;
 
         Ok(Self {
+            name,
             description,
-            id,
+            uid,
             actions,
             indexes,
             expires_at,
@@ -78,20 +95,34 @@ impl Key {
             self.description = des?;
         }
 
-        if let Some(act) = value.get("actions") {
-            let act = from_value(act.clone())
-                .map_err(|_| AuthControllerError::InvalidApiKeyActions(act.clone()));
-            self.actions = act?;
+        if let Some(des) = value.get("name") {
+            let des = from_value(des.clone())
+                .map_err(|_| AuthControllerError::InvalidApiKeyName(des.clone()));
+            self.name = des?;
         }
 
-        if let Some(ind) = value.get("indexes") {
-            let ind = from_value(ind.clone())
-                .map_err(|_| AuthControllerError::InvalidApiKeyIndexes(ind.clone()));
-            self.indexes = ind?;
+        if value.get("uid").is_some() {
+            return Err(AuthControllerError::ImmutableField("uid".to_string()));
         }
 
-        if let Some(exp) = value.get("expiresAt") {
-            self.expires_at = parse_expiration_date(exp)?;
+        if value.get("actions").is_some() {
+            return Err(AuthControllerError::ImmutableField("actions".to_string()));
+        }
+
+        if value.get("indexes").is_some() {
+            return Err(AuthControllerError::ImmutableField("indexes".to_string()));
+        }
+
+        if value.get("expiresAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("expiresAt".to_string()));
+        }
+
+        if value.get("createdAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("createdAt".to_string()));
+        }
+
+        if value.get("updatedAt").is_some() {
+            return Err(AuthControllerError::ImmutableField("updatedAt".to_string()));
         }
 
         self.updated_at = OffsetDateTime::now_utc();
@@ -101,11 +132,13 @@ impl Key {
 
     pub(crate) fn default_admin() -> Self {
         let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
         Self {
-            description: Some("Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)".to_string()),
-            id: generate_id(),
+            name: Some("Default Admin API Key".to_string()),
+            description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
+            uid,
             actions: vec![Action::All],
-            indexes: vec!["*".to_string()],
+            indexes: vec![StarOr::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -114,31 +147,18 @@ impl Key {
 
     pub(crate) fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
         Self {
-            description: Some(
-                "Default Search API Key (Use it to search from the frontend)".to_string(),
-            ),
-            id: generate_id(),
+            name: Some("Default Search API Key".to_string()),
+            description: Some("Use it to search from the frontend".to_string()),
+            uid,
             actions: vec![Action::Search],
-            indexes: vec!["*".to_string()],
+            indexes: vec![StarOr::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,
         }
     }
-}
-
-/// Generate a printable key of 64 characters using thread_rng.
-fn generate_id() -> [u8; KEY_ID_LENGTH] {
-    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    let mut rng = rand::thread_rng();
-    let mut bytes = [0; KEY_ID_LENGTH];
-    for byte in bytes.iter_mut() {
-        *byte = CHARSET[rng.gen_range(0..CHARSET.len())];
-    }
-
-    bytes
 }
 
 fn parse_expiration_date(value: &Value) -> Result<Option<OffsetDateTime>> {

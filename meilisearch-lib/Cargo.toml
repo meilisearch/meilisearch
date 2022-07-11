@@ -1,9 +1,7 @@
 [package]
 name = "meilisearch-lib"
-version = "0.27.2"
+version = "0.28.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 actix-web = { version = "4.0.1", default-features = false }
@@ -29,8 +27,8 @@ itertools = "0.10.3"
 lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-error = { path = "../meilisearch-error" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.26.6" }
+meilisearch-types = { path = "../meilisearch-types" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.31.1" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
@@ -41,6 +39,7 @@ rand = "0.8.5"
 rayon = "1.5.1"
 regex = "1.5.5"
 reqwest = { version = "0.11.9", features = ["json", "rustls-tls"], default-features = false, optional = true }
+roaring = "0.9.0"
 rustls = "0.20.4"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
@@ -52,15 +51,15 @@ tempfile = "3.3.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.17.0", features = ["full"] }
-uuid = { version = "0.8.2", features = ["serde"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 whoami = { version = "1.2.1", optional = true }
 
 [dev-dependencies]
 actix-rt = "2.7.0"
-meilisearch-error = { path = "../meilisearch-error", features = ["test-traits"] }
+meilisearch-types = { path = "../meilisearch-types", features = ["test-traits"] }
 mockall = "0.11.0"
-nelson = { git = "https://github.com/MarinPostma/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
+nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
 paste = "1.0.6"
 proptest = "1.0.0"
 proptest-derive = "0.3.0"

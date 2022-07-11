@@ -52,16 +52,13 @@ impl Server {
         }
     }
 
-    pub async fn new_auth() -> Self {
-        let dir = TempDir::new().unwrap();
-
+    pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
             std::env::set_var("TMP", TEST_TEMP_DIR.path());
         } else {
             std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
         }
 
-        let mut options = default_settings(dir.path());
         options.master_key = Some("MASTER_KEY".to_string());
 
         let meilisearch = setup_meilisearch(&options).unwrap();
@@ -79,9 +76,15 @@ impl Server {
         }
     }
 
-    pub async fn new_with_options(options: Opt) -> Self {
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
+    pub async fn new_auth() -> Self {
+        let dir = TempDir::new().unwrap();
+        let options = default_settings(dir.path());
+        Self::new_auth_with_options(options, dir).await
+    }
+
+    pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
+        let meilisearch = setup_meilisearch(&options)?;
+        let auth = AuthController::new(&options.db_path, &options.master_key)?;
         let service = Service {
             meilisearch,
             auth,
@@ -89,10 +92,10 @@ impl Server {
             api_key: None,
         };
 
-        Server {
+        Ok(Server {
             service,
             _dir: None,
-        }
+        })
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
@@ -103,8 +106,27 @@ impl Server {
         }
     }
 
-    pub async fn list_indexes(&self) -> (Value, StatusCode) {
-        self.service.get("/indexes").await
+    pub async fn list_indexes(
+        &self,
+        offset: Option<usize>,
+        limit: Option<usize>,
+    ) -> (Value, StatusCode) {
+        let (offset, limit) = (
+            offset.map(|offset| format!("offset={offset}")),
+            limit.map(|limit| format!("limit={limit}")),
+        );
+        let query_parameter = offset
+            .as_ref()
+            .zip(limit.as_ref())
+            .map(|(offset, limit)| format!("{offset}&{limit}"))
+            .or_else(|| offset.xor(limit));
+        if let Some(query_parameter) = query_parameter {
+            self.service
+                .get(format!("/indexes?{query_parameter}"))
+                .await
+        } else {
+            self.service.get("/indexes").await
+        }
     }
 
     pub async fn version(&self) -> (Value, StatusCode) {
@@ -131,8 +153,8 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         env: "development".to_owned(),
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         no_analytics: true,
-        max_index_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
-        max_task_db_size: Byte::from_unit(4.0, ByteUnit::GiB).unwrap(),
+        max_index_size: Byte::from_unit(100.0, ByteUnit::MiB).unwrap(),
+        max_task_db_size: Byte::from_unit(1.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
         snapshot_dir: ".".into(),
         indexer_options: IndexerOpts {

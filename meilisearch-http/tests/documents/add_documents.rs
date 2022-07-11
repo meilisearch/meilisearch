@@ -35,7 +35,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
 
     // put
     let req = test::TestRequest::put()
@@ -48,7 +48,7 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
-    assert_eq!(response["uid"], 1);
+    assert_eq!(response["taskUid"], 1);
 }
 
 /// any other content-type is must be refused
@@ -599,7 +599,7 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert_eq!(response["uid"], 0);
+    assert_eq!(response["taskUid"], 0);
     /*
      * currently we don’t check these field to stay ISO with meilisearch
      * assert_eq!(response["status"], "pending");
@@ -615,7 +615,7 @@ async fn add_documents_no_index_creation() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentAddition");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["receivedDocuments"], 1);
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
@@ -638,7 +638,7 @@ async fn error_document_add_create_index_bad_uid() {
     let (response, code) = index.add_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
-        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+        "message": "invalid index uid `883  fj!`, the uid must be an integer or a string containing only alphanumeric characters a-z A-Z 0-9, hyphens - and underscores _.",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -655,7 +655,7 @@ async fn error_document_update_create_index_bad_uid() {
     let (response, code) = index.update_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
-        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+        "message": "invalid index uid `883  fj!`, the uid must be an integer or a string containing only alphanumeric characters a-z A-Z 0-9, hyphens - and underscores _.",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
@@ -685,7 +685,7 @@ async fn document_addition_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentAddition");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["receivedDocuments"], 1);
     assert_eq!(response["details"]["indexedDocuments"], 1);
 
@@ -714,7 +714,7 @@ async fn document_update_with_primary_key() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentPartial");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 1);
     assert_eq!(response["details"]["receivedDocuments"], 1);
 
@@ -818,7 +818,7 @@ async fn add_larger_dataset() {
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
-    assert_eq!(response["type"], "documentAddition");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 77);
     assert_eq!(response["details"]["receivedDocuments"], 77);
     let (response, code) = index
@@ -827,8 +827,8 @@ async fn add_larger_dataset() {
             ..Default::default()
         })
         .await;
-    assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 77);
+    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 
 #[actix_rt::test]
@@ -840,7 +840,7 @@ async fn update_larger_dataset() {
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["type"], "documentPartial");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 77);
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions {
@@ -849,7 +849,7 @@ async fn update_larger_dataset() {
         })
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 77);
+    assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 
 #[actix_rt::test]
@@ -868,7 +868,12 @@ async fn error_add_documents_bad_document_id() {
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(
+        response["error"]["message"],
+        json!(
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
+        )
+    );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
@@ -891,7 +896,12 @@ async fn error_update_documents_bad_document_id() {
     index.update_documents(documents, None).await;
     let response = index.wait_task(1).await;
     assert_eq!(response["status"], json!("failed"));
-    assert_eq!(response["error"]["message"], json!("Document identifier `foo & bar` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."));
+    assert_eq!(
+        response["error"]["message"],
+        json!(
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
+        )
+    );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(

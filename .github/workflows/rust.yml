@@ -12,6 +12,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   tests:
@@ -82,7 +83,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: stable
           override: true
           components: rustfmt
       - name: Cache dependencies

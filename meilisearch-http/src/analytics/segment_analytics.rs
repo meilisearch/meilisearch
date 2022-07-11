@@ -31,6 +31,8 @@ use crate::Opt;
 
 use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 
+const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
+
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &str) {
     let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
@@ -48,7 +50,8 @@ const SEGMENT_API_KEY: &str = "P3FWhhEsJiEDCuEHpmcN9DHcK4hVfBvb";
 pub fn extract_user_agents(request: &HttpRequest) -> Vec<String> {
     request
         .headers()
-        .get(USER_AGENT)
+        .get(ANALYTICS_HEADER)
+        .or_else(|| request.headers().get(USER_AGENT))
         .map(|header| header.to_str().ok())
         .flatten()
         .unwrap_or("unknown")
@@ -78,7 +81,19 @@ impl SegmentAnalytics {
         let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         write_user_id(&opt.db_path, &user_id);
 
-        let client = HttpClient::default();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .build();
+
+        // if reqwest throws an error we won't be able to send analytics
+        if client.is_err() {
+            return super::MockAnalytics::new(opt);
+        }
+
+        let client = HttpClient::new(
+            client.unwrap(),
+            "https://telemetry.meilisearch.com".to_string(),
+        );
         let user = User::UserId { user_id };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
@@ -130,11 +145,7 @@ impl SegmentAnalytics {
 
 impl super::Analytics for SegmentAnalytics {
     fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
-        let user_agent = request
-            .map(|req| req.headers().get(USER_AGENT))
-            .flatten()
-            .map(|header| header.to_str().unwrap_or("unknown"))
-            .map(|s| s.split(';').map(str::trim).collect::<Vec<&str>>());
+        let user_agent = request.map(|req| extract_user_agents(req));
 
         send["user-agent"] = json!(user_agent);
         let event = Track {
@@ -363,7 +374,7 @@ pub struct SearchAggregator {
     highlight_pre_tag: bool,
     highlight_post_tag: bool,
     crop_marker: bool,
-    matches: bool,
+    show_matches_position: bool,
     crop_length: bool,
 }
 
@@ -415,11 +426,11 @@ impl SearchAggregator {
         ret.max_limit = query.limit;
         ret.max_offset = query.offset.unwrap_or_default();
 
-        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG;
-        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG;
-        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER;
-        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH;
-        ret.matches = query.matches;
+        ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
+        ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
+        ret.crop_marker = query.crop_marker != DEFAULT_CROP_MARKER();
+        ret.crop_length = query.crop_length != DEFAULT_CROP_LENGTH();
+        ret.show_matches_position = query.show_matches_position;
 
         ret
     }
@@ -472,7 +483,7 @@ impl SearchAggregator {
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
         self.crop_marker |= other.crop_marker;
-        self.matches |= other.matches;
+        self.show_matches_position |= other.show_matches_position;
         self.crop_length |= other.crop_length;
     }
 
@@ -484,7 +495,7 @@ impl SearchAggregator {
             let percentile_99th = 0.99 * (self.total_succeeded as f64 - 1.) + 1.;
             // we get all the values in a sorted manner
             let time_spent = self.time_spent.into_sorted_vec();
-            // We are only intersted by the slowest value of the 99th fastest results
+            // We are only interested by the slowest value of the 99th fastest results
             let time_spent = time_spent.get(percentile_99th as usize);
 
             let properties = json!({
@@ -515,7 +526,7 @@ impl SearchAggregator {
                     "highlight_pre_tag": self.highlight_pre_tag,
                     "highlight_post_tag": self.highlight_post_tag,
                     "crop_marker": self.crop_marker,
-                    "matches": self.matches,
+                    "show_matches_position": self.show_matches_position,
                     "crop_length": self.crop_length,
                 },
             });
@@ -563,8 +574,8 @@ impl DocumentsAggregator {
         let content_type = request
             .headers()
             .get(CONTENT_TYPE)
-            .map(|s| s.to_str().unwrap_or("unkown"))
-            .unwrap_or("unkown")
+            .and_then(|s| s.to_str().ok())
+            .unwrap_or("unknown")
             .to_string();
         ret.content_types.insert(content_type);
         ret.index_creation = index_creation;
@@ -580,13 +591,13 @@ impl DocumentsAggregator {
 
         self.updated |= other.updated;
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents.into_iter() {
+        for user_agent in other.user_agents {
             self.user_agents.insert(user_agent);
         }
-        for primary_key in other.primary_keys.into_iter() {
+        for primary_key in other.primary_keys {
             self.primary_keys.insert(primary_key);
         }
-        for content_type in other.content_types.into_iter() {
+        for content_type in other.content_types {
             self.content_types.insert(content_type);
         }
         self.index_creation |= other.index_creation;

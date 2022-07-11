@@ -7,6 +7,7 @@ use anyhow::bail;
 use fs_extra::dir::{self, CopyOptions};
 use log::{info, trace};
 use meilisearch_auth::open_auth_store_env;
+use milli::heed::CompactionOption;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use walkdir::WalkDir;
@@ -14,7 +15,6 @@ use walkdir::WalkDir;
 use crate::compression::from_tar_gz;
 use crate::index_controller::open_meta_env;
 use crate::index_controller::versioning::VERSION_FILE_NAME;
-use crate::tasks::task::Job;
 use crate::tasks::Scheduler;
 
 pub struct SnapshotService {
@@ -39,8 +39,7 @@ impl SnapshotService {
                 meta_env_size: self.meta_env_size,
                 index_size: self.index_size,
             };
-            let job = Job::Snapshot(snapshot_job);
-            self.scheduler.write().await.schedule_job(job).await;
+            self.scheduler.write().await.schedule_snapshot(snapshot_job);
             sleep(self.snapshot_period).await;
         }
     }
@@ -183,9 +182,7 @@ impl SnapshotJob {
             let mut options = milli::heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
             let index = milli::Index::new(options, entry.path())?;
-            index
-                .env
-                .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
+            index.copy_to_path(dst, CompactionOption::Enabled)?;
         }
 
         Ok(())

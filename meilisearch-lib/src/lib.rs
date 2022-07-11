@@ -3,6 +3,7 @@ pub mod error;
 pub mod options;
 
 mod analytics;
+mod dump;
 pub mod index;
 pub mod index_controller;
 mod index_resolver;
@@ -18,23 +19,6 @@ pub use milli::heed;
 
 mod compression;
 pub mod document_formats;
-
-use walkdir::WalkDir;
-
-pub trait EnvSizer {
-    fn size(&self) -> u64;
-}
-
-impl EnvSizer for milli::heed::Env {
-    fn size(&self) -> u64 {
-        WalkDir::new(self.path())
-            .into_iter()
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| entry.metadata().ok())
-            .filter(|metadata| metadata.is_file())
-            .fold(0, |acc, m| acc + m.len())
-    }
-}
 
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.

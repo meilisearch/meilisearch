@@ -4,7 +4,7 @@ description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch-http"
-version = "0.27.2"
+version = "0.28.0"
 
 [[bin]]
 name = "meilisearch"
@@ -45,7 +45,7 @@ itertools = "0.10.3"
 jsonwebtoken = "8.0.1"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-error = { path = "../meilisearch-error" }
+meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
@@ -57,10 +57,12 @@ platform-dirs = "0.3.0"
 rand = "0.8.5"
 rayon = "1.5.1"
 regex = "1.5.5"
+reqwest = { version = "0.11.4", features = ["rustls-tls", "json"], default-features = false }
 rustls = "0.20.4"
 rustls-pemfile = "0.3.0"
 segment = { version = "0.2.0", optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
+serde-cs = "0.2.3"
 serde_json = { version = "1.0.79", features = ["preserve_order"] }
 sha2 = "0.10.2"
 siphasher = "0.3.10"
@@ -73,16 +75,16 @@ thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.17.0", features = ["full"] }
 tokio-stream = "0.1.8"
-uuid = { version = "0.8.2", features = ["serde"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 
 [dev-dependencies]
 actix-rt = "2.7.0"
 assert-json-diff = "2.0.1"
+manifest-dir-macros = "0.1.14"
 maplit = "1.0.2"
-paste = "1.0.6"
-serde_url_params = "0.2.1"
 urlencoding = "2.1.0"
+yaup = "0.2.0"
 
 [features]
 default = ["analytics", "mini-dashboard"]
@@ -103,5 +105,5 @@ mini-dashboard = [
 tikv-jemallocator = "0.4.3"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.10/build.zip"
-sha1 = "1adf96592c267425c110bfefc36b7fc6bfb0f93d"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.0/build.zip"
+sha1 = "25d1615c608541375a08bd722c3fd3315f926be6"

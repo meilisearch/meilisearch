@@ -1,13 +1,14 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
-use meilisearch_error::ResponseError;
 use meilisearch_lib::index::{
-    default_crop_length, default_crop_marker, default_highlight_post_tag,
-    default_highlight_pre_tag, SearchQuery, DEFAULT_SEARCH_LIMIT,
+    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
 use serde::Deserialize;
+use serde_cs::vec::CS;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
@@ -28,42 +29,26 @@ pub struct SearchQueryGet {
     q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
-    attributes_to_retrieve: Option<String>,
-    attributes_to_crop: Option<String>,
-    #[serde(default = "default_crop_length")]
+    attributes_to_retrieve: Option<CS<String>>,
+    attributes_to_crop: Option<CS<String>>,
+    #[serde(default = "DEFAULT_CROP_LENGTH")]
     crop_length: usize,
-    attributes_to_highlight: Option<String>,
+    attributes_to_highlight: Option<CS<String>>,
     filter: Option<String>,
     sort: Option<String>,
     #[serde(default = "Default::default")]
-    matches: bool,
-    facets_distribution: Option<String>,
-    #[serde(default = "default_highlight_pre_tag")]
+    show_matches_position: bool,
+    facets: Option<CS<String>>,
+    #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
     highlight_pre_tag: String,
-    #[serde(default = "default_highlight_post_tag")]
+    #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
     highlight_post_tag: String,
-    #[serde(default = "default_crop_marker")]
+    #[serde(default = "DEFAULT_CROP_MARKER")]
     crop_marker: String,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
     fn from(other: SearchQueryGet) -> Self {
-        let attributes_to_retrieve = other
-            .attributes_to_retrieve
-            .map(|attrs| attrs.split(',').map(String::from).collect());
-
-        let attributes_to_crop = other
-            .attributes_to_crop
-            .map(|attrs| attrs.split(',').map(String::from).collect());
-
-        let attributes_to_highlight = other
-            .attributes_to_highlight
-            .map(|attrs| attrs.split(',').map(String::from).collect());
-
-        let facets_distribution = other
-            .facets_distribution
-            .map(|attrs| attrs.split(',').map(String::from).collect());
-
         let filter = match other.filter {
             Some(f) => match serde_json::from_str(&f) {
                 Ok(v) => Some(v),
@@ -72,20 +57,22 @@ impl From<SearchQueryGet> for SearchQuery {
             None => None,
         };
 
-        let sort = other.sort.map(|attr| fix_sort_query_parameters(&attr));
-
         Self {
             q: other.q,
             offset: other.offset,
-            limit: other.limit.unwrap_or(DEFAULT_SEARCH_LIMIT),
-            attributes_to_retrieve,
-            attributes_to_crop,
+            limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+            attributes_to_retrieve: other
+                .attributes_to_retrieve
+                .map(|o| o.into_iter().collect()),
+            attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length,
-            attributes_to_highlight,
+            attributes_to_highlight: other
+                .attributes_to_highlight
+                .map(|o| o.into_iter().collect()),
             filter,
-            sort,
-            matches: other.matches,
-            facets_distribution,
+            sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
+            show_matches_position: other.show_matches_position,
+            facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
@@ -124,10 +111,9 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
             sort_parameters.push(current_sort.to_string());
             merge = true;
         } else if merge && !sort_parameters.is_empty() {
-            sort_parameters
-                .last_mut()
-                .unwrap()
-                .push_str(&format!(",{}", current_sort));
+            let s = sort_parameters.last_mut().unwrap();
+            s.push(',');
+            s.push_str(current_sort);
             if current_sort.ends_with("):desc") || current_sort.ends_with("):asc") {
                 merge = false;
             }
@@ -169,10 +155,6 @@ pub async fn search_with_url_query(
 
     let search_result = search_result?;
 
-    // Tests that the nb_hits is always set to false
-    #[cfg(test)]
-    assert!(!search_result.exhaustive_nb_hits);
-
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))
 }
@@ -206,10 +188,6 @@ pub async fn search_with_post(
     analytics.post_search(aggregate);
 
     let search_result = search_result?;
-
-    // Tests that the nb_hits is always set to false
-    #[cfg(test)]
-    assert!(!search_result.exhaustive_nb_hits);
 
     debug!("returns: {:?}", search_result);
     Ok(HttpResponse::Ok().json(search_result))

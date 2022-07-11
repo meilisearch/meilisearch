@@ -72,7 +72,7 @@ async fn clear_all_documents() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert!(response.as_array().unwrap().is_empty());
+    assert!(response["results"].as_array().unwrap().is_empty());
 }
 
 #[actix_rt::test]
@@ -89,7 +89,7 @@ async fn clear_all_documents_empty_index() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert!(response.as_array().unwrap().is_empty());
+    assert!(response["results"].as_array().unwrap().is_empty());
 }
 
 #[actix_rt::test]
@@ -125,8 +125,8 @@ async fn delete_batch() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 1);
-    assert_eq!(response.as_array().unwrap()[0]["id"], 3);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+    assert_eq!(response["results"][0]["id"], json!(3));
 }
 
 #[actix_rt::test]
@@ -143,5 +143,5 @@ async fn delete_no_document_batch() {
         .get_all_documents(GetAllDocumentsOptions::default())
         .await;
     assert_eq!(code, 200);
-    assert_eq!(response.as_array().unwrap().len(), 3);
+    assert_eq!(response["results"].as_array().unwrap().len(), 3);
 }

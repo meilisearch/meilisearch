@@ -1,20 +1,14 @@
-use std::path::PathBuf;
-
-use meilisearch_error::ResponseError;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use super::batch::BatchId;
-use crate::{
-    index::{Settings, Unchecked},
-    index_resolver::{error::IndexResolverError, IndexUid},
-    snapshot::SnapshotJob,
-};
+use crate::index::{Settings, Unchecked};
 
-pub type TaskId = u64;
+pub type TaskId = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -52,7 +46,7 @@ pub enum TaskEvent {
         #[serde(with = "time::serde::rfc3339")]
         OffsetDateTime,
     ),
-    Succeded {
+    Succeeded {
         result: TaskResult,
         #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
         #[serde(with = "time::serde::rfc3339")]
@@ -66,6 +60,22 @@ pub enum TaskEvent {
     },
 }
 
+impl TaskEvent {
+    pub fn succeeded(result: TaskResult) -> Self {
+        Self::Succeeded {
+            result,
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+
+    pub fn failed(error: impl Into<ResponseError>) -> Self {
+        Self::Failed {
+            error: error.into(),
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 /// A task represents an operation that Meilisearch must do.
 /// It's stored on disk and executed from the lowest to highest Task id.
 /// Everytime a new task is created it has a higher Task id than the previous one.
@@ -74,7 +84,10 @@ pub enum TaskEvent {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
-    pub index_uid: IndexUid,
+    /// The name of the index the task is targeting. If it isn't targeting any index (i.e Dump task)
+    /// then this is None
+    // TODO: when next forward breaking dumps, it would be a good idea to move this field inside of
+    // the TaskContent.
     pub content: TaskContent,
     pub events: Vec<TaskEvent>,
 }
@@ -84,7 +97,10 @@ impl Task {
     /// A task is finished when its last state is either `Succeeded` or `Failed`.
     pub fn is_finished(&self) -> bool {
         self.events.last().map_or(false, |event| {
-            matches!(event, TaskEvent::Succeded { .. } | TaskEvent::Failed { .. })
+            matches!(
+                event,
+                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
+            )
         })
     }
 
@@ -98,32 +114,17 @@ impl Task {
             _ => None,
         }
     }
-}
 
-/// A job is like a volatile priority `Task`.
-/// It should be processed as fast as possible and is not stored on disk.
-/// This means, when Meilisearch is closed all your unprocessed jobs will disappear.
-#[derive(Debug, derivative::Derivative)]
-#[derivative(PartialEq)]
-pub enum Job {
-    Dump {
-        #[derivative(PartialEq = "ignore")]
-        ret: oneshot::Sender<Result<oneshot::Sender<()>, IndexResolverError>>,
-        path: PathBuf,
-    },
-    Snapshot(#[derivative(PartialEq = "ignore")] SnapshotJob),
-    Empty,
-}
-
-impl Default for Job {
-    fn default() -> Self {
-        Self::Empty
-    }
-}
-
-impl Job {
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
+    pub fn index_uid(&self) -> Option<&str> {
+        match &self.content {
+            TaskContent::DocumentAddition { index_uid, .. }
+            | TaskContent::DocumentDeletion { index_uid, .. }
+            | TaskContent::SettingsUpdate { index_uid, .. }
+            | TaskContent::IndexDeletion { index_uid }
+            | TaskContent::IndexCreation { index_uid, .. }
+            | TaskContent::IndexUpdate { index_uid, .. } => Some(index_uid.as_str()),
+            TaskContent::Dump { .. } => None,
+        }
     }
 }
 
@@ -139,6 +140,7 @@ pub enum DocumentDeletion {
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
     DocumentAddition {
+        index_uid: IndexUid,
         #[cfg_attr(test, proptest(value = "Uuid::new_v4()"))]
         content_uuid: Uuid,
         #[cfg_attr(test, proptest(strategy = "test::index_document_method_strategy()"))]
@@ -147,19 +149,30 @@ pub enum TaskContent {
         documents_count: usize,
         allow_index_creation: bool,
     },
-    DocumentDeletion(DocumentDeletion),
+    DocumentDeletion {
+        index_uid: IndexUid,
+        deletion: DocumentDeletion,
+    },
     SettingsUpdate {
+        index_uid: IndexUid,
         settings: Settings<Unchecked>,
         /// Indicates whether the task was a deletion
         is_deletion: bool,
         allow_index_creation: bool,
     },
-    IndexDeletion,
+    IndexDeletion {
+        index_uid: IndexUid,
+    },
     IndexCreation {
+        index_uid: IndexUid,
         primary_key: Option<String>,
     },
     IndexUpdate {
+        index_uid: IndexUid,
         primary_key: Option<String>,
+    },
+    Dump {
+        uid: String,
     },
 }
 
