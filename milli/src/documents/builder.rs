@@ -1,9 +1,11 @@
 use std::io::{self, Write};
 
 use grenad::{CompressionType, WriterBuilder};
+use serde::de::Deserializer;
 use serde_json::{to_writer, Value};
 
 use super::{DocumentsBatchIndex, Error, DOCUMENTS_BATCH_INDEX_KEY};
+use crate::documents::serde_impl::DocumentVisitor;
 use crate::Object;
 
 /// The `DocumentsBatchBuilder` provides a way to build a documents batch in the intermediary
@@ -76,6 +78,13 @@ impl<W: Write> DocumentsBatchBuilder<W> {
         self.documents_count += 1;
 
         Ok(())
+    }
+
+    /// Appends a new JSON array of objects into the batch and updates the `DocumentsBatchIndex` accordingly.
+    pub fn append_json_array<R: io::Read>(&mut self, reader: R) -> Result<(), Error> {
+        let mut de = serde_json::Deserializer::from_reader(reader);
+        let mut visitor = DocumentVisitor::new(self);
+        de.deserialize_any(&mut visitor)?
     }
 
     /// Appends a new CSV file into the batch and updates the `DocumentsBatchIndex` accordingly.

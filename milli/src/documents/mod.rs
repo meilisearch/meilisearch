@@ -1,6 +1,7 @@
 mod builder;
 mod enriched;
 mod reader;
+mod serde_impl;
 
 use std::fmt::{self, Debug};
 use std::io;

@@ -337,11 +337,8 @@ fn documents_from_jsonl(reader: impl Read) -> Result<Vec<u8>> {
 
 fn documents_from_json(reader: impl Read) -> Result<Vec<u8>> {
     let mut documents = DocumentsBatchBuilder::new(Vec::new());
-    let list: Vec<Object> = serde_json::from_reader(reader)?;
 
-    for object in list {
-        documents.append_json_object(&object)?;
-    }
+    documents.append_json_array(reader)?;
 
     documents.into_inner().map_err(Into::into)
 }
