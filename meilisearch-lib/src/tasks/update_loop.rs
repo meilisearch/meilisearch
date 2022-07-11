@@ -49,7 +49,7 @@ impl UpdateLoop {
             };
 
             if let Err(e) = self.process_next_batch().await {
-                log::error!("an error occured while processing an update batch: {}", e);
+                log::error!("an error occurred while processing an update batch: {}", e);
             }
         }
     }

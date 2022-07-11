@@ -51,7 +51,7 @@ jobs:
     - uses: hecrj/setup-rust-action@master
       with:
         rust-version: stable
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Build
       run: cargo build --release --locked
     - name: Upload binaries to release
@@ -80,7 +80,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Installing Rust toolchain
         uses: actions-rs/toolchain@v1

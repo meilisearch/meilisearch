@@ -39,7 +39,7 @@ async fn get_task_status() {
     index.wait_task(0).await;
     let (_response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
-    // TODO check resonse format, as per #48
+    // TODO check response format, as per #48
 }
 
 #[actix_rt::test]

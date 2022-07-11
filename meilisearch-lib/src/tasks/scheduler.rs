@@ -189,7 +189,7 @@ impl TaskQueue {
             Entry::Occupied(entry) => {
                 // A task list already exists for this index, all we have to to is to push the new
                 // update to the end of the list. This won't change the order since ids are
-                // monotically increasing.
+                // monotonically increasing.
                 let mut list = entry.get().borrow_mut();
 
                 // We only need the first element to be lower than the one we want to

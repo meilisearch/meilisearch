@@ -23,9 +23,9 @@ jobs:
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v1.3.0
+      uses: Swatinem/rust-cache@v1.4.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
@@ -42,14 +42,14 @@ jobs:
     name: Run tests in debug
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v1.3.0
+        uses: Swatinem/rust-cache@v1.4.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -60,7 +60,7 @@ jobs:
     name: Run Clippy
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -68,7 +68,7 @@ jobs:
           override: true
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v1.3.0
+        uses: Swatinem/rust-cache@v1.4.0
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -79,7 +79,7 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -87,6 +87,6 @@ jobs:
           override: true
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v1.3.0
+        uses: Swatinem/rust-cache@v1.4.0
       - name: Run cargo fmt
         run: cargo fmt --all -- --check

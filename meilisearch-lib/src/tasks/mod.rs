@@ -33,7 +33,7 @@ pub trait BatchHandler: Sync + Send + 'static {
     /// `accept` beforehand.
     async fn process_batch(&self, batch: Batch) -> Batch;
 
-    /// `finish` is called when the result of `process` has been commited to the task store. This
+    /// `finish` is called when the result of `process` has been committed to the task store. This
     /// method can be used to perform cleanup after the update has been completed for example.
     async fn finish(&self, batch: &Batch);
 }
