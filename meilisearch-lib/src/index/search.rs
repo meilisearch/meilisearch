@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
@@ -26,6 +26,8 @@ pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
+pub const DEFAULT_PAGE: fn() -> usize = || 1;
+pub const DEFAULT_HIT_PER_PAGE: fn() -> usize = || 20;
 
 /// The maximum number of results that the engine
 /// will be able to return in one search call.
@@ -36,8 +38,11 @@ pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 pub struct SearchQuery {
     pub q: Option<String>,
     pub offset: Option<usize>,
-    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
-    pub limit: usize,
+    pub limit: Option<usize>,
+    #[serde(default = "DEFAULT_PAGE")]
+    pub page: usize,
+    #[serde(default = "DEFAULT_HIT_PER_PAGE")]
+    pub hits_per_page: usize,
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]
@@ -97,13 +102,28 @@ pub struct SearchHit {
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
-    pub estimated_total_hits: u64,
     pub query: String,
-    pub limit: usize,
-    pub offset: usize,
     pub processing_time_ms: u128,
+    #[serde(flatten)]
+    pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[serde(untagged)]
+pub enum HitsInfo {
+    Pagination {
+        hits_per_page: usize,
+        page: usize,
+        total_pages: usize,
+    },
+    OffsetLimit {
+        limit: usize,
+        offset: usize,
+        estimated_total_hits: usize,
+    },
 }
 
 impl Index {
@@ -125,8 +145,26 @@ impl Index {
 
         // Make sure that a user can't get more documents than the hard limit,
         // we align that on the offset too.
-        let offset = min(query.offset.unwrap_or(0), max_total_hits);
-        let limit = min(query.limit, max_total_hits.saturating_sub(offset));
+        let is_finite_pagination = query.offset.is_none() && query.limit.is_none();
+
+        let (offset, limit) = if is_finite_pagination {
+            // we start at least at page 1.
+            let page = max(query.page, 1);
+            // return at least 1 document.
+            let hits_per_page = max(query.hits_per_page, 1);
+            let offset = min(hits_per_page * (page - 1), max_total_hits);
+            let limit = min(hits_per_page, max_total_hits.saturating_sub(offset));
+
+            (offset, limit)
+        } else {
+            let offset = min(query.offset.unwrap_or(0), max_total_hits);
+            let limit = min(
+                query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+                max_total_hits.saturating_sub(offset),
+            );
+
+            (offset, limit)
+        };
 
         search.offset(offset);
         search.limit(limit);
@@ -251,7 +289,23 @@ impl Index {
             documents.push(hit);
         }
 
-        let estimated_total_hits = candidates.len();
+        let number_of_hits = min(candidates.len() as usize, max_total_hits);
+        let hits_info = if is_finite_pagination {
+            // return at least 1 document.
+            let hits_per_page = max(query.hits_per_page, 1);
+            HitsInfo::Pagination {
+                hits_per_page,
+                page: offset / hits_per_page + 1,
+                // TODO @many: estimation for now but we should ask milli to return an exact value
+                total_pages: (number_of_hits + hits_per_page - 1) / query.hits_per_page,
+            }
+        } else {
+            HitsInfo::OffsetLimit {
+                limit: query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+                offset,
+                estimated_total_hits: number_of_hits,
+            }
+        };
 
         let facet_distribution = match query.facets {
             Some(ref fields) => {
@@ -274,10 +328,8 @@ impl Index {
 
         let result = SearchResult {
             hits: documents,
-            estimated_total_hits,
+            hits_info,
             query: query.q.clone().unwrap_or_default(),
-            limit: query.limit,
-            offset: query.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
             facet_distribution,
         };
