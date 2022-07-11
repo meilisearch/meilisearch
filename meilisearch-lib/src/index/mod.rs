@@ -1,6 +1,7 @@
 pub use search::{
-    MatchingStrategy, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_HIT_PER_PAGE, DEFAULT_PAGE,
+    DEFAULT_SEARCH_LIMIT, MatchingStrategy
 };
 pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
 

@@ -10,7 +10,7 @@ use http::header::CONTENT_TYPE;
 use meilisearch_auth::SearchRules;
 use meilisearch_lib::index::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use meilisearch_lib::index_controller::Stats;
 use meilisearch_lib::MeiliSearch;
@@ -372,6 +372,7 @@ pub struct SearchAggregator {
     // pagination
     max_limit: usize,
     max_offset: usize,
+    finite_pagination: bool,
 
     // formatting
     highlight_pre_tag: bool,
@@ -426,11 +427,18 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
+        if query.limit.is_none() && query.offset.is_none() {
+            ret.max_limit = query.hits_per_page;
+            ret.max_offset = query.page.saturating_sub(1) * query.hits_per_page;
+            ret.finite_pagination = true;
+        } else {
+            ret.max_limit = query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            ret.max_offset = query.offset.unwrap_or_default();
+            ret.finite_pagination = false;
+        }
+
         ret.matching_strategy
             .insert(format!("{:?}", query.matching_strategy), 1);
-
-        ret.max_limit = query.limit;
-        ret.max_offset = query.offset.unwrap_or_default();
 
         ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
