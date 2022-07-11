@@ -21,7 +21,7 @@ use typed_chunk::{write_typed_chunk_into_index, TypedChunk};
 
 use self::enrich::enrich_documents_batch;
 pub use self::enrich::{
-    extract_float_from_value, validate_document_id, validate_document_id_value,
+    extract_finite_float_from_value, validate_document_id, validate_document_id_value,
     validate_geo_from_json, DocumentId,
 };
 pub use self::helpers::{

@@ -326,11 +326,23 @@ pub fn validate_document_id_value(document_id: Value) -> Result<StdResult<String
 
 /// Try to extract an `f64` from a JSON `Value` and return the `Value`
 /// in the `Err` variant if it failed.
-pub fn extract_float_from_value(value: Value) -> StdResult<f64, Value> {
-    match value {
-        Value::Number(ref n) => n.as_f64().ok_or(value),
-        Value::String(ref s) => s.parse::<f64>().map_err(|_| value),
-        value => Err(value),
+pub fn extract_finite_float_from_value(value: Value) -> StdResult<f64, Value> {
+    let number = match value {
+        Value::Number(ref n) => match n.as_f64() {
+            Some(number) => number,
+            None => return Err(value),
+        },
+        Value::String(ref s) => match s.parse::<f64>() {
+            Ok(number) => number,
+            Err(_) => return Err(value),
+        },
+        value => return Err(value),
+    };
+
+    if number.is_finite() {
+        Ok(number)
+    } else {
+        Err(value)
     }
 }
 
@@ -340,7 +352,7 @@ pub fn validate_geo_from_json(id: &DocumentId, bytes: &[u8]) -> Result<StdResult
     match serde_json::from_slice(bytes).map_err(InternalError::SerdeJson)? {
         Value::Object(mut object) => match (object.remove("lat"), object.remove("lng")) {
             (Some(lat), Some(lng)) => {
-                match (extract_float_from_value(lat), extract_float_from_value(lng)) {
+                match (extract_finite_float_from_value(lat), extract_finite_float_from_value(lng)) {
                     (Ok(_), Ok(_)) => Ok(Ok(())),
                     (Err(value), Ok(_)) => Ok(Err(BadLatitude { document_id: debug_id(), value })),
                     (Ok(_), Err(value)) => Ok(Err(BadLongitude { document_id: debug_id(), value })),

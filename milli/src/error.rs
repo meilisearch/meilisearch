@@ -152,11 +152,11 @@ pub enum GeoError {
     MissingLatitude { document_id: Value },
     #[error("Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")]
     MissingLongitude { document_id: Value },
-    #[error("Could not parse latitude nor longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{lat}` and `{lng}`.")]
+    #[error("Could not parse latitude nor longitude in the document with the id: `{document_id}`. Was expecting finite numbers but instead got `{lat}` and `{lng}`.")]
     BadLatitudeAndLongitude { document_id: Value, lat: Value, lng: Value },
-    #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
+    #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
     BadLatitude { document_id: Value, value: Value },
-    #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
+    #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
     BadLongitude { document_id: Value, value: Value },
 }
 
