@@ -204,7 +204,9 @@ impl PrimaryKey<'_> {
     /// can have depending of the first level name and deepnes of the objects.
     fn possible_level_names(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
         let name = self.name();
-        iter::successors(Some((name, "")), |(curr, _)| curr.rsplit_once(PRIMARY_KEY_SPLIT_SYMBOL))
+        name.match_indices(PRIMARY_KEY_SPLIT_SYMBOL)
+            .map(move |(i, _)| (&name[..i], &name[i + PRIMARY_KEY_SPLIT_SYMBOL.len_utf8()..]))
+            .chain(iter::once((name, "")))
     }
 }
 

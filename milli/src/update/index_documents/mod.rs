@@ -1198,7 +1198,7 @@ mod tests {
         let error = builder.execute().unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a number but instead got `"lol"`."#
+            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `"lol"`."#
         );
 
         let documents = documents!([
@@ -1212,7 +1212,7 @@ mod tests {
         let error = builder.execute().unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a number but instead got `[12,13]`."#
+            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `[12,13]`."#
         );
 
         let documents = documents!([
@@ -1226,7 +1226,7 @@ mod tests {
         let error = builder.execute().unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse longitude in the document with the id: `0`. Was expecting a number but instead got `"hello"`."#
+            r#"Could not parse longitude in the document with the id: `0`. Was expecting a finite number but instead got `"hello"`."#
         );
     }
 
