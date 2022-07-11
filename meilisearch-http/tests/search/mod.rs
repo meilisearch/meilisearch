@@ -567,7 +567,7 @@ async fn placeholder_search_is_hard_limited() {
         .await;
 
     index
-        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } }))
         .await;
     index.wait_task(1).await;
 
@@ -636,7 +636,7 @@ async fn search_is_hard_limited() {
         .await;
 
     index
-        .update_settings(json!({ "pagination": { "limitedTo": 10_000 } }))
+        .update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } }))
         .await;
     index.wait_task(1).await;
 

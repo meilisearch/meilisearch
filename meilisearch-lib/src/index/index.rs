@@ -4,9 +4,10 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
+use walkdir::WalkDir;
 
 use fst::IntoStreamer;
-use milli::heed::{EnvOpenOptions, RoTxn};
+use milli::heed::{CompactionOption, EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
@@ -14,8 +15,7 @@ use serde_json::{Map, Value};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::index::search::DEFAULT_PAGINATION_LIMITED_TO;
-use crate::EnvSizer;
+use crate::index::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 
 use super::error::IndexError;
 use super::error::Result;
@@ -202,9 +202,9 @@ impl Index {
         };
 
         let pagination = PaginationSettings {
-            limited_to: Setting::Set(
-                self.pagination_limited_to(txn)?
-                    .unwrap_or(DEFAULT_PAGINATION_LIMITED_TO),
+            max_total_hits: Setting::Set(
+                self.pagination_max_total_hits(txn)?
+                    .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
             ),
         };
 
@@ -245,7 +245,7 @@ impl Index {
         let fields_ids_map = self.fields_ids_map(&txn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
+        let iter = self.all_documents(&txn)?.skip(offset).take(limit);
 
         let mut documents = Vec::new();
 
@@ -302,7 +302,12 @@ impl Index {
     }
 
     pub fn size(&self) -> u64 {
-        self.env.size()
+        WalkDir::new(self.inner.path())
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|metadata| metadata.is_file())
+            .fold(0, |acc, m| acc + m.len())
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {
@@ -310,9 +315,7 @@ impl Index {
         create_dir_all(&dst)?;
         dst.push("data.mdb");
         let _txn = self.write_txn()?;
-        self.inner
-            .env
-            .copy_to_path(dst, milli::heed::CompactionOption::Enabled)?;
+        self.inner.copy_to_path(dst, CompactionOption::Enabled)?;
         Ok(())
     }
 }

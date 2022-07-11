@@ -318,7 +318,7 @@ make_setting_route!(
             "Pagination Updated".to_string(),
             json!({
                 "pagination": {
-                    "limited_to": setting.as_ref().and_then(|s| s.limited_to.set()),
+                    "max_total_hits": setting.as_ref().and_then(|s| s.max_total_hits.set()),
                 },
             }),
             Some(req),
@@ -349,7 +349,9 @@ generate_configure!(
     stop_words,
     synonyms,
     ranking_rules,
-    typo_tolerance
+    typo_tolerance,
+    pagination,
+    faceting
 );
 
 pub async fn update_all(
@@ -408,6 +410,18 @@ pub async fn update_all(
                         .set()
                         .map(|s| s.two_typos.set()))
                     .flatten(),
+            },
+            "faceting": {
+                "max_values_per_facet": settings.faceting
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.max_values_per_facet.as_ref().set()),
+            },
+            "pagination": {
+                "max_total_hits": settings.pagination
+                    .as_ref()
+                    .set()
+                    .and_then(|s| s.max_total_hits.as_ref().set()),
             },
         }),
         Some(&req),

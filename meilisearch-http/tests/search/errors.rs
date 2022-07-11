@@ -45,26 +45,18 @@ async fn search_invalid_highlight_and_crop_tags() {
 
     for field in fields {
         // object
-        index
-            .search(
-                json!({field.to_string(): {"marker": "<crop>"}}),
-                |response, code| {
-                    assert_eq!(code, 400, "field {} passing object: {}", &field, response);
-                    assert_eq!(response["code"], "bad_request");
-                },
-            )
+        let (response, code) = index
+            .search_post(json!({field.to_string(): {"marker": "<crop>"}}))
             .await;
+        assert_eq!(code, 400, "field {} passing object: {}", &field, response);
+        assert_eq!(response["code"], "bad_request");
 
         // array
-        index
-            .search(
-                json!({field.to_string(): ["marker", "<crop>"]}),
-                |response, code| {
-                    assert_eq!(code, 400, "field {} passing array: {}", &field, response);
-                    assert_eq!(response["code"], "bad_request");
-                },
-            )
+        let (response, code) = index
+            .search_post(json!({field.to_string(): ["marker", "<crop>"]}))
             .await;
+        assert_eq!(code, 400, "field {} passing array: {}", &field, response);
+        assert_eq!(response["code"], "bad_request");
     }
 }
 
@@ -115,7 +107,7 @@ async fn filter_invalid_syntax_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["title & Glass"]]}), |response, code| {
+        .search(json!({"filter": ["title & Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -172,7 +164,7 @@ async fn filter_invalid_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["many = Glass"]]}), |response, code| {
+        .search(json!({"filter": ["many = Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -226,7 +218,7 @@ async fn filter_reserved_geo_attribute_array() {
         "link": "https://docs.meilisearch.com/errors#invalid_filter"
     });
     index
-        .search(json!({"filter": [["_geo = Glass"]]}), |response, code| {
+        .search(json!({"filter": ["_geo = Glass"]}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })
@@ -281,7 +273,7 @@ async fn filter_reserved_attribute_array() {
     });
     index
         .search(
-            json!({"filter": [["_geoDistance = Glass"]]}),
+            json!({"filter": ["_geoDistance = Glass"]}),
             |response, code| {
                 assert_eq!(response, expected_response);
                 assert_eq!(code, 400);

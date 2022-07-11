@@ -14,7 +14,6 @@ use serde_json::Value;
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, StarOr};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -30,16 +29,16 @@ pub struct SearchQueryGet {
     q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
-    attributes_to_retrieve: Option<CS<StarOr<String>>>,
-    attributes_to_crop: Option<CS<StarOr<String>>>,
+    attributes_to_retrieve: Option<CS<String>>,
+    attributes_to_crop: Option<CS<String>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]
     crop_length: usize,
-    attributes_to_highlight: Option<CS<StarOr<String>>>,
+    attributes_to_highlight: Option<CS<String>>,
     filter: Option<String>,
     sort: Option<String>,
     #[serde(default = "Default::default")]
     show_matches_position: bool,
-    facets: Option<CS<StarOr<String>>>,
+    facets: Option<CS<String>>,
     #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
     highlight_pre_tag: String,
     #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
@@ -62,14 +61,18 @@ impl From<SearchQueryGet> for SearchQuery {
             q: other.q,
             offset: other.offset,
             limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-            attributes_to_retrieve: other.attributes_to_retrieve.and_then(fold_star_or),
-            attributes_to_crop: other.attributes_to_crop.and_then(fold_star_or),
+            attributes_to_retrieve: other
+                .attributes_to_retrieve
+                .map(|o| o.into_iter().collect()),
+            attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length,
-            attributes_to_highlight: other.attributes_to_highlight.and_then(fold_star_or),
+            attributes_to_highlight: other
+                .attributes_to_highlight
+                .map(|o| o.into_iter().collect()),
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position,
-            facets: other.facets.and_then(fold_star_or),
+            facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,

@@ -75,7 +75,7 @@ thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = { version = "1.17.0", features = ["full"] }
 tokio-stream = "0.1.8"
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 
 [dev-dependencies]
@@ -83,8 +83,8 @@ actix-rt = "2.7.0"
 assert-json-diff = "2.0.1"
 manifest-dir-macros = "0.1.14"
 maplit = "1.0.2"
-serde_url_params = "0.2.1"
 urlencoding = "2.1.0"
+yaup = "0.2.0"
 
 [features]
 default = ["analytics", "mini-dashboard"]
@@ -105,5 +105,5 @@ mini-dashboard = [
 tikv-jemallocator = "0.4.3"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.1.10/build.zip"
-sha1 = "1adf96592c267425c110bfefc36b7fc6bfb0f93d"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.0/build.zip"
+sha1 = "25d1615c608541375a08bd722c3fd3315f926be6"

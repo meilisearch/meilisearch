@@ -574,7 +574,7 @@ impl DocumentsAggregator {
         let content_type = request
             .headers()
             .get(CONTENT_TYPE)
-            .map(|s| s.to_str().unwrap_or("unknown"))
+            .and_then(|s| s.to_str().ok())
             .unwrap_or("unknown")
             .to_string();
         ret.content_types.insert(content_type);
@@ -591,13 +591,13 @@ impl DocumentsAggregator {
 
         self.updated |= other.updated;
         // we can't create a union because there is no `into_union` method
-        for user_agent in other.user_agents.into_iter() {
+        for user_agent in other.user_agents {
             self.user_agents.insert(user_agent);
         }
-        for primary_key in other.primary_keys.into_iter() {
+        for primary_key in other.primary_keys {
             self.primary_keys.insert(primary_key);
         }
-        for content_type in other.content_types.into_iter() {
+        for content_type in other.content_types {
             self.content_types.insert(content_type);
         }
         self.index_creation |= other.index_creation;

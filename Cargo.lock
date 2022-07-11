@@ -1123,8 +1123,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
+version = "0.31.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1148,8 +1148,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
+version = "0.31.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
 dependencies = [
  "serde_json",
 ]
@@ -1661,8 +1661,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
+version = "0.31.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
 dependencies = [
  "serde_json",
 ]
@@ -2003,7 +2003,6 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 name = "meilisearch-auth"
 version = "0.28.0"
 dependencies = [
- "base64",
  "enum-iterator",
  "hmac",
  "meilisearch-types",
@@ -2014,7 +2013,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time 0.3.9",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -2069,7 +2068,6 @@ dependencies = [
  "serde",
  "serde-cs",
  "serde_json",
- "serde_url_params",
  "sha-1",
  "sha2",
  "siphasher",
@@ -2084,9 +2082,10 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "urlencoding",
- "uuid",
+ "uuid 1.1.2",
  "vergen",
  "walkdir",
+ "yaup",
  "zip",
 ]
 
@@ -2147,7 +2146,7 @@ dependencies = [
  "thiserror",
  "time 0.3.9",
  "tokio",
- "uuid",
+ "uuid 1.1.2",
  "walkdir",
  "whoami",
 ]
@@ -2189,8 +2188,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.29.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.29.3#f1d848bb9add86b9414d110a083dfa0462d5d636"
+version = "0.31.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
 dependencies = [
  "bimap",
  "bincode",
@@ -2229,7 +2228,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time 0.3.9",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -2515,7 +2514,7 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.2.0"
+version = "0.28.0"
 dependencies = [
  "big_s",
  "serde_json",
@@ -3114,16 +3113,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_url_params"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c43307d0640738af32fe8d01e47119bc0fc8a686be470a44a586caff76dfb34"
-dependencies = [
- "serde",
- "url",
-]
-
-[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3688,6 +3677,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "uuid"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
+dependencies = [
+ "getrandom",
  "serde",
 ]
 
@@ -3993,6 +3991,16 @@ name = "yada"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d12cb7a57bbf2ab670ed9545bae3648048547f9039279a89ce000208e585c1"
+
+[[package]]
+name = "yaup"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc9ef6963f7e857050aabf31ebc44184f278bcfec4c3671552c1a916b152b45"
+dependencies = [
+ "serde",
+ "url",
+]
 
 [[package]]
 name = "zerocopy"
