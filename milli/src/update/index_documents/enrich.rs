@@ -256,7 +256,7 @@ impl fmt::Debug for DocumentId {
     }
 }
 
-fn contained_in(selector: &str, key: &str) -> bool {
+fn starts_with(selector: &str, key: &str) -> bool {
     selector.strip_prefix(key).map_or(false, |tail| {
         tail.chars().next().map(|c| c == PRIMARY_KEY_SPLIT_SYMBOL).unwrap_or(true)
     })
@@ -282,12 +282,7 @@ pub fn fetch_matching_values_in_object(
             format!("{}{}{}", base_key, PRIMARY_KEY_SPLIT_SYMBOL, key)
         };
 
-        // here if the user only specified `doggo` we need to iterate in all the fields of `doggo`
-        // so we check the contained_in on both side.
-        let should_continue =
-            contained_in(selector, &base_key) || contained_in(&base_key, selector);
-
-        if should_continue {
+        if starts_with(selector, &base_key) {
             match value {
                 Value::Object(object) => {
                     fetch_matching_values_in_object(object, selector, &base_key, output)
