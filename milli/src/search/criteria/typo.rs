@@ -368,7 +368,7 @@ mod test {
             excluded_candidates: &RoaringBitmap::new(),
         };
 
-        let parent = Initial::new(query_tree, facet_candidates);
+        let parent = Initial::new(&context, query_tree, facet_candidates, false);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -405,7 +405,7 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(Some(query_tree), facet_candidates);
+        let parent = Initial::new(&context, Some(query_tree), facet_candidates, false);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -439,7 +439,7 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(query_tree, Some(facet_candidates.clone()));
+        let parent = Initial::new(&context, query_tree, Some(facet_candidates.clone()), false);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -476,7 +476,8 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(Some(query_tree), Some(facet_candidates.clone()));
+        let parent =
+            Initial::new(&context, Some(query_tree), Some(facet_candidates.clone()), false);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);

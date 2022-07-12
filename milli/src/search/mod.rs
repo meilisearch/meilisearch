@@ -47,6 +47,7 @@ pub struct Search<'a> {
     terms_matching_strategy: TermsMatchingStrategy,
     authorize_typos: bool,
     words_limit: usize,
+    exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -61,6 +62,7 @@ impl<'a> Search<'a> {
             sort_criteria: None,
             terms_matching_strategy: TermsMatchingStrategy::default(),
             authorize_typos: true,
+            exhaustive_number_hits: false,
             words_limit: 10,
             rtxn,
             index,
@@ -104,6 +106,11 @@ impl<'a> Search<'a> {
 
     pub fn filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
         self.filter = Some(condition);
+        self
+    }
+
+    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
+        self.exhaustive_number_hits = exhaustive_number_hits;
         self
     }
 
@@ -189,6 +196,7 @@ impl<'a> Search<'a> {
             primitive_query,
             filtered_candidates,
             self.sort_criteria.clone(),
+            self.exhaustive_number_hits,
         )?;
 
         match self.index.distinct_field(self.rtxn)? {
@@ -262,6 +270,7 @@ impl fmt::Debug for Search<'_> {
             terms_matching_strategy,
             authorize_typos,
             words_limit,
+            exhaustive_number_hits,
             rtxn: _,
             index: _,
         } = self;
@@ -273,6 +282,7 @@ impl fmt::Debug for Search<'_> {
             .field("sort_criteria", sort_criteria)
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("authorize_typos", authorize_typos)
+            .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("words_limit", words_limit)
             .finish()
     }

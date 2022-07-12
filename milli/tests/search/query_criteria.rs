@@ -51,7 +51,7 @@ macro_rules! test_criterion {
     };
 }
 
-test_criterion!(none_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![], vec![]);
+test_criterion!(none_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![], vec![]);
 test_criterion!(none_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![], vec![]);
 test_criterion!(words_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Words], vec![]);
 test_criterion!(
