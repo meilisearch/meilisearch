@@ -1628,6 +1628,58 @@ mod tests {
     }
 
     #[test]
+    fn retrieve_a_b_nested_document_id() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key("a.b".to_owned());
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!({ "a" : { "b" : { "c" :  1 }}});
+        let indexing_config = IndexDocumentsConfig::default();
+        let builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        let (_builder, user_error) = builder.add_documents(content).unwrap();
+
+        // There must be an issue with the primary key no present in the given document
+        user_error.unwrap_err();
+    }
+
+    #[test]
+    fn retrieve_a_b_c_nested_document_id() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+        let config = IndexerConfig::default();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        builder.set_primary_key("a.b.c".to_owned());
+        builder.execute(|_| ()).unwrap();
+
+        let content = documents!({ "a" : { "b" : { "c" :  1 }}});
+        let indexing_config = IndexDocumentsConfig::default();
+        let builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
+        assert!(external_documents_ids.get("1").is_some());
+    }
+
+    #[test]
     fn test_facets_generation() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();

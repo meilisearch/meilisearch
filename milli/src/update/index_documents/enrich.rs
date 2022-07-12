@@ -257,12 +257,9 @@ impl fmt::Debug for DocumentId {
 }
 
 fn contained_in(selector: &str, key: &str) -> bool {
-    selector.starts_with(key)
-        && selector[key.len()..]
-            .chars()
-            .next()
-            .map(|c| c == PRIMARY_KEY_SPLIT_SYMBOL)
-            .unwrap_or(true)
+    selector.strip_prefix(key).map_or(false, |tail| {
+        tail.chars().next().map(|c| c == PRIMARY_KEY_SPLIT_SYMBOL).unwrap_or(true)
+    })
 }
 
 pub fn fetch_matching_values(value: Value, selector: &str, output: &mut Vec<Value>) {
