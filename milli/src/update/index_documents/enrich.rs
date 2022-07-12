@@ -30,7 +30,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     let mut cursor = reader.into_cursor();
     let mut documents_batch_index = cursor.documents_batch_index().clone();
     let mut external_ids = tempfile::tempfile().map(grenad::Writer::new)?;
-    let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+    let mut uuid_buffer = [0; uuid::fmt::Hyphenated::LENGTH];
 
     // The primary key *field id* that has already been set for this index or the one
     // we will guess by searching for the first key that contains "id" as a substring.
@@ -119,7 +119,7 @@ fn fetch_or_generate_document_id(
     documents_batch_index: &DocumentsBatchIndex,
     primary_key: PrimaryKey,
     autogenerate_docids: bool,
-    uuid_buffer: &mut [u8; uuid::adapter::Hyphenated::LENGTH],
+    uuid_buffer: &mut [u8; uuid::fmt::Hyphenated::LENGTH],
     count: u32,
 ) -> Result<StdResult<DocumentId, UserError>> {
     match primary_key {
@@ -134,7 +134,7 @@ fn fetch_or_generate_document_id(
                     }
                 }
                 None if autogenerate_docids => {
-                    let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(uuid_buffer);
+                    let uuid = uuid::Uuid::new_v4().as_hyphenated().encode_lower(uuid_buffer);
                     Ok(Ok(DocumentId::generated(uuid.to_string(), count)))
                 }
                 None => Ok(Err(UserError::MissingDocumentId {

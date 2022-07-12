@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::fs::{create_dir_all, remove_dir_all, File};
-use std::io::{self, BufReader, Cursor, Read, Seek};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek};
 use std::num::ParseFloatError;
 use std::path::Path;
 
@@ -138,7 +138,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     }
 }
 
-pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<impl BufRead + Seek> {
+pub fn documents_from(filename: &str, filetype: &str) -> DocumentsBatchReader<impl BufRead + Seek> {
     let reader =
         File::open(filename).expect(&format!("could not find the dataset in: {}", filename));
     let reader = BufReader::new(reader);

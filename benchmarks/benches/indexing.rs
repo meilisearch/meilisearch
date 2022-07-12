@@ -170,12 +170,13 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -185,12 +186,13 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -460,12 +462,13 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let indexing_config =
                     IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -476,12 +479,13 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let indexing_config =
                     IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -680,12 +684,13 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -695,12 +700,13 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
                 wtxn.commit().unwrap();
 
@@ -1079,12 +1085,13 @@ fn reindexing_geo(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
@@ -1095,12 +1102,13 @@ fn reindexing_geo(c: &mut Criterion) {
                 let config = IndexerConfig::default();
                 let indexing_config = IndexDocumentsConfig::default();
                 let mut wtxn = index.write_txn().unwrap();
-                let mut builder =
+                let builder =
                     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ())
                         .unwrap();
 
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                builder.add_documents(documents).unwrap();
+                let (builder, user_error) = builder.add_documents(documents).unwrap();
+                user_error.unwrap();
                 builder.execute().unwrap();
 
                 wtxn.commit().unwrap();
