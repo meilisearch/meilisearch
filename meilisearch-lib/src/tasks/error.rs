@@ -12,6 +12,8 @@ pub type Result<T> = std::result::Result<T, TaskError>;
 pub enum TaskError {
     #[error("Task `{0}` not found.")]
     UnexistingTask(TaskId),
+    #[error("Invalid task id `{0}`.")]
+    InvalidTask(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -28,6 +30,7 @@ impl ErrorCode for TaskError {
     fn error_code(&self) -> Code {
         match self {
             TaskError::UnexistingTask(_) => Code::TaskNotFound,
+            TaskError::InvalidTask(_) => Code::TaskNotFound,
             TaskError::Internal(_) => Code::Internal,
         }
     }

@@ -43,6 +43,23 @@ async fn get_task_status() {
 }
 
 #[actix_rt::test]
+async fn get_invalid_task() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let (response, code) = index.service.get("/tasks/hello").await;
+
+    let expected_response = json!({
+        "message": "Invalid task id `hello`.",
+        "code": "task_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#task_not_found"
+    });
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 404);
+}
+
+#[actix_rt::test]
 async fn list_tasks() {
     let server = Server::new().await;
     let index = server.index("test");
