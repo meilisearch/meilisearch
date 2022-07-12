@@ -85,14 +85,15 @@ pub struct SearchResult {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
 #[serde(untagged)]
 pub enum HitsInfo {
+    #[serde(rename_all = "camelCase")]
     Pagination {
         hits_per_page: usize,
         page: usize,
         total_pages: usize,
     },
+    #[serde(rename_all = "camelCase")]
     OffsetLimit {
         limit: usize,
         offset: usize,
