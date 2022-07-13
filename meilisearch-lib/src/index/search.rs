@@ -148,6 +148,8 @@ impl Index {
         // we align that on the offset too.
         let is_finite_pagination = query.offset.is_none() && query.limit.is_none();
 
+        search.exhaustive_number_hits(is_finite_pagination);
+
         let (offset, limit) = if is_finite_pagination {
             // we start at least at page 1.
             let page = max(query.page, 1);
