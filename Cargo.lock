@@ -644,9 +644,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a26a3df4d9c9231eb1e757fe6b1c66c471e0c2cd5410265e7c3109a726663c4"
+checksum = "2ed19edcd98f5bf6572f48d6f5982d595cb8718e47c6f0066d942b280575ff02"
 dependencies = [
  "character_converter",
  "cow-utils",
@@ -1124,7 +1124,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#bf4633797a850ed9b83707a213e649d6d4c57623"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1149,7 +1149,7 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#bf4633797a850ed9b83707a213e649d6d4c57623"
 dependencies = [
  "serde_json",
 ]
@@ -1662,7 +1662,7 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#bf4633797a850ed9b83707a213e649d6d4c57623"
 dependencies = [
  "serde_json",
 ]
@@ -2013,7 +2013,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time 0.3.9",
- "uuid 1.1.2",
+ "uuid",
 ]
 
 [[package]]
@@ -2082,7 +2082,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "urlencoding",
- "uuid 1.1.2",
+ "uuid",
  "vergen",
  "walkdir",
  "yaup",
@@ -2146,7 +2146,7 @@ dependencies = [
  "thiserror",
  "time 0.3.9",
  "tokio",
- "uuid 1.1.2",
+ "uuid",
  "walkdir",
  "whoami",
 ]
@@ -2189,7 +2189,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.31.1#83ad1aaf0552db9f63fc21ae9fe3976e61577dc8"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#bf4633797a850ed9b83707a213e649d6d4c57623"
 dependencies = [
  "bimap",
  "bincode",
@@ -2228,7 +2228,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time 0.3.9",
- "uuid 0.8.2",
+ "uuid",
 ]
 
 [[package]]
@@ -3669,15 +3669,6 @@ name = "utf8-width"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5190c9442dcdaf0ddd50f37420417d219ae5261bbf5db120d0f9bab996c9cba1"
-
-[[package]]
-name = "uuid"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
-dependencies = [
- "getrandom",
-]
 
 [[package]]
 name = "uuid"
