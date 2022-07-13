@@ -199,10 +199,7 @@ async fn get_task(
         .parse::<TaskId>()
         .map_err(|_| TaskError::InvalidTask(task_id.into_inner()))?;
 
-    let task: TaskView = meilisearch
-        .get_task(id, filters)
-        .await?
-        .into();
+    let task: TaskView = meilisearch.get_task(id, filters).await?.into();
 
     Ok(HttpResponse::Ok().json(task))
 }
