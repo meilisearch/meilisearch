@@ -30,7 +30,7 @@ impl ErrorCode for TaskError {
     fn error_code(&self) -> Code {
         match self {
             TaskError::UnexistingTask(_) => Code::TaskNotFound,
-            TaskError::InvalidTask(_) => Code::TaskNotFound,
+            TaskError::InvalidTask(_) => Code::InvalidTaskId,
             TaskError::Internal(_) => Code::Internal,
         }
     }

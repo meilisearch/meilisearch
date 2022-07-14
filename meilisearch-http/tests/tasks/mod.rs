@@ -50,13 +50,13 @@ async fn get_invalid_task() {
 
     let expected_response = json!({
         "message": "Invalid task id `hello`.",
-        "code": "task_not_found",
+        "code": "invalid_task_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#task_not_found"
+        "link": "https://docs.meilisearch.com/errors#invalid_task_id"
     });
 
     assert_eq!(response, expected_response);
-    assert_eq!(code, 404);
+    assert_eq!(code, 400);
 }
 
 #[actix_rt::test]
