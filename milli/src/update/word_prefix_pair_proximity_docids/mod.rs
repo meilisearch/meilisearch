@@ -88,7 +88,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 
         if !prefixes.is_empty() {
             let mut cursor = new_word_pair_proximity_docids.into_cursor()?;
-            Self::execute_on_word_pairs_and_prefixes(
+            execute_on_word_pairs_and_prefixes(
                 &mut cursor,
                 |cursor| {
                     if let Some((key, value)) = cursor.move_on_next()? {
@@ -113,7 +113,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 },
             )?;
         }
-        dbg!(count);
 
         let prefixes = PrefixTrieNode::from_sorted_prefixes(
             new_prefix_fst_words
@@ -136,7 +135,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 tempfile::tempfile()?,
             );
 
-            Self::execute_on_word_pairs_and_prefixes(
+            execute_on_word_pairs_and_prefixes(
                 &mut db_iter,
                 |db_iter| db_iter.next().transpose().map_err(|e| e.into()),
                 &prefixes,
@@ -145,7 +144,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 |key, value| writer.insert(key, value).map_err(|e| e.into()),
             )?;
             drop(db_iter);
-            writer_into_lmdb_database(
+            writer_of_new_elements_into_lmdb_database(
                 self.wtxn,
                 *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
                 writer,
@@ -170,73 +169,71 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 
         Ok(())
     }
-
-    fn execute_on_word_pairs_and_prefixes<Iter>(
-        iter: &mut Iter,
-        mut next_word_pair_proximity: impl for<'a> FnMut(
-            &'a mut Iter,
-        ) -> Result<
-            Option<((&'a [u8], &'a [u8], u8), &'a [u8])>,
-        >,
-        prefixes: &PrefixTrieNode,
-        allocations: &mut Allocations,
-        max_proximity: u8,
-        mut insert: impl for<'a> FnMut(&'a [u8], &'a [u8]) -> Result<()>,
-    ) -> Result<()> {
-        let mut batch = PrefixAndProximityBatch::default();
-        let mut prev_word2_start = 0;
-
-        let mut prefix_search_start = PrefixTrieNodeSearchStart(0);
-        let mut empty_prefixes = false;
-
-        let mut prefix_buffer = allocations.take_byte_vector();
-
-        while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
-            if proximity > max_proximity {
-                continue;
-            };
-            let word2_start_different_than_prev = word2[0] != prev_word2_start;
-            if empty_prefixes && !word2_start_different_than_prev {
-                continue;
-            }
-            let word1_different_than_prev = word1 != batch.word1;
-            if word1_different_than_prev || word2_start_different_than_prev {
-                batch.flush(allocations, &mut insert)?;
-                if word1_different_than_prev {
-                    prefix_search_start.0 = 0;
-                    batch.word1.clear();
-                    batch.word1.extend_from_slice(word1);
-                }
-                if word2_start_different_than_prev {
-                    // word2_start_different_than_prev == true
-                    prev_word2_start = word2[0];
-                }
-                empty_prefixes = !prefixes.set_search_start(word2, &mut prefix_search_start);
-            }
-
-            if !empty_prefixes {
-                prefixes.for_each_prefix_of(
-                    word2,
-                    &mut prefix_buffer,
-                    &prefix_search_start,
-                    |prefix_buffer| {
-                        let mut value = allocations.take_byte_vector();
-                        value.extend_from_slice(&data);
-                        let prefix_len = prefix_buffer.len();
-                        prefix_buffer.push(0);
-                        prefix_buffer.push(proximity);
-                        batch.insert(&prefix_buffer, value, allocations);
-                        prefix_buffer.truncate(prefix_len);
-                    },
-                );
-                prefix_buffer.clear();
-            }
-        }
-        batch.flush(allocations, &mut insert)?;
-        Ok(())
-    }
 }
+fn execute_on_word_pairs_and_prefixes<Iter>(
+    iter: &mut Iter,
+    mut next_word_pair_proximity: impl for<'a> FnMut(
+        &'a mut Iter,
+    ) -> Result<
+        Option<((&'a [u8], &'a [u8], u8), &'a [u8])>,
+    >,
+    prefixes: &PrefixTrieNode,
+    allocations: &mut Allocations,
+    max_proximity: u8,
+    mut insert: impl for<'a> FnMut(&'a [u8], &'a [u8]) -> Result<()>,
+) -> Result<()> {
+    let mut batch = PrefixAndProximityBatch::default();
+    let mut prev_word2_start = 0;
 
+    let mut prefix_search_start = PrefixTrieNodeSearchStart(0);
+    let mut empty_prefixes = false;
+
+    let mut prefix_buffer = allocations.take_byte_vector();
+
+    while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
+        if proximity > max_proximity {
+            continue;
+        };
+        let word2_start_different_than_prev = word2[0] != prev_word2_start;
+        if empty_prefixes && !word2_start_different_than_prev {
+            continue;
+        }
+        let word1_different_than_prev = word1 != batch.word1;
+        if word1_different_than_prev || word2_start_different_than_prev {
+            batch.flush(allocations, &mut insert)?;
+            if word1_different_than_prev {
+                prefix_search_start.0 = 0;
+                batch.word1.clear();
+                batch.word1.extend_from_slice(word1);
+            }
+            if word2_start_different_than_prev {
+                // word2_start_different_than_prev == true
+                prev_word2_start = word2[0];
+            }
+            empty_prefixes = !prefixes.set_search_start(word2, &mut prefix_search_start);
+        }
+
+        if !empty_prefixes {
+            prefixes.for_each_prefix_of(
+                word2,
+                &mut prefix_buffer,
+                &prefix_search_start,
+                |prefix_buffer| {
+                    let mut value = allocations.take_byte_vector();
+                    value.extend_from_slice(&data);
+                    let prefix_len = prefix_buffer.len();
+                    prefix_buffer.push(0);
+                    prefix_buffer.push(proximity);
+                    batch.insert(&prefix_buffer, value, allocations);
+                    prefix_buffer.truncate(prefix_len);
+                },
+            );
+            prefix_buffer.clear();
+        }
+    }
+    batch.flush(allocations, &mut insert)?;
+    Ok(())
+}
 /**
 A map structure whose keys are (prefix, proximity) and whose values are vectors of bitstrings (serialized roaring bitmaps).
 The keys are sorted and conflicts are resolved by merging the vectors of bitstrings together.
@@ -275,30 +272,32 @@ impl PrefixAndProximityBatch {
             };
         }
 
-        if self.batch.is_empty() {
-            insert_new_key_value!();
-        } else if self.batch.len() == 1 {
-            let (existing_key, existing_data) = &mut self.batch[0];
-            match new_key.cmp(&existing_key) {
-                Ordering::Less => {
-                    insert_new_key_value!(0);
-                }
-                Ordering::Equal => {
-                    existing_data.push(Cow::Owned(new_value));
-                }
-                Ordering::Greater => {
-                    insert_new_key_value!();
+        match self.batch.len() {
+            0 => {
+                insert_new_key_value!();
+            }
+            1 => {
+                let (existing_key, existing_data) = &mut self.batch[0];
+                match new_key.cmp(&existing_key) {
+                    Ordering::Less => {
+                        insert_new_key_value!(0);
+                    }
+                    Ordering::Equal => {
+                        existing_data.push(Cow::Owned(new_value));
+                    }
+                    Ordering::Greater => {
+                        insert_new_key_value!();
+                    }
                 }
             }
-        } else {
-            match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
+            _ => match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
                 Ok(position) => {
                     self.batch[position].1.push(Cow::Owned(new_value));
                 }
                 Err(position) => {
                     insert_new_key_value!(position);
                 }
-            }
+            },
         }
     }
 
@@ -368,17 +367,13 @@ fn insert_into_database(
 }
 
 // This is adapted from `sorter_into_lmdb_database`
-pub fn writer_into_lmdb_database(
+pub fn writer_of_new_elements_into_lmdb_database(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     writer: grenad::Writer<std::fs::File>,
 ) -> Result<()> {
     let file = writer.into_inner()?;
     let reader = grenad::Reader::new(BufReader::new(file))?;
-    let len = reader.len();
-    dbg!(len);
-    let before = Instant::now();
-
     if database.is_empty(wtxn)? {
         let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
         let mut cursor = reader.into_cursor()?;
@@ -389,11 +384,9 @@ pub fn writer_into_lmdb_database(
     } else {
         let mut cursor = reader.into_cursor()?;
         while let Some((k, v)) = cursor.move_on_next()? {
-            insert_into_database(wtxn, database, k, v)?;
+            database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
         }
     }
-
-    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
     Ok(())
 }
 
@@ -454,18 +447,14 @@ impl PrefixTrieNode {
             self.children[search_start.0..].iter().position(|(_, c)| *c >= byte)
         {
             let (_, c) = self.children[search_start.0 + position];
-            // dbg!(position, c, byte);
             if c == byte {
-                // dbg!();
                 search_start.0 += position;
                 true
             } else {
-                // dbg!();
                 search_start.0 = 0;
                 false
             }
         } else {
-            // dbg!();
             search_start.0 = 0;
             false
         }
@@ -546,7 +535,26 @@ impl PrefixTrieNode {
 }
 #[cfg(test)]
 mod tests {
+    use roaring::RoaringBitmap;
+
+    use crate::{CboRoaringBitmapCodec, StrStrU8Codec};
+
     use super::*;
+
+    fn check_prefixes(
+        trie: &PrefixTrieNode,
+        search_start: &PrefixTrieNodeSearchStart,
+        word: &str,
+        expected_prefixes: &[&str],
+    ) {
+        let mut actual_prefixes = vec![];
+        trie.for_each_prefix_of(word.as_bytes(), &mut Vec::new(), &search_start, |x| {
+            let s = String::from_utf8(x.to_owned()).unwrap();
+            actual_prefixes.push(s);
+        });
+        assert_eq!(actual_prefixes, expected_prefixes);
+    }
+
     #[test]
     fn test_trie() {
         let trie = PrefixTrieNode::from_sorted_prefixes(IntoIterator::into_iter([
@@ -567,43 +575,146 @@ mod tests {
             "ta", "te", "th", "ti", "to", "tr", "tra", "tri", "tu", "u", "un", "v", "va", "ve",
             "vi", "vo", "w", "wa", "we", "wh", "wi", "wo", "y", "yo", "z",
         ]));
-        // let mut buffer = String::new();
-        // trie.print(&mut buffer, 0);
-        // buffer.clear();
+
         let mut search_start = PrefixTrieNodeSearchStart(0);
-        let mut buffer = vec![];
 
         let is_empty = !trie.set_search_start("affair".as_bytes(), &mut search_start);
-        println!("{search_start:?}");
-        println!("is empty: {is_empty}");
-        trie.for_each_prefix_of("affair".as_bytes(), &mut buffer, &search_start, |x| {
-            let s = std::str::from_utf8(x).unwrap();
-            println!("{s}");
-        });
-        buffer.clear();
-        trie.for_each_prefix_of("trans".as_bytes(), &mut buffer, &search_start, |x| {
-            let s = std::str::from_utf8(x).unwrap();
-            println!("{s}");
-        });
-        buffer.clear();
+        assert!(!is_empty);
+        assert_eq!(search_start.0, 2);
 
-        trie.for_each_prefix_of("affair".as_bytes(), &mut buffer, &search_start, |x| {
-            let s = std::str::from_utf8(x).unwrap();
-            println!("{s}");
-        });
-        buffer.clear();
-        // trie.for_each_prefix_of("1", |x| {
-        //     println!("{x}");
-        // });
-        // trie.for_each_prefix_of("19", |x| {
-        //     println!("{x}");
-        // });
-        // trie.for_each_prefix_of("21", |x| {
-        //     println!("{x}");
-        // });
-        // let mut buffer = vec![];
-        // trie.for_each_prefix_of("integ", &mut buffer, |x| {
-        //     println!("{x}");
-        // });
+        check_prefixes(&trie, &search_start, "affair", &["a"]);
+        check_prefixes(&trie, &search_start, "shampoo", &["s", "sh", "sha"]);
+
+        let is_empty = !trie.set_search_start("unique".as_bytes(), &mut search_start);
+        assert!(!is_empty);
+        assert_eq!(trie.children[search_start.0].1, b'u');
+
+        check_prefixes(&trie, &search_start, "unique", &["u", "un"]);
+
+        // NOTE: this should fail, because the search start is already beyong 'a'
+        let is_empty = trie.set_search_start("abba".as_bytes(), &mut search_start);
+        assert!(!is_empty);
+        // search start is reset
+        assert_eq!(search_start.0, 0);
+
+        let trie = PrefixTrieNode::from_sorted_prefixes(IntoIterator::into_iter([
+            "arb", "arbre", "cat", "catto",
+        ]));
+        check_prefixes(&trie, &search_start, "arbres", &["arb", "arbre"]);
+        check_prefixes(&trie, &search_start, "cattos", &["cat", "catto"]);
+    }
+
+    #[test]
+    fn test_execute_on_word_pairs_and_prefixes() {
+        let prefixes = PrefixTrieNode::from_sorted_prefixes(IntoIterator::into_iter([
+            "arb", "arbre", "cat", "catto",
+        ]));
+
+        let mut serialised_bitmap123 = vec![];
+        let mut bitmap123 = RoaringBitmap::new();
+        bitmap123.insert(1);
+        bitmap123.insert(2);
+        bitmap123.insert(3);
+        CboRoaringBitmapCodec::serialize_into(&bitmap123, &mut serialised_bitmap123);
+
+        let mut serialised_bitmap456 = vec![];
+        let mut bitmap456 = RoaringBitmap::new();
+        bitmap456.insert(4);
+        bitmap456.insert(5);
+        bitmap456.insert(6);
+        CboRoaringBitmapCodec::serialize_into(&bitmap456, &mut serialised_bitmap456);
+
+        let mut serialised_bitmap789 = vec![];
+        let mut bitmap789 = RoaringBitmap::new();
+        bitmap789.insert(7);
+        bitmap789.insert(8);
+        bitmap789.insert(9);
+        CboRoaringBitmapCodec::serialize_into(&bitmap789, &mut serialised_bitmap789);
+
+        let mut serialised_bitmap_ranges = vec![];
+        let mut bitmap_ranges = RoaringBitmap::new();
+        bitmap_ranges.insert_range(63_000..65_000);
+        bitmap_ranges.insert_range(123_000..128_000);
+        CboRoaringBitmapCodec::serialize_into(&bitmap_ranges, &mut serialised_bitmap_ranges);
+
+        let word_pairs = [
+            // 1, 3:  (healthy arb 2) and (healthy arbre 2) with (bitmap123 | bitmap456)
+            (("healthy", "arbre", 2), &serialised_bitmap123),
+            //          not inserted because 3 > max_proximity
+            (("healthy", "arbre", 3), &serialised_bitmap456),
+            // 0, 2:  (healthy arb 1) and (healthy arbre 1) with (bitmap123)
+            (("healthy", "arbres", 1), &serialised_bitmap123),
+            // 1, 3:
+            (("healthy", "arbres", 2), &serialised_bitmap456),
+            //          not be inserted because 3 > max_proximity
+            (("healthy", "arbres", 3), &serialised_bitmap789),
+            //          not inserted because no prefixes for boat
+            (("healthy", "boat", 1), &serialised_bitmap123),
+            //          not inserted because no prefixes for ca
+            (("healthy", "ca", 1), &serialised_bitmap123),
+            // 4: (healthy cat 1) with (bitmap456 + bitmap123)
+            (("healthy", "cats", 1), &serialised_bitmap456),
+            // 5: (healthy cat 2) with (bitmap789 + bitmap_ranges)
+            (("healthy", "cats", 2), &serialised_bitmap789),
+            // 4 + 6: (healthy catto 1) with (bitmap123)
+            (("healthy", "cattos", 1), &serialised_bitmap123),
+            // 5 + 7: (healthy catto 2) with (bitmap_ranges)
+            (("healthy", "cattos", 2), &serialised_bitmap_ranges),
+            // 8: (jittery cat 1) with (bitmap123 | bitmap456 | bitmap789 | bitmap_ranges)
+            (("jittery", "cat", 1), &serialised_bitmap123),
+            // 8:
+            (("jittery", "cata", 1), &serialised_bitmap456),
+            // 8:
+            (("jittery", "catb", 1), &serialised_bitmap789),
+            // 8:
+            (("jittery", "catc", 1), &serialised_bitmap_ranges),
+        ];
+
+        let expected_result = [
+            // first batch:
+            (("healthy", "arb", 1), bitmap123.clone()),
+            (("healthy", "arb", 2), &bitmap123 | &bitmap456),
+            (("healthy", "arbre", 1), bitmap123.clone()),
+            (("healthy", "arbre", 2), &bitmap123 | &bitmap456),
+            // second batch:
+            (("healthy", "cat", 1), &bitmap456 | &bitmap123),
+            (("healthy", "cat", 2), &bitmap789 | &bitmap_ranges),
+            (("healthy", "catto", 1), bitmap123.clone()),
+            (("healthy", "catto", 2), bitmap_ranges.clone()),
+            // third batch
+            (("jittery", "cat", 1), (&bitmap123 | &bitmap456 | &bitmap789 | &bitmap_ranges)),
+        ];
+
+        let mut result = vec![];
+
+        let mut allocations = Allocations::default();
+        let mut iter =
+            IntoIterator::into_iter(word_pairs).map(|((word1, word2, proximity), data)| {
+                ((word1.as_bytes(), word2.as_bytes(), proximity), data.as_slice())
+            });
+        execute_on_word_pairs_and_prefixes(
+            &mut iter,
+            |iter| Ok(iter.next()),
+            &prefixes,
+            &mut allocations,
+            2,
+            |k, v| {
+                let (word1, prefix, proximity) = StrStrU8Codec::bytes_decode(k).unwrap();
+                let bitmap = CboRoaringBitmapCodec::bytes_decode(v).unwrap();
+                result.push(((word1.to_owned(), prefix.to_owned(), proximity.to_owned()), bitmap));
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        for (x, y) in result.into_iter().zip(IntoIterator::into_iter(expected_result)) {
+            let ((actual_word1, actual_prefix, actual_proximity), actual_bitmap) = x;
+            let ((expected_word1, expected_prefix, expected_proximity), expected_bitmap) = y;
+
+            assert_eq!(actual_word1, expected_word1);
+            assert_eq!(actual_prefix, expected_prefix);
+            assert_eq!(actual_proximity, expected_proximity);
+            assert_eq!(actual_bitmap, expected_bitmap);
+        }
     }
 }
