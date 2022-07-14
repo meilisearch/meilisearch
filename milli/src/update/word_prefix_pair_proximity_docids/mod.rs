@@ -8,12 +8,11 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::BufReader;
-use std::time::Instant;
 
 use crate::update::index_documents::{
     create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
 };
-use crate::{Index, Result, UncheckedStrStrU8Codec};
+use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedStrStrU8Codec};
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -189,6 +188,7 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
     let mut empty_prefixes = false;
 
     let mut prefix_buffer = allocations.take_byte_vector();
+    let mut merge_buffer = allocations.take_byte_vector();
 
     while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
         if proximity > max_proximity {
@@ -200,7 +200,7 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
         }
         let word1_different_than_prev = word1 != batch.word1;
         if word1_different_than_prev || word2_start_different_than_prev {
-            batch.flush(allocations, &mut insert)?;
+            batch.flush(allocations, &mut merge_buffer, &mut insert)?;
             if word1_different_than_prev {
                 prefix_search_start.0 = 0;
                 batch.word1.clear();
@@ -231,7 +231,7 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
             prefix_buffer.clear();
         }
     }
-    batch.flush(allocations, &mut insert)?;
+    batch.flush(allocations, &mut merge_buffer, &mut insert)?;
     Ok(())
 }
 /**
@@ -307,12 +307,14 @@ impl PrefixAndProximityBatch {
     fn flush(
         &mut self,
         allocations: &mut Allocations,
+        merge_buffer: &mut Vec<u8>,
         insert: &mut impl for<'buffer> FnMut(&'buffer [u8], &'buffer [u8]) -> Result<()>,
     ) -> Result<()> {
         let PrefixAndProximityBatch { word1, batch } = self;
         if batch.is_empty() {
             return Ok(());
         }
+        merge_buffer.clear();
 
         let mut buffer = allocations.take_byte_vector();
         buffer.extend_from_slice(word1);
@@ -321,14 +323,15 @@ impl PrefixAndProximityBatch {
         for (key, mergeable_data) in batch.drain(..) {
             buffer.truncate(word1.len() + 1);
             buffer.extend_from_slice(key.as_slice());
-            let merged;
+
             let data = if mergeable_data.len() > 1 {
-                merged = merge_cbo_roaring_bitmaps(&buffer, &mergeable_data)?;
-                &merged
+                CboRoaringBitmapCodec::merge_into(&mergeable_data, merge_buffer)?;
+                merge_buffer.as_slice()
             } else {
                 &mergeable_data[0]
             };
             insert(buffer.as_slice(), data)?;
+            merge_buffer.clear();
             allocations.reclaim_byte_vector(key);
             allocations.reclaim_mergeable_data_vector(mergeable_data);
         }
@@ -443,20 +446,17 @@ impl PrefixTrieNode {
         let byte = word[0];
         if self.children[search_start.0].1 == byte {
             return true;
-        } else if let Some(position) =
-            self.children[search_start.0..].iter().position(|(_, c)| *c >= byte)
-        {
-            let (_, c) = self.children[search_start.0 + position];
-            if c == byte {
-                search_start.0 += position;
-                true
-            } else {
-                search_start.0 = 0;
-                false
-            }
         } else {
-            search_start.0 = 0;
-            false
+            match self.children[search_start.0..].binary_search_by_key(&byte, |x| x.1) {
+                Ok(position) => {
+                    search_start.0 += position;
+                    true
+                }
+                Err(_) => {
+                    search_start.0 = 0;
+                    false
+                }
+            }
         }
     }
 
