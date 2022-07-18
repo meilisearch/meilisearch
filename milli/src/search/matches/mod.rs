@@ -116,7 +116,7 @@ pub struct Matcher<'t, 'm, A> {
 impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
-        /// some word are counted as matches only if there are close together and in the good order,
+        /// some words are counted as matches only if they are close together and in the good order,
         /// compute_partial_match peek into next words to validate if the match is complete.
         fn compute_partial_match<'a>(
             mut partial: PartialMatch,
