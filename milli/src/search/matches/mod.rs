@@ -257,7 +257,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         // an iterator starting from the last match token position and going trew the end of the text.
         let mut after_tokens = tokens[last_match_token_position..].iter().peekable();
 
-        // gross the crop window peeking in both drections
+        // grows the crop window peeking in both directions
         // until the window contains the good number of words:
         while remaining_words > 0 {
             let before_token = before_tokens.peek().map(|t| t.separator_kind());
