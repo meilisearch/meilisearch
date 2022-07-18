@@ -428,7 +428,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                         _ => matches,
                     };
 
-                    // If the text have to be croped,
+                    // If the text has to be cropped,
                     // crop around the best interval.
                     let (byte_start, byte_end) = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
