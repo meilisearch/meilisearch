@@ -325,7 +325,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
             }
         }
 
-        // finally, keep the byte index of each bounds of the crop window.
+        // finally, keep the byte index of each bound of the crop window.
         let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
         let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
 
