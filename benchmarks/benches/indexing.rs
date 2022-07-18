@@ -617,7 +617,7 @@ fn indexing_movies_default(c: &mut Criterion) {
             move || {
                 let primary_key = "id";
                 let searchable_fields = ["title", "overview"];
-                let filterable_fields = ["released_date", "genres"];
+                let filterable_fields = ["release_date", "genres"];
                 let sortable_fields = [];
 
                 setup_index_with_settings(
@@ -654,7 +654,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
             move || {
                 let primary_key = "id";
                 let searchable_fields = ["title", "overview"];
-                let filterable_fields = ["released_date", "genres"];
+                let filterable_fields = ["release_date", "genres"];
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
@@ -705,7 +705,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
             move || {
                 let primary_key = "id";
                 let searchable_fields = ["title", "overview"];
-                let filterable_fields = ["released_date", "genres"];
+                let filterable_fields = ["release_date", "genres"];
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
@@ -760,7 +760,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
             move || {
                 let primary_key = "id";
                 let searchable_fields = ["title", "overview"];
-                let filterable_fields = ["released_date", "genres"];
+                let filterable_fields = ["release_date", "genres"];
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
