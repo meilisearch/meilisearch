@@ -351,23 +351,34 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
     let mut batch = PrefixAndProximityBatch::default();
     let mut prev_word2_start = 0;
 
+    // Optimisation: the index at the root of the prefix trie where to search for
     let mut prefix_search_start = PrefixTrieNodeSearchStart(0);
+
+    // Optimisation: true if there are no potential prefixes for the current word2 based on its first letter
     let mut empty_prefixes = false;
 
     let mut prefix_buffer = allocations.take_byte_vector();
     let mut merge_buffer = allocations.take_byte_vector();
 
     while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
+        // skip this iteration if the proximity is over the threshold
         if proximity > max_proximity {
             continue;
         };
         let word2_start_different_than_prev = word2[0] != prev_word2_start;
+        // if there were no potential prefixes for the previous word2 based on its first letter,
+        // and if the current word2 starts with the same letter, then there is also no potential
+        // prefixes for the current word2, and we can skip to the next iteration
         if empty_prefixes && !word2_start_different_than_prev {
             continue;
         }
+
+        // if word1 is different than the previous word1 OR if the start of word2 is different
+        // than the previous start of word2, then we'll need to flush the batch
         let word1_different_than_prev = word1 != batch.word1;
         if word1_different_than_prev || word2_start_different_than_prev {
             batch.flush(allocations, &mut merge_buffer, &mut insert)?;
+            // don't forget to reset the value of batch.word1 and prev_word2_start
             if word1_different_than_prev {
                 prefix_search_start.0 = 0;
                 batch.word1.clear();
@@ -377,10 +388,12 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
                 // word2_start_different_than_prev == true
                 prev_word2_start = word2[0];
             }
+            // Optimisation: find the search start in the prefix trie to iterate over the prefixes of word2
             empty_prefixes = !prefixes.set_search_start(word2, &mut prefix_search_start);
         }
 
         if !empty_prefixes {
+            // All conditions are satisfied, we can now insert each new prefix of word2 into the batch
             prefixes.for_each_prefix_of(
                 word2,
                 &mut prefix_buffer,
@@ -618,6 +631,10 @@ impl PrefixTrieNode {
             self.is_end_node = true;
         }
     }
+
+    /// Call the given closure on each prefix of the word contained in the prefix trie.
+    ///
+    /// The search starts from the given `search_start`.
     fn for_each_prefix_of(
         &self,
         word: &[u8],
