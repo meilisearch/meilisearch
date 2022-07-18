@@ -419,7 +419,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         } else {
             match &self.matches {
                 Some((tokens, matches)) => {
-                    // If the text have to be croped,
+                    // If the text has to be cropped,
                     // compute the best interval to crop around.
                     let matches = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
