@@ -252,7 +252,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         let mut remaining_words = crop_size + first_match_word_position - last_match_word_position;
 
         // create the initial state of the crop window: 2 iterators starting from the matches positions,
-        // a reverse iterator starting from the first match token position and going trew the beginning of the text,
+        // a reverse iterator starting from the first match token position and going towards the beginning of the text,
         let mut before_tokens = tokens[..first_match_token_position].iter().rev().peekable();
         // an iterator starting from the last match token position and going trew the end of the text.
         let mut after_tokens = tokens[last_match_token_position..].iter().peekable();
