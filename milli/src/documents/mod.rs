@@ -203,10 +203,11 @@ mod test {
         builder.append_json_object(value.as_object().unwrap()).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut documents =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let (mut documents, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
-        assert_eq!(documents.documents_batch_index().iter().count(), 5);
+        assert_eq!(index.iter().count(), 5);
         let reader = documents.next_document().unwrap().unwrap();
         assert_eq!(reader.iter().count(), 5);
         assert!(documents.next_document().unwrap().is_none());
@@ -226,9 +227,10 @@ mod test {
         builder.append_json_object(doc2.as_object().unwrap()).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut documents =
-            DocumentsBatchReader::from_reader(io::Cursor::new(vector)).unwrap().into_cursor();
-        assert_eq!(documents.documents_batch_index().iter().count(), 2);
+        let (mut documents, index) = DocumentsBatchReader::from_reader(io::Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
+        assert_eq!(index.iter().count(), 2);
         let reader = documents.next_document().unwrap().unwrap();
         assert_eq!(reader.iter().count(), 1);
         assert!(documents.next_document().unwrap().is_some());
@@ -243,7 +245,7 @@ mod test {
             }
         }]);
 
-        let mut cursor = docs_reader.into_cursor();
+        let (mut cursor, _) = docs_reader.into_cursor_and_fields_index();
         let doc = cursor.next_document().unwrap().unwrap();
         let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
         assert_eq!(nested, json!({ "toto": ["hello"] }));

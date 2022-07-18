@@ -17,6 +17,10 @@ pub struct DocumentsBatchReader<R> {
 }
 
 impl<R: io::Read + io::Seek> DocumentsBatchReader<R> {
+    pub fn new(cursor: DocumentsBatchCursor<R>, fields_index: DocumentsBatchIndex) -> Self {
+        Self { cursor: cursor.cursor, fields_index }
+    }
+
     /// Construct a `DocumentsReader` from a reader.
     ///
     /// It first retrieves the index, then moves to the first document. Use the `into_cursor`
@@ -46,30 +50,20 @@ impl<R: io::Read + io::Seek> DocumentsBatchReader<R> {
     }
 
     /// This method returns a forward cursor over the documents.
-    pub fn into_cursor(self) -> DocumentsBatchCursor<R> {
+    pub fn into_cursor_and_fields_index(self) -> (DocumentsBatchCursor<R>, DocumentsBatchIndex) {
         let DocumentsBatchReader { cursor, fields_index } = self;
-        let mut cursor = DocumentsBatchCursor { cursor, fields_index };
+        let mut cursor = DocumentsBatchCursor { cursor };
         cursor.reset();
-        cursor
+        (cursor, fields_index)
     }
 }
 
 /// A forward cursor over the documents in a `DocumentsBatchReader`.
 pub struct DocumentsBatchCursor<R> {
     cursor: grenad::ReaderCursor<R>,
-    fields_index: DocumentsBatchIndex,
 }
 
 impl<R> DocumentsBatchCursor<R> {
-    pub fn into_reader(self) -> DocumentsBatchReader<R> {
-        let DocumentsBatchCursor { cursor, fields_index, .. } = self;
-        DocumentsBatchReader { cursor, fields_index }
-    }
-
-    pub fn documents_batch_index(&self) -> &DocumentsBatchIndex {
-        &self.fields_index
-    }
-
     /// Resets the cursor to be able to read from the start again.
     pub fn reset(&mut self) {
         self.cursor.reset();

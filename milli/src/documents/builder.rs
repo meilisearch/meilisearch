@@ -216,9 +216,9 @@ mod test {
         assert_eq!(builder.documents_count(), 2);
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
         assert_eq!(index.len(), 3);
 
         let document = cursor.next_document().unwrap().unwrap();
@@ -240,9 +240,9 @@ mod test {
         assert_eq!(builder.documents_count(), 2);
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
         assert_eq!(index.len(), 2);
 
         let document = cursor.next_document().unwrap().unwrap();
@@ -264,9 +264,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
 
@@ -292,9 +292,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -319,9 +319,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -346,9 +346,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -373,9 +373,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -400,9 +400,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -427,9 +427,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -454,9 +454,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
@@ -482,8 +482,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
+        let (mut cursor, _) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         assert!(cursor.next_document().is_err());
     }
@@ -498,9 +499,9 @@ mod test {
         builder.append_csv(csv).unwrap();
         let vector = builder.into_inner().unwrap();
 
-        let mut cursor =
-            DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap().into_cursor();
-        let index = cursor.documents_batch_index().clone();
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
         let doc = cursor.next_document().unwrap().unwrap();
         let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();

@@ -56,14 +56,13 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
     }
 
     /// This method returns a forward cursor over the enriched documents.
-    pub fn into_cursor(self) -> EnrichedDocumentsBatchCursor<R> {
+    pub fn into_cursor_and_fields_index(
+        self,
+    ) -> (EnrichedDocumentsBatchCursor<R>, DocumentsBatchIndex) {
         let EnrichedDocumentsBatchReader { documents, primary_key, mut external_ids } = self;
+        let (documents, fields_index) = documents.into_cursor_and_fields_index();
         external_ids.reset();
-        EnrichedDocumentsBatchCursor {
-            documents: documents.into_cursor(),
-            primary_key,
-            external_ids,
-        }
+        (EnrichedDocumentsBatchCursor { documents, primary_key, external_ids }, fields_index)
     }
 }
 
@@ -80,23 +79,9 @@ pub struct EnrichedDocumentsBatchCursor<R> {
 }
 
 impl<R> EnrichedDocumentsBatchCursor<R> {
-    pub fn into_reader(self) -> EnrichedDocumentsBatchReader<R> {
-        let EnrichedDocumentsBatchCursor { documents, primary_key, external_ids } = self;
-        EnrichedDocumentsBatchReader {
-            documents: documents.into_reader(),
-            primary_key,
-            external_ids,
-        }
-    }
-
     pub fn primary_key(&self) -> &str {
         &self.primary_key
     }
-
-    pub fn documents_batch_index(&self) -> &DocumentsBatchIndex {
-        self.documents.documents_batch_index()
-    }
-
     /// Resets the cursor to be able to read from the start again.
     pub fn reset(&mut self) {
         self.documents.reset();

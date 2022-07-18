@@ -146,11 +146,11 @@ impl<'a, 'i> Transform<'a, 'i> {
         R: Read + Seek,
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        let mut cursor = reader.into_cursor();
-        let fields_index = cursor.documents_batch_index();
+        let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
+
         let external_documents_ids = self.index.external_documents_ids(wtxn)?;
 
-        let mapping = create_fields_mapping(&mut self.fields_ids_map, fields_index)?;
+        let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
         let primary_key = cursor.primary_key().to_string();
         let primary_key_id =

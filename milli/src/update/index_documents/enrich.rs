@@ -27,8 +27,8 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     autogenerate_docids: bool,
     reader: DocumentsBatchReader<R>,
 ) -> Result<StdResult<EnrichedDocumentsBatchReader<R>, UserError>> {
-    let mut cursor = reader.into_cursor();
-    let mut documents_batch_index = cursor.documents_batch_index().clone();
+    let (mut cursor, mut documents_batch_index) = reader.into_cursor_and_fields_index();
+
     let mut external_ids = tempfile::tempfile().map(grenad::Writer::new)?;
     let mut uuid_buffer = [0; uuid::fmt::Hyphenated::LENGTH];
 
@@ -103,9 +103,10 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     }
 
     let external_ids = writer_into_reader(external_ids)?;
+    let primary_key_name = primary_key.name().to_string();
     let reader = EnrichedDocumentsBatchReader::new(
-        cursor.into_reader(),
-        primary_key.name().to_string(),
+        DocumentsBatchReader::new(cursor, documents_batch_index),
+        primary_key_name,
         external_ids,
     )?;
 
