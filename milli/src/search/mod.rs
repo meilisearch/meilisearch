@@ -191,21 +191,33 @@ impl<'a> Search<'a> {
         }
 
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-        let criteria = criteria_builder.build(
-            query_tree,
-            primitive_query,
-            filtered_candidates,
-            self.sort_criteria.clone(),
-            self.exhaustive_number_hits,
-        )?;
 
         match self.index.distinct_field(self.rtxn)? {
-            None => self.perform_sort(NoopDistinct, matching_words.unwrap_or_default(), criteria),
+            None => {
+                let criteria = criteria_builder.build::<NoopDistinct>(
+                    query_tree,
+                    primitive_query,
+                    filtered_candidates,
+                    self.sort_criteria.clone(),
+                    self.exhaustive_number_hits,
+                    None,
+                )?;
+                self.perform_sort(NoopDistinct, matching_words.unwrap_or_default(), criteria)
+            }
             Some(name) => {
                 let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
                 match field_ids_map.id(name) {
                     Some(fid) => {
                         let distinct = FacetDistinct::new(fid, self.index, self.rtxn);
+
+                        let criteria = criteria_builder.build(
+                            query_tree,
+                            primitive_query,
+                            filtered_candidates,
+                            self.sort_criteria.clone(),
+                            self.exhaustive_number_hits,
+                            Some(distinct.clone()),
+                        )?;
                         self.perform_sort(distinct, matching_words.unwrap_or_default(), criteria)
                     }
                     None => Ok(SearchResult::default()),

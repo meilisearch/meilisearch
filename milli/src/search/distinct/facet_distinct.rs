@@ -21,6 +21,7 @@ const DOCID_SIZE: usize = size_of::<DocumentId>();
 /// care to keep the document we are currently on, and remove it from the excluded list. The next
 /// iterations will never contain any occurence of a document with the same distinct value as a
 /// document from previous iterations.
+#[derive(Clone)]
 pub struct FacetDistinct<'a> {
     distinct: FieldId,
     index: &'a Index,
