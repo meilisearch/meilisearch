@@ -164,10 +164,8 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
     delimited(multispace0, inner, multispace0)
 }
 
-
 /// value_list = (value ("," value)* ","?)?
 fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
-
     // TODO: here, I should return a failure with a clear explanation whenever possible
     // for example:
     // * expected the name of a field, but got `AND`
@@ -193,12 +191,13 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
     let (input, _) = ws(tag("IN"))(input)?;
 
     // everything after `IN` can be a failure
-    let (input, _) = cut_with_err(tag("["), |_| {
-        Error::new_from_kind(input, ErrorKind::InOpeningBracket)
-    })(input)?;
+    let (input, _) =
+        cut_with_err(tag("["), |_| Error::new_from_kind(input, ErrorKind::InOpeningBracket))(
+            input,
+        )?;
 
     let (input, content) = cut(parse_value_list)(input)?;
-    
+
     // everything after `IN` can be a failure
     let (input, _) = cut_with_err(tag("]"), |_| {
         if eof::<_, ()>(input).is_ok() {
@@ -218,18 +217,19 @@ fn parse_not_in(input: Span) -> IResult<FilterCondition> {
     let (input, _) = multispace1(input)?;
     let (input, _) = ws(tag("IN"))(input)?;
 
-
     // everything after `IN` can be a failure
-    let (input, _) = cut_with_err(tag("["), |_| {
-        Error::new_from_kind(input, ErrorKind::InOpeningBracket)
-    })(input)?;
+    let (input, _) =
+        cut_with_err(tag("["), |_| Error::new_from_kind(input, ErrorKind::InOpeningBracket))(
+            input,
+        )?;
 
     let (input, content) = cut(parse_value_list)(input)?;
-    
+
     // everything after `IN` can be a failure
-    let (input, _) = cut_with_err(tag("]"), |_| {
-        Error::new_from_kind(input, ErrorKind::InClosingBracket)
-    })(input)?;
+    let (input, _) =
+        cut_with_err(tag("]"), |_| Error::new_from_kind(input, ErrorKind::InClosingBracket))(
+            input,
+        )?;
 
     let filter = FilterCondition::Not(Box::new(FilterCondition::In { fid: value, els: content }));
     Ok((input, filter))
@@ -378,60 +378,60 @@ pub mod tests {
             // simple test
             (
                 "x = AND",
-                Fc::Not(Box::new(Fc::Not(Box::new(Fc::In { 
-                    fid: rtok("NOT NOT", "colour"), 
-                    els: vec![] 
+                Fc::Not(Box::new(Fc::Not(Box::new(Fc::In {
+                    fid: rtok("NOT NOT", "colour"),
+                    els: vec![]
                 }))))
             ),
             (
                 "colour IN[]",
-                Fc::In { 
-                    fid: rtok("", "colour"), 
-                    els: vec![] 
+                Fc::In {
+                    fid: rtok("", "colour"),
+                    els: vec![]
                 }
             ),
             (
                 "colour IN[green]",
-                Fc::In { 
-                    fid: rtok("", "colour"), 
-                    els: vec![rtok("colour IN[", "green")] 
+                Fc::In {
+                    fid: rtok("", "colour"),
+                    els: vec![rtok("colour IN[", "green")]
                 }
             ),
             (
                 "colour IN[green,]",
-                Fc::In { 
-                    fid: rtok("", "colour"), 
-                    els: vec![rtok("colour IN[", "green")] 
+                Fc::In {
+                    fid: rtok("", "colour"),
+                    els: vec![rtok("colour IN[", "green")]
                 }
             ),
             (
                 "colour IN[green,blue]",
-                Fc::In { 
-                    fid: rtok("", "colour"), 
+                Fc::In {
+                    fid: rtok("", "colour"),
                     els: vec![
                         rtok("colour IN[", "green"),
                         rtok("colour IN[green, ", "blue"),
-                    ] 
+                    ]
                 }
             ),
             (
                 "colour NOT IN[green,blue]",
-                Fc::Not(Box::new(Fc::In { 
-                    fid: rtok("", "colour"), 
+                Fc::Not(Box::new(Fc::In {
+                    fid: rtok("", "colour"),
                     els: vec![
                         rtok("colour NOT IN[", "green"),
                         rtok("colour NOT IN[green, ", "blue"),
-                    ] 
+                    ]
                 }))
             ),
             (
                 " colour IN [  green , blue , ]",
-                Fc::In { 
-                    fid: rtok(" ", "colour"), 
+                Fc::In {
+                    fid: rtok(" ", "colour"),
                     els: vec![
                         rtok("colour IN [  ", "green"),
                         rtok("colour IN [  green , ", "blue"),
-                    ] 
+                    ]
                 }
             ),
             (

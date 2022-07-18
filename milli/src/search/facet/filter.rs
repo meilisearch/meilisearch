@@ -302,9 +302,7 @@ impl<'a> Filter<'a> {
             }
             Condition::NotEqual(val) => {
                 let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(
-                    rtxn, index, field_id, &operator,
-                )?;
+                let docids = Self::evaluate_operator(rtxn, index, field_id, &operator)?;
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
@@ -421,20 +419,30 @@ impl<'a> Filter<'a> {
             FilterCondition::Or(subfilters) => {
                 let mut bitmap = RoaringBitmap::new();
                 for f in subfilters {
-                    bitmap |= Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
+                    bitmap |=
+                        Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
                 }
                 Ok(bitmap)
             }
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
                 if let Some(first_subfilter) = subfilters_iter.next() {
-                    let mut bitmap =
-                        Self::inner_evaluate(&(first_subfilter.clone()).into(), rtxn, index, filterable_fields)?;
+                    let mut bitmap = Self::inner_evaluate(
+                        &(first_subfilter.clone()).into(),
+                        rtxn,
+                        index,
+                        filterable_fields,
+                    )?;
                     for f in subfilters_iter {
                         if bitmap.is_empty() {
                             return Ok(bitmap);
                         }
-                        bitmap &= Self::inner_evaluate(&(f.clone()).into(), rtxn, index, filterable_fields)?;
+                        bitmap &= Self::inner_evaluate(
+                            &(f.clone()).into(),
+                            rtxn,
+                            index,
+                            filterable_fields,
+                        )?;
                     }
                     Ok(bitmap)
                 } else {
