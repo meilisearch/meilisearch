@@ -102,7 +102,7 @@ pub struct MatchBounds {
 }
 
 /// Structure used to analize a string, compute words that match,
-/// and format the source string returning an highlighted and croped sub-string.
+/// and format the source string, returning a highlighted and cropped sub-string.
 pub struct Matcher<'t, 'm, A> {
     text: &'t str,
     matching_words: &'m MatchingWords,
