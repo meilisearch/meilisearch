@@ -659,7 +659,7 @@ mod test {
     use nelson::Mocker;
 
     use crate::index::error::Result as IndexResult;
-    use crate::index::Index;
+    use crate::index::{HitsInfo, Index};
     use crate::index::{
         DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     };
@@ -692,7 +692,9 @@ mod test {
         let query = SearchQuery {
             q: Some(String::from("hello world")),
             offset: Some(10),
-            limit: 0,
+            limit: Some(0),
+            page: 1,
+            hits_per_page: 10,
             attributes_to_retrieve: Some(vec!["string".to_owned()].into_iter().collect()),
             attributes_to_crop: None,
             crop_length: 18,
@@ -709,10 +711,12 @@ mod test {
 
         let result = SearchResult {
             hits: vec![],
-            estimated_total_hits: 29,
             query: "hello world".to_string(),
-            limit: 24,
-            offset: 0,
+            hits_info: HitsInfo::OffsetLimit {
+                limit: 24,
+                offset: 0,
+                estimated_total_hits: 29,
+            },
             processing_time_ms: 50,
             facet_distribution: None,
         };
