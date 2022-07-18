@@ -1,7 +1,7 @@
 ## What is WordPrefixPairProximityDocids?
 The word-prefix-pair-proximity-docids database is a database whose keys are of the form (`word`, `prefix`, `proximity`) and the values are roaring bitmaps of the documents which contain `word` followed by another word starting with `prefix` at a distance of `proximity`.
 
-The prefixes present in this database are only those that correspond to many different words present in the documents.
+The prefixes present in this database are only those that correspond to many different words in the documents.
 
 ## How is it created/updated? (simplified version)
 To compute it, we have access to (mainly) two inputs:
@@ -28,13 +28,13 @@ horror cathedral 4	 -> docids5: [1, 2]
 
 I illustrate a simplified version of the algorithm to create the word-prefix-pair-proximity database below:
 
-1. ==Outer loop:== First, we iterate over each word pair and its proximity:
+1. **Outer loop:** First, we iterate over each word pair and its proximity:
 ```
 word1    : good
 word2    : dog
 proximity: 3
 ```
-2. ==Inner loop:== Then, we iterate over all the prefixes of `word2` that are in the list of sorted prefixes. And we insert the key (`prefix`, `proximity`) and the value (`docids`) to a sorted map which we call the “batch”. For example, at the end of the first inner loop, we may have:
+2. **Inner loop:** Then, we iterate over all the prefixes of `word2` that are in the list of sorted prefixes. And we insert the key (`prefix`, `proximity`) and the value (`docids`) to a sorted map which we call the “batch”. For example, at the end of the first inner loop, we may have:
 ```
 Outer loop 1:
 ------------------------------
@@ -108,7 +108,7 @@ Because `word2` begins with a different letter than the previous `word2`, we kno
 2. And therefore, every instance of (`word2`, `prefix`) will be greater than any element in the batch.
 Therefore, we know that we can insert every element from the batch into the database before proceeding any further. This operation is called “flushing the batch”. Flushing the batch should also be done whenever `word1` is different than the previous `word1`.
 
-6. ==Flushing the batch==: to flush the batch, we look at the `word1` and iterate over the elements of the batch in sorted order:
+6. **Flushing the batch:** to flush the batch, we look at the `word1` and iterate over the elements of the batch in sorted order:
 ```
 Flushing Batch loop 1:
 ------------------------------

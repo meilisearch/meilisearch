@@ -1,18 +1,14 @@
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-
-use heed::BytesDecode;
-use log::debug;
-
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::HashSet;
-use std::io::BufReader;
-
 use crate::update::index_documents::{
     create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
 };
 use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedStrStrU8Codec};
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::BytesDecode;
+use log::debug;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::io::BufReader;
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -72,10 +68,11 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
+
+        // This is an optimisation, to reuse allocations between loop iterations
         let mut allocations = Allocations::default();
 
-        let mut count = 0;
-
+        // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length
         let prefixes = PrefixTrieNode::from_sorted_prefixes(
             common_prefix_fst_words
                 .into_iter()
@@ -85,9 +82,14 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 .filter(|s| s.len() <= self.max_prefix_length),
         );
 
+        // If the prefix trie is not empty, then we can iterate over all new
+        // word pairs to look for new (word1, common_prefix, proximity) elements
+        // to insert in the DB
         if !prefixes.is_empty() {
             let mut cursor = new_word_pair_proximity_docids.into_cursor()?;
+            // This is the core of the algorithm
             execute_on_word_pairs_and_prefixes(
+                // the first two arguments tell how to iterate over the new word pairs
                 &mut cursor,
                 |cursor| {
                     if let Some((key, value)) = cursor.move_on_next()? {
@@ -101,8 +103,8 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 &prefixes,
                 &mut allocations,
                 self.max_proximity,
+                // and this argument tells what to do with each new key (word1, prefix, proximity) and value (roaring bitmap)
                 |key, value| {
-                    count += 1;
                     insert_into_database(
                         &mut self.wtxn,
                         *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
@@ -112,6 +114,8 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 },
             )?;
         }
+
+        // Now we do the same thing with the new prefixes and all word pairs in the DB
 
         let prefixes = PrefixTrieNode::from_sorted_prefixes(
             new_prefix_fst_words
@@ -128,6 +132,8 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 .remap_data_type::<ByteSlice>()
                 .iter(self.wtxn)?;
 
+            // Since we read the DB, we can't write to it directly, so we add each new (word1, prefix, proximity)
+            // element in an intermediary grenad
             let mut writer = create_writer(
                 self.chunk_compression_type,
                 self.chunk_compression_level,
@@ -143,7 +149,12 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 |key, value| writer.insert(key, value).map_err(|e| e.into()),
             )?;
             drop(db_iter);
-            writer_of_new_elements_into_lmdb_database(
+
+            // and then we write the grenad into the DB
+            // Since the grenad contains only new prefixes, we know in advance that none
+            // of its elements already exist in the DB, thus there is no need to specify
+            // how to merge conflicting elements
+            write_into_lmdb_database_without_merging(
                 self.wtxn,
                 *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
                 writer,
@@ -169,6 +180,15 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
         Ok(())
     }
 }
+
+/// This is the core of the algorithm to initialise the Word Prefix Pair Proximity Docids database.
+///
+/// Its main arguments are:
+/// 1. a sorted iterator over ((word1, word2, proximity), docids) elements
+/// 2. a prefix trie
+/// 3. a closure to describe how to handle the new computed (word1, prefix, proximity) elements
+///
+/// For more information about the
 fn execute_on_word_pairs_and_prefixes<Iter>(
     iter: &mut Iter,
     mut next_word_pair_proximity: impl for<'a> FnMut(
@@ -252,52 +272,19 @@ struct PrefixAndProximityBatch {
 }
 
 impl PrefixAndProximityBatch {
+    /// Insert the new key and value into the batch
     fn insert(&mut self, new_key: &[u8], new_value: Vec<u8>, allocations: &mut Allocations) {
-        // this is a macro instead of a closure because the borrow checker will complain
-        // about the closure moving `new_value`
-        macro_rules! insert_new_key_value {
-            () => {
+        match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
+            Ok(position) => {
+                self.batch[position].1.push(Cow::Owned(new_value));
+            }
+            Err(position) => {
                 let mut key = allocations.take_byte_vector();
                 key.extend_from_slice(new_key);
                 let mut mergeable_data = allocations.take_mergeable_data_vector();
                 mergeable_data.push(Cow::Owned(new_value));
-                self.batch.push((key, mergeable_data));
-            };
-            ($idx:expr) => {
-                let mut key = allocations.take_byte_vector();
-                key.extend_from_slice(new_key);
-                let mut mergeable_data = allocations.take_mergeable_data_vector();
-                mergeable_data.push(Cow::Owned(new_value));
-                self.batch.insert($idx, (key, mergeable_data));
-            };
-        }
-
-        match self.batch.len() {
-            0 => {
-                insert_new_key_value!();
+                self.batch.insert(position, (key, mergeable_data));
             }
-            1 => {
-                let (existing_key, existing_data) = &mut self.batch[0];
-                match new_key.cmp(&existing_key) {
-                    Ordering::Less => {
-                        insert_new_key_value!(0);
-                    }
-                    Ordering::Equal => {
-                        existing_data.push(Cow::Owned(new_value));
-                    }
-                    Ordering::Greater => {
-                        insert_new_key_value!();
-                    }
-                }
-            }
-            _ => match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
-                Ok(position) => {
-                    self.batch[position].1.push(Cow::Owned(new_value));
-                }
-                Err(position) => {
-                    insert_new_key_value!(position);
-                }
-            },
         }
     }
 
@@ -369,8 +356,10 @@ fn insert_into_database(
     Ok(())
 }
 
-// This is adapted from `sorter_into_lmdb_database`
-pub fn writer_of_new_elements_into_lmdb_database(
+// This is adapted from `sorter_into_lmdb_database` and `write_into_lmdb_database`,
+// but it uses `append` if the database is empty, and it assumes that the values in the
+// writer don't conflict with values in the database.
+pub fn write_into_lmdb_database_without_merging(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     writer: grenad::Writer<std::fs::File>,
