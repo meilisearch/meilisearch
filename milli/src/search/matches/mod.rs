@@ -11,6 +11,7 @@ const DEFAULT_CROP_MARKER: &'static str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &'static str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &'static str = "</em>";
 
+/// Structure used to build a Matcher allowing to customize formating tags.
 pub struct MatcherBuilder<'a, A> {
     matching_words: MatchingWords,
     tokenizer: Tokenizer<'a, A>,
@@ -100,6 +101,8 @@ pub struct MatchBounds {
     pub length: usize,
 }
 
+/// Structure used to analize a string, compute words that match,
+/// and format the source string, returning a highlighted and cropped sub-string.
 pub struct Matcher<'t, 'm, A> {
     text: &'t str,
     matching_words: &'m MatchingWords,
@@ -113,6 +116,8 @@ pub struct Matcher<'t, 'm, A> {
 impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
+        /// some words are counted as matches only if they are close together and in the good order,
+        /// compute_partial_match peek into next words to validate if the match is complete.
         fn compute_partial_match<'a>(
             mut partial: PartialMatch,
             token_position: usize,
@@ -246,9 +251,14 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         // matches needs to be counted in the crop len.
         let mut remaining_words = crop_size + first_match_word_position - last_match_word_position;
 
+        // create the initial state of the crop window: 2 iterators starting from the matches positions,
+        // a reverse iterator starting from the first match token position and going towards the beginning of the text,
         let mut before_tokens = tokens[..first_match_token_position].iter().rev().peekable();
+        // an iterator starting from the last match token position and going towards the end of the text.
         let mut after_tokens = tokens[last_match_token_position..].iter().peekable();
 
+        // grows the crop window peeking in both directions
+        // until the window contains the good number of words:
         while remaining_words > 0 {
             let before_token = before_tokens.peek().map(|t| t.separator_kind());
             let after_token = after_tokens.peek().map(|t| t.separator_kind());
@@ -315,6 +325,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
             }
         }
 
+        // finally, keep the byte index of each bound of the crop window.
         let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
         let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
 
@@ -353,7 +364,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         (uniq_score, distance_score, order_score)
     }
 
-    /// Returns the matches interval where the score computed by match_interval_score is maximal.
+    /// Returns the matches interval where the score computed by match_interval_score is the best.
     fn find_best_match_interval<'a>(&self, matches: &'a [Match], crop_size: usize) -> &'a [Match] {
         // we compute the matches interval if we have at least 2 matches.
         if matches.len() > 1 {
@@ -408,6 +419,8 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
         } else {
             match &self.matches {
                 Some((tokens, matches)) => {
+                    // If the text has to be cropped,
+                    // compute the best interval to crop around.
                     let matches = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
                             self.find_best_match_interval(matches, crop_size)
@@ -415,6 +428,8 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                         _ => matches,
                     };
 
+                    // If the text has to be cropped,
+                    // crop around the best interval.
                     let (byte_start, byte_end) = match format_options.crop {
                         Some(crop_size) if crop_size > 0 => {
                             self.crop_bounds(tokens, matches, crop_size)
