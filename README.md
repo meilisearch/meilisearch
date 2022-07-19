@@ -63,7 +63,7 @@ docker run -p 7700:7700 -v "$(pwd)/meili_data:/meili_data" getmeili/meilisearch
 
 #### Announcing a cloud-hosted Meilisearch
 
-Join the closed beta by filling out this [form](https://meilisearch.typeform.com/to/FtnzvZfh).
+Join the closed beta by filling out this [form](https://meilisearch.typeform.com/to/VI2cI2rv).
 
 #### Try Meilisearch in our Sandbox
 
