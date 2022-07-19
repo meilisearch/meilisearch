@@ -287,14 +287,7 @@ impl<'a> Filter<'a> {
             Condition::NotExists => {
                 let all_ids = index.documents_ids(rtxn)?;
 
-                let exist = Self::evaluate_operator(
-                    rtxn,
-                    index,
-                    numbers_db,
-                    strings_db,
-                    field_id,
-                    &Condition::Exists,
-                )?;
+                let exist = Self::evaluate_operator(rtxn, index, field_id, &Condition::Exists)?;
 
                 let notexist = all_ids - exist;
                 return Ok(notexist);
