@@ -12,7 +12,7 @@ different words in the documents.
 To compute it, we have access to (mainly) two inputs:
 
 * a list of sorted prefixes, such as:
-```
+```text
 c
 ca
 cat
@@ -25,7 +25,7 @@ different words from the database are included in this list.
 
 * a sorted list of word pairs and the distance between them (i.e. proximity),
 * associated with a roaring bitmap, such as:
-```
+```text
 good dog   3         -> docids1: [2, 5, 6]
 good doggo 1         -> docids2: [8]
 good dogma 1         -> docids3: [7, 19, 20]
@@ -37,7 +37,7 @@ I illustrate a simplified version of the algorithm to create the word-prefix
 pair-proximity database below:
 
 1. **Outer loop:** First, we iterate over each word pair and its proximity:
-```
+```text
 word1    : good
 word2    : dog
 proximity: 3
@@ -46,7 +46,7 @@ proximity: 3
 in the list of sorted prefixes. And we insert the key (`prefix`, `proximity`)
 and the value (`docids`) to a sorted map which we call the “batch”. For example,
 at the end of the first inner loop, we may have:
-```
+```text
 Outer loop 1:
 ------------------------------
 word1    : good
@@ -63,7 +63,7 @@ batch: [
 ]
 ```
 3. For illustration purpose, let's run through a second iteration of the outer loop:
-```
+```text
 Outer loop 2:
 ------------------------------
 word1    : good
@@ -87,7 +87,7 @@ of the elements inserted in the second iteration of the outer loop appear
 *before* elements from the first iteration.
 
 4. And a third:
-```
+```text
 Outer loop 3:
 ------------------------------
 word1    : good
@@ -110,7 +110,7 @@ Notice that there were some conflicts which were resolved by merging the
 conflicting values together.
 
 5. On the fourth iteration of the outer loop, we have:
-```
+```text
 Outer loop 4:
 ------------------------------
 word1    : good
@@ -131,7 +131,7 @@ is different than the previous `word1`.
 
 6. **Flushing the batch:** to flush the batch, we look at the `word1` and
 iterate over the elements of the batch in sorted order:
-```
+```text
 Flushing Batch loop 1:
 ------------------------------
 word1    : good
