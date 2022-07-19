@@ -1,12 +1,11 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
-use heed::{BytesDecode, BytesEncode, RwTxn};
+use heed::{BytesDecode, RwTxn};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
@@ -17,8 +16,8 @@ use super::{ClonableMmap, MergeFn};
 use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
 use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::{
-    error, lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, FieldId,
-    GeoPoint, Index, Result, BEU16,
+    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
+    Result,
 };
 
 pub(crate) enum TypedChunk {
@@ -36,7 +35,7 @@ pub(crate) enum TypedChunk {
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
-    FieldIdFacetExistsDocids(BTreeMap<FieldId, RoaringBitmap>),
+    FieldIdFacetExistsDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
 }
 
@@ -149,11 +148,12 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
-            write_sorted_iterator_into_database(
-                facet_id_exists_docids.into_iter().map(|(k, v)| (BEU16::new(k), v)),
+            append_entries_into_database(
+                facet_id_exists_docids,
                 &index.facet_id_exists_docids,
-                "facet-id-exists-docids",
                 wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
                 merge_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
@@ -267,58 +267,6 @@ fn merge_cbo_roaring_bitmaps(
         &[Cow::Borrowed(db_value), Cow::Borrowed(new_value)],
         buffer,
     )?)
-}
-
-fn write_sorted_iterator_into_database<Iter, Key, Value, KeyCodec, ValueCodec, Merge>(
-    mut iterator: Iter,
-    database: &heed::Database<KeyCodec, ValueCodec>,
-    database_name: &'static str,
-    wtxn: &mut RwTxn,
-    merge_values: Merge,
-) -> Result<()>
-where
-    for<'a> KeyCodec: BytesEncode<'a, EItem = Key>,
-    for<'a> ValueCodec: BytesEncode<'a, EItem = Value> + BytesDecode<'a, DItem = Value>,
-    Iter: Iterator<Item = (Key, Value)>,
-    Merge: Fn(&[u8], &[u8], &mut Vec<u8>) -> Result<()>,
-{
-    if database.is_empty(wtxn)? {
-        let mut database = database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
-
-        while let Some((key, value)) = iterator.next() {
-            let key = KeyCodec::bytes_encode(&key)
-                .ok_or(error::SerializationError::Encoding { db_name: Some(database_name) })?;
-            if valid_lmdb_key(&key) {
-                let value = ValueCodec::bytes_encode(&value)
-                    .ok_or(error::SerializationError::Encoding { db_name: Some(database_name) })?;
-                unsafe { database.append(&key, &value)? };
-            }
-        }
-
-        Ok(())
-    } else {
-        let database = database.remap_types::<ByteSlice, ByteSlice>();
-        let mut buffer = Vec::new();
-        while let Some((key, value)) = iterator.next() {
-            let key = KeyCodec::bytes_encode(&key)
-                .ok_or(error::SerializationError::Encoding { db_name: Some(database_name) })?;
-            if valid_lmdb_key(&key) {
-                let value = ValueCodec::bytes_encode(&value)
-                    .ok_or(error::SerializationError::Encoding { db_name: Some(database_name) })?;
-                let value = match database.get(wtxn, &key)? {
-                    Some(prev_value) => {
-                        merge_values(&value, &prev_value, &mut buffer)?;
-                        &buffer[..]
-                    }
-                    None => &value,
-                };
-
-                database.put(wtxn, &key, value)?;
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Write provided entries in database using serialize_value function.

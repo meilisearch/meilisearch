@@ -5,13 +5,15 @@ use std::io;
 use std::mem::size_of;
 
 use heed::zerocopy::AsBytes;
+use heed::BytesEncode;
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::{DocumentId, FieldId, Result, BEU32};
+use crate::update::index_documents::{create_writer, writer_into_reader};
+use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32};
 
 /// Extracts the facet values of each faceted field of each document.
 ///
@@ -22,7 +24,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>, BTreeMap<FieldId, RoaringBitmap>)> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)> {
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -91,10 +93,21 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         }
     }
 
+    let mut facet_exists_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    for (fid, bitmap) in facet_exists_docids.into_iter() {
+        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
+        facet_exists_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    }
+    let facet_exists_docids_reader = writer_into_reader(facet_exists_docids_writer)?;
+
     Ok((
         sorter_into_reader(fid_docid_facet_numbers_sorter, indexer.clone())?,
         sorter_into_reader(fid_docid_facet_strings_sorter, indexer.clone())?,
-        facet_exists_docids,
+        facet_exists_docids_reader,
     ))
 }
 

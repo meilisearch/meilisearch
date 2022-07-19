@@ -8,13 +8,12 @@ mod extract_word_docids;
 mod extract_word_pair_proximity_docids;
 mod extract_word_position_docids;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::fs::File;
 
 use crossbeam_channel::Sender;
 use log::debug;
 use rayon::prelude::*;
-use roaring::RoaringBitmap;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
@@ -73,21 +72,25 @@ pub(crate) fn data_from_obkv_documents(
 
     let (
         docid_word_positions_chunks,
-        (docid_fid_facet_numbers_chunks, (docid_fid_facet_strings_chunks, facet_exists_docids)),
+        (
+            docid_fid_facet_numbers_chunks,
+            (docid_fid_facet_strings_chunks, facet_exists_docids_chunks),
+        ),
     ) = result?;
 
-    // merge facet_exists_docids hashmaps and send them as a typed chunk
+    // merge facet_exists_docids and send them as a typed chunk
     {
         let lmdb_writer_sx = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let mut all = BTreeMap::default();
-            for facet_exists_docids in facet_exists_docids {
-                for (field_id, docids) in facet_exists_docids {
-                    let docids0 = all.entry(field_id).or_default();
-                    *docids0 |= docids;
+            debug!("merge {} database", "facet-id-exists-docids");
+            match facet_exists_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+                Ok(reader) => {
+                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
+                }
+                Err(e) => {
+                    let _ = lmdb_writer_sx.send(Err(e));
                 }
             }
-            let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(all)));
         });
     }
 
@@ -228,7 +231,7 @@ fn send_and_extract_flattened_documents_data(
     grenad::Reader<CursorClonableMmap>,
     (
         grenad::Reader<CursorClonableMmap>,
-        (grenad::Reader<CursorClonableMmap>, BTreeMap<FieldId, RoaringBitmap>),
+        (grenad::Reader<CursorClonableMmap>, grenad::Reader<File>),
     ),
 )> {
     let flattened_documents_chunk =
@@ -273,7 +276,7 @@ fn send_and_extract_flattened_documents_data(
                 let (
                     docid_fid_facet_numbers_chunk,
                     docid_fid_facet_strings_chunk,
-                    facet_exists_docids,
+                    fid_facet_exists_docids_chunk,
                 ) = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
                     indexer.clone(),
@@ -298,7 +301,7 @@ fn send_and_extract_flattened_documents_data(
 
                 Ok((
                     docid_fid_facet_numbers_chunk,
-                    (docid_fid_facet_strings_chunk, facet_exists_docids),
+                    (docid_fid_facet_strings_chunk, fid_facet_exists_docids_chunk),
                 ))
             },
         );
