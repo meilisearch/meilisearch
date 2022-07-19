@@ -192,17 +192,19 @@ the grenad and insert its elements in the database.
 
 
 */
-use crate::update::index_documents::{
-    create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
-};
-use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedStrStrU8Codec};
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::io::BufReader;
+
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::BytesDecode;
 use log::debug;
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::io::BufReader;
+
+use crate::update::index_documents::{
+    create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
+};
+use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedStrStrU8Codec};
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -737,9 +739,8 @@ impl PrefixTrieNode {
 mod tests {
     use roaring::RoaringBitmap;
 
-    use crate::{CboRoaringBitmapCodec, StrStrU8Codec};
-
     use super::*;
+    use crate::{CboRoaringBitmapCodec, StrStrU8Codec};
 
     use std::io::Cursor;
 
