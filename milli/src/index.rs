@@ -15,7 +15,7 @@ use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, FieldIdCodec,
 };
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
@@ -75,6 +75,7 @@ pub mod db_name {
     pub const WORD_PREFIX_POSITION_DOCIDS: &str = "word-prefix-position-docids";
     pub const FIELD_ID_WORD_COUNT_DOCIDS: &str = "field-id-word-count-docids";
     pub const FACET_ID_F64_DOCIDS: &str = "facet-id-f64-docids";
+    pub const FACET_ID_EXISTS_DOCIDS: &str = "facet-id-exists-docids";
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
@@ -116,6 +117,9 @@ pub struct Index {
     /// Maps the position of a word prefix with all the docids where this prefix appears.
     pub word_prefix_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
 
+    /// Maps the facet field id and the docids for which this field exists
+    pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+
     /// Maps the facet field id, level and the number with the docids that corresponds to it.
     pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     /// Maps the facet field id and the string with the original string and docids that corresponds to it.
@@ -134,7 +138,7 @@ impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(16);
+        options.max_dbs(17);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -152,6 +156,9 @@ impl Index {
         let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec> =
+            env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
+
         let field_id_docid_facet_f64s = env.create_database(Some(FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =
             env.create_database(Some(FIELD_ID_DOCID_FACET_STRINGS))?;
@@ -174,6 +181,7 @@ impl Index {
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_exists_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
             documents,
@@ -801,6 +809,18 @@ impl Index {
         buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
             .copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
+            Some(docids) => Ok(docids),
+            None => Ok(RoaringBitmap::new()),
+        }
+    }
+
+    /// Retrieve all the documents which contain this field id
+    pub fn exists_faceted_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        field_id: FieldId,
+    ) -> heed::Result<RoaringBitmap> {
+        match self.facet_id_exists_docids.get(rtxn, &field_id)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
         }

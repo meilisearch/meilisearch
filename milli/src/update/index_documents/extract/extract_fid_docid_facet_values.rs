@@ -20,7 +20,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)> {
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -28,7 +28,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory.map(|m| m / 2),
+        max_memory.map(|m| m / 3),
     );
 
     let mut fid_docid_facet_strings_sorter = create_sorter(
@@ -36,7 +36,15 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
-        max_memory.map(|m| m / 2),
+        max_memory.map(|m| m / 3),
+    );
+
+    let mut fid_docid_facet_exists_sorter = create_sorter(
+        keep_first,
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        indexer.max_nb_chunks,
+        max_memory.map(|m| m / 3),
     );
 
     let mut key_buffer = Vec::new();
@@ -46,15 +54,19 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
         for (field_id, field_bytes) in obkv.iter() {
             if faceted_fields.contains(&field_id) {
-                let value =
-                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
-                let (numbers, strings) = extract_facet_values(&value);
-
                 key_buffer.clear();
 
+                // here, we know already that the document must be added to the “field id exists” database
                 // prefix key with the field_id and the document_id
+
                 key_buffer.extend_from_slice(&field_id.to_be_bytes());
                 key_buffer.extend_from_slice(&docid_bytes);
+                fid_docid_facet_exists_sorter.insert(&key_buffer, ().as_bytes())?;
+
+                let value =
+                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+
+                let (numbers, strings) = extract_facet_values(&value);
 
                 // insert facet numbers in sorter
                 for number in numbers {
@@ -79,7 +91,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
     Ok((
         sorter_into_reader(fid_docid_facet_numbers_sorter, indexer.clone())?,
-        sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
+        sorter_into_reader(fid_docid_facet_strings_sorter, indexer.clone())?,
+        sorter_into_reader(fid_docid_facet_exists_sorter, indexer)?,
     ))
 }
 

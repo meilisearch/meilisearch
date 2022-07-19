@@ -1,4 +1,5 @@
 mod extract_docid_word_positions;
+mod extract_facet_exists_docids;
 mod extract_facet_number_docids;
 mod extract_facet_string_docids;
 mod extract_fid_docid_facet_values;
@@ -16,6 +17,7 @@ use log::debug;
 use rayon::prelude::*;
 
 use self::extract_docid_word_positions::extract_docid_word_positions;
+use self::extract_facet_exists_docids::extract_facet_exists_docids;
 use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
 use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
@@ -53,7 +55,7 @@ pub(crate) fn data_from_obkv_documents(
         })
         .collect::<Result<()>>()?;
 
-    let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = flattened_obkv_chunks
+    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))> = flattened_obkv_chunks
         .par_bridge()
         .map(|flattened_obkv_chunks| {
             send_and_extract_flattened_documents_data(
@@ -72,7 +74,10 @@ pub(crate) fn data_from_obkv_documents(
 
     let (
         docid_word_positions_chunks,
-        (docid_fid_facet_numbers_chunks, docid_fid_facet_strings_chunks),
+        (
+            docid_fid_facet_numbers_chunks,
+            (docid_fid_facet_strings_chunks, docid_fid_facet_exists_chunks),
+        ),
     ) = result?;
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
@@ -137,6 +142,15 @@ pub(crate) fn data_from_obkv_documents(
         TypedChunk::FieldIdFacetNumberDocids,
         "field-id-facet-number-docids",
     );
+    spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
+        docid_fid_facet_exists_chunks.clone(),
+        indexer.clone(),
+        lmdb_writer_sx.clone(),
+        extract_facet_exists_docids,
+        merge_cbo_roaring_bitmaps,
+        TypedChunk::FieldIdFacetExistsDocids,
+        "field-id-facet-exists-docids",
+    );
 
     Ok(())
 }
@@ -197,6 +211,7 @@ fn send_original_documents_data(
 /// - docid_word_positions
 /// - docid_fid_facet_numbers
 /// - docid_fid_facet_strings
+/// - docid_fid_facet_exists
 fn send_and_extract_flattened_documents_data(
     flattened_documents_chunk: Result<grenad::Reader<File>>,
     indexer: GrenadParameters,
@@ -209,7 +224,10 @@ fn send_and_extract_flattened_documents_data(
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
-    (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
+    (
+        grenad::Reader<CursorClonableMmap>,
+        (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
+    ),
 )> {
     let flattened_documents_chunk =
         flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -250,12 +268,15 @@ fn send_and_extract_flattened_documents_data(
                 Ok(docid_word_positions_chunk)
             },
             || {
-                let (docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk) =
-                    extract_fid_docid_facet_values(
-                        flattened_documents_chunk.clone(),
-                        indexer.clone(),
-                        faceted_fields,
-                    )?;
+                let (
+                    docid_fid_facet_numbers_chunk,
+                    docid_fid_facet_strings_chunk,
+                    docid_fid_facet_exists_chunk,
+                ) = extract_fid_docid_facet_values(
+                    flattened_documents_chunk.clone(),
+                    indexer.clone(),
+                    faceted_fields,
+                )?;
 
                 // send docid_fid_facet_numbers_chunk to DB writer
                 let docid_fid_facet_numbers_chunk =
@@ -273,7 +294,13 @@ fn send_and_extract_flattened_documents_data(
                     docid_fid_facet_strings_chunk.clone(),
                 )));
 
-                Ok((docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk))
+                let docid_fid_facet_exists_chunk =
+                    unsafe { as_cloneable_grenad(&docid_fid_facet_exists_chunk)? };
+
+                Ok((
+                    docid_fid_facet_numbers_chunk,
+                    (docid_fid_facet_strings_chunk, docid_fid_facet_exists_chunk),
+                ))
             },
         );
 

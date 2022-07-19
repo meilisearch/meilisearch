@@ -1931,4 +1931,153 @@ mod tests {
 
         assert_eq!(ids.len(), map.len());
     }
+
+    #[test]
+    fn index_documents_check_exists_database_reindex() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let content = documents!([
+            {
+                "id": 0,
+                "colour": 0,
+            },
+            {
+                "id": 1,
+                "colour": []
+            },
+            {
+                "id": 2,
+                "colour": {}
+            },
+            {
+                "id": 3,
+                "colour": null
+            },
+            {
+                "id": 4,
+                "colour": [1]
+            },
+            {
+                "id": 5
+            },
+            {
+                "id": 6,
+                "colour": {
+                    "green": 1
+                }
+            }
+        ]);
+
+        let config = IndexerConfig::default();
+        let indexing_config = IndexDocumentsConfig::default();
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        let faceted_fields = hashset!(S("colour"));
+        builder.set_filterable_fields(faceted_fields);
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let facets = index.faceted_fields(&rtxn).unwrap();
+        assert_eq!(facets, hashset!(S("colour"), S("colour.green")));
+
+        let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
+        let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
+
+        let bitmap_colour = index.facet_id_exists_docids.get(&rtxn, &colour_id).unwrap().unwrap();
+        assert_eq!(bitmap_colour.into_iter().collect::<Vec<_>>(), vec![0, 1, 2, 3, 4, 6]);
+
+        let bitmap_colour_green =
+            index.facet_id_exists_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
+        assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6]);
+    }
+
+    #[test]
+    fn index_documents_check_exists_database() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        let config = IndexerConfig::default();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+
+        let faceted_fields = hashset!(S("colour"));
+        builder.set_filterable_fields(faceted_fields);
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let content = documents!([
+            {
+                "id": 0,
+                "colour": 0,
+            },
+            {
+                "id": 1,
+                "colour": []
+            },
+            {
+                "id": 2,
+                "colour": {}
+            },
+            {
+                "id": 3,
+                "colour": null
+            },
+            {
+                "id": 4,
+                "colour": [1]
+            },
+            {
+                "id": 5
+            },
+            {
+                "id": 6,
+                "colour": {
+                    "green": 1
+                }
+            }
+        ]);
+
+        let indexing_config = IndexDocumentsConfig::default();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let mut builder =
+            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
+                .unwrap();
+        builder.add_documents(content).unwrap();
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let facets = index.faceted_fields(&rtxn).unwrap();
+        assert_eq!(facets, hashset!(S("colour"), S("colour.green")));
+
+        let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
+        let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
+
+        let bitmap_colour = index.facet_id_exists_docids.get(&rtxn, &colour_id).unwrap().unwrap();
+        assert_eq!(bitmap_colour.into_iter().collect::<Vec<_>>(), vec![0, 1, 2, 3, 4, 6]);
+
+        let bitmap_colour_green =
+            index.facet_id_exists_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
+        assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6]);
+    }
 }
