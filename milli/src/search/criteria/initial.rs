@@ -38,11 +38,15 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
             .take()
             .map(|mut answer| {
                 if self.exhaustive_number_hits && answer.query_tree.is_some() {
-                    let candidates = resolve_query_tree(
+                    let mut candidates = resolve_query_tree(
                         self.ctx,
                         answer.query_tree.as_ref().unwrap(),
                         &mut params.wdcache,
                     )?;
+
+                    if let Some(ref filtered_candidates) = answer.filtered_candidates {
+                        candidates &= filtered_candidates;
+                    }
 
                     let bucket_candidates = match &mut self.distinct {
                         // may be really time consuming
