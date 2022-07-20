@@ -97,6 +97,7 @@ impl<W: Write> DocumentsBatchBuilder<W> {
             .map(|(k, t)| (self.fields_index.insert(k), t))
             .enumerate()
             .collect();
+        // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
         typed_fields_ids.sort_unstable_by_key(|(_, (fid, _))| *fid);
 
         let mut record = csv::StringRecord::new();
