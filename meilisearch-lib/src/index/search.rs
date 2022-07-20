@@ -92,6 +92,7 @@ pub enum HitsInfo {
         hits_per_page: usize,
         page: usize,
         total_pages: usize,
+        total_hits: usize,
     },
     #[serde(rename_all = "camelCase")]
     OffsetLimit {
@@ -271,8 +272,8 @@ impl Index {
             HitsInfo::Pagination {
                 hits_per_page,
                 page: offset / hits_per_page + 1,
-                // TODO @many: estimation for now but we should ask milli to return an exact value
                 total_pages: (number_of_hits + hits_per_page - 1) / query.hits_per_page,
+                total_hits: number_of_hits,
             }
         } else {
             HitsInfo::OffsetLimit {
