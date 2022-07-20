@@ -1124,7 +1124,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#6d6acdcb03b9d3d5c67c54801b5a3931d0446346"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#34ebe6fb037710dab54baa87cc269506455b382a"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1149,7 +1149,7 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#6d6acdcb03b9d3d5c67c54801b5a3931d0446346"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#34ebe6fb037710dab54baa87cc269506455b382a"
 dependencies = [
  "serde_json",
 ]
@@ -1662,7 +1662,7 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#6d6acdcb03b9d3d5c67c54801b5a3931d0446346"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#34ebe6fb037710dab54baa87cc269506455b382a"
 dependencies = [
  "serde_json",
 ]
@@ -2190,7 +2190,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.31.1"
-source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#6d6acdcb03b9d3d5c67c54801b5a3931d0446346"
+source = "git+https://github.com/meilisearch/milli.git?branch=ease-search-results-pagination#34ebe6fb037710dab54baa87cc269506455b382a"
 dependencies = [
  "bimap",
  "bincode",
