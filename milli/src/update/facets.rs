@@ -1,12 +1,138 @@
+/*!
+This module initialises the databases that are used to quickly get the list
+of documents with a faceted field value falling within a certain range. For
+example, they can be used to implement filters such as `x >= 3`.
+
+These databases are `facet_id_string_docids` and `facet_id_f64_docids`.
+
+## Example with numbers
+
+In the case of numbers, we start with a sorted list whose keys are
+`(field_id, number_value)` and whose value is a roaring bitmap of the document ids
+which contain the value `number_value` for the faceted field `field_id`.
+
+From this list, we want to compute two things:
+
+1. the bitmap of all documents that contain **any** number for each faceted field
+2. a structure that allows us to use a (sort of) binary search to find all documents
+containing numbers inside a certain range for a faceted field
+
+To achieve goal (2), we recursively split the list into chunks. Every time we split it, we
+create a new "level" that is several times smaller than the level below it. The base level,
+level 0, is the starting list. Level 1 is composed of chunks of up to N elements. Each element
+contains a range and a bitmap of docids. Level 2 is composed of chunks up to N^2 elements, etc.
+
+For example, let's say we have 26 documents which we identify through the letters a-z.
+We will focus on a single faceted field. When there are multiple faceted fields, the structure
+described below is simply repeated for each field.
+
+What we want to obtain is the following structure for each faceted field:
+```text
+┌───────┐   ┌───────────────────────────────────────────────────────────────────────────────┐
+│  all  │   │                       [a, b, c, d, e, f, g, u, y, z]                          │
+└───────┘   └───────────────────────────────────────────────────────────────────────────────┘
+            ┌───────────────────────────────┬───────────────────────────────┬───────────────┐
+┌───────┐   │            1.2 – 2            │           3.4 – 100           │   102 – 104   │
+│Level 2│   │                               │                               │               │
+└───────┘   │        [a, b, d, f, z]        │        [c, d, e, f, g]        │    [u, y]     │
+            ├───────────────┬───────────────┼───────────────┬───────────────┼───────────────┤
+┌───────┐   │   1.2 – 1.3   │    1.6 – 2    │   3.4 – 12    │  12.3 – 100   │   102 – 104   │
+│Level 1│   │               │               │               │               │               │
+└───────┘   │ [a, b, d, z]  │   [a, b, f]   │   [c, d, g]   │    [e, f]     │    [u, y]     │
+            ├───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┤
+┌───────┐   │  1.2  │  1.3  │  1.6  │   2   │  3.4  │   12  │  12.3 │  100  │  102  │  104  │
+│Level 0│   │       │       │       │       │       │       │       │       │       │       │
+└───────┘   │ [a, b]│ [d, z]│ [b, f]│ [a, f]│ [c, d]│  [g]  │  [e]  │ [e, f]│  [y]  │  [u]  │
+            └───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┘
+```
+
+You can read more about this structure (for strings) in `[crate::search::facet::facet_strings]`.
+
+To create the levels, we use a recursive algorithm which makes sure that we only need to iterate
+over the elements of level 0 once. It is implemented by [`recursive_compute_levels`].
+
+## Encoding
+
+### Numbers
+For numbers we use the same encoding for level 0 and the other levels.
+
+The key is given by `FacetLevelValueF64Codec`. It consists of:
+1. The field id            : u16
+2. The height of the level : u8
+3. The start bound         : f64
+4. The end bound           : f64
+Note that at level 0, we have start bound == end bound.
+
+The value is a serialised `RoaringBitmap`.
+
+### Strings
+
+For strings, we use a different encoding for level 0 and the other levels.
+
+At level 0, the key is given by `FacetStringLevelZeroCodec`. It consists of:
+1. The field id                : u16
+2. The height of the level     : u8  <-- always == 0
+3. The normalised string value : &str
+
+And the value is given by `FacetStringLevelZeroValueCodec`. It consists of:
+1. The original string
+2. A serialised `RoaringBitmap`
+
+At level 1, the key is given by `FacetLevelValueU32Codec`. It consists of:
+1. The field id                : u16
+2. The height of the level     : u8  <-- always >= 1
+3. The start bound             : u32
+4. The end bound               : u32
+where the bounds are indices inside level 0.
+
+The value is given by `FacetStringZeroBoundsValueCodec<CboRoaringBitmapCodec>`.
+If the level is 1, then it consists of:
+1. The normalised string of the start bound
+2. The normalised string of the end bound
+3. A serialised `RoaringBitmap`
+
+If the level is higher, then it consists only of the serialised roaring bitmap.
+
+The distinction between the value encoding of level 1 and the levels above it
+is to allow us to retrieve the value in level 0 quickly by reading the key of
+level 1 (we obtain the string value of the bound and execute a prefix search
+in the database).
+
+Therefore, for strings, the structure for a single faceted field looks more like this:
+```text
+┌───────┐   ┌───────────────────────────────────────────────────────────────────────────────┐
+│  all  │   │                       [a, b, c, d, e, f, g, u, y, z]                          │
+└───────┘   └───────────────────────────────────────────────────────────────────────────────┘
+
+            ┌───────────────────────────────┬───────────────────────────────┬───────────────┐
+┌───────┐   │             0 – 3             │             4 – 7             │     8 – 9     │
+│Level 2│   │                               │                               │               │
+└───────┘   │        [a, b, d, f, z]        │        [c, d, e, f, g]        │    [u, y]     │
+            ├───────────────┬───────────────┼───────────────┬───────────────┼───────────────┤
+┌───────┐   │     0 – 1     │     2 – 3     │     4 – 5     │     6 – 7     │     8 – 9     │
+│Level 1│   │  "ab" – "ac"  │ "ba" – "bac"  │ "gaf" – "gal" │"form" – "wow" │ "woz" – "zz"  │
+└───────┘   │ [a, b, d, z]  │   [a, b, f]   │   [c, d, g]   │    [e, f]     │    [u, y]     │
+            ├───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┤
+┌───────┐   │  "ab" │  "ac" │  "ba" │ "bac" │ "gaf" │ "gal" │ "form"│ "wow" │ "woz" │  "zz" │
+│Level 0│   │  "AB" │ " Ac" │ "ba " │ "Bac" │ " GAF"│ "gal" │ "Form"│ " wow"│ "woz" │  "ZZ" │
+└───────┘   │ [a, b]│ [d, z]│ [b, f]│ [a, f]│ [c, d]│  [g]  │  [e]  │ [e, f]│  [y]  │  [u]  │
+            └───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┘
+
+The first line in a cell is its key (without the field id and level height) and the last two
+lines are its values.
+```
+*/
+
+use std::cmp;
+use std::fs::File;
+use std::num::{NonZeroU8, NonZeroUsize};
+use std::ops::RangeFrom;
+
 use grenad::{CompressionType, Reader, Writer};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, BytesEncode, Error};
 use log::debug;
 use roaring::RoaringBitmap;
-use std::cmp;
-use std::fs::File;
-use std::num::{NonZeroU8, NonZeroUsize};
-use std::ops::RangeFrom;
 use time::OffsetDateTime;
 
 use crate::error::InternalError;
@@ -80,11 +206,11 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 field_id,
                 &string_documents_ids,
             )?;
-            for facet_strings_levels in facet_string_levels {
+            for facet_strings_level in facet_string_levels {
                 write_into_lmdb_database(
                     self.wtxn,
                     *self.index.facet_id_string_docids.as_polymorph(),
-                    facet_strings_levels,
+                    facet_strings_level,
                     |_, _| {
                         Err(InternalError::IndexingMergingKeys { process: "facet string levels" })?
                     },
@@ -94,7 +220,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             // Clear the facet number levels.
             clear_field_number_levels(self.wtxn, self.index.facet_id_f64_docids, field_id)?;
 
-            let (facet_number_levels_2, number_documents_ids) = compute_facet_number_levels(
+            let (facet_number_levels, number_documents_ids) = compute_facet_number_levels(
                 self.wtxn,
                 self.index.facet_id_f64_docids,
                 self.chunk_compression_type,
@@ -110,11 +236,11 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 &number_documents_ids,
             )?;
 
-            for facet_number_levels in facet_number_levels_2 {
+            for facet_number_level in facet_number_levels {
                 write_into_lmdb_database(
                     self.wtxn,
                     *self.index.facet_id_f64_docids.as_polymorph(),
-                    facet_number_levels,
+                    facet_number_level,
                     |_, _| {
                         Err(InternalError::IndexingMergingKeys { process: "facet number levels" })?
                     },
@@ -257,6 +383,43 @@ fn compute_facet_strings_levels<'t>(
     }
 }
 
+/**
+Compute a level from the levels below it, with the elements of level 0 already existing in the given `db`.
+
+This function is generic to work with both numbers and strings. The generic type parameters are:
+* `KeyCodec`/`ValueCodec`: the codecs used to read the elements of the database.
+* `Bound`: part of the range in the levels structure. For example, for numbers, the `Bound` is `f64`
+because each chunk in a level contains a range such as (1.2 ..= 4.5).
+
+## Arguments
+* `rtxn` : LMDB read transaction
+* `db`: a database which already contains a `level 0`
+* `compression_type`/`compression_level`: parameters used to create the `grenad::Writer` that
+will contain the new levels
+* `level` : the height of the level to create, or `0` to read elements from level 0.
+* `level_0_start` : a key in the database that points to the beginning of its level 0
+* `level_0_range` : equivalent to `level_0_start..`
+* `level_0_size` : the number of elements in level 0
+* `level_group_size` : the number of elements from the level below that are represented by a
+* single element of the new level
+* `computed_group_bitmap` : a callback that is called whenever at most `level_group_size` elements
+from the level below were read/created. Its arguments are:
+    0. the list of bitmaps from each read/created element of the level below
+    1. the start bound corresponding to the first element
+    2. the end bound corresponding to the last element
+* `bound_from_db_key` : finds the `Bound` from a key in the database
+* `bitmap_from_db_value` : finds the `RoaringBitmap` from a value in the database
+* `write_entry` : writes an element of a level into the writer. The arguments are:
+    0. the writer
+    1. the height of the level
+    2. the start bound
+    3. the end bound
+    4. the docids of all elements between the start and end bound
+
+## Return
+A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
+that must be inserted into the database.
+*/
 fn recursive_compute_levels<'t, KeyCodec, ValueCodec, Bound>(
     rtxn: &'t heed::RoTxn,
     db: heed::Database<KeyCodec, ValueCodec>,
@@ -284,6 +447,9 @@ where
     if level == 0 {
         // base case for the recursion
 
+        // we read the elements one by one and
+        // 1. keep track of the start and end bounds
+        // 2. fill the `bitmaps` vector to give it to level 1 once `level_group_size` elements were read
         let mut bitmaps = vec![];
 
         let mut start_bound = bound_from_db_key(0, &level_0_start);
@@ -308,6 +474,7 @@ where
                 bitmaps.clear();
             }
         }
+        // don't forget to give the leftover bitmaps as well
         if !bitmaps.is_empty() {
             computed_group_bitmap(&bitmaps, start_bound, end_bound)?;
             bitmaps.clear();
@@ -315,12 +482,19 @@ where
         // level 0 is already stored in the DB
         return Ok(vec![]);
     } else {
+        // level >= 1
+        // we compute each element of this level based on the elements of the level below it
+        // once we have computed `level_group_size` elements, we give the start and end bounds
+        // of those elements, and their bitmaps, to the level above
+
         let mut cur_writer =
             create_writer(compression_type, compression_level, tempfile::tempfile()?);
 
         let mut range_for_bitmaps = vec![];
         let mut bitmaps = vec![];
 
+        // compute the levels below
+        // in the callback, we fill `cur_writer` with the correct elements for this level
         let mut sub_writers = recursive_compute_levels(
             rtxn,
             db,
@@ -361,6 +535,7 @@ where
             bitmap_from_db_value,
             write_entry,
         )?;
+        // don't forget to insert the leftover elements into the writer as well
         if !bitmaps.is_empty() {
             let start_range = range_for_bitmaps.first().unwrap().0;
             let end_range = range_for_bitmaps.last().unwrap().1;
