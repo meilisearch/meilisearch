@@ -335,7 +335,7 @@ pub fn resolve_query_tree<'t>(
                     // Get all the documents with the matching distance for each word pairs.
                     let mut bitmaps = Vec::with_capacity(winsize.pow(2));
                     for (offset, s1) in win.iter().enumerate() {
-                        for (dist, s2) in win.iter().skip(offset).enumerate() {
+                        for (dist, s2) in win.iter().skip(offset + 1).enumerate() {
                             match ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
                                 Some(m) => bitmaps.push(m),
                                 // If there are no document for this distance, there will be no
