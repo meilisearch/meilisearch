@@ -1,24 +1,41 @@
 mod builder;
-/// The documents module defines an intermediary document format that milli uses for indexation, and
-/// provides an API to easily build and read such documents.
-///
-/// The `DocumentBatchBuilder` interface allows to write batches of documents to a writer, that can
-/// later be read by milli using the `DocumentBatchReader` interface.
+mod enriched;
 mod reader;
 mod serde_impl;
 
 use std::fmt::{self, Debug};
 use std::io;
+use std::str::Utf8Error;
 
 use bimap::BiHashMap;
-pub use builder::DocumentBatchBuilder;
-pub use reader::DocumentBatchReader;
+pub use builder::DocumentsBatchBuilder;
+pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
+use obkv::KvReader;
+pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
-use crate::FieldId;
+use crate::error::{FieldIdMapMissingEntry, InternalError};
+use crate::{FieldId, Object, Result};
+
+/// The key that is used to store the `DocumentsBatchIndex` datastructure,
+/// it is the absolute last key of the list.
+const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
+
+/// Helper function to convert an obkv reader into a JSON object.
+pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
+    obkv.iter()
+        .map(|(field_id, value)| {
+            let field_name = index.name(field_id).ok_or_else(|| {
+                FieldIdMapMissingEntry::FieldId { field_id, process: "obkv_to_object" }
+            })?;
+            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+            Ok((field_name.to_string(), value))
+        })
+        .collect()
+}
 
 /// A bidirectional map that links field ids to their name in a document batch.
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct DocumentsBatchIndex(pub BiHashMap<FieldId, String>);
 
 impl DocumentsBatchIndex {
@@ -46,15 +63,16 @@ impl DocumentsBatchIndex {
         self.0.iter()
     }
 
-    pub fn name(&self, id: FieldId) -> Option<&String> {
-        self.0.get_by_left(&id)
+    pub fn name(&self, id: FieldId) -> Option<&str> {
+        self.0.get_by_left(&id).map(AsRef::as_ref)
     }
 
-    pub fn recreate_json(
-        &self,
-        document: &obkv::KvReaderU16,
-    ) -> Result<serde_json::Map<String, serde_json::Value>, crate::Error> {
-        let mut map = serde_json::Map::new();
+    pub fn id(&self, name: &str) -> Option<FieldId> {
+        self.0.get_by_right(name).cloned()
+    }
+
+    pub fn recreate_json(&self, document: &obkv::KvReaderU16) -> Result<Object> {
+        let mut map = Object::new();
 
         for (k, v) in document.iter() {
             // TODO: TAMO: update the error type
@@ -69,50 +87,22 @@ impl DocumentsBatchIndex {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DocumentsMetadata {
-    count: usize,
-    index: DocumentsBatchIndex,
-}
-
-pub struct ByteCounter<W> {
-    count: usize,
-    writer: W,
-}
-
-impl<W> ByteCounter<W> {
-    fn new(writer: W) -> Self {
-        Self { count: 0, writer }
-    }
-}
-
-impl<W: io::Write> io::Write for ByteCounter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let count = self.writer.write(buf)?;
-        self.count += count;
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
-    }
-}
-
 #[derive(Debug)]
 pub enum Error {
     ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
     InvalidDocumentFormat,
-    Custom(String),
-    JsonError(serde_json::Error),
-    CsvError(csv::Error),
-    Serialize(bincode::Error),
+    InvalidEnrichedData,
+    InvalidUtf8(Utf8Error),
+    Csv(csv::Error),
+    Json(serde_json::Error),
+    Serialize(serde_json::Error),
+    Grenad(grenad::Error),
     Io(io::Error),
-    DocumentTooLarge,
 }
 
 impl From<csv::Error> for Error {
     fn from(e: csv::Error) -> Self {
-        Self::CsvError(e)
+        Self::Csv(e)
     }
 }
 
@@ -122,15 +112,21 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<bincode::Error> for Error {
-    fn from(other: bincode::Error) -> Self {
-        Self::Serialize(other)
+impl From<serde_json::Error> for Error {
+    fn from(other: serde_json::Error) -> Self {
+        Self::Json(other)
     }
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(other: serde_json::Error) -> Self {
-        Self::JsonError(other)
+impl From<grenad::Error> for Error {
+    fn from(other: grenad::Error) -> Self {
+        Self::Grenad(other)
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(other: Utf8Error) -> Self {
+        Self::InvalidUtf8(other)
     }
 }
 
@@ -140,13 +136,16 @@ impl fmt::Display for Error {
             Error::ParseFloat { error, line, value } => {
                 write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
             }
-            Error::Custom(s) => write!(f, "Unexpected serialization error: {}", s),
-            Error::InvalidDocumentFormat => f.write_str("Invalid document addition format."),
-            Error::JsonError(err) => write!(f, "Couldn't serialize document value: {}", err),
+            Error::InvalidDocumentFormat => {
+                f.write_str("Invalid document addition format, missing the documents batch index.")
+            }
+            Error::InvalidEnrichedData => f.write_str("Invalid enriched data."),
+            Error::InvalidUtf8(e) => write!(f, "{}", e),
             Error::Io(e) => write!(f, "{}", e),
-            Error::DocumentTooLarge => f.write_str("Provided document is too large (>2Gib)"),
             Error::Serialize(e) => write!(f, "{}", e),
-            Error::CsvError(e) => write!(f, "{}", e),
+            Error::Grenad(e) => write!(f, "{}", e),
+            Error::Csv(e) => write!(f, "{}", e),
+            Error::Json(e) => write!(f, "{}", e),
         }
     }
 }
@@ -158,15 +157,25 @@ impl std::error::Error for Error {}
 macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
-        let mut writer = std::io::Cursor::new(Vec::new());
-        let mut builder = crate::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-        let documents = serde_json::to_vec(&documents).unwrap();
-        builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
-        builder.finish().unwrap();
+        let documents = match documents {
+            object @ serde_json::Value::Object(_) => vec![object],
+            serde_json::Value::Array(objects) => objects,
+            invalid => {
+                panic!("an array of objects must be specified, {:#?} is not an array", invalid)
+            }
+        };
 
-        writer.set_position(0);
+        let mut builder = crate::documents::DocumentsBatchBuilder::new(Vec::new());
+        for document in documents {
+            let object = match document {
+                serde_json::Value::Object(object) => object,
+                invalid => panic!("an object must be specified, {:#?} is not an object", invalid),
+            };
+            builder.append_json_object(&object).unwrap();
+        }
 
-        crate::documents::DocumentBatchReader::from_reader(writer).unwrap()
+        let vector = builder.into_inner().unwrap();
+        crate::documents::DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap()
     }};
 }
 
@@ -180,7 +189,7 @@ mod test {
 
     #[test]
     fn create_documents_no_errors() {
-        let json = json!({
+        let value = json!({
             "number": 1,
             "string": "this is a field",
             "array": ["an", "array"],
@@ -190,26 +199,18 @@ mod test {
             "bool": true
         });
 
-        let json = serde_json::to_vec(&json).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(value.as_object().unwrap()).unwrap();
+        let vector = builder.into_inner().unwrap();
 
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
+        let (mut documents, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
 
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(json)).unwrap();
-
-        builder.finish().unwrap();
-
-        let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
-
-        assert_eq!(documents.index().iter().count(), 5);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 5);
-        assert!(documents.next_document_with_index().unwrap().is_none());
+        assert_eq!(index.iter().count(), 5);
+        let reader = documents.next_document().unwrap().unwrap();
+        assert_eq!(reader.iter().count(), 5);
+        assert!(documents.next_document().unwrap().is_none());
     }
 
     #[test]
@@ -221,101 +222,56 @@ mod test {
             "toto": false,
         });
 
-        let doc1 = serde_json::to_vec(&doc1).unwrap();
-        let doc2 = serde_json::to_vec(&doc2).unwrap();
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_json_object(doc1.as_object().unwrap()).unwrap();
+        builder.append_json_object(doc2.as_object().unwrap()).unwrap();
+        let vector = builder.into_inner().unwrap();
 
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(doc1)).unwrap();
-        builder.extend_from_json(Cursor::new(doc2)).unwrap();
-
-        builder.finish().unwrap();
-
-        let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
-
-        assert_eq!(documents.index().iter().count(), 2);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 1);
-        assert!(documents.next_document_with_index().unwrap().is_some());
-        assert!(documents.next_document_with_index().unwrap().is_none());
-    }
-
-    #[test]
-    fn add_documents_array() {
-        let docs = json!([
-            { "toto": false },
-            { "tata": "hello" },
-        ]);
-
-        let docs = serde_json::to_vec(&docs).unwrap();
-
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        builder.extend_from_json(Cursor::new(docs)).unwrap();
-
-        builder.finish().unwrap();
-
-        let mut documents =
-            DocumentBatchReader::from_reader(io::Cursor::new(cursor.into_inner())).unwrap();
-
-        assert_eq!(documents.index().iter().count(), 2);
-
-        let reader = documents.next_document_with_index().unwrap().unwrap();
-
-        assert_eq!(reader.1.iter().count(), 1);
-        assert!(documents.next_document_with_index().unwrap().is_some());
-        assert!(documents.next_document_with_index().unwrap().is_none());
-    }
-
-    #[test]
-    fn add_invalid_document_format() {
-        let mut v = Vec::new();
-        let mut cursor = io::Cursor::new(&mut v);
-
-        let mut builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
-
-        let docs = json!([[
-            { "toto": false },
-            { "tata": "hello" },
-        ]]);
-
-        let docs = serde_json::to_vec(&docs).unwrap();
-        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
-
-        let docs = json!("hello");
-        let docs = serde_json::to_vec(&docs).unwrap();
-
-        assert!(builder.extend_from_json(Cursor::new(docs)).is_err());
+        let (mut documents, index) = DocumentsBatchReader::from_reader(io::Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
+        assert_eq!(index.iter().count(), 2);
+        let reader = documents.next_document().unwrap().unwrap();
+        assert_eq!(reader.iter().count(), 1);
+        assert!(documents.next_document().unwrap().is_some());
+        assert!(documents.next_document().unwrap().is_none());
     }
 
     #[test]
     fn test_nested() {
-        let mut docs = documents!([{
+        let docs_reader = documents!([{
             "hello": {
                 "toto": ["hello"]
             }
         }]);
 
-        let (_index, doc) = docs.next_document_with_index().unwrap().unwrap();
-
+        let (mut cursor, _) = docs_reader.into_cursor_and_fields_index();
+        let doc = cursor.next_document().unwrap().unwrap();
         let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
         assert_eq!(nested, json!({ "toto": ["hello"] }));
     }
 
     #[test]
-    fn out_of_order_fields() {
+    fn out_of_order_json_fields() {
         let _documents = documents!([
             {"id": 1,"b": 0},
             {"id": 2,"a": 0,"b": 0},
         ]);
+    }
+
+    #[test]
+    fn out_of_order_csv_fields() {
+        let csv1_content = "id:number,b\n1,0";
+        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
+
+        let csv2_content = "id:number,a,b\n2,0,0";
+        let csv2 = csv::Reader::from_reader(Cursor::new(csv2_content));
+
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv1).unwrap();
+        builder.append_csv(csv2).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
     }
 }

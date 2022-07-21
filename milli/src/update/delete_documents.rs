@@ -657,13 +657,13 @@ mod tests {
     fn insert_documents<'t, R: std::io::Read + std::io::Seek>(
         wtxn: &mut RwTxn<'t, '_>,
         index: &'t Index,
-        documents: crate::documents::DocumentBatchReader<R>,
+        documents: crate::documents::DocumentsBatchReader<R>,
     ) {
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
-            IndexDocuments::new(wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        builder.add_documents(documents).unwrap();
+        let builder = IndexDocuments::new(wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+        let (builder, user_error) = builder.add_documents(documents).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
     }
 
@@ -701,9 +701,10 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         // delete those documents, ids are synchronous therefore 0, 1, and 2.
@@ -736,9 +737,10 @@ mod tests {
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         // Delete not all of the documents but some of them.

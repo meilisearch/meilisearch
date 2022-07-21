@@ -6,10 +6,11 @@ use big_s::S;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
-use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member};
+use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object};
 use serde::Deserialize;
+use serde_json::Deserializer;
 use slice_group_by::GroupBy;
 
 mod distinct;
@@ -60,24 +61,21 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
 
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-    let mut cursor = Cursor::new(Vec::new());
-    let mut documents_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(CONTENT.as_bytes());
 
-    for doc in serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>() {
-        let doc = Cursor::new(serde_json::to_vec(&doc.unwrap()).unwrap());
-        documents_builder.extend_from_json(doc).unwrap();
+    for result in Deserializer::from_reader(reader).into_iter::<Object>() {
+        let object = result.unwrap();
+        documents_builder.append_json_object(&object).unwrap();
     }
 
-    documents_builder.finish().unwrap();
-
-    cursor.set_position(0);
+    let vector = documents_builder.into_inner().unwrap();
 
     // index documents
-    let content = DocumentBatchReader::from_reader(cursor).unwrap();
-    builder.add_documents(content).unwrap();
+    let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
+    let (builder, user_error) = builder.add_documents(content).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
 
     wtxn.commit().unwrap();

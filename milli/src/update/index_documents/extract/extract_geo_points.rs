@@ -1,12 +1,12 @@
 use std::fs::File;
 use std::io;
-use std::result::Result as StdResult;
 
 use concat_arrays::concat_arrays;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
 use crate::error::GeoError;
+use crate::update::index_documents::extract_finite_float_from_value;
 use crate::{FieldId, InternalError, Result};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
@@ -29,9 +29,9 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         let obkv = obkv::KvReader::new(value);
         // since we only needs the primary key when we throw an error we create this getter to
         // lazily get it when needed
-        let primary_key = || -> Value {
-            let primary_key = obkv.get(primary_key_id).unwrap();
-            serde_json::from_slice(primary_key).unwrap()
+        let document_id = || -> Value {
+            let document_id = obkv.get(primary_key_id).unwrap();
+            serde_json::from_slice(document_id).unwrap()
         };
 
         // first we get the two fields
@@ -40,32 +40,24 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
 
         if let Some((lat, lng)) = lat.zip(lng) {
             // then we extract the values
-            let lat = extract_float_from_value(
+            let lat = extract_finite_float_from_value(
                 serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
             )
-            .map_err(|lat| GeoError::BadLatitude { document_id: primary_key(), value: lat })?;
+            .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })?;
 
-            let lng = extract_float_from_value(
+            let lng = extract_finite_float_from_value(
                 serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
             )
-            .map_err(|lng| GeoError::BadLongitude { document_id: primary_key(), value: lng })?;
+            .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })?;
 
             let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else if lat.is_none() && lng.is_some() {
-            return Err(GeoError::MissingLatitude { document_id: primary_key() })?;
+            return Err(GeoError::MissingLatitude { document_id: document_id() })?;
         } else if lat.is_some() && lng.is_none() {
-            return Err(GeoError::MissingLongitude { document_id: primary_key() })?;
+            return Err(GeoError::MissingLongitude { document_id: document_id() })?;
         }
     }
 
     Ok(writer_into_reader(writer)?)
-}
-
-fn extract_float_from_value(value: Value) -> StdResult<f64, Value> {
-    match value {
-        Value::Number(ref n) => n.as_f64().ok_or(value),
-        Value::String(ref s) => s.parse::<f64>().map_err(|_| value),
-        value => Err(value),
-    }
 }

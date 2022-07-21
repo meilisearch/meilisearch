@@ -648,10 +648,11 @@ mod tests {
 
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         wtxn.commit().unwrap();

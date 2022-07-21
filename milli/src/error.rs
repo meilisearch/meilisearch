@@ -4,12 +4,11 @@ use std::{io, str};
 
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use thiserror::Error;
 
-use crate::{CriterionError, DocumentId, FieldId, SortError};
-
-pub type Object = Map<String, Value>;
+use crate::documents::{self, DocumentsBatchCursorError};
+use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
     ["_geo", "_geoDistance", "_geoPoint", "_geoRadius"].contains(&keyword)
@@ -37,6 +36,8 @@ pub enum InternalError {
     FieldIdMappingMissingEntry { key: FieldId },
     #[error(transparent)]
     Fst(#[from] fst::Error),
+    #[error(transparent)]
+    DocumentsError(#[from] documents::Error),
     #[error("Invalid compression type have been specified to grenad.")]
     GrenadInvalidCompressionType,
     #[error("Invalid grenad file with an invalid version format.")]
@@ -123,6 +124,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     MaxDatabaseSizeReached,
     #[error("Document doesn't have a `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
     MissingDocumentId { primary_key: String, document: Object },
+    #[error("Document have too many matching `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
+    TooManyDocumentIds { primary_key: String, document: Object },
     #[error("The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.")]
     MissingPrimaryKey,
     #[error("There is no more space left on the device. Consider increasing the size of the disk/partition.")]
@@ -141,13 +144,19 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 
 #[derive(Error, Debug)]
 pub enum GeoError {
+    #[error("The `_geo` field in the document with the id: `{document_id}` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `{value}`.")]
+    NotAnObject { document_id: Value, value: Value },
+    #[error("Could not find latitude nor longitude in the document with the id: `{document_id}`. Was expecting `_geo.lat` and `_geo.lng` fields.")]
+    MissingLatitudeAndLongitude { document_id: Value },
     #[error("Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")]
     MissingLatitude { document_id: Value },
     #[error("Could not find longitude in the document with the id: `{document_id}`. Was expecting a `_geo.lng` field.")]
     MissingLongitude { document_id: Value },
-    #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
+    #[error("Could not parse latitude nor longitude in the document with the id: `{document_id}`. Was expecting finite numbers but instead got `{lat}` and `{lng}`.")]
+    BadLatitudeAndLongitude { document_id: Value, lat: Value, lng: Value },
+    #[error("Could not parse latitude in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
     BadLatitude { document_id: Value, value: Value },
-    #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a number but instead got `{value}`.")]
+    #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
     BadLongitude { document_id: Value, value: Value },
 }
 
@@ -178,6 +187,7 @@ macro_rules! error_from_sub_error {
 error_from_sub_error! {
     FieldIdMapMissingEntry => InternalError,
     fst::Error => InternalError,
+    documents::Error => InternalError,
     str::Utf8Error => InternalError,
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
@@ -199,6 +209,15 @@ where
             grenad::Error::InvalidFormatVersion => {
                 Error::InternalError(InternalError::GrenadInvalidFormatVersion)
             }
+        }
+    }
+}
+
+impl From<DocumentsBatchCursorError> for Error {
+    fn from(error: DocumentsBatchCursorError) -> Error {
+        match error {
+            DocumentsBatchCursorError::Grenad(e) => Error::from(e),
+            DocumentsBatchCursorError::SerdeJson(e) => Error::from(InternalError::from(e)),
         }
     }
 }

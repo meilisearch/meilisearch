@@ -106,35 +106,31 @@ fn test_typo_disabled_on_word() {
     options.map_size(4096 * 100);
     let index = Index::new(options, tmp.path()).unwrap();
 
-    let documents = json!([
-        {
-            "id": 1usize,
-            "data": "zealand",
-        },
-        {
-            "id": 2usize,
-            "data": "zearand",
-        },
-    ]);
+    let mut builder = milli::documents::DocumentsBatchBuilder::new(Vec::new());
+    let doc1 = json!({
+        "id": 1usize,
+        "data": "zealand",
+    });
 
-    let mut writer = std::io::Cursor::new(Vec::new());
-    let mut builder = milli::documents::DocumentBatchBuilder::new(&mut writer).unwrap();
-    let documents = serde_json::to_vec(&documents).unwrap();
-    builder.extend_from_json(std::io::Cursor::new(documents)).unwrap();
-    builder.finish().unwrap();
+    let doc2 = json!({
+        "id": 2usize,
+        "data": "zearand",
+    });
 
-    writer.set_position(0);
+    builder.append_json_object(doc1.as_object().unwrap()).unwrap();
+    builder.append_json_object(doc2.as_object().unwrap()).unwrap();
+    let vector = builder.into_inner().unwrap();
 
-    let documents = milli::documents::DocumentBatchReader::from_reader(writer).unwrap();
+    let documents =
+        milli::documents::DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap();
 
     let mut txn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
     let indexing_config = IndexDocumentsConfig::default();
-    let mut builder =
-        IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder = IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
 
-    builder.add_documents(documents).unwrap();
-
+    let (builder, user_error) = builder.add_documents(documents).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
     txn.commit().unwrap();
 

@@ -5,7 +5,7 @@ use big_s::S;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
-use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
 use rand::Rng;
@@ -390,11 +390,9 @@ fn criteria_ascdesc() {
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
 
-    let mut cursor = Cursor::new(Vec::new());
-    let mut batch_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+    let mut batch_builder = DocumentsBatchBuilder::new(Vec::new());
 
     (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
         let mut rng = rand::thread_rng();
@@ -412,17 +410,19 @@ fn criteria_ascdesc() {
             "age": age,
         });
 
-        let json = Cursor::new(serde_json::to_vec(&json).unwrap());
-        batch_builder.extend_from_json(json).unwrap();
+        let object = match json {
+            serde_json::Value::Object(object) => object,
+            _ => panic!(),
+        };
+
+        batch_builder.append_json_object(&object).unwrap();
     });
 
-    batch_builder.finish().unwrap();
+    let vector = batch_builder.into_inner().unwrap();
 
-    cursor.set_position(0);
-
-    let reader = DocumentBatchReader::from_reader(cursor).unwrap();
-
-    builder.add_documents(reader).unwrap();
+    let reader = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
+    let (builder, user_error) = builder.add_documents(reader).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
 
     wtxn.commit().unwrap();

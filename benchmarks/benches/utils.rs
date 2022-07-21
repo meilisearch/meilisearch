@@ -7,12 +7,12 @@ use std::path::Path;
 
 use criterion::BenchmarkId;
 use heed::EnvOpenOptions;
-use milli::documents::DocumentBatchReader;
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };
-use milli::{Filter, Index};
-use serde_json::{Map, Value};
+use milli::{Filter, Index, Object};
+use serde_json::Value;
 
 pub struct Conf<'a> {
     /// where we are going to create our database.mmdb directory
@@ -96,12 +96,10 @@ pub fn base_setup(conf: &Conf) -> Index {
         update_method: IndexDocumentsMethod::ReplaceDocuments,
         ..Default::default()
     };
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
     let documents = documents_from(conf.dataset, conf.dataset_format);
-
-    builder.add_documents(documents).unwrap();
-
+    let (builder, user_error) = builder.add_documents(documents).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
     wtxn.commit().unwrap();
 
@@ -140,7 +138,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
     }
 }
 
-pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<impl BufRead + Seek> {
+pub fn documents_from(filename: &str, filetype: &str) -> DocumentsBatchReader<impl BufRead + Seek> {
     let reader =
         File::open(filename).expect(&format!("could not find the dataset in: {}", filename));
     let reader = BufReader::new(reader);
@@ -150,39 +148,35 @@ pub fn documents_from(filename: &str, filetype: &str) -> DocumentBatchReader<imp
         "jsonl" => documents_from_jsonl(reader).unwrap(),
         otherwise => panic!("invalid update format {:?}", otherwise),
     };
-    DocumentBatchReader::from_reader(Cursor::new(documents)).unwrap()
+    DocumentsBatchReader::from_reader(Cursor::new(documents)).unwrap()
 }
 
-fn documents_from_jsonl(mut reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+fn documents_from_jsonl(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
 
-    let mut buf = String::new();
-
-    while reader.read_line(&mut buf)? > 0 {
-        documents.extend_from_json(&mut buf.as_bytes())?;
-        buf.clear();
+    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
+        let object = result?;
+        documents.append_json_object(&object)?;
     }
-    documents.finish()?;
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_json(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    let mut documents = milli::documents::DocumentBatchBuilder::new(&mut writer)?;
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
 
-    documents.extend_from_json(reader)?;
-    documents.finish()?;
+    documents.append_json_array(reader)?;
 
-    Ok(writer.into_inner())
+    documents.into_inner().map_err(Into::into)
 }
 
 fn documents_from_csv(reader: impl BufRead) -> anyhow::Result<Vec<u8>> {
-    let mut writer = Cursor::new(Vec::new());
-    milli::documents::DocumentBatchBuilder::from_csv(reader, &mut writer)?.finish()?;
+    let csv = csv::Reader::from_reader(reader);
 
-    Ok(writer.into_inner())
+    let mut documents = DocumentsBatchBuilder::new(Vec::new());
+    documents.append_csv(csv)?;
+
+    documents.into_inner().map_err(Into::into)
 }
 
 enum AllowedType {
@@ -222,14 +216,14 @@ impl<R: Read> CSVDocumentDeserializer<R> {
 }
 
 impl<R: Read> Iterator for CSVDocumentDeserializer<R> {
-    type Item = anyhow::Result<Map<String, Value>>;
+    type Item = anyhow::Result<Object>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let csv_document = self.documents.next()?;
 
         match csv_document {
             Ok(csv_document) => {
-                let mut document = Map::new();
+                let mut document = Object::new();
 
                 for ((field_name, field_type), value) in
                     self.headers.iter().zip(csv_document.into_iter())

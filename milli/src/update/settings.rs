@@ -735,10 +735,11 @@ mod tests {
         ]);
         let config = IndexerConfig::default();
         let indexing_config = IndexDocumentsConfig::default();
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -798,10 +799,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -850,10 +852,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -880,10 +883,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
@@ -934,10 +938,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -974,10 +979,11 @@ mod tests {
 
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1016,10 +1022,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1067,10 +1074,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1110,10 +1118,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1142,10 +1151,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1172,10 +1182,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         // In the same transaction we provide some stop_words
@@ -1251,10 +1262,11 @@ mod tests {
         let config = IndexerConfig::default();
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
 
         // In the same transaction provide some synonyms
@@ -1389,10 +1401,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
@@ -1452,10 +1465,11 @@ mod tests {
         ]);
         let indexing_config =
             IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let mut builder =
+        let builder =
             IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
                 .unwrap();
-        builder.add_documents(content).unwrap();
+        let (builder, user_error) = builder.add_documents(content).unwrap();
+        user_error.unwrap();
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 

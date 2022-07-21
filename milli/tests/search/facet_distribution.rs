@@ -3,9 +3,10 @@ use std::io::Cursor;
 use big_s::S;
 use heed::EnvOpenOptions;
 use maplit::hashset;
-use milli::documents::{DocumentBatchBuilder, DocumentBatchReader};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{FacetDistribution, Index};
+use milli::{FacetDistribution, Index, Object};
+use serde_json::Deserializer;
 
 #[test]
 fn test_facet_distribution_with_no_facet_values() {
@@ -28,38 +29,33 @@ fn test_facet_distribution_with_no_facet_values() {
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
 
-    let mut builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-    let mut cursor = Cursor::new(Vec::new());
-    let mut documents_builder = DocumentBatchBuilder::new(&mut cursor).unwrap();
+    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(
-        r#"[
-        {
+        r#"{
             "id": 123,
             "title": "What a week, hu...",
             "genres": [],
             "tags": ["blue"]
-        },
+        }
         {
             "id": 345,
             "title": "I am the pig!",
             "tags": ["red"]
-        }
-    ]"#,
+        }"#,
     );
 
-    for doc in serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>() {
-        let doc = Cursor::new(serde_json::to_vec(&doc.unwrap()).unwrap());
-        documents_builder.extend_from_json(doc).unwrap();
+    for result in Deserializer::from_reader(reader).into_iter::<Object>() {
+        let object = result.unwrap();
+        documents_builder.append_json_object(&object).unwrap();
     }
 
-    documents_builder.finish().unwrap();
-
-    cursor.set_position(0);
+    let vector = documents_builder.into_inner().unwrap();
 
     // index documents
-    let content = DocumentBatchReader::from_reader(cursor).unwrap();
-    builder.add_documents(content).unwrap();
+    let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
+    let (builder, user_error) = builder.add_documents(content).unwrap();
+    user_error.unwrap();
     builder.execute().unwrap();
 
     wtxn.commit().unwrap();

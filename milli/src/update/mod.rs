@@ -3,7 +3,7 @@ pub use self::clear_documents::ClearDocuments;
 pub use self::delete_documents::{DeleteDocuments, DocumentDeletionResult};
 pub use self::facets::Facets;
 pub use self::index_documents::{
-    DocumentAdditionResult, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
+    DocumentAdditionResult, DocumentId, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
 };
 pub use self::indexer_config::IndexerConfig;
 pub use self::settings::{Setting, Settings};
