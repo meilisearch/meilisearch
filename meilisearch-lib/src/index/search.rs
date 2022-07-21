@@ -272,7 +272,7 @@ impl Index {
             HitsInfo::Pagination {
                 hits_per_page,
                 page: offset / hits_per_page + 1,
-                total_pages: (number_of_hits + hits_per_page - 1) / query.hits_per_page,
+                total_pages: (number_of_hits + hits_per_page - 1) / hits_per_page,
                 total_hits: number_of_hits,
             }
         } else {
