@@ -105,5 +105,5 @@ mini-dashboard = [
 tikv-jemallocator = "0.4.3"
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.0/build.zip"
-sha1 = "25d1615c608541375a08bd722c3fd3315f926be6"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.1/build.zip"
+sha1 = "05a02ff13c3982091884a3f81d28bf53e72607b2"
