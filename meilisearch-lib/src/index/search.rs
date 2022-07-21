@@ -124,13 +124,16 @@ impl Index {
         search.exhaustive_number_hits(is_finite_pagination);
 
         let (offset, limit) = if is_finite_pagination {
-            let offset = min(
-                query.hits_per_page * (query.page.saturating_sub(1)),
-                max_total_hits,
-            );
-            let limit = min(query.hits_per_page, max_total_hits.saturating_sub(offset));
+            match query.page.checked_sub(1) {
+                Some(page) => {
+                    let offset = min(query.hits_per_page * page, max_total_hits);
+                    let limit = min(query.hits_per_page, max_total_hits.saturating_sub(offset));
 
-            (offset, limit)
+                    (offset, limit)
+                }
+                // page 0 returns 0 hits
+                None => (0, 0),
+            }
         } else {
             let offset = min(query.offset.unwrap_or(0), max_total_hits);
             let limit = min(
