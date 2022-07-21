@@ -1,15 +1,19 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
+use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 use std::mem::size_of;
 
 use heed::zerocopy::AsBytes;
+use heed::BytesEncode;
+use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::{DocumentId, FieldId, Result};
+use crate::update::index_documents::{create_writer, writer_into_reader};
+use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32};
 
 /// Extracts the facet values of each faceted field of each document.
 ///
@@ -20,7 +24,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>)> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)> {
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -39,6 +43,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 2),
     );
 
+    let mut facet_exists_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
+
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
@@ -46,15 +52,25 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
         for (field_id, field_bytes) in obkv.iter() {
             if faceted_fields.contains(&field_id) {
-                let value =
-                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
-                let (numbers, strings) = extract_facet_values(&value);
-
                 key_buffer.clear();
 
-                // prefix key with the field_id and the document_id
+                // Set key to the field_id
+                // Note: this encoding is consistent with FieldIdCodec
                 key_buffer.extend_from_slice(&field_id.to_be_bytes());
+
+                // Here, we know already that the document must be added to the “field id exists” database
+                let document: [u8; 4] = docid_bytes[..4].try_into().ok().unwrap();
+                let document = BEU32::from(document).get();
+
+                facet_exists_docids.entry(field_id).or_default().insert(document);
+
+                // For the other extraction tasks, prefix the key with the field_id and the document_id
                 key_buffer.extend_from_slice(&docid_bytes);
+
+                let value =
+                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+
+                let (numbers, strings) = extract_facet_values(&value);
 
                 // insert facet numbers in sorter
                 for number in numbers {
@@ -77,9 +93,21 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         }
     }
 
+    let mut facet_exists_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    for (fid, bitmap) in facet_exists_docids.into_iter() {
+        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
+        facet_exists_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    }
+    let facet_exists_docids_reader = writer_into_reader(facet_exists_docids_writer)?;
+
     Ok((
         sorter_into_reader(fid_docid_facet_numbers_sorter, indexer.clone())?,
-        sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
+        sorter_into_reader(fid_docid_facet_strings_sorter, indexer.clone())?,
+        facet_exists_docids_reader,
     ))
 }
 

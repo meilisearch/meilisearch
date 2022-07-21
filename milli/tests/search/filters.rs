@@ -80,3 +80,9 @@ test_filter!(
     lower_complex_filter_2,
     vec![Left(vec!["tag=red", "tag=green"]), Left(vec!["asc_desc_rank<3", "asc_desc_rank<1"])]
 );
+test_filter!(exists_filter_1, vec![Right("opt1 EXISTS")]);
+test_filter!(exists_filter_1_not, vec![Right("opt1 NOT EXISTS")]);
+test_filter!(exists_filter_1_not_alt, vec![Right("NOT opt1 EXISTS")]);
+test_filter!(exists_filter_1_double_not, vec![Right("NOT opt1 NOT EXISTS")]);
+
+test_filter!(exists_filter_2, vec![Right("opt1.opt2 EXISTS")]);

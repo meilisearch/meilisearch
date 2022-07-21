@@ -44,6 +44,7 @@ pub use self::search::{
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub type Attribute = u32;
+pub type BEU16 = heed::zerocopy::U16<heed::byteorder::BE>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type DocumentId = u32;
