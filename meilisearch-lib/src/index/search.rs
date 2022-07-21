@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
@@ -124,12 +124,11 @@ impl Index {
         search.exhaustive_number_hits(is_finite_pagination);
 
         let (offset, limit) = if is_finite_pagination {
-            // we start at least at page 1.
-            let page = max(query.page, 1);
-            // return at least 1 document.
-            let hits_per_page = max(query.hits_per_page, 1);
-            let offset = min(hits_per_page * (page - 1), max_total_hits);
-            let limit = min(hits_per_page, max_total_hits.saturating_sub(offset));
+            let offset = min(
+                query.hits_per_page * (query.page.saturating_sub(1)),
+                max_total_hits,
+            );
+            let limit = min(query.hits_per_page, max_total_hits.saturating_sub(offset));
 
             (offset, limit)
         } else {
@@ -267,12 +266,15 @@ impl Index {
 
         let number_of_hits = min(candidates.len() as usize, max_total_hits);
         let hits_info = if is_finite_pagination {
-            // return at least 1 document.
-            let hits_per_page = max(query.hits_per_page, 1);
+            // If hit_per_page is 0, then pages can't be computed and so we respond 0.
+            let total_pages = (number_of_hits + query.hits_per_page.saturating_sub(1))
+                .checked_div(query.hits_per_page)
+                .unwrap_or(0);
+
             HitsInfo::Pagination {
-                hits_per_page,
-                page: offset / hits_per_page + 1,
-                total_pages: (number_of_hits + hits_per_page - 1) / hits_per_page,
+                hits_per_page: query.hits_per_page,
+                page: query.page,
+                total_pages,
                 total_hits: number_of_hits,
             }
         } else {
