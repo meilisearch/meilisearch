@@ -14,6 +14,8 @@ mod index;
 
 pub use index::{Document, IndexMeta, IndexStats};
 
+pub use milli::OptionalWords;
+
 #[cfg(not(test))]
 pub use index::Index;
 

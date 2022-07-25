@@ -366,6 +366,9 @@ pub struct SearchAggregator {
     // The maximum number of terms in a q request
     max_terms_number: usize,
 
+    // everytime a search is done, we increment the counter linked to the used settings
+    optional_words: HashMap<String, usize>,
+
     // pagination
     max_limit: usize,
     max_offset: usize,
@@ -423,6 +426,9 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
+        ret.optional_words
+            .insert(format!("{:?}", query.optional_words), 1);
+
         ret.max_limit = query.limit;
         ret.max_offset = query.offset.unwrap_or_default();
 
@@ -476,6 +482,11 @@ impl SearchAggregator {
         }
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
+
+        for (key, value) in other.optional_words.into_iter() {
+            let optional_words = self.optional_words.entry(key).or_insert(0);
+            *optional_words = optional_words.saturating_add(value);
+        }
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
@@ -517,6 +528,7 @@ impl SearchAggregator {
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
+                   "most_used_optional_words": self.optional_words.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "pagination": {
                    "max_limit": self.max_limit,

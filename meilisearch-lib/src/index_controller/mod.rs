@@ -697,6 +697,7 @@ mod test {
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
+            optional_words: Default::default(),
         };
 
         let result = SearchResult {

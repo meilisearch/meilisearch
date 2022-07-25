@@ -6,8 +6,8 @@ use std::time::Instant;
 use either::Either;
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder, SortError,
-    DEFAULT_VALUES_PER_FACET,
+    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder,
+    OptionalWords, SortError, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,8 @@ pub struct SearchQuery {
     pub highlight_post_tag: String,
     #[serde(default = "DEFAULT_CROP_MARKER")]
     pub crop_marker: String,
+    #[serde(default)]
+    pub optional_words: OptionalWords,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -90,6 +92,8 @@ impl Index {
         if let Some(ref query) = query.q {
             search.query(query);
         }
+
+        search.optional_words(query.optional_words);
 
         let max_total_hits = self
             .pagination_max_total_hits(&rtxn)?
