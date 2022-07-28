@@ -11,7 +11,7 @@ pub enum DumpError {
     #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("{0}")]
-    IndexResolver(#[from] IndexResolverError),
+    IndexResolver(Box<IndexResolverError>),
 }
 
 internal_error!(
@@ -25,6 +25,12 @@ internal_error!(
     AuthControllerError,
     TaskError
 );
+
+impl From<IndexResolverError> for DumpError {
+    fn from(e: IndexResolverError) -> Self {
+        Self::IndexResolver(Box::new(e))
+    }
+}
 
 impl ErrorCode for DumpError {
     fn error_code(&self) -> Code {

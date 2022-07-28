@@ -484,7 +484,7 @@ fn make_batch(tasks: &mut TaskQueue, config: &SchedulerConfig) -> Processing {
                     match list.peek() {
                         Some(pending) if pending.kind == kind => {
                             // We always need to process at least one task for the scheduler to make progress.
-                            if config.disable_auto_batching && task_list.len() > 0 {
+                            if config.disable_auto_batching && !task_list.is_empty() {
                                 break;
                             }
                             let pending = list.pop().unwrap();
