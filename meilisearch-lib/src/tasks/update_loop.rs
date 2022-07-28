@@ -1,9 +1,7 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use time::OffsetDateTime;
 use tokio::sync::{watch, RwLock};
-use tokio::time::interval_at;
 
 use super::batch::Batch;
 use super::error::Result;
@@ -17,20 +15,17 @@ pub struct UpdateLoop {
     performers: Vec<Arc<dyn BatchHandler + Send + Sync + 'static>>,
 
     notifier: Option<watch::Receiver<()>>,
-    debounce_duration: Option<Duration>,
 }
 
 impl UpdateLoop {
     pub fn new(
         scheduler: Arc<RwLock<Scheduler>>,
         performers: Vec<Arc<dyn BatchHandler + Send + Sync + 'static>>,
-        debuf_duration: Option<Duration>,
         notifier: watch::Receiver<()>,
     ) -> Self {
         Self {
             scheduler,
             performers,
-            debounce_duration: debuf_duration,
             notifier: Some(notifier),
         }
     }
@@ -42,11 +37,6 @@ impl UpdateLoop {
             if notifier.changed().await.is_err() {
                 break;
             }
-
-            if let Some(t) = self.debounce_duration {
-                let mut interval = interval_at(tokio::time::Instant::now() + t, t);
-                interval.tick().await;
-            };
 
             if let Err(e) = self.process_next_batch().await {
                 log::error!("an error occurred while processing an update batch: {}", e);
