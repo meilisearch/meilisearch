@@ -454,7 +454,7 @@ fn create_query_tree(
 
     let mut operation_children = Vec::new();
     let mut query = query.to_vec();
-    for _ in 0..remove_count {
+    for _ in 0..=remove_count {
         let pos = match optional_words {
             TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
             TermsMatchingStrategy::Any => {
