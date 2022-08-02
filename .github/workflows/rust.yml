@@ -24,6 +24,7 @@ jobs:
         os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
     - uses: actions/checkout@v3
+    - uses: rui314/setup-mold@v1 # Optimize link time
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2.0.0
     - name: Run cargo check without any default features
@@ -43,6 +44,7 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1 # Optimize link time
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -61,6 +63,7 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1 # Optimize link time
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -80,6 +83,7 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1 # Optimize link time
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
