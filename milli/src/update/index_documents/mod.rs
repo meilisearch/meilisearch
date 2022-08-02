@@ -604,41 +604,27 @@ fn execute_word_prefix_docids(
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
     use big_s::S;
-    use heed::EnvOpenOptions;
     use maplit::hashset;
 
     use super::*;
-    use crate::documents::DocumentsBatchBuilder;
+    use crate::documents::documents_batch_reader_from_objects;
+    use crate::index::tests::TempIndex;
     use crate::update::DeleteDocuments;
     use crate::BEU16;
 
     #[test]
     fn simple_document_replacement() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         // First we send 3 documents with ids from 1 to 3.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "kevina" },
-            { "id": 3, "name": "benoit" }
-        ]);
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 2, "name": "kevina" },
+                { "id": 3, "name": "benoit" }
+            ]))
+            .unwrap();
 
         // Check that there is 3 documents now.
         let rtxn = index.read_txn().unwrap();
@@ -647,15 +633,7 @@ mod tests {
         drop(rtxn);
 
         // Second we send 1 document with id 1, to erase the previous ones.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([ { "id": 1, "name": "updated kevin" } ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([ { "id": 1, "name": "updated kevin" } ])).unwrap();
 
         // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
@@ -664,18 +642,13 @@ mod tests {
         drop(rtxn);
 
         // Third we send 3 documents again to replace the existing ones.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "name": "updated second kevin" },
-            { "id": 2, "name": "updated kevina" },
-            { "id": 3, "name": "updated benoit" }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "updated second kevin" },
+                { "id": 2, "name": "updated kevina" },
+                { "id": 3, "name": "updated benoit" }
+            ]))
+            .unwrap();
 
         // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
@@ -686,31 +659,18 @@ mod tests {
 
     #[test]
     fn simple_document_merge() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         // First we send 3 documents with duplicate ids and
         // change the index method to merge documents.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 1, "name": "kevina" },
-            { "id": 1, "name": "benoit" }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::UpdateDocuments,
-            ..Default::default()
-        };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 1, "name": "kevina" },
+                { "id": 1, "name": "benoit" }
+            ]))
+            .unwrap();
 
         // Check that there is only 1 document now.
         let rtxn = index.read_txn().unwrap();
@@ -731,14 +691,7 @@ mod tests {
         drop(rtxn);
 
         // Second we send 1 document with id 1, to force it to be merged with the previous one.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([ { "id": 1, "age": 25 } ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([ { "id": 1, "age": 25 } ])).unwrap();
 
         // Check that there is **always** 1 document.
         let rtxn = index.read_txn().unwrap();
@@ -763,25 +716,14 @@ mod tests {
 
     #[test]
     fn not_auto_generated_documents_ids() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        // First we send 3 documents with ids from 1 to 3.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
+        let result = index.add_documents(documents!([
             { "name": "kevin" },
             { "name": "kevina" },
             { "name": "benoit" }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (_builder, user_error) = builder.add_documents(content).unwrap();
-        assert!(user_error.is_err());
-        wtxn.commit().unwrap();
+        ]));
+        assert!(result.is_err());
 
         // Check that there is no document.
         let rtxn = index.read_txn().unwrap();
@@ -792,28 +734,16 @@ mod tests {
 
     #[test]
     fn simple_auto_generated_documents_ids() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
         // First we send 3 documents with ids from 1 to 3.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "name": "kevin" },
-            { "name": "kevina" },
-            { "name": "benoit" }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config =
-            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "name": "kevin" },
+                { "name": "kevina" },
+                { "name": "benoit" }
+            ]))
+            .unwrap();
 
         // Check that there is 3 documents now.
         let rtxn = index.read_txn().unwrap();
@@ -826,14 +756,7 @@ mod tests {
         drop(rtxn);
 
         // Second we send 1 document with the generated uuid, to erase the previous ones.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([ { "name": "updated kevin", "id": kevin_uuid } ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([ { "name": "updated kevin", "id": kevin_uuid } ])).unwrap();
 
         // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
@@ -857,26 +780,16 @@ mod tests {
 
     #[test]
     fn reordered_auto_generated_documents_ids() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
 
         // First we send 3 documents with ids from 1 to 3.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "kevina" },
-            { "id": 3, "name": "benoit" }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 2, "name": "kevina" },
+                { "id": 3, "name": "benoit" }
+            ]))
+            .unwrap();
 
         // Check that there is 3 documents now.
         let rtxn = index.read_txn().unwrap();
@@ -885,16 +798,8 @@ mod tests {
         drop(rtxn);
 
         // Second we send 1 document without specifying the id.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([ { "name": "new kevin" } ]);
-        let indexing_config =
-            IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.index_documents_config.autogenerate_docids = true;
+        index.add_documents(documents!([ { "name": "new kevin" } ])).unwrap();
 
         // Check that there is 4 documents now.
         let rtxn = index.read_txn().unwrap();
@@ -905,22 +810,10 @@ mod tests {
 
     #[test]
     fn empty_update() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         // First we send 0 documents and only headers.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([])).unwrap();
 
         // Check that there is no documents.
         let rtxn = index.read_txn().unwrap();
@@ -931,34 +824,14 @@ mod tests {
 
     #[test]
     fn invalid_documents_ids() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         // First we send 1 document with an invalid id.
-        let mut wtxn = index.write_txn().unwrap();
         // There is a space in the document id.
-        let content = documents!([ { "id": "brume bleue", "name": "kevin" } ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (_builder, user_error) = builder.add_documents(content).unwrap();
-        assert!(user_error.is_err());
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([ { "id": "brume bleue", "name": "kevin" } ])).unwrap_err();
 
-        // First we send 1 document with a valid id.
-        let mut wtxn = index.write_txn().unwrap();
-        // There is a space in the document id.
-        let content = documents!([ { "id": 32, "name": "kevin" } ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        // Then we send 1 document with a valid id.
+        index.add_documents(documents!([ { "id": 32, "name": "kevin" } ])).unwrap();
 
         // Check that there is 1 document now.
         let rtxn = index.read_txn().unwrap();
@@ -969,26 +842,16 @@ mod tests {
 
     #[test]
     fn complex_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         // First we send 3 documents with an id for only one of them.
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
-            { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
-            { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
+                { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
+                { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
+            ]))
+            .unwrap();
 
         // Check that there is 1 documents now.
         let rtxn = index.read_txn().unwrap();
@@ -1010,126 +873,72 @@ mod tests {
 
     #[test]
     fn simple_documents_replace() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
-        // First we send 3 documents with an id for only one of them.
-        let mut wtxn = index.write_txn().unwrap();
-        let documents = documents!([
+        index.add_documents(documents!([
           { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
           { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
           { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
           { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
           { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
           { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::ReplaceDocuments,
-            ..Default::default()
-        };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        ])).unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::UpdateDocuments,
-            ..Default::default()
-        };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let documents = documents!([
-          {
-            "id": 2,
-            "author": "J. Austen",
-            "date": "1813"
-          }
-        ]);
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([{
+                "id": 2,
+                "author": "J. Austen",
+                "date": "1813"
+            }]))
+            .unwrap();
     }
 
     #[test]
     fn mixed_geo_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         // We send 6 documents and mix the ones that have _geo and those that don't have it.
-        let mut wtxn = index.write_txn().unwrap();
-        let documents = documents!([
-          { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
-          { "id": 456 },
-          { "id": 1 },
-          { "id": 1344 },
-          { "id": 4 },
-          { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::ReplaceDocuments,
-            ..Default::default()
-        };
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+              { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+              { "id": 456 },
+              { "id": 1 },
+              { "id": 1344 },
+              { "id": 4 },
+              { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
+            ]))
+            .unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        let faceted_fields = hashset!(S("_geo"));
-        builder.set_filterable_fields(faceted_fields);
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset!(S("_geo")));
+            })
+            .unwrap();
     }
 
     #[test]
     fn index_all_flavour_of_geo() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
-        let config = IndexerConfig::default();
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset!(S("_geo")));
+            })
+            .unwrap();
 
-        builder.set_filterable_fields(hashset!(S("_geo")));
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::ReplaceDocuments,
-            ..Default::default()
-        };
-        let mut wtxn = index.write_txn().unwrap();
-
-        let documents = documents!([
-          { "id": 0, "_geo": { "lat": 31, "lng": [42] } },
-          { "id": 1, "_geo": { "lat": "31" }, "_geo.lng": 42 },
-          { "id": 2, "_geo": { "lng": "42" }, "_geo.lat": "31" },
-          { "id": 3, "_geo.lat": 31, "_geo.lng": "42" },
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lat": 31, "lng": [42] } },
+              { "id": 1, "_geo": { "lat": "31" }, "_geo.lng": 42 },
+              { "id": 2, "_geo": { "lng": "42" }, "_geo.lat": "31" },
+              { "id": 3, "_geo.lat": 31, "_geo.lng": "42" },
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1141,90 +950,60 @@ mod tests {
 
     #[test]
     fn geo_error() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
-        let config = IndexerConfig::default();
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset!(S("_geo")));
+            })
+            .unwrap();
 
-        builder.set_filterable_fields(hashset!(S("_geo")));
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
-
-        let indexing_config = IndexDocumentsConfig {
-            update_method: IndexDocumentsMethod::ReplaceDocuments,
-            ..Default::default()
-        };
-        let mut wtxn = index.write_txn().unwrap();
-
-        let documents = documents!([
-          { "id": 0, "_geo": { "lng": 42 } }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        let error = builder.execute().unwrap_err();
+        let error = index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lng": 42 } }
+            ]))
+            .unwrap_err();
         assert_eq!(
             &error.to_string(),
             r#"Could not find latitude in the document with the id: `0`. Was expecting a `_geo.lat` field."#
         );
 
-        let documents = documents!([
-          { "id": 0, "_geo": { "lat": 42 } }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        let error = builder.execute().unwrap_err();
+        let error = index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lat": 42 } }
+            ]))
+            .unwrap_err();
         assert_eq!(
             &error.to_string(),
             r#"Could not find longitude in the document with the id: `0`. Was expecting a `_geo.lng` field."#
         );
 
-        let documents = documents!([
-          { "id": 0, "_geo": { "lat": "lol", "lng": 42 } }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        let error = builder.execute().unwrap_err();
+        let error = index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lat": "lol", "lng": 42 } }
+            ]))
+            .unwrap_err();
         assert_eq!(
             &error.to_string(),
             r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `"lol"`."#
         );
 
-        let documents = documents!([
-          { "id": 0, "_geo": { "lat": [12, 13], "lng": 42 } }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        let error = builder.execute().unwrap_err();
+        let error = index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lat": [12, 13], "lng": 42 } }
+            ]))
+            .unwrap_err();
         assert_eq!(
             &error.to_string(),
             r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `[12,13]`."#
         );
 
-        let documents = documents!([
-          { "id": 0, "_geo": { "lat": 12, "lng": "hello" } }
-        ]);
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        let error = builder.execute().unwrap_err();
+        let error = index
+            .add_documents(documents!([
+              { "id": 0, "_geo": { "lat": 12, "lng": "hello" } }
+            ]))
+            .unwrap_err();
         assert_eq!(
             &error.to_string(),
             r#"Could not parse longitude in the document with the id: `0`. Was expecting a finite number but instead got `"hello"`."#
@@ -1233,27 +1012,17 @@ mod tests {
 
     #[test]
     fn delete_documents_then_insert() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
+        index
+            .add_documents(documents!([
+                { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
+                { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
+                { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
+                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+            ]))
+            .unwrap();
         let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
-            { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
-            { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
-            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
         assert_eq!(index.primary_key(&wtxn).unwrap(), Some("objectId"));
 
         // Delete not all of the documents but some of them.
@@ -1263,42 +1032,29 @@ mod tests {
 
         let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
         assert!(external_documents_ids.get("30").is_none());
+        wtxn.commit().unwrap();
 
-        let content = documents!([
-            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
-        ]);
+        index
+            .add_documents(documents!([
+                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+            ]))
+            .unwrap();
 
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        let wtxn = index.write_txn().unwrap();
         let external_documents_ids = index.external_documents_ids(&wtxn).unwrap();
         assert!(external_documents_ids.get("30").is_some());
-
-        let content = documents!([
-            { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
-        ]);
-
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
         wtxn.commit().unwrap();
+
+        index
+            .add_documents(documents!([
+                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+            ]))
+            .unwrap();
     }
 
     #[test]
     fn index_more_than_256_fields() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
+        let index = TempIndex::new();
 
         let mut big_object = serde_json::Map::new();
         big_object.insert(S("id"), serde_json::Value::from("wow"));
@@ -1307,56 +1063,23 @@ mod tests {
             big_object.insert(key, serde_json::Value::from("I am a text!"));
         }
 
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_json_object(&big_object).unwrap();
-        let vector = builder.into_inner().unwrap();
-        let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
+        let documents = documents_batch_reader_from_objects([big_object]);
+        index.add_documents(documents).unwrap();
     }
 
     #[test]
     fn index_more_than_1000_positions_in_a_field() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(50 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-
-        let mut big_object = serde_json::Map::new();
-        big_object.insert(S("id"), serde_json::Value::from("wow"));
-        let content: String = (0..=u16::MAX)
-            .into_iter()
-            .map(|p| p.to_string())
-            .reduce(|a, b| a + " " + b.as_ref())
+        let index = TempIndex::new_with_map_size(4096 * 100_000); // 400 MB
+        let mut content = String::with_capacity(382101);
+        for i in 0..=u16::MAX {
+            content.push_str(&format!("{i} "));
+        }
+        index
+            .add_documents(documents!({
+                "id": "wow",
+                "content": content
+            }))
             .unwrap();
-        big_object.insert("content".to_string(), serde_json::Value::from(content));
-
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_json_object(&big_object).unwrap();
-        let vector = builder.into_inner().unwrap();
-        let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();
 
@@ -1370,117 +1093,90 @@ mod tests {
 
     #[test]
     fn index_documents_with_zeroes() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            {
-                "id": 2,
-                "title": "Prideand Prejudice",
-                "au{hor": "Jane Austin",
-                "genre": "romance",
-                "price$": "3.5$",
-            },
-            {
-                "id": 456,
-                "title": "Le Petit Prince",
-                "au{hor": "Antoine de Saint-Exupéry",
-                "genre": "adventure",
-                "price$": "10.0$",
-            },
-            {
-                "id": 1,
-                "title": "Wonderland",
-                "au{hor": "Lewis Carroll",
-                "genre": "fantasy",
-                "price$": "25.99$",
-            },
-            {
-                "id": 4,
-                "title": "Harry Potter ing fantasy\0lood Prince",
-                "au{hor": "J. K. Rowling",
-                "genre": "fantasy\0",
-            },
-        ]);
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                {
+                    "id": 2,
+                    "title": "Prideand Prejudice",
+                    "au{hor": "Jane Austin",
+                    "genre": "romance",
+                    "price$": "3.5$",
+                },
+                {
+                    "id": 456,
+                    "title": "Le Petit Prince",
+                    "au{hor": "Antoine de Saint-Exupéry",
+                    "genre": "adventure",
+                    "price$": "10.0$",
+                },
+                {
+                    "id": 1,
+                    "title": "Wonderland",
+                    "au{hor": "Lewis Carroll",
+                    "genre": "fantasy",
+                    "price$": "25.99$",
+                },
+                {
+                    "id": 4,
+                    "title": "Harry Potter ing fantasy\0lood Prince",
+                    "au{hor": "J. K. Rowling",
+                    "genre": "fantasy\0",
+                },
+            ]))
+            .unwrap();
     }
 
     #[test]
     fn index_documents_with_nested_fields() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            {
-                "id": 0,
-                "title": "The zeroth document",
-            },
-            {
-                "id": 1,
-                "title": "The first document",
-                "nested": {
-                    "object": "field",
-                    "machin": "bidule",
+        index
+            .add_documents(documents!([
+                {
+                    "id": 0,
+                    "title": "The zeroth document",
                 },
-            },
-            {
-                "id": 2,
-                "title": "The second document",
-                "nested": [
-                    "array",
-                    {
+                {
+                    "id": 1,
+                    "title": "The first document",
+                    "nested": {
                         "object": "field",
+                        "machin": "bidule",
                     },
-                    {
-                        "prout": "truc",
-                        "machin": "lol",
-                    },
-                ],
-            },
-            {
-                "id": 3,
-                "title": "The third document",
-                "nested": "I lied",
-            },
-        ]);
+                },
+                {
+                    "id": 2,
+                    "title": "The second document",
+                    "nested": [
+                        "array",
+                        {
+                            "object": "field",
+                        },
+                        {
+                            "prout": "truc",
+                            "machin": "lol",
+                        },
+                    ],
+                },
+                {
+                    "id": 3,
+                    "title": "The third document",
+                    "nested": "I lied",
+                },
+            ]))
+            .unwrap();
 
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        index
+            .update_settings(|settings| {
+                let searchable_fields = vec![S("title"), S("nested.object"), S("nested.machin")];
+                settings.set_searchable_fields(searchable_fields);
 
-        wtxn.commit().unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        let searchable_fields = vec![S("title"), S("nested.object"), S("nested.machin")];
-        builder.set_searchable_fields(searchable_fields);
-
-        let faceted_fields = hashset!(S("title"), S("nested.object"), S("nested.machin"));
-        builder.set_filterable_fields(faceted_fields);
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+                let faceted_fields = hashset!(S("title"), S("nested.object"), S("nested.machin"));
+                settings.set_filterable_fields(faceted_fields);
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1554,54 +1250,42 @@ mod tests {
 
     #[test]
     fn index_documents_with_nested_primary_key() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-        let config = IndexerConfig::default();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key("complex.nested.id".to_owned());
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("complex.nested.id".to_owned());
+            })
+            .unwrap();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            {
-                "complex": {
-                    "nested": {
-                        "id": 0,
+        index
+            .add_documents(documents!([
+                {
+                    "complex": {
+                        "nested": {
+                            "id": 0,
+                        },
                     },
+                    "title": "The zeroth document",
                 },
-                "title": "The zeroth document",
-            },
-            {
-                "complex.nested": {
-                    "id": 1,
+                {
+                    "complex.nested": {
+                        "id": 1,
+                    },
+                    "title": "The first document",
                 },
-                "title": "The first document",
-            },
-            {
-                "complex": {
-                    "nested.id": 2,
+                {
+                    "complex": {
+                        "nested.id": 2,
+                    },
+                    "title": "The second document",
                 },
-                "title": "The second document",
-            },
-            {
-                "complex.nested.id": 3,
-                "title": "The third document",
-            },
-        ]);
-
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+                {
+                    "complex.nested.id": 3,
+                    "title": "The third document",
+                },
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1630,50 +1314,28 @@ mod tests {
 
     #[test]
     fn retrieve_a_b_nested_document_id() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-        let config = IndexerConfig::default();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key("a.b".to_owned());
-        builder.execute(|_| ()).unwrap();
-
-        let content = documents!({ "a" : { "b" : { "c" :  1 }}});
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (_builder, user_error) = builder.add_documents(content).unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("a.b".to_owned());
+            })
+            .unwrap();
 
         // There must be an issue with the primary key no present in the given document
-        user_error.unwrap_err();
+        index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap_err();
     }
 
     #[test]
     fn retrieve_a_b_c_nested_document_id() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-        let config = IndexerConfig::default();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key("a.b.c".to_owned());
-        builder.execute(|_| ()).unwrap();
-
-        let content = documents!({ "a" : { "b" : { "c" :  1 }}});
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("a.b.c".to_owned());
+            })
+            .unwrap();
+        index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
         let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
@@ -1682,61 +1344,42 @@ mod tests {
 
     #[test]
     fn test_facets_generation() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            {
-                "id": 0,
-                "dog": {
-                    "race": {
-                        "bernese mountain": "zeroth",
+        index
+            .add_documents(documents!([
+                {
+                    "id": 0,
+                    "dog": {
+                        "race": {
+                            "bernese mountain": "zeroth",
+                        },
                     },
                 },
-            },
-            {
-                "id": 1,
-                "dog.race": {
-                    "bernese mountain": "first",
+                {
+                    "id": 1,
+                    "dog.race": {
+                        "bernese mountain": "first",
+                    },
                 },
-            },
-            {
-                "id": 2,
-                "dog.race.bernese mountain": "second",
-            },
-            {
-                "id": 3,
-                "dog": {
-                    "race.bernese mountain": "third"
+                {
+                    "id": 2,
+                    "dog.race.bernese mountain": "second",
                 },
-            },
-        ]);
+                {
+                    "id": 3,
+                    "dog": {
+                        "race.bernese mountain": "third"
+                    },
+                },
+            ]))
+            .unwrap();
 
-        // index the documents
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
-
-        // ---- ADD THE SETTING TO TEST THE FILTERABLE
-
-        // add the settings
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        builder.set_filterable_fields(hashset!(String::from("dog")));
-
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset!(String::from("dog")));
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1751,17 +1394,12 @@ mod tests {
             let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
             assert_eq!(documents_ids, vec![i]);
         }
-
-        // ---- RESET THE SETTINGS
-
-        // update the settings
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        builder.reset_filterable_fields();
-
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        // Reset the settings
+        index
+            .update_settings(|settings| {
+                settings.reset_filterable_fields();
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1769,16 +1407,12 @@ mod tests {
 
         assert_eq!(facets, hashset!());
 
-        // ---- UPDATE THE SETTINGS TO TEST THE SORTABLE
-
-        // update the settings
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        builder.set_sortable_fields(hashset!(S("dog.race")));
-
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        // update the settings to test the sortable
+        index
+            .update_settings(|settings| {
+                settings.set_sortable_fields(hashset!(S("dog.race")));
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1796,69 +1430,37 @@ mod tests {
 
     #[test]
     fn index_2_times_documents_split_by_zero_document_indexation() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let content = documents!([
-            {"id": 0, "name": "Kerollmops", "score": 78},
-            {"id": 1, "name": "ManyTheFish", "score": 75},
-            {"id": 2, "name": "Ferdi", "score": 39},
-            {"id": 3, "name": "Tommy", "score": 33}
-        ]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                {"id": 0, "name": "Kerollmops", "score": 78},
+                {"id": 1, "name": "ManyTheFish", "score": 75},
+                {"id": 2, "name": "Ferdi", "score": 39},
+                {"id": 3, "name": "Tommy", "score": 33}
+            ]))
+            .unwrap();
 
         // Check that there is 4 document now.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 4);
 
-        let content = documents!([]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.add_documents(documents!([])).unwrap();
 
         // Check that there is 4 document now.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 4);
 
-        let content = documents!([
-            {"id": 0, "name": "Kerollmops", "score": 78},
-            {"id": 1, "name": "ManyTheFish", "score": 75},
-            {"id": 2, "name": "Ferdi", "score": 39},
-            {"id": 3, "name": "Tommy", "score": 33}
-        ]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                {"id": 0, "name": "Kerollmops", "score": 78},
+                {"id": 1, "name": "ManyTheFish", "score": 75},
+                {"id": 2, "name": "Ferdi", "score": 39},
+                {"id": 3, "name": "Tommy", "score": 33}
+            ]))
+            .unwrap();
 
         // Check that there is 4 document now.
         let rtxn = index.read_txn().unwrap();
@@ -1868,26 +1470,14 @@ mod tests {
 
     #[test]
     fn test_meilisearch_1714() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let content = documents!([
-          {"id": "123", "title": "小化妆包" },
-          {"id": "456", "title": "Ipad 包" }
-        ]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+              {"id": "123", "title": "小化妆包" },
+              {"id": "456", "title": "Ipad 包" }
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1913,35 +1503,20 @@ mod tests {
     /// it should not return any error.
     #[test]
     fn text_with_too_long_words() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let content = documents!([
-          {"id": 1, "title": "a".repeat(256) },
-          {"id": 2, "title": "b".repeat(512) },
-          {"id": 3, "title": format!("{} {}", "c".repeat(250), "d".repeat(250)) },
-        ]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+              {"id": 1, "title": "a".repeat(256) },
+              {"id": 2, "title": "b".repeat(512) },
+              {"id": 3, "title": format!("{} {}", "c".repeat(250), "d".repeat(250)) },
+            ]))
+            .unwrap();
     }
 
     #[test]
     fn text_with_too_long_keys() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
         let script = "https://bug.example.com/meilisearch/milli.saml2?ROLE=Programmer-1337&SAMLRequest=Cy1ytcZT1Po%2L2IY2y9Unru8rgnW4qWfPiI0EpT7P8xjJV8PeQikRL%2E8D9A4pj9tmbymbQCQwGmGjPMK7qwXFPX4DH52JO2b7n6TXjuR7zkIFuYdzdY2rwRNBPgCL7ihclEm9zyIjKZQ%2JTqiwfXxWjnI0KEYQYHdwd6Q%2Fx%28BDLNsvmL54CCY2F4RWeRs4eqWfn%2EHqxlhreFzax4AiQ2tgOtV5thOaaWqrhZD%2Py70nuyZWNTKwciGI43AoHg6PThANsQ5rAY5amzN%2ufbs1swETUXlLZuOut5YGpYPZfY6STJWNp4QYSUOUXBZpdElYsH7UHZ7VhJycgyt%28aTK0GW6GbKne2tJM0hgSczOqndg6RFa9WsnSBi4zMcaEfYur4WlSsHDYInF9ROousKqVMZ6H8%2gbUissaLh1eXRGo8KEJbyEHbhVVKGD%28kx4cfKjx9fT3pkeDTdvDrVn25jIzi9wHyt9l1lWc8ICnCvXCVUPP%2BjBG4wILR29gMV9Ux2QOieQm2%2Fycybhr8sBGCl30mHC7blvWt%2T3mrCHQoS3VK49PZNPqBZO9C7vOjOWoszNkJx4QckWV%2FZFvbpzUUkiBiehr9F%2FvQSxz9lzv68GwbTu9fr638p%2FQM%3D&RelayState=https%3A%2F%example.bug.com%2Fde&SigAlg=http%3A%2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=AZFpkhFFII7PodiewTovaGnLQKUVZp0qOCCcBIUkJ6P5by3lE3Lldj9pKaFu4wz4j%2B015HEhDvF0LlAmwwES85vdGh%2FpD%2cIQPRUEjdCbQkQDd3dy1mMXbpXxSe4QYcv9Ni7tqNTQxekpO1gE7rtg6zC66EU55uM9aj9abGQ034Vly%2F6IJ08bvAq%2B%2FB9KruLstuiNWnlXTfNGsOxGLK7%2BXr94LTkat8m%2FMan6Qr95%2KeR5TmmqaQIE4N9H6o4TopT7mXr5CF2Z3";
 
         // Create 200 documents with a long text
@@ -1953,60 +1528,22 @@ mod tests {
                     serde_json::Value::Object(object) => Some(object),
                     _ => None,
                 });
-
-            let mut builder = crate::documents::DocumentsBatchBuilder::new(Vec::new());
-            for object in documents_iter {
-                builder.append_json_object(&object).unwrap();
-            }
-            let vector = builder.into_inner().unwrap();
-            crate::documents::DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap()
+            documents_batch_reader_from_objects(documents_iter)
         };
-
         // Index those 200 long documents
-        let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        index.add_documents(content).unwrap();
 
-        // Create one long document
-        let content = documents!([
-          {"id": 400, "script": script },
-        ]);
-
-        // Index this one long document
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
+        // Index one long document
+        index
+            .add_documents(documents!([
+              {"id": 400, "script": script },
+            ]))
+            .unwrap();
     }
 
     #[test]
     fn index_documents_in_multiple_transforms() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(4096 * 100);
-        let index = Index::new(options, tmp).unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        let indexer_config = IndexerConfig::default();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &indexer_config,
-            IndexDocumentsConfig::default(),
-            |_| (),
-        )
-        .unwrap();
+        let index = TempIndex::new();
 
         let doc1 = documents! {[{
             "id": 228142,
@@ -2028,12 +1565,10 @@ mod tests {
             "branch_id_number": 0
         }]};
 
-        let (builder, user_error) = builder.add_documents(doc1).unwrap();
-        user_error.unwrap();
-        let (builder, user_error) = builder.add_documents(doc2).unwrap();
-        user_error.unwrap();
+        index.add_documents(doc1).unwrap();
+        index.add_documents(doc2).unwrap();
 
-        builder.execute().unwrap();
+        let wtxn = index.read_txn().unwrap();
 
         let map = index.external_documents_ids(&wtxn).unwrap().to_hash_map();
         let ids = map.values().collect::<HashSet<_>>();
@@ -2043,10 +1578,7 @@ mod tests {
 
     #[test]
     fn index_documents_check_exists_database() {
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
 
-        let faceted_fields = hashset!(S("colour"));
         let content = || {
             documents!([
                 {
@@ -2088,30 +1620,6 @@ mod tests {
                 }
             ])
         };
-        let make_index = || {
-            let path = tempfile::tempdir().unwrap();
-            let mut options = EnvOpenOptions::new();
-            options.map_size(10 * 1024 * 1024); // 10 MB
-            Index::new(options, &path).unwrap()
-        };
-
-        let set_filterable_fields = |index: &Index| {
-            let mut wtxn = index.write_txn().unwrap();
-            let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-            builder.set_filterable_fields(faceted_fields.clone());
-            builder.execute(|_| ()).unwrap();
-            wtxn.commit().unwrap();
-        };
-        let add_documents = |index: &Index| {
-            let mut wtxn = index.write_txn().unwrap();
-            let builder =
-                IndexDocuments::new(&mut wtxn, index, &config, indexing_config.clone(), |_| ())
-                    .unwrap();
-            let (builder, user_error) = builder.add_documents(content()).unwrap();
-            user_error.unwrap();
-            builder.execute().unwrap();
-            wtxn.commit().unwrap();
-        };
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
@@ -2132,34 +1640,27 @@ mod tests {
                 .unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6, 7]);
         };
+        
+        let faceted_fields = hashset!(S("colour"));
 
-        let index = make_index();
-        add_documents(&index);
-        set_filterable_fields(&index);
+        let index = TempIndex::new();
+        index.add_documents(content()).unwrap();
+        index.update_settings(|settings| {
+            settings.set_filterable_fields(faceted_fields.clone()); 
+        }).unwrap(); 
         check_ok(&index);
 
-        let index = make_index();
-        set_filterable_fields(&index);
-        add_documents(&index);
+        let index = TempIndex::new();
+        index.update_settings(|settings| {
+            settings.set_filterable_fields(faceted_fields.clone()); 
+        }).unwrap(); 
+        index.add_documents(content()).unwrap();
         check_ok(&index);
     }
 
     #[test]
     fn primary_key_must_not_contain_floats() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(4096 * 100);
-        let index = Index::new(options, tmp).unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        let indexer_config = IndexerConfig::default();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &indexer_config,
-            IndexDocumentsConfig::default(),
-            |_| (),
-        )
-        .unwrap();
+        let index = TempIndex::new_with_map_size(4096 * 100);
 
         let doc1 = documents! {[{
             "id": -228142,
@@ -2181,32 +1682,15 @@ mod tests {
             "title": "something",
         }]};
 
-        let (builder, user_error) = builder.add_documents(doc1).unwrap();
-        user_error.unwrap();
-        let (builder, user_error) = builder.add_documents(doc2).unwrap();
-        assert!(user_error.is_err());
-        let (builder, user_error) = builder.add_documents(doc3).unwrap();
-        assert!(user_error.is_err());
-        let (_builder, user_error) = builder.add_documents(doc4).unwrap();
-        assert!(user_error.is_err());
+        index.add_documents(doc1).unwrap();
+        index.add_documents(doc2).unwrap_err();
+        index.add_documents(doc3).unwrap_err();
+        index.add_documents(doc4).unwrap_err();
     }
 
     #[test]
     fn primary_key_must_not_contain_whitespace() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(4096 * 100);
-        let index = Index::new(options, tmp).unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        let indexer_config = IndexerConfig::default();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &indexer_config,
-            IndexDocumentsConfig::default(),
-            |_| (),
-        )
-        .unwrap();
+        let index = TempIndex::new();
 
         let doc1 = documents! {[{
             "id": " 1",
@@ -2228,13 +1712,9 @@ mod tests {
             "title": "something",
         }]};
 
-        let (builder, user_error) = builder.add_documents(doc1).unwrap();
-        assert!(user_error.is_err());
-        let (builder, user_error) = builder.add_documents(doc2).unwrap();
-        assert!(user_error.is_err());
-        let (builder, user_error) = builder.add_documents(doc3).unwrap();
-        assert!(user_error.is_err());
-        let (_builder, user_error) = builder.add_documents(doc4).unwrap();
-        assert!(user_error.is_err());
+        index.add_documents(doc1).unwrap_err();
+        index.add_documents(doc2).unwrap_err();
+        index.add_documents(doc3).unwrap_err();
+        index.add_documents(doc4).unwrap_err();
     }
 }

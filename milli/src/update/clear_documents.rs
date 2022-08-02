@@ -82,36 +82,25 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
 #[cfg(test)]
 mod tests {
-    use heed::EnvOpenOptions;
-
     use super::*;
-    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig};
+    use crate::index::tests::TempIndex;
 
     #[test]
     fn clear_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 0, "name": "kevin", "age": 20 },
-            { "id": 1, "name": "kevina" },
-            { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
-        ]);
-        let indexing_config = IndexDocumentsConfig::default();
-        let config = IndexerConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        index
+            .add_documents_using_wtxn(&mut wtxn, documents!([
+                { "id": 0, "name": "kevin", "age": 20 },
+                { "id": 1, "name": "kevina" },
+                { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
+            ]))
+            .unwrap();
 
         // Clear all documents from the database.
         let builder = ClearDocuments::new(&mut wtxn, &index);
         assert_eq!(builder.execute().unwrap(), 3);
-
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

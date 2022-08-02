@@ -1182,16 +1182,19 @@ pub(crate) mod tests {
     use std::ops::Deref;
 
     use big_s::S;
-    use heed::EnvOpenOptions;
+    use heed::{EnvOpenOptions, RwTxn};
     use maplit::btreemap;
     use tempfile::TempDir;
 
+    use crate::documents::DocumentsBatchReader;
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig};
+    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::Index;
 
     pub(crate) struct TempIndex {
-        inner: Index,
+        pub inner: Index,
+        pub indexer_config: IndexerConfig,
+        pub index_documents_config: IndexDocumentsConfig,
         _tempdir: TempDir,
     }
 
@@ -1204,43 +1207,88 @@ pub(crate) mod tests {
     }
 
     impl TempIndex {
-        /// Creates a temporary index, with a default `4096 * 100` size. This should be enough for
-        /// most tests.
-        pub fn new() -> Self {
+        /// Creates a temporary index
+        pub fn new_with_map_size(size: usize) -> Self {
             let mut options = EnvOpenOptions::new();
-            options.map_size(100 * 4096);
+            options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
             let inner = Index::new(options, _tempdir.path()).unwrap();
-            Self { inner, _tempdir }
+            let indexer_config = IndexerConfig::default();
+            let index_documents_config = IndexDocumentsConfig::default();
+            Self { inner, indexer_config, index_documents_config, _tempdir }
+        }
+        /// Creates a temporary index, with a default `4096 * 1000` size. This should be enough for
+        /// most tests.
+        pub fn new() -> Self {
+            Self::new_with_map_size(4096 * 1000)
+        }
+        pub fn add_documents_using_wtxn<'t, R>(
+            &'t self,
+            wtxn: &mut RwTxn<'t, '_>,
+            documents: DocumentsBatchReader<R>,
+        ) -> Result<(), crate::error::Error>
+        where
+            R: std::io::Read + std::io::Seek,
+        {
+            let builder = IndexDocuments::new(
+                wtxn,
+                &self,
+                &self.indexer_config,
+                self.index_documents_config.clone(),
+                |_| (),
+            )
+            .unwrap();
+            let (builder, user_error) = builder.add_documents(documents).unwrap();
+            user_error?;
+            builder.execute()?;
+            Ok(())
+        }
+        pub fn add_documents<R>(
+            &self,
+            documents: DocumentsBatchReader<R>,
+        ) -> Result<(), crate::error::Error>
+        where
+            R: std::io::Read + std::io::Seek,
+        {
+            let mut wtxn = self.write_txn().unwrap();
+            self.add_documents_using_wtxn(&mut wtxn, documents)?;
+            wtxn.commit().unwrap();
+            Ok(())
+        }
+
+        pub fn update_settings(
+            &self,
+            update: impl Fn(&mut Settings),
+        ) -> Result<(), crate::error::Error> {
+            let mut wtxn = self.write_txn().unwrap();
+            self.update_settings_using_wtxn(&mut wtxn, update)?;
+            wtxn.commit().unwrap();
+            Ok(())
+        }
+        pub fn update_settings_using_wtxn<'t>(
+            &'t self,
+            wtxn: &mut RwTxn<'t, '_>,
+            update: impl Fn(&mut Settings),
+        ) -> Result<(), crate::error::Error> {
+            let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
+            update(&mut builder);
+            builder.execute(drop)?;
+            Ok(())
         }
     }
 
     #[test]
     fn initial_field_distribution() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 },
-        ]);
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 2, "name": "bob", "age": 20 },
+                { "id": 2, "name": "bob", "age": 20 },
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-
         let field_distribution = index.field_distribution(&rtxn).unwrap();
         assert_eq!(
             field_distribution,
@@ -1253,19 +1301,13 @@ pub(crate) mod tests {
 
         // we add all the documents a second time. we are supposed to get the same
         // field_distribution in the end
-        let mut wtxn = index.write_txn().unwrap();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let content = documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 },
-        ]);
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 2, "name": "bob", "age": 20 },
+                { "id": 2, "name": "bob", "age": 20 },
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1280,19 +1322,12 @@ pub(crate) mod tests {
         );
 
         // then we update a document by removing one field and another by adding one field
-        let content = documents!([
-            { "id": 1, "name": "kevin", "has_dog": true },
-            { "id": 2, "name": "bob" }
-        ]);
-
-        let mut wtxn = index.write_txn().unwrap();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin", "has_dog": true },
+                { "id": 2, "name": "bob" }
+            ]))
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1341,35 +1376,19 @@ pub(crate) mod tests {
 
     #[test]
     fn add_documents_and_set_searchable_fields() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "doggo": "kevin" },
-            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
-            { "id": 3, "name": "jean", "age": 25 },
-        ]);
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
-
-        // set searchable fields
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_searchable_fields(vec![S("doggo"), S("name")]);
-
-        builder.execute(drop).unwrap();
-        wtxn.commit().unwrap();
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                { "id": 1, "doggo": "kevin" },
+                { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+                { "id": 3, "name": "jean", "age": 25 },
+            ]))
+            .unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("doggo"), S("name")]);
+            })
+            .unwrap();
 
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
@@ -1383,19 +1402,13 @@ pub(crate) mod tests {
 
     #[test]
     fn set_searchable_fields_and_add_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-        let config = IndexerConfig::default();
+        let index = TempIndex::new();
 
-        // set searchable fields
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-        builder.set_searchable_fields(vec![S("doggo"), S("name")]);
-
-        builder.execute(drop).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("doggo"), S("name")]);
+            })
+            .unwrap();
 
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
@@ -1405,21 +1418,13 @@ pub(crate) mod tests {
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 1, "doggo": "kevin" },
-            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
-            { "id": 3, "name": "jean", "age": 25 },
-        ]);
-
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 1, "doggo": "kevin" },
+                { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+                { "id": 3, "name": "jean", "age": 25 },
+            ]))
+            .unwrap();
 
         // ensure we get the right real searchable fields + user defined searchable fields
         let rtxn = index.read_txn().unwrap();
