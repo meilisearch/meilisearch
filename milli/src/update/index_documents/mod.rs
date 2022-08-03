@@ -2086,4 +2086,51 @@ mod tests {
         let (_builder, user_error) = builder.add_documents(doc4).unwrap();
         assert!(user_error.is_err());
     }
+
+    #[test]
+    fn primary_key_must_not_contain_whitespace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(4096 * 100);
+        let index = Index::new(options, tmp).unwrap();
+        let mut wtxn = index.write_txn().unwrap();
+        let indexer_config = IndexerConfig::default();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &indexer_config,
+            IndexDocumentsConfig::default(),
+            |_| (),
+        )
+        .unwrap();
+
+        let doc1 = documents! {[{
+            "id": " 1",
+            "title": "asdsad",
+        }]};
+
+        let doc2 = documents! {[{
+            "id": "\t2",
+            "title": "something",
+        }]};
+
+        let doc3 = documents! {[{
+            "id": "\r3",
+            "title": "something",
+        }]};
+
+        let doc4 = documents! {[{
+            "id": "\n4",
+            "title": "something",
+        }]};
+
+        let (builder, user_error) = builder.add_documents(doc1).unwrap();
+        assert!(user_error.is_err());
+        let (builder, user_error) = builder.add_documents(doc2).unwrap();
+        assert!(user_error.is_err());
+        let (builder, user_error) = builder.add_documents(doc3).unwrap();
+        assert!(user_error.is_err());
+        let (_builder, user_error) = builder.add_documents(doc4).unwrap();
+        assert!(user_error.is_err());
+    }
 }
