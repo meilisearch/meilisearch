@@ -13,6 +13,10 @@ pub mod proximity;
 mod search;
 pub mod update;
 
+#[cfg(test)]
+#[macro_use]
+pub mod snapshot_tests;
+
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
