@@ -294,9 +294,7 @@ pub fn fetch_matching_values_in_object(
     }
 }
 
-/// Returns a trimmed version of the document id or `None` if it is invalid.
 pub fn validate_document_id(document_id: &str) -> Option<&str> {
-    let document_id = document_id.trim();
     if !document_id.is_empty()
         && document_id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
     {
