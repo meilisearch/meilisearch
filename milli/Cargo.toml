@@ -55,7 +55,6 @@ insta = "1.17.1"
 maplit = "1.0.2"
 md5 = "0.7.0"
 rand = "0.8.5"
-regex = "1.6.0"
 
 [features]
 default = []

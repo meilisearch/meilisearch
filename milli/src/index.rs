@@ -1183,13 +1183,12 @@ pub(crate) mod tests {
 
     use big_s::S;
     use heed::{EnvOpenOptions, RwTxn};
-    use maplit::btreemap;
     use tempfile::TempDir;
 
     use crate::documents::DocumentsBatchReader;
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-    use crate::Index;
+    use crate::{db_snap, Index};
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -1288,16 +1287,29 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        let rtxn = index.read_txn().unwrap();
-        let field_distribution = index.field_distribution(&rtxn).unwrap();
-        assert_eq!(
-            field_distribution,
-            btreemap! {
-                "id".to_string() => 2,
-                "name".to_string() => 2,
-                "age".to_string() => 1,
-            }
+        db_snap!(index, field_distribution, 1);
+
+        db_snap!(index, word_docids,
+            @r###"
+        1                [0, ]
+        2                [1, ]
+        20               [1, ]
+        bob              [1, ]
+        kevin            [0, ]
+        "###
         );
+
+        db_snap!(index, field_distribution);
+
+        db_snap!(index, field_distribution,
+            @"
+            age              1     
+            id               2     
+            name             2     
+            "
+        );
+
+        // snapshot_index!(&index, "1", include: "^field_distribution$");
 
         // we add all the documents a second time. we are supposed to get the same
         // field_distribution in the end
@@ -1309,16 +1321,12 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        let rtxn = index.read_txn().unwrap();
-
-        let field_distribution = index.field_distribution(&rtxn).unwrap();
-        assert_eq!(
-            field_distribution,
-            btreemap! {
-                "id".to_string() => 2,
-                "name".to_string() => 2,
-                "age".to_string() => 1,
-            }
+        db_snap!(index, field_distribution,
+            @r###"
+            age              1     
+            id               2     
+            name             2     
+            "###
         );
 
         // then we update a document by removing one field and another by adding one field
@@ -1329,16 +1337,12 @@ pub(crate) mod tests {
             ]))
             .unwrap();
 
-        let rtxn = index.read_txn().unwrap();
-
-        let field_distribution = index.field_distribution(&rtxn).unwrap();
-        assert_eq!(
-            field_distribution,
-            btreemap! {
-                "id".to_string() => 2,
-                "name".to_string() => 2,
-                "has_dog".to_string() => 1,
-            }
+        db_snap!(index, field_distribution,
+            @r###"
+            has_dog          1     
+            id               2     
+            name             2     
+            "###
         );
     }
 
