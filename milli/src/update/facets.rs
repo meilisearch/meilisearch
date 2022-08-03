@@ -347,7 +347,11 @@ fn write_string_entry(
 mod tests {
     use std::num::NonZeroUsize;
 
-    use crate::{db_snap, documents::batch_reader_from_documents, index::tests::TempIndex};
+    use crate::{
+        db_snap,
+        documents::{batch_reader_from_documents, documents_batch_reader_from_objects},
+        index::tests::TempIndex,
+    };
 
     #[test]
     fn test_facets_number() {
@@ -419,7 +423,7 @@ mod tests {
                     serde_json::json!({ "facet2": format!("s{i:X}") }).as_object().unwrap().clone(),
                 );
             }
-            let documents = batch_reader_from_documents(&documents);
+            let documents = documents_batch_reader_from_objects(documents);
 
             index.add_documents(documents).unwrap();
 

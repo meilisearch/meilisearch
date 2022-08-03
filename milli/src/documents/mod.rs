@@ -191,17 +191,6 @@ pub fn documents_batch_reader_from_objects(
 }
 
 #[cfg(test)]
-pub fn batch_reader_from_documents(
-    documents: &[Object],
-) -> DocumentsBatchReader<std::io::Cursor<Vec<u8>>> {
-    let mut builder = DocumentsBatchBuilder::new(Vec::new());
-    for object in documents {
-        builder.append_json_object(&object).unwrap();
-    }
-    DocumentsBatchReader::from_reader(std::io::Cursor::new(builder.into_inner().unwrap())).unwrap()
-}
-
-#[cfg(test)]
 mod test {
     use std::io::Cursor;
 
