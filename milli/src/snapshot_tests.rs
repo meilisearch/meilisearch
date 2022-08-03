@@ -30,7 +30,7 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Setti
 
 #[macro_export]
 macro_rules! db_snap {
-    ($index:ident, $db_name:ident, $name:literal) => {
+    ($index:ident, $db_name:ident, $name:expr) => {
         let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
             &format!("{}", $name),
         ));
