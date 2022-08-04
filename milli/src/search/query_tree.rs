@@ -99,11 +99,6 @@ impl QueryKind {
         QueryKind::Exact { original_typo: 0, word }
     }
 
-    #[cfg(test)]
-    pub fn exact_with_typo(original_typo: u8, word: String) -> Self {
-        QueryKind::Exact { original_typo, word }
-    }
-
     pub fn tolerant(typo: u8, word: String) -> Self {
         QueryKind::Tolerant { typo, word }
     }
