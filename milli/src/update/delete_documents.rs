@@ -654,25 +654,12 @@ where
 #[cfg(test)]
 mod tests {
     use big_s::S;
-    use heed::{EnvOpenOptions, RwTxn};
+    use heed::RwTxn;
     use maplit::hashset;
 
     use super::*;
-    use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+    use crate::index::tests::TempIndex;
     use crate::Filter;
-
-    fn insert_documents<'t, R: std::io::Read + std::io::Seek>(
-        wtxn: &mut RwTxn<'t, '_>,
-        index: &'t Index,
-        documents: crate::documents::DocumentsBatchReader<R>,
-    ) {
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder = IndexDocuments::new(wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(documents).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-    }
 
     fn delete_documents<'t>(
         wtxn: &mut RwTxn<'t, '_>,
@@ -695,24 +682,19 @@ mod tests {
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
-            { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
-            { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
-        ]);
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
+                    { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
+                    { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
+                ]),
+            )
+            .unwrap();
 
         // delete those documents, ids are synchronous therefore 0, 1, and 2.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -730,25 +712,19 @@ mod tests {
 
     #[test]
     fn delete_documents_with_strange_primary_key() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            { "mysuperid": 0, "name": "kevin" },
-            { "mysuperid": 1, "name": "kevina" },
-            { "mysuperid": 2, "name": "benoit" }
-        ]);
-
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "mysuperid": 0, "name": "kevin" },
+                    { "mysuperid": 1, "name": "kevina" },
+                    { "mysuperid": 2, "name": "benoit" }
+                ]),
+            )
+            .unwrap();
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
@@ -761,42 +737,45 @@ mod tests {
 
     #[test]
     fn filtered_placeholder_search_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("docid"));
-        builder.set_filterable_fields(hashset! { S("label") });
-        builder.execute(|_| ()).unwrap();
 
-        let content = documents!([
-            { "docid": "1_4",  "label": "sign" },
-            { "docid": "1_5",  "label": "letter" },
-            { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-            { "docid": "1_36", "label": "drawing,painting,pattern" },
-            { "docid": "1_37", "label": "art,drawing,outdoor" },
-            { "docid": "1_38", "label": "aquarium,art,drawing" },
-            { "docid": "1_39", "label": "abstract" },
-            { "docid": "1_40", "label": "cartoon" },
-            { "docid": "1_41", "label": "art,drawing" },
-            { "docid": "1_42", "label": "art,pattern" },
-            { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-            { "docid": "1_44", "label": "drawing" },
-            { "docid": "1_45", "label": "art" },
-            { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-            { "docid": "1_47", "label": "abstract,pattern" },
-            { "docid": "1_52", "label": "abstract,cartoon" },
-            { "docid": "1_57", "label": "abstract,drawing,pattern" },
-            { "docid": "1_58", "label": "abstract,art,cartoon" },
-            { "docid": "1_68", "label": "design" },
-            { "docid": "1_69", "label": "geometry" }
-        ]);
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+                settings.set_filterable_fields(hashset! { S("label") });
+            })
+            .unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": "sign" },
+                    { "docid": "1_5",  "label": "letter" },
+                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
+                    { "docid": "1_36", "label": "drawing,painting,pattern" },
+                    { "docid": "1_37", "label": "art,drawing,outdoor" },
+                    { "docid": "1_38", "label": "aquarium,art,drawing" },
+                    { "docid": "1_39", "label": "abstract" },
+                    { "docid": "1_40", "label": "cartoon" },
+                    { "docid": "1_41", "label": "art,drawing" },
+                    { "docid": "1_42", "label": "art,pattern" },
+                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
+                    { "docid": "1_44", "label": "drawing" },
+                    { "docid": "1_45", "label": "art" },
+                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
+                    { "docid": "1_47", "label": "abstract,pattern" },
+                    { "docid": "1_52", "label": "abstract,cartoon" },
+                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
+                    { "docid": "1_58", "label": "abstract,art,cartoon" },
+                    { "docid": "1_68", "label": "design" },
+                    { "docid": "1_69", "label": "geometry" }
+                ]),
+            )
+            .unwrap();
+
         delete_documents(&mut wtxn, &index, &["1_4"]);
 
         // Placeholder search with filter
@@ -809,41 +788,43 @@ mod tests {
 
     #[test]
     fn placeholder_search_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("docid"));
-        builder.execute(|_| ()).unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
 
-        let content = documents!([
-            { "docid": "1_4",  "label": "sign" },
-            { "docid": "1_5",  "label": "letter" },
-            { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-            { "docid": "1_36", "label": "drawing,painting,pattern" },
-            { "docid": "1_37", "label": "art,drawing,outdoor" },
-            { "docid": "1_38", "label": "aquarium,art,drawing" },
-            { "docid": "1_39", "label": "abstract" },
-            { "docid": "1_40", "label": "cartoon" },
-            { "docid": "1_41", "label": "art,drawing" },
-            { "docid": "1_42", "label": "art,pattern" },
-            { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-            { "docid": "1_44", "label": "drawing" },
-            { "docid": "1_45", "label": "art" },
-            { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-            { "docid": "1_47", "label": "abstract,pattern" },
-            { "docid": "1_52", "label": "abstract,cartoon" },
-            { "docid": "1_57", "label": "abstract,drawing,pattern" },
-            { "docid": "1_58", "label": "abstract,art,cartoon" },
-            { "docid": "1_68", "label": "design" },
-            { "docid": "1_69", "label": "geometry" }
-        ]);
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": "sign" },
+                    { "docid": "1_5",  "label": "letter" },
+                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
+                    { "docid": "1_36", "label": "drawing,painting,pattern" },
+                    { "docid": "1_37", "label": "art,drawing,outdoor" },
+                    { "docid": "1_38", "label": "aquarium,art,drawing" },
+                    { "docid": "1_39", "label": "abstract" },
+                    { "docid": "1_40", "label": "cartoon" },
+                    { "docid": "1_41", "label": "art,drawing" },
+                    { "docid": "1_42", "label": "art,pattern" },
+                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
+                    { "docid": "1_44", "label": "drawing" },
+                    { "docid": "1_45", "label": "art" },
+                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
+                    { "docid": "1_47", "label": "abstract,pattern" },
+                    { "docid": "1_52", "label": "abstract,cartoon" },
+                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
+                    { "docid": "1_58", "label": "abstract,art,cartoon" },
+                    { "docid": "1_68", "label": "design" },
+                    { "docid": "1_69", "label": "geometry" }
+                ]),
+            )
+            .unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
 
         // Placeholder search
@@ -862,41 +843,43 @@ mod tests {
 
     #[test]
     fn search_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("docid"));
-        builder.execute(|_| ()).unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
 
-        let content = documents!([
-            {"docid": "1_4", "label": "sign"},
-            {"docid": "1_5", "label": "letter"},
-            {"docid": "1_7", "label": "abstract,cartoon,design,pattern"},
-            {"docid": "1_36","label": "drawing,painting,pattern"},
-            {"docid": "1_37","label": "art,drawing,outdoor"},
-            {"docid": "1_38","label": "aquarium,art,drawing"},
-            {"docid": "1_39","label": "abstract"},
-            {"docid": "1_40","label": "cartoon"},
-            {"docid": "1_41","label": "art,drawing"},
-            {"docid": "1_42","label": "art,pattern"},
-            {"docid": "1_43","label": "abstract,art,drawing,pattern"},
-            {"docid": "1_44","label": "drawing"},
-            {"docid": "1_45","label": "art"},
-            {"docid": "1_46","label": "abstract,colorfulness,pattern"},
-            {"docid": "1_47","label": "abstract,pattern"},
-            {"docid": "1_52","label": "abstract,cartoon"},
-            {"docid": "1_57","label": "abstract,drawing,pattern"},
-            {"docid": "1_58","label": "abstract,art,cartoon"},
-            {"docid": "1_68","label": "design"},
-            {"docid": "1_69","label": "geometry"}
-        ]);
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    {"docid": "1_4", "label": "sign"},
+                    {"docid": "1_5", "label": "letter"},
+                    {"docid": "1_7", "label": "abstract,cartoon,design,pattern"},
+                    {"docid": "1_36","label": "drawing,painting,pattern"},
+                    {"docid": "1_37","label": "art,drawing,outdoor"},
+                    {"docid": "1_38","label": "aquarium,art,drawing"},
+                    {"docid": "1_39","label": "abstract"},
+                    {"docid": "1_40","label": "cartoon"},
+                    {"docid": "1_41","label": "art,drawing"},
+                    {"docid": "1_42","label": "art,pattern"},
+                    {"docid": "1_43","label": "abstract,art,drawing,pattern"},
+                    {"docid": "1_44","label": "drawing"},
+                    {"docid": "1_45","label": "art"},
+                    {"docid": "1_46","label": "abstract,colorfulness,pattern"},
+                    {"docid": "1_47","label": "abstract,pattern"},
+                    {"docid": "1_52","label": "abstract,cartoon"},
+                    {"docid": "1_57","label": "abstract,drawing,pattern"},
+                    {"docid": "1_58","label": "abstract,art,cartoon"},
+                    {"docid": "1_68","label": "design"},
+                    {"docid": "1_69","label": "geometry"}
+                ]),
+            )
+            .unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
 
         // search for abstract
@@ -915,20 +898,18 @@ mod tests {
 
     #[test]
     fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("id"));
-        builder.set_filterable_fields(hashset!(S("_geo")));
-        builder.set_sortable_fields(hashset!(S("_geo")));
-        builder.execute(|_| ()).unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("id"));
+                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_sortable_fields(hashset!(S("_geo")));
+            })
+            .unwrap();
 
-        let content = documents!([
+        index.add_documents_using_wtxn(&mut wtxn, documents!([
             { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
             { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
             { "id": "3",  "city": "Hellemmes",         "_geo": { "lat": 50.6312, "lng": 3.1106 } },
@@ -949,10 +930,9 @@ mod tests {
             { "id": "18", "city": "Amiens",            "_geo": { "lat": 49.9314, "lng": 2.2710 } },
             { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
             { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
-        ]);
-        let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
+        ])).unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
+        let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
 
         // Placeholder search with geo filter
@@ -972,41 +952,43 @@ mod tests {
 
     #[test]
     fn get_documents_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("docid"));
-        builder.execute(|_| ()).unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
 
-        let content = documents!([
-            { "docid": "1_4",  "label": "sign" },
-            { "docid": "1_5",  "label": "letter" },
-            { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-            { "docid": "1_36", "label": "drawing,painting,pattern" },
-            { "docid": "1_37", "label": "art,drawing,outdoor" },
-            { "docid": "1_38", "label": "aquarium,art,drawing" },
-            { "docid": "1_39", "label": "abstract" },
-            { "docid": "1_40", "label": "cartoon" },
-            { "docid": "1_41", "label": "art,drawing" },
-            { "docid": "1_42", "label": "art,pattern" },
-            { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-            { "docid": "1_44", "label": "drawing" },
-            { "docid": "1_45", "label": "art" },
-            { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-            { "docid": "1_47", "label": "abstract,pattern" },
-            { "docid": "1_52", "label": "abstract,cartoon" },
-            { "docid": "1_57", "label": "abstract,drawing,pattern" },
-            { "docid": "1_58", "label": "abstract,art,cartoon" },
-            { "docid": "1_68", "label": "design" },
-            { "docid": "1_69", "label": "geometry" }
-        ]);
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": "sign" },
+                    { "docid": "1_5",  "label": "letter" },
+                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
+                    { "docid": "1_36", "label": "drawing,painting,pattern" },
+                    { "docid": "1_37", "label": "art,drawing,outdoor" },
+                    { "docid": "1_38", "label": "aquarium,art,drawing" },
+                    { "docid": "1_39", "label": "abstract" },
+                    { "docid": "1_40", "label": "cartoon" },
+                    { "docid": "1_41", "label": "art,drawing" },
+                    { "docid": "1_42", "label": "art,pattern" },
+                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
+                    { "docid": "1_44", "label": "drawing" },
+                    { "docid": "1_45", "label": "art" },
+                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
+                    { "docid": "1_47", "label": "abstract,pattern" },
+                    { "docid": "1_52", "label": "abstract,cartoon" },
+                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
+                    { "docid": "1_58", "label": "abstract,art,cartoon" },
+                    { "docid": "1_68", "label": "design" },
+                    { "docid": "1_69", "label": "geometry" }
+                ]),
+            )
+            .unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
         let deleted_external_ids = ["1_7", "1_52"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
 
@@ -1042,18 +1024,17 @@ mod tests {
 
     #[test]
     fn stats_should_not_return_deleted_documents() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let config = IndexerConfig::default();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_primary_key(S("docid"));
-        builder.execute(|_| ()).unwrap();
 
-        let content = documents!([
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+            })
+            .unwrap();
+
+        index.add_documents_using_wtxn(&mut wtxn, documents!([
             { "docid": "1_4",  "label": "sign"},
             { "docid": "1_5",  "label": "letter"},
             { "docid": "1_7",  "label": "abstract,cartoon,design,pattern", "title": "Mickey Mouse"},
@@ -1074,9 +1055,8 @@ mod tests {
             { "docid": "1_58", "label": "abstract,art,cartoon"},
             { "docid": "1_68", "label": "design"},
             { "docid": "1_69", "label": "geometry"}
-        ]);
+        ])).unwrap();
 
-        insert_documents(&mut wtxn, &index, content);
         delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
 
         // count internal documents
