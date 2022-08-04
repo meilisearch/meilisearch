@@ -7,6 +7,7 @@ pub mod task;
 pub mod extractors;
 pub mod option;
 pub mod routes;
+pub mod metrics;
 
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
@@ -146,16 +147,48 @@ macro_rules! create_app {
         use actix_cors::Cors;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
+        use actix_web::dev::Service;
         use actix_web::{middleware, web};
         use meilisearch_http::error::MeilisearchHttpError;
         use meilisearch_http::routes;
         use meilisearch_http::{configure_data, dashboard};
         use meilisearch_types::error::ResponseError;
+        use meilisearch_http::metrics;
+
+        use lazy_static::lazy_static;
+        use prometheus::{opts, register_histogram_vec, register_int_counter_vec, register_int_gauge};
+        use prometheus::{HistogramVec, IntCounterVec, IntGauge, HistogramTimer};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
+            .wrap_fn(|req, srv| {
+                let mut histogram_timer: Option<HistogramTimer> = None;
+                let request_path = req.path();
+                let is_registered_resource = req.resource_map().has_resource(request_path);
+                if is_registered_resource {
+                    let request_method = req.method().to_string();
+                    histogram_timer = Some(
+                        metrics::HTTP_RESPONSE_TIME_SECONDS
+                            .with_label_values(&[&request_method, request_path])
+                            .start_timer(),
+                    );
+                    metrics::HTTP_REQUESTS_TOTAL
+                        .with_label_values(&[&request_method, request_path])
+                        .inc();
+                }
+
+                let fut = srv.call(req);
+
+                async {
+                    let res = fut.await?;
+                    if let Some(histogram_timer) = histogram_timer {
+                        histogram_timer.observe_duration();
+                    };
+                    Ok(res)
+                }
+            })
             .wrap(
                 Cors::default()
                     .send_wildcard()
