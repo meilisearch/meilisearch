@@ -77,6 +77,8 @@ tokio = { version = "1.17.0", features = ["full"] }
 tokio-stream = "0.1.8"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
+prometheus = { version = "0.13.0", features = ["process"] }
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 actix-rt = "2.7.0"

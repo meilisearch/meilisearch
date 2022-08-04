@@ -1,4 +1,5 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpResponse};
+use actix_web::http::header::{self};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,7 @@ use meilisearch_types::star_or::StarOr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use prometheus::{Encoder, TextEncoder};
 
 mod api_key;
 mod dump;
@@ -21,6 +23,7 @@ mod tasks;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::resource("/metrics").route(web::get().to(get_metrics)))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
@@ -277,4 +280,37 @@ struct KeysResponse {
 
 pub async fn get_health() -> Result<HttpResponse, ResponseError> {
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
+}
+
+pub async fn get_metrics(
+    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
+) -> Result<HttpResponse, ResponseError> {
+
+    let search_rules = &meilisearch.filters().search_rules;
+    let response = meilisearch.get_all_stats(search_rules).await?;
+
+    crate::metrics::MEILISEARCH_DB_SIZE
+    .set(response.database_size as i64);
+
+    crate::metrics::MEILISEARCH_INDEX_COUNT
+    .set(response.indexes.len() as i64);
+
+    for (index, value) in response.indexes.iter() {
+        crate::metrics::MEILISEARCH_DOCS_COUNT
+        .with_label_values(&[&index])
+        .set(value.number_of_documents as i64);
+    }
+
+    let encoder = TextEncoder::new();
+    let mut buffer = vec![];
+    encoder
+        .encode(&prometheus::gather(), &mut buffer)
+        .expect("Failed to encode metrics");
+
+    let response = String::from_utf8(buffer.clone()).expect("Failed to convert bytes to string");
+    buffer.clear();
+
+    Ok(HttpResponse::Ok()
+        .insert_header(header::ContentType(mime::TEXT_PLAIN))
+        .body(response))
 }
