@@ -494,28 +494,21 @@ mod tests {
 
     use big_s::S;
     use either::Either;
-    use heed::EnvOpenOptions;
     use maplit::hashset;
 
-    use super::*;
-    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-    use crate::Index;
+    use crate::index::tests::TempIndex;
+    use crate::Filter;
 
     #[test]
     fn empty_db() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
-
+        let index = TempIndex::new();
         // Set the filterable fields to be the channel.
-        let config = IndexerConfig::default();
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_searchable_fields(vec![S("PrIcE")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("PrIcE") });
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("PrIcE")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S("PrIcE") });
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -592,10 +585,7 @@ mod tests {
 
     #[test]
     fn not_filterable() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
         let rtxn = index.read_txn().unwrap();
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
@@ -611,14 +601,12 @@ mod tests {
         ));
         drop(rtxn);
 
-        let config = IndexerConfig::default();
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_searchable_fields(vec![S("title")]);
-        builder.set_filterable_fields(hashset! { S("title") });
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("title")]);
+                settings.set_filterable_fields(hashset! { S("title") });
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
@@ -637,92 +625,64 @@ mod tests {
 
     #[test]
     fn escaped_quote_in_filter_value_2380() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-        let content = documents!([
-            {
-                "id": "test_1",
-                "monitor_diagonal": "27' to 30'"
-            },
-            {
-                "id": "test_2",
-                "monitor_diagonal": "27\" to 30\""
-            },
-            {
-                "id": "test_3",
-                "monitor_diagonal": "27\" to 30'"
-            },
-        ]);
+        index
+            .add_documents(documents!([
+                {
+                    "id": "test_1",
+                    "monitor_diagonal": "27' to 30'"
+                },
+                {
+                    "id": "test_2",
+                    "monitor_diagonal": "27\" to 30\""
+                },
+                {
+                    "id": "test_3",
+                    "monitor_diagonal": "27\" to 30'"
+                },
+            ]))
+            .unwrap();
 
-        let config = IndexerConfig::default();
-        let indexing_config = IndexDocumentsConfig::default();
-        let builder =
-            IndexDocuments::new(&mut wtxn, &index, &config, indexing_config.clone(), |_| ())
-                .unwrap();
-        let (builder, user_error) = builder.add_documents(content).unwrap();
-        user_error.unwrap();
-        builder.execute().unwrap();
-
-        wtxn.commit().unwrap();
-
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = update::Settings::new(&mut wtxn, &index, &config);
-
-        builder.set_filterable_fields(hashset!(S("monitor_diagonal")));
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset!(S("monitor_diagonal")));
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
         let mut search = crate::Search::new(&rtxn, &index);
         // this filter is copy pasted from #2380 with the exact same espace sequence
-        search.filter(
-            crate::Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap(),
-        );
+        search.filter(Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![2]);
 
-        search.filter(
-            crate::Filter::from_str(r#"monitor_diagonal = "27' to 30'" "#).unwrap().unwrap(),
-        );
+        search.filter(Filter::from_str(r#"monitor_diagonal = "27' to 30'" "#).unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![0]);
 
-        search.filter(
-            crate::Filter::from_str(r#"monitor_diagonal = "27\" to 30\"" "#).unwrap().unwrap(),
-        );
+        search.filter(Filter::from_str(r#"monitor_diagonal = "27\" to 30\"" "#).unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
-        search.filter(
-            crate::Filter::from_str(r#"monitor_diagonal = "27\" to 30'" "#).unwrap().unwrap(),
-        );
+        search.filter(Filter::from_str(r#"monitor_diagonal = "27\" to 30'" "#).unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![2]);
     }
 
     #[test]
     fn geo_radius_error() {
-        let path = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(10 * 1024 * 1024); // 10 MB
-        let index = Index::new(options, &path).unwrap();
+        let index = TempIndex::new();
 
-        let config = IndexerConfig::default();
-        // Set the filterable fields to be the channel.
-        let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index, &config);
-        builder.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
-        builder.set_filterable_fields(hashset! { S("_geo"), S("price") });
-        builder.execute(|_| ()).unwrap();
-        wtxn.commit().unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S("_geo"), S("price") });
+            })
+            .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();

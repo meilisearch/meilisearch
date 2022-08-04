@@ -1578,7 +1578,6 @@ mod tests {
 
     #[test]
     fn index_documents_check_exists_database() {
-
         let content = || {
             documents!([
                 {
@@ -1640,20 +1639,24 @@ mod tests {
                 .unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6, 7]);
         };
-        
+
         let faceted_fields = hashset!(S("colour"));
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
-        index.update_settings(|settings| {
-            settings.set_filterable_fields(faceted_fields.clone()); 
-        }).unwrap(); 
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
         check_ok(&index);
 
         let index = TempIndex::new();
-        index.update_settings(|settings| {
-            settings.set_filterable_fields(faceted_fields.clone()); 
-        }).unwrap(); 
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
         index.add_documents(content()).unwrap();
         check_ok(&index);
     }
