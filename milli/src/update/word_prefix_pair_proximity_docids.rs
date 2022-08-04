@@ -249,11 +249,9 @@ fn insert_current_prefix_data_in_sorter<'a>(
 mod tests {
     use std::io::Cursor;
 
-    use crate::{
-        db_snap,
-        documents::{DocumentsBatchBuilder, DocumentsBatchReader},
-        index::tests::TempIndex,
-    };
+    use crate::db_snap;
+    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+    use crate::index::tests::TempIndex;
 
     fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
         let mut documents = Vec::new();

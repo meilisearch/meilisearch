@@ -1,14 +1,16 @@
-use crate::{
-    heed_codec::facet::{
-        FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-        FacetStringZeroBoundsValueCodec,
-    },
-    make_db_snap_from_iter, CboRoaringBitmapCodec, ExternalDocumentsIds, Index,
-};
-use heed::{types::ByteSlice, BytesDecode};
-use roaring::RoaringBitmap;
+use std::borrow::Cow;
+use std::fmt::Write;
 use std::path::Path;
-use std::{borrow::Cow, fmt::Write};
+
+use heed::types::ByteSlice;
+use heed::BytesDecode;
+use roaring::RoaringBitmap;
+
+use crate::heed_codec::facet::{
+    FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
+    FacetStringZeroBoundsValueCodec,
+};
+use crate::{make_db_snap_from_iter, CboRoaringBitmapCodec, ExternalDocumentsIds, Index};
 
 #[track_caller]
 pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Settings {

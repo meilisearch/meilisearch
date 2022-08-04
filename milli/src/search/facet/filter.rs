@@ -490,14 +490,12 @@ impl<'a> From<FilterCondition<'a>> for Filter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Write;
-
+    use crate::index::tests::TempIndex;
+    use crate::Filter;
     use big_s::S;
     use either::Either;
     use maplit::hashset;
-
-    use crate::index::tests::TempIndex;
-    use crate::Filter;
+    use std::fmt::Write;
 
     #[test]
     fn empty_db() {
