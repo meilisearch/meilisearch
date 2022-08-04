@@ -30,6 +30,71 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Setti
     settings
 }
 
+/**
+Create a snapshot test of the given database.
+
+## Arguments
+1. The identifier for the `Index`
+2. The content of the index to snapshot. Available options are:
+    - `settings`
+    - `word_docids`
+    - `exact_word_docids`
+    - `word_prefix_docids`
+    - `exact_word_prefix_docids`
+    - `docid_word_positions`
+    - `word_pair_proximity_docids`
+    - `word_prefix_pair_proximity_docids`
+    - `word_position_docids`
+    - `field_id_word_count_docids`
+    - `word_prefix_position_docids`
+    - `facet_id_f64_docids`
+    - `facet_id_string_docids`
+    - `documents_ids`
+    - `stop_words`
+    - `soft_deleted_documents_ids`
+    - `field_distribution`
+    - `fields_ids_map`
+    - `geo_faceted_documents_ids`
+    - `external_documents_ids`
+    - `number_faceted_documents_ids`
+    - `string_faceted_documents_ids`
+    - `words_fst`
+    - `words_prefixes_fst`
+
+3. The identifier for the snapshot test (optional)
+4. `@""` to write the snapshot inline (optional)
+
+## Behaviour
+The content of the database will be printed either inline or to the file system
+at `test_directory/test_file.rs/test_name/db_name.snap`.
+
+If the database is too large, then only the hash of the database will be saved, with
+the name `db_name.hash.snap`. To *also* save the full content of the database anyway,
+set the `MILLI_TEST_FULL_SNAPS` environment variable to `true`. The full snapshot will
+be saved with the name `db_name.full.snap` but will not be saved to the git repository.
+
+Running `cargo test` will check whether the old snapshot is identical to the
+current one. If they are equal, the test passes. Otherwise, the test fails.
+
+Use the command line `cargo insta` to approve or reject new snapshots.
+
+## Example
+```ignore
+let index = TempIndex::new();
+
+// basic usages
+db_snap!(index, word_docids);
+
+// named snapshot to avoid conflicts
+db_snap!(index, word_docids, "some_identifier");
+
+// write the snapshot inline
+db_snap!(index, word_docids, @""); // will be autocompleted by running `cargo insta review`
+
+// give a name to the inline snapshot
+db_snap!(index, word_docids, "some_identifier", @"");
+```
+*/
 #[macro_export]
 macro_rules! db_snap {
     ($index:ident, $db_name:ident, $name:expr) => {
