@@ -632,25 +632,59 @@ mod tests {
                 ]),
             ],
         );
-
-        let expected = vec![
-            vec![vec![Query { prefix: false, kind: QueryKind::exact(S("manythefish")) }]],
-            vec![
-                vec![Query { prefix: false, kind: QueryKind::exact(S("manythe")) }],
-                vec![Query { prefix: false, kind: QueryKind::exact(S("fish")) }],
-            ],
-            vec![
-                vec![Query { prefix: false, kind: QueryKind::exact(S("many")) }],
-                vec![Query { prefix: false, kind: QueryKind::exact(S("thefish")) }],
-            ],
-            vec![
-                vec![Query { prefix: false, kind: QueryKind::exact(S("many")) }],
-                vec![Query { prefix: false, kind: QueryKind::exact(S("the")) }],
-                vec![Query { prefix: false, kind: QueryKind::exact(S("fish")) }],
-            ],
-        ];
-
         let result = flatten_query_tree(&query_tree);
-        assert_eq!(expected, result);
+
+        insta::assert_debug_snapshot!(result, @r###"
+        [
+            [
+                [
+                    Exact {
+                        word: "manythefish",
+                    },
+                ],
+            ],
+            [
+                [
+                    Exact {
+                        word: "manythe",
+                    },
+                ],
+                [
+                    Exact {
+                        word: "fish",
+                    },
+                ],
+            ],
+            [
+                [
+                    Exact {
+                        word: "many",
+                    },
+                ],
+                [
+                    Exact {
+                        word: "thefish",
+                    },
+                ],
+            ],
+            [
+                [
+                    Exact {
+                        word: "many",
+                    },
+                ],
+                [
+                    Exact {
+                        word: "the",
+                    },
+                ],
+                [
+                    Exact {
+                        word: "fish",
+                    },
+                ],
+            ],
+        ]
+        "###);
     }
 }
