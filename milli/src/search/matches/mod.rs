@@ -574,10 +574,10 @@ mod tests {
         let mut matcher = builder.build(text);
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
-            matcher.format(format_options), 
+            matcher.format(format_options),
             @"Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>."
         );
-        
+
         // Text containing some matches.
         let text = "Natalie risk her future to build a world with the boy she loves.";
         let mut matcher = builder.build(text);

@@ -370,7 +370,7 @@ mod test {
 
         let parent = Initial::new(query_tree, facet_candidates);
         let criteria = Typo::new(&context, Box::new(parent));
-        
+
         let result = display_criteria(criteria, criterion_parameters);
         insta::assert_snapshot!(result, @r###"
         CriterionResult { query_tree: None, candidates: None, filtered_candidates: None, bucket_candidates: None }
