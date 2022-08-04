@@ -53,7 +53,7 @@ pub(crate) fn data_from_obkv_documents(
         })
         .collect::<Result<()>>()?;
 
-    let result: Result<(Vec<_>, (Vec<_>, Vec<_>))> = flattened_obkv_chunks
+    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))> = flattened_obkv_chunks
         .par_bridge()
         .map(|flattened_obkv_chunks| {
             send_and_extract_flattened_documents_data(
@@ -72,8 +72,27 @@ pub(crate) fn data_from_obkv_documents(
 
     let (
         docid_word_positions_chunks,
-        (docid_fid_facet_numbers_chunks, docid_fid_facet_strings_chunks),
+        (
+            docid_fid_facet_numbers_chunks,
+            (docid_fid_facet_strings_chunks, facet_exists_docids_chunks),
+        ),
     ) = result?;
+
+    // merge facet_exists_docids and send them as a typed chunk
+    {
+        let lmdb_writer_sx = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            debug!("merge {} database", "facet-id-exists-docids");
+            match facet_exists_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+                Ok(reader) => {
+                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
+                }
+                Err(e) => {
+                    let _ = lmdb_writer_sx.send(Err(e));
+                }
+            }
+        });
+    }
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
@@ -197,6 +216,7 @@ fn send_original_documents_data(
 /// - docid_word_positions
 /// - docid_fid_facet_numbers
 /// - docid_fid_facet_strings
+/// - docid_fid_facet_exists
 fn send_and_extract_flattened_documents_data(
     flattened_documents_chunk: Result<grenad::Reader<File>>,
     indexer: GrenadParameters,
@@ -209,7 +229,10 @@ fn send_and_extract_flattened_documents_data(
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
     grenad::Reader<CursorClonableMmap>,
-    (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
+    (
+        grenad::Reader<CursorClonableMmap>,
+        (grenad::Reader<CursorClonableMmap>, grenad::Reader<File>),
+    ),
 )> {
     let flattened_documents_chunk =
         flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -250,12 +273,15 @@ fn send_and_extract_flattened_documents_data(
                 Ok(docid_word_positions_chunk)
             },
             || {
-                let (docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk) =
-                    extract_fid_docid_facet_values(
-                        flattened_documents_chunk.clone(),
-                        indexer.clone(),
-                        faceted_fields,
-                    )?;
+                let (
+                    docid_fid_facet_numbers_chunk,
+                    docid_fid_facet_strings_chunk,
+                    fid_facet_exists_docids_chunk,
+                ) = extract_fid_docid_facet_values(
+                    flattened_documents_chunk.clone(),
+                    indexer.clone(),
+                    faceted_fields,
+                )?;
 
                 // send docid_fid_facet_numbers_chunk to DB writer
                 let docid_fid_facet_numbers_chunk =
@@ -273,7 +299,10 @@ fn send_and_extract_flattened_documents_data(
                     docid_fid_facet_strings_chunk.clone(),
                 )));
 
-                Ok((docid_fid_facet_numbers_chunk, docid_fid_facet_strings_chunk))
+                Ok((
+                    docid_fid_facet_numbers_chunk,
+                    (docid_fid_facet_strings_chunk, fid_facet_exists_docids_chunk),
+                ))
             },
         );
 

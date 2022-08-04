@@ -170,6 +170,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_position_docids,
             word_prefix_position_docids,
             facet_id_f64_docids,
+            facet_id_exists_docids,
             facet_id_string_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
@@ -424,9 +425,15 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_number_docids(
+        remove_docids_from_facet_field_id_docids(
             self.wtxn,
             facet_id_f64_docids,
+            &self.to_delete_docids,
+        )?;
+        // We delete the documents ids that are under the facet field id values.
+        remove_docids_from_facet_field_id_docids(
+            self.wtxn,
+            facet_id_exists_docids,
             &self.to_delete_docids,
         )?;
 
@@ -618,7 +625,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
     Ok(())
 }
 
-fn remove_docids_from_facet_field_id_number_docids<'a, C>(
+fn remove_docids_from_facet_field_id_docids<'a, C>(
     wtxn: &'a mut heed::RwTxn,
     db: &heed::Database<C, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,

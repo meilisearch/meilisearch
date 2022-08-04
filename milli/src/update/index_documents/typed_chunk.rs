@@ -35,6 +35,7 @@ pub(crate) enum TypedChunk {
     WordPairProximityDocids(grenad::Reader<File>),
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
+    FieldIdFacetExistsDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
 }
 
@@ -139,6 +140,17 @@ pub(crate) fn write_typed_chunk_into_index(
             append_entries_into_database(
                 facet_id_f64_docids_iter,
                 &index.facet_id_f64_docids,
+                wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
+                merge_cbo_roaring_bitmaps,
+            )?;
+            is_merged_database = true;
+        }
+        TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
+            append_entries_into_database(
+                facet_id_exists_docids,
+                &index.facet_id_exists_docids,
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),

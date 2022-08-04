@@ -6,6 +6,8 @@ mod facet_string_zero_bounds_value_codec;
 mod field_doc_id_facet_f64_codec;
 mod field_doc_id_facet_string_codec;
 
+use heed::types::OwnedType;
+
 pub use self::facet_level_value_f64_codec::FacetLevelValueF64Codec;
 pub use self::facet_level_value_u32_codec::FacetLevelValueU32Codec;
 pub use self::facet_string_level_zero_codec::FacetStringLevelZeroCodec;
@@ -15,6 +17,9 @@ pub use self::facet_string_level_zero_value_codec::{
 pub use self::facet_string_zero_bounds_value_codec::FacetStringZeroBoundsValueCodec;
 pub use self::field_doc_id_facet_f64_codec::FieldDocIdFacetF64Codec;
 pub use self::field_doc_id_facet_string_codec::FieldDocIdFacetStringCodec;
+use crate::BEU16;
+
+pub type FieldIdCodec = OwnedType<BEU16>;
 
 /// Tries to split a slice in half at the given middle point,
 /// `None` if the slice is too short.
