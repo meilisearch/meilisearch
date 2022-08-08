@@ -1,5 +1,5 @@
-use actix_web::{web, HttpResponse};
 use actix_web::http::header::{self};
+use actix_web::{web, HttpResponse};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -276,20 +276,17 @@ pub async fn get_health() -> Result<HttpResponse, ResponseError> {
 pub async fn get_metrics(
     meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-
     let search_rules = &meilisearch.filters().search_rules;
     let response = meilisearch.get_all_stats(search_rules).await?;
 
-    crate::metrics::MEILISEARCH_DB_SIZE
-    .set(response.database_size as i64);
+    crate::metrics::MEILISEARCH_DB_SIZE.set(response.database_size as i64);
 
-    crate::metrics::MEILISEARCH_INDEX_COUNT
-    .set(response.indexes.len() as i64);
+    crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     for (index, value) in response.indexes.iter() {
         crate::metrics::MEILISEARCH_DOCS_COUNT
-        .with_label_values(&[&index])
-        .set(value.number_of_documents as i64);
+            .with_label_values(&[index])
+            .set(value.number_of_documents as i64);
     }
 
     let encoder = TextEncoder::new();
