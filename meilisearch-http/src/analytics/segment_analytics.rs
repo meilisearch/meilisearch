@@ -369,7 +369,7 @@ pub struct SearchAggregator {
     // pagination
     max_limit: usize,
     max_offset: usize,
-    finite_pagination: bool,
+    finite_pagination: usize,
 
     // formatting
     highlight_pre_tag: bool,
@@ -427,11 +427,11 @@ impl SearchAggregator {
         if query.limit.is_none() && query.offset.is_none() {
             ret.max_limit = query.hits_per_page;
             ret.max_offset = query.page.saturating_sub(1) * query.hits_per_page;
-            ret.finite_pagination = true;
+            ret.finite_pagination = 1;
         } else {
             ret.max_limit = query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
             ret.max_offset = query.offset.unwrap_or_default();
-            ret.finite_pagination = false;
+            ret.finite_pagination = 0;
         }
 
         ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
@@ -487,6 +487,7 @@ impl SearchAggregator {
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
+        self.finite_pagination += other.finite_pagination;
 
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
@@ -529,6 +530,7 @@ impl SearchAggregator {
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
+                   "finite_pagination": self.finite_pagination > self.total_received / 2,
                 },
                 "formatting": {
                     "highlight_pre_tag": self.highlight_pre_tag,
