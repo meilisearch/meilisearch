@@ -7,7 +7,6 @@ pub mod task;
 pub mod extractors;
 pub mod option;
 pub mod routes;
-pub mod metrics;
 
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
@@ -145,19 +144,21 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 macro_rules! create_app {
     ($data:expr, $auth:expr, $enable_frontend:expr, $opt:expr, $analytics:expr) => {{
         use actix_cors::Cors;
+        use actix_web::dev::Service;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
-        use actix_web::dev::Service;
         use actix_web::{middleware, web};
         use meilisearch_http::error::MeilisearchHttpError;
+        use meilisearch_http::metrics;
         use meilisearch_http::routes;
         use meilisearch_http::{configure_data, dashboard};
         use meilisearch_types::error::ResponseError;
-        use meilisearch_http::metrics;
 
         use lazy_static::lazy_static;
-        use prometheus::{opts, register_histogram_vec, register_int_counter_vec, register_int_gauge};
-        use prometheus::{HistogramVec, IntCounterVec, IntGauge, HistogramTimer};
+        use prometheus::{
+            opts, register_histogram_vec, register_int_counter_vec, register_int_gauge,
+        };
+        use prometheus::{HistogramTimer, HistogramVec, IntCounterVec, IntGauge};
 
         App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))

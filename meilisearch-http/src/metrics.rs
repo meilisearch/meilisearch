@@ -1,5 +1,8 @@
 use lazy_static::lazy_static;
-use prometheus::{opts, register_histogram_vec, register_int_counter_vec, register_int_gauge, register_int_gauge_vec};
+use prometheus::{
+    opts, register_histogram_vec, register_int_counter_vec, register_int_gauge,
+    register_int_gauge_vec,
+};
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 
 const HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: &[f64; 14] = &[
@@ -13,23 +16,21 @@ lazy_static! {
         &["method", "path"]
     )
     .expect("Can't create a metric");
-
-    pub static ref MEILISEARCH_DB_SIZE: IntGauge = register_int_gauge!(
-        opts!("meilisearch_database_size", "MeiliSearch Stats DbSize")
-    )
+    pub static ref MEILISEARCH_DB_SIZE: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_database_size",
+        "MeiliSearch Stats DbSize"
+    ))
     .expect("Can't create a metric");
-
-    pub static ref MEILISEARCH_INDEX_COUNT: IntGauge = register_int_gauge!(
-        opts!("meilisearch_total_index", "MeiliSearch Stats Index Count")
-    )
+    pub static ref MEILISEARCH_INDEX_COUNT: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_total_index",
+        "MeiliSearch Stats Index Count"
+    ))
     .expect("Can't create a metric");
-
     pub static ref MEILISEARCH_DOCS_COUNT: IntGaugeVec = register_int_gauge_vec!(
         opts!("meilisearch_docs_count", "MeiliSearch Stats Docs Count"),
         &["index"]
     )
     .expect("Can't create a metric");
-
     pub static ref HTTP_RESPONSE_TIME_SECONDS: HistogramVec = register_histogram_vec!(
         "http_response_time_seconds",
         "HTTP response times",
