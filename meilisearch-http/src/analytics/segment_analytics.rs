@@ -271,8 +271,8 @@ impl Segment {
     }
 
     async fn run(mut self, meilisearch: MeiliSearch) {
-        const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
-                                                                 // The first batch must be sent after one hour.
+        const INTERVAL: Duration = Duration::from_secs(60); // one minute
+                                                            // The first batch must be sent after one minute.
         let mut interval =
             tokio::time::interval_at(tokio::time::Instant::now() + INTERVAL, INTERVAL);
 
@@ -302,7 +302,7 @@ impl Segment {
                 .push(Identify {
                     context: Some(json!({
                         "app": {
-                            "version": env!("CARGO_PKG_VERSION").to_string(),
+                            "version": "prototype-pagination-2".to_string(),
                         },
                     })),
                     user: self.user.clone(),
