@@ -1,5 +1,6 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
+use assert_json_diff::assert_json_include;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -1094,4 +1095,77 @@ async fn add_documents_with_primary_key_twice() {
     index.wait_task(1).await;
     let (response, _code) = index.get_task(1).await;
     assert_eq!(response["status"], "succeeded");
+}
+
+#[actix_rt::test]
+async fn batch_several_documents_addition() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let mut documents: Vec<_> = (0..150usize)
+        .into_iter()
+        .map(|id| {
+            json!(
+                {
+                    "id": id,
+                    "title": "foo",
+                    "desc": "bar"
+                }
+            )
+        })
+        .collect();
+
+    documents[100] = json!({"title": "error", "desc": "error"});
+
+    // enqueue batch of documents
+    for chunk in documents.chunks(30) {
+        index.add_documents(json!(chunk), Some("id")).await;
+    }
+
+    // wait first batch of documents to finish
+    index.wait_task(4).await;
+
+    // run a second completely failing batch
+    for chunk in documents.chunks(30) {
+        let mut chunk = chunk.to_vec();
+        chunk[0] = json!({"title": "error", "desc": "error"});
+
+        index.add_documents(json!(chunk), Some("id")).await;
+    }
+    // wait second batch of documents to finish
+    index.wait_task(9).await;
+
+    let (response, _code) = index.list_tasks().await;
+
+    // Check if only the 6th task failed
+    assert_json_include!(
+        actual: response,
+        expected:
+            json!(
+                {
+                    "results": [
+                        {"uid": 9, "status": "failed"},
+                        {"uid": 8, "status": "failed"},
+                        {"uid": 7, "status": "failed"},
+                        {"uid": 6, "status": "failed"},
+                        {"uid": 5, "status": "failed"},
+                        {"uid": 4, "status": "succeeded"},
+                        {"uid": 3, "status": "failed"},
+                        {"uid": 2, "status": "succeeded"},
+                        {"uid": 1, "status": "succeeded"},
+                        {"uid": 0, "status": "succeeded"},
+                    ]
+                }
+            )
+    );
+
+    // Check if there are exactly 120 documents (150 - 30) in the index;
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            limit: Some(200),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 120);
 }
