@@ -135,7 +135,7 @@ macro_rules! db_snap {
         });
     };
     ($index:ident, $db_name:ident, $name:literal, @$inline:literal) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(format!("", $name)));
+        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, true);
