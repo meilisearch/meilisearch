@@ -9,6 +9,10 @@ use utils::Conf;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#[cfg(target_os = "macos")]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn base_conf(builder: &mut Settings) {
     let displayed_fields =
         ["id", "title", "album", "artist", "genre", "country", "released", "duration"]

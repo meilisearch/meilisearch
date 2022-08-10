@@ -13,6 +13,10 @@ csv = "1.1.6"
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+mimalloc = { version = "0.1.29", default-features = false }
+
+
 [dev-dependencies]
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 criterion = { version = "0.3.5", features = ["html_reports"] }

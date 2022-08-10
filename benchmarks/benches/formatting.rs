@@ -6,6 +6,10 @@ use milli::{FormatOptions, MatcherBuilder, MatchingWord, MatchingWords};
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#[cfg(target_os = "macos")]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 struct Conf<'a> {
     name: &'a str,
     text: &'a str,

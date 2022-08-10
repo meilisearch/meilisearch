@@ -18,6 +18,10 @@ use roaring::RoaringBitmap;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#[cfg(target_os = "macos")]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 const BENCHMARK_ITERATION: usize = 10;
 
 fn setup_dir(path: impl AsRef<Path>) {
