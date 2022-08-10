@@ -5,11 +5,6 @@ use criterion::{criterion_group, criterion_main};
 use milli::update::Settings;
 use utils::Conf;
 
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
-#[cfg(target_os = "macos")]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
