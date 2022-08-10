@@ -699,18 +699,6 @@ impl PrefixTrieNode {
             }
         }
     }
-    // fn print(&self, buffer: &mut String, ident: usize) {
-    //     let mut spaces = String::new();
-    //     for _ in 0..ident {
-    //         spaces.push(' ')
-    //     }
-    //     for (child, c) in &self.children {
-    //         buffer.push(char::from_u32(*c as u32).unwrap());
-    //         println!("{spaces}{buffer}:");
-    //         child.print(buffer, ident + 4);
-    //         buffer.pop();
-    //     }
-    // }
 }
 #[cfg(test)]
 mod tests {
