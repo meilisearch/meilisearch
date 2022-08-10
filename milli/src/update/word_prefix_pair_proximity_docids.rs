@@ -265,9 +265,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
     ) -> Result<()> {
         debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
-        // This is an optimisation, to reuse allocations between loop iterations
-        let mut allocations = Allocations::default();
-
         // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length
         let prefixes = PrefixTrieNode::from_sorted_prefixes(
             common_prefix_fst_words
@@ -297,7 +294,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                     }
                 },
                 &prefixes,
-                &mut allocations,
                 self.max_proximity,
                 // and this argument tells what to do with each new key (word1, prefix, proximity) and value (roaring bitmap)
                 |key, value| {
@@ -340,7 +336,6 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 &mut db_iter,
                 |db_iter| db_iter.next().transpose().map_err(|e| e.into()),
                 &prefixes,
-                &mut allocations,
                 self.max_proximity,
                 |key, value| writer.insert(key, value).map_err(|e| e.into()),
             )?;
@@ -393,7 +388,6 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
         Option<((&'a [u8], &'a [u8], u8), &'a [u8])>,
     >,
     prefixes: &PrefixTrieNode,
-    allocations: &mut Allocations,
     max_proximity: u8,
     mut insert: impl for<'a> FnMut(&'a [u8], &'a [u8]) -> Result<()>,
 ) -> Result<()> {
@@ -406,8 +400,8 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
     // Optimisation: true if there are no potential prefixes for the current word2 based on its first letter
     let mut empty_prefixes = false;
 
-    let mut prefix_buffer = allocations.take_byte_vector();
-    let mut merge_buffer = allocations.take_byte_vector();
+    let mut prefix_buffer = Vec::with_capacity(8);
+    let mut merge_buffer = Vec::with_capacity(65_536);
 
     while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
         // skip this iteration if the proximity is over the threshold
@@ -426,7 +420,7 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
         // than the previous start of word2, then we'll need to flush the batch
         let word1_different_than_prev = word1 != batch.word1;
         if word1_different_than_prev || word2_start_different_than_prev {
-            batch.flush(allocations, &mut merge_buffer, &mut insert)?;
+            batch.flush(&mut merge_buffer, &mut insert)?;
             // don't forget to reset the value of batch.word1 and prev_word2_start
             if word1_different_than_prev {
                 prefix_search_start.0 = 0;
@@ -448,19 +442,17 @@ fn execute_on_word_pairs_and_prefixes<Iter>(
                 &mut prefix_buffer,
                 &prefix_search_start,
                 |prefix_buffer| {
-                    let mut value = allocations.take_byte_vector();
-                    value.extend_from_slice(&data);
                     let prefix_len = prefix_buffer.len();
                     prefix_buffer.push(0);
                     prefix_buffer.push(proximity);
-                    batch.insert(&prefix_buffer, value, allocations);
+                    batch.insert(&prefix_buffer, data.to_vec());
                     prefix_buffer.truncate(prefix_len);
                 },
             );
             prefix_buffer.clear();
         }
     }
-    batch.flush(allocations, &mut merge_buffer, &mut insert)?;
+    batch.flush(&mut merge_buffer, &mut insert)?;
     Ok(())
 }
 /**
@@ -482,17 +474,13 @@ struct PrefixAndProximityBatch {
 
 impl PrefixAndProximityBatch {
     /// Insert the new key and value into the batch
-    fn insert(&mut self, new_key: &[u8], new_value: Vec<u8>, allocations: &mut Allocations) {
+    fn insert(&mut self, new_key: &[u8], new_value: Vec<u8>) {
         match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
             Ok(position) => {
                 self.batch[position].1.push(Cow::Owned(new_value));
             }
             Err(position) => {
-                let mut key = allocations.take_byte_vector();
-                key.extend_from_slice(new_key);
-                let mut mergeable_data = allocations.take_mergeable_data_vector();
-                mergeable_data.push(Cow::Owned(new_value));
-                self.batch.insert(position, (key, mergeable_data));
+                self.batch.insert(position, (new_key.to_vec(), vec![Cow::Owned(new_value)]));
             }
         }
     }
@@ -502,7 +490,6 @@ impl PrefixAndProximityBatch {
     /// The key given to `insert` is `(word1, prefix, proximity)` and the value is the associated merged roaring bitmap.
     fn flush(
         &mut self,
-        allocations: &mut Allocations,
         merge_buffer: &mut Vec<u8>,
         insert: &mut impl for<'buffer> FnMut(&'buffer [u8], &'buffer [u8]) -> Result<()>,
     ) -> Result<()> {
@@ -512,7 +499,7 @@ impl PrefixAndProximityBatch {
         }
         merge_buffer.clear();
 
-        let mut buffer = allocations.take_byte_vector();
+        let mut buffer = Vec::with_capacity(word1.len() + 1 + 6 + 1);
         buffer.extend_from_slice(word1);
         buffer.push(0);
 
@@ -528,8 +515,6 @@ impl PrefixAndProximityBatch {
             };
             insert(buffer.as_slice(), data)?;
             merge_buffer.clear();
-            allocations.reclaim_byte_vector(key);
-            allocations.reclaim_mergeable_data_vector(mergeable_data);
         }
 
         Ok(())
@@ -589,36 +574,6 @@ pub fn write_into_lmdb_database_without_merging(
         }
     }
     Ok(())
-}
-
-struct Allocations {
-    byte_vectors: Vec<Vec<u8>>,
-    mergeable_data_vectors: Vec<Vec<Cow<'static, [u8]>>>,
-}
-impl Default for Allocations {
-    fn default() -> Self {
-        Self {
-            byte_vectors: Vec::with_capacity(65_536),
-            mergeable_data_vectors: Vec::with_capacity(4096),
-        }
-    }
-}
-impl Allocations {
-    fn take_byte_vector(&mut self) -> Vec<u8> {
-        self.byte_vectors.pop().unwrap_or_else(|| Vec::with_capacity(16))
-    }
-    fn take_mergeable_data_vector(&mut self) -> Vec<Cow<'static, [u8]>> {
-        self.mergeable_data_vectors.pop().unwrap_or_else(|| Vec::with_capacity(8))
-    }
-
-    fn reclaim_byte_vector(&mut self, mut data: Vec<u8>) {
-        data.clear();
-        self.byte_vectors.push(data);
-    }
-    fn reclaim_mergeable_data_vector(&mut self, mut data: Vec<Cow<'static, [u8]>>) {
-        data.clear();
-        self.mergeable_data_vectors.push(data);
-    }
 }
 
 #[derive(Default, Debug)]
@@ -970,7 +925,6 @@ mod tests {
 
         let mut result = vec![];
 
-        let mut allocations = Allocations::default();
         let mut iter =
             IntoIterator::into_iter(word_pairs).map(|((word1, word2, proximity), data)| {
                 ((word1.as_bytes(), word2.as_bytes(), proximity), data.as_slice())
@@ -979,7 +933,6 @@ mod tests {
             &mut iter,
             |iter| Ok(iter.next()),
             &prefixes,
-            &mut allocations,
             2,
             |k, v| {
                 let (word1, prefix, proximity) = StrStrU8Codec::bytes_decode(k).unwrap();
