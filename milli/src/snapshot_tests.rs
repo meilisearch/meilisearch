@@ -17,14 +17,15 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Setti
     let mut settings = insta::Settings::clone_current();
     settings.set_prepend_module_to_snapshot(false);
     let path = Path::new(std::panic::Location::caller().file());
-    let path = path.strip_prefix("milli/src").unwrap();
+    let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
     let test_name = std::thread::current().name().unwrap().rsplit("::").next().unwrap().to_owned();
 
     if let Some(name) = name {
-        settings.set_snapshot_path(Path::new("snapshots").join(path).join(test_name).join(name));
+        settings
+            .set_snapshot_path(Path::new("snapshots").join(filename).join(test_name).join(name));
     } else {
-        settings.set_snapshot_path(Path::new("snapshots").join(path).join(test_name));
+        settings.set_snapshot_path(Path::new("snapshots").join(filename).join(test_name));
     }
 
     settings
