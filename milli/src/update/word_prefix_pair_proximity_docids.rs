@@ -554,8 +554,8 @@ fn insert_into_database(
                             process: "get-put-merge",
                         }
                     })?;
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { iter.put_current(key, &val)? };
+            // safety: we use the new_key, not the one from the database iterator, to avoid undefined behaviour
+            unsafe { iter.put_current(new_key, &val)? };
         }
         _ => {
             drop(iter);
@@ -579,7 +579,7 @@ pub fn write_into_lmdb_database_without_merging(
         let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
         let mut cursor = reader.into_cursor()?;
         while let Some((k, v)) = cursor.move_on_next()? {
-            // safety: we don't keep references from inside the LMDB database.
+            // safety: the key comes from the grenad reader, not the database
             unsafe { out_iter.append(k, v)? };
         }
     } else {
