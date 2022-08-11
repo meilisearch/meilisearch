@@ -1126,10 +1126,10 @@ async fn batch_several_documents_addition() {
     index.wait_task(4).await;
 
     // run a second completely failing batch
+    documents[40] = json!({"title": "error", "desc": "error"});
+    documents[70] = json!({"title": "error", "desc": "error"});
+    documents[130] = json!({"title": "error", "desc": "error"});
     for chunk in documents.chunks(30) {
-        let mut chunk = chunk.to_vec();
-        chunk[0] = json!({"title": "error", "desc": "error"});
-
         index.add_documents(json!(chunk), Some("id")).await;
     }
     // wait second batch of documents to finish
@@ -1144,16 +1144,23 @@ async fn batch_several_documents_addition() {
             json!(
                 {
                     "results": [
-                        {"uid": 9, "status": "failed"},
-                        {"uid": 8, "status": "failed"},
-                        {"uid": 7, "status": "failed"},
-                        {"uid": 6, "status": "failed"},
-                        {"uid": 5, "status": "failed"},
-                        {"uid": 4, "status": "succeeded"},
-                        {"uid": 3, "status": "failed"},
-                        {"uid": 2, "status": "succeeded"},
-                        {"uid": 1, "status": "succeeded"},
-                        {"uid": 0, "status": "succeeded"},
+                        // Completelly failing batch
+                        {"uid": 9, "status": "failed", "batchUid": 6},
+                        {"uid": 8, "status": "failed", "batchUid": 6},
+                        {"uid": 7, "status": "failed", "batchUid": 6},
+                        {"uid": 6, "status": "failed", "batchUid": 6},
+
+                        // Inter-batch
+                        {"uid": 5, "status": "succeeded", "batchUid": 5},
+
+                        // 1 fail in an succeded batch
+                        {"uid": 4, "status": "succeeded", "batchUid": 1},
+                        {"uid": 3, "status": "failed", "batchUid": 1},
+                        {"uid": 2, "status": "succeeded", "batchUid": 1},
+                        {"uid": 1, "status": "succeeded", "batchUid": 1},
+
+                        // Inter-batch
+                        {"uid": 0, "status": "succeeded", "batchUid": 0},
                     ]
                 }
             )

@@ -31,7 +31,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
 
     // disable autobatching?
     AUTOBATCHING_ENABLED.store(
-        opt.scheduler_options.disable_auto_batching,
+        !opt.scheduler_options.disable_auto_batching,
         std::sync::atomic::Ordering::Relaxed,
     );
 
