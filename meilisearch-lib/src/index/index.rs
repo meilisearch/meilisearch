@@ -111,7 +111,7 @@ impl Index {
         let rtxn = self.read_txn()?;
 
         Ok(IndexStats {
-            size: self.size(),
+            size: self.size()?,
             number_of_documents: self.number_of_documents(&rtxn)?,
             is_indexing: None,
             field_distribution: self.field_distribution(&rtxn)?,
@@ -296,15 +296,6 @@ impl Index {
         };
 
         Ok(document)
-    }
-
-    pub fn size(&self) -> u64 {
-        WalkDir::new(self.path())
-            .into_iter()
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| entry.metadata().ok())
-            .filter(|metadata| metadata.is_file())
-            .fold(0, |acc, m| acc + m.len())
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {

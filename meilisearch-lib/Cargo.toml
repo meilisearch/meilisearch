@@ -28,7 +28,8 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.32.0" }
+# milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.31.2" }
+milli = { git = "https://github.com/meilisearch/milli.git", branch = "bump/heed" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"

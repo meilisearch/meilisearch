@@ -47,6 +47,7 @@ impl ErrorCode for MilliError<'_> {
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidMinWordLengthForTypo
                     }
+                    UserError::InvalidLmdbOpenOptions => Code::Internal,
                 }
             }
         }
