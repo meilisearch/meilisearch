@@ -7,7 +7,7 @@ use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use milli::facet::FacetType;
 use milli::index::db_name::*;
-use milli::{FieldId, Index};
+use milli::{heed, FieldId, Index};
 use structopt::StructOpt;
 use Command::*;
 

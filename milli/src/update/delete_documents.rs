@@ -20,10 +20,6 @@ use crate::{
     RoaringBitmapCodec, SmallString32, BEU32,
 };
 
-/// The threshold we use to determine after which number of documents we want to clear the
-/// soft-deleted database and delete documents for real.
-const DELETE_DOCUMENTS_THRESHOLD: u64 = 10_000;
-
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
@@ -129,7 +125,27 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // if we have less documents to delete than the threshold we simply save them in
         // the `soft_deleted_documents_ids` bitmap and early exit.
-        if soft_deleted_docids.len() < DELETE_DOCUMENTS_THRESHOLD {
+        let size_used = self.index.used_size()?;
+        let map_size = self.index.env.map_size()? as u64;
+        let nb_documents = self.index.number_of_documents(&self.wtxn)?;
+        let nb_soft_deleted = soft_deleted_docids.len();
+
+        let percentage_available = 100 - (size_used * 100 / map_size);
+        let estimated_document_size = size_used / (nb_documents + nb_soft_deleted);
+        let estimated_size_used_by_soft_deleted = estimated_document_size * nb_soft_deleted;
+        let percentage_used_by_soft_deleted_documents =
+            estimated_size_used_by_soft_deleted * 100 / map_size;
+
+        // if we have more than 10% of disk space available and the soft deleted
+        // documents uses less than 10% of the total space available,
+        // we skip the deletion. Eg.
+        // - With 100Go of disk and 20Go used including 5Go of soft-deleted documents
+        //   We don’t delete anything.
+        // - With 100Go of disk and 95Go used including 1mo of soft-deleted documents
+        //   We run the deletion.
+        // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
+        //   We run the deletion.
+        if percentage_available > 10 && percentage_used_by_soft_deleted_documents < 10 {
             self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
             return Ok(DocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),

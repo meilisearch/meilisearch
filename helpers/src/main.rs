@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use byte_unit::Byte;
-use heed::{CompactionOption, Env, EnvOpenOptions};
+use milli::heed::{CompactionOption, Env, EnvOpenOptions};
 use structopt::StructOpt;
 use Command::*;
 

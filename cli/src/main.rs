@@ -13,7 +13,7 @@ use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
 use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
-use milli::{Index, Object};
+use milli::{heed, Index, Object};
 use structopt::StructOpt;
 
 #[global_allocator]

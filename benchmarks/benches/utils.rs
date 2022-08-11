@@ -6,8 +6,8 @@ use std::num::ParseFloatError;
 use std::path::Path;
 
 use criterion::BenchmarkId;
-use heed::EnvOpenOptions;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use milli::heed::EnvOpenOptions;
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };

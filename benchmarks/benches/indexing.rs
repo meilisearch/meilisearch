@@ -5,7 +5,7 @@ use std::fs::{create_dir_all, remove_dir_all};
 use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use heed::{EnvOpenOptions, RwTxn};
+use milli::heed::{EnvOpenOptions, RwTxn};
 use milli::update::{
     DeleteDocuments, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings,
 };
