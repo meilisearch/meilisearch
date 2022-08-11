@@ -101,7 +101,11 @@ async fn run_http(
 pub fn print_launch_resume(opt: &Opt, user: &str) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
-
+    let protocol =if opt.ssl_cert_path.is_some()&&opt.ssl_key_path.is_some(){
+        "https"
+    }else {
+        "http"
+    };
     let ascii_name = r#"
 888b     d888          d8b 888 d8b                                            888
 8888b   d8888          Y8P 888 Y8P                                            888
@@ -116,7 +120,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
     eprintln!("{}", ascii_name);
 
     eprintln!("Database path:\t\t{:?}", opt.db_path);
-    eprintln!("Server listening on:\t\"http://{}\"", opt.http_addr);
+    eprintln!("Server listening on:\t\"{}://{}\"",protocol ,opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
@@ -160,3 +164,4 @@ Anonymous telemetry:\t\"Enabled\""
     eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html");
     eprintln!();
 }
+
