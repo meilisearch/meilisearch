@@ -33,6 +33,7 @@ mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
 once_cell = "1.10.0"
+page_size = "0.4.2"
 parking_lot = "0.12.0"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 rand = "0.8.5"

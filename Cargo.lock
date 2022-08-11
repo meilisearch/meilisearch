@@ -2125,6 +2125,7 @@ dependencies = [
  "num_cpus",
  "obkv",
  "once_cell",
+ "page_size",
  "parking_lot",
  "paste",
  "permissive-json-pointer",
