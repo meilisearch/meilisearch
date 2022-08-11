@@ -275,11 +275,13 @@ impl IndexControllerBuilder {
 
     /// Set the index controller builder's max update store size.
     pub fn set_max_task_store_size(&mut self, max_update_store_size: usize) -> &mut Self {
+        let max_update_store_size = clamp_to_page_size(max_update_store_size);
         self.max_task_store_size.replace(max_update_store_size);
         self
     }
 
     pub fn set_max_index_size(&mut self, size: usize) -> &mut Self {
+        let size = clamp_to_page_size(size);
         self.max_index_size.replace(size);
         self
     }
@@ -643,6 +645,11 @@ pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
             }
         }
     }
+}
+
+// Clamp the provided value to be a multiple of system page size.
+fn clamp_to_page_size(size: usize) -> usize {
+    size / page_size::get() * page_size::get()
 }
 
 #[cfg(test)]
