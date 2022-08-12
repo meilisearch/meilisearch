@@ -303,8 +303,7 @@ pub async fn get_metrics(
         .encode(&prometheus::gather(), &mut buffer)
         .expect("Failed to encode metrics");
 
-    let response = String::from_utf8(buffer.clone()).expect("Failed to convert bytes to string");
-    buffer.clear();
+    let response = String::from_utf8(buffer).expect("Failed to convert bytes to string");
 
     Ok(HttpResponse::Ok()
         .insert_header(header::ContentType(mime::TEXT_PLAIN))
