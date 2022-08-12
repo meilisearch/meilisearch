@@ -372,9 +372,6 @@ pub mod test {
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(
-            tasks.first().as_ref().unwrap().index_uid().unwrap(),
-            "test"
-        );
+        assert_eq!(tasks.first().as_ref().unwrap().index_uid().unwrap(), "test");
     }
 }
