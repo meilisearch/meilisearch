@@ -416,7 +416,7 @@ impl Scheduler {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Processing {
     DocumentAdditions(Vec<TaskId>),
     IndexUpdate(TaskId),

@@ -373,7 +373,7 @@ pub mod test {
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(
-            &*tasks.first().as_ref().unwrap().index_uid().unwrap(),
+            tasks.first().as_ref().unwrap().index_uid().unwrap(),
             "test"
         );
     }

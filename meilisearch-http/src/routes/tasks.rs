@@ -119,7 +119,7 @@ async fn get_tasks(
     // Then we complete the task filter with other potential status and types filters.
     let filters = if type_.is_some() || status.is_some() {
         let mut filters = indexes_filters.unwrap_or_default();
-        filters.filter_fn(move |task| {
+        filters.filter_fn(Box::new(move |task| {
             let matches_type = match &type_ {
                 Some(types) => types
                     .iter()
@@ -135,7 +135,7 @@ async fn get_tasks(
             };
 
             matches_type && matches_status
-        });
+        }));
         Some(filters)
     } else {
         indexes_filters
