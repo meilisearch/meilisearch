@@ -16,9 +16,8 @@ use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerCon
 use milli::{Index, Object};
 use structopt::StructOpt;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "Milli CLI", about = "A simple CLI to manipulate a milli index.")]

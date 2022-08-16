@@ -5,9 +5,8 @@ use heed::{CompactionOption, Env, EnvOpenOptions};
 use structopt::StructOpt;
 use Command::*;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug, StructOpt)]
 /// Some helpers commands for milli.

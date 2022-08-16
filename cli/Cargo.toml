@@ -18,6 +18,5 @@ byte-unit = { version = "4.0.14", features = ["serde"] }
 bimap = "0.6.2"
 csv = "1.1.6"
 stderrlog = "0.5.1"
+mimalloc = { version = "0.1.29", default-features = false }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
