@@ -8,6 +8,8 @@ opt-level = 3
 
 [profile.release]
 debug = true
+codegen-units = 1
+lto = "thin"
 
 # Make sure that the build scripts and proc-macros are compiled with
 # all the optimizations. It speeds up the zip crate that we use in the build.rs.
