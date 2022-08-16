@@ -244,3 +244,88 @@ fn insert_current_prefix_data_in_sorter<'a>(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::db_snap;
+    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+    use crate::index::tests::TempIndex;
+
+    fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
+        let mut documents = Vec::new();
+        for prefix in prefixes {
+            for i in 0..50 {
+                documents.push(
+                    serde_json::json!({
+                        "text": format!("{prefix}{i:x}"),
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                )
+            }
+        }
+        documents
+    }
+
+    #[test]
+    fn test_update() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a", "be"]);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "text": "At an amazing and beautiful house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "text": "The bell rings at 5 am"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["am", "an"]);
+        documents.push(
+            serde_json::json!({
+                "text": "At an extraordinary house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, word_prefix_pair_proximity_docids, "update");
+    }
+}

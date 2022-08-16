@@ -6,3 +6,10 @@
 *.csv
 *.mmdb
 *.svg
+
+# Snapshots
+## ... large
+*.full.snap
+
+#  ... unreviewed
+*.snap.new

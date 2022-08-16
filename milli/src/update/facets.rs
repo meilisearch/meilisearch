@@ -342,3 +342,93 @@ fn write_string_entry(
     writer.insert(&key, &data)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use crate::db_snap;
+    use crate::documents::documents_batch_reader_from_objects;
+    use crate::index::tests::TempIndex;
+
+    #[test]
+    fn test_facets_number() {
+        let test =
+            |name: &str, group_size: Option<NonZeroUsize>, min_level_size: Option<NonZeroUsize>| {
+                let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
+                index.index_documents_config.autogenerate_docids = true;
+                index.index_documents_config.facet_level_group_size = group_size;
+                index.index_documents_config.facet_min_level_size = min_level_size;
+
+                index
+                    .update_settings(|settings| {
+                        settings.set_filterable_fields(
+                            IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
+                                .collect(),
+                        );
+                    })
+                    .unwrap();
+
+                let mut documents = vec![];
+                for i in 0..1_000 {
+                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
+                }
+                for i in 0..100 {
+                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
+                }
+                let documents = documents_batch_reader_from_objects(documents);
+
+                index.add_documents(documents).unwrap();
+
+                db_snap!(index, facet_id_f64_docids, name);
+            };
+
+        test("default", None, None);
+        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
+        test("small_groups_small_levels", NonZeroUsize::new(2), NonZeroUsize::new(2));
+        test("small_groups_large_levels", NonZeroUsize::new(2), NonZeroUsize::new(128));
+        test("large_groups_small_levels", NonZeroUsize::new(16), NonZeroUsize::new(2));
+        test("large_groups_large_levels", NonZeroUsize::new(16), NonZeroUsize::new(256));
+    }
+
+    #[test]
+    fn test_facets_string() {
+        let test = |name: &str,
+                    group_size: Option<NonZeroUsize>,
+                    min_level_size: Option<NonZeroUsize>| {
+            let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
+            index.index_documents_config.autogenerate_docids = true;
+            index.index_documents_config.facet_level_group_size = group_size;
+            index.index_documents_config.facet_min_level_size = min_level_size;
+
+            index
+                .update_settings(|settings| {
+                    settings.set_filterable_fields(
+                        IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
+                            .collect(),
+                    );
+                })
+                .unwrap();
+
+            let mut documents = vec![];
+            for i in 0..100 {
+                documents.push(
+                    serde_json::json!({ "facet": format!("s{i:X}") }).as_object().unwrap().clone(),
+                );
+            }
+            for i in 0..10 {
+                documents.push(
+                    serde_json::json!({ "facet2": format!("s{i:X}") }).as_object().unwrap().clone(),
+                );
+            }
+            let documents = documents_batch_reader_from_objects(documents);
+
+            index.add_documents(documents).unwrap();
+
+            db_snap!(index, facet_id_string_docids, name);
+        };
+
+        test("default", None, None);
+        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
+    }
+}

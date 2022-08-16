@@ -349,22 +349,33 @@ mod test {
     use super::super::test::TestContext;
     use super::*;
 
+    fn display_criteria(mut criteria: Typo, mut parameters: CriterionParameters) -> String {
+        let mut result = String::new();
+        while let Some(criterion) = criteria.next(&mut parameters).unwrap() {
+            result.push_str(&format!("{criterion:?}\n\n"));
+        }
+        result
+    }
+
     #[test]
     fn initial_placeholder_no_facets() {
         let context = TestContext::default();
         let query_tree = None;
         let facet_candidates = None;
 
-        let mut criterion_parameters = CriterionParameters {
+        let criterion_parameters = CriterionParameters {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
 
         let parent = Initial::new(query_tree, facet_candidates);
-        let mut criteria = Typo::new(&context, Box::new(parent));
+        let criteria = Typo::new(&context, Box::new(parent));
 
-        assert!(criteria.next(&mut criterion_parameters).unwrap().unwrap().candidates.is_none());
-        assert!(criteria.next(&mut criterion_parameters).unwrap().is_none());
+        let result = display_criteria(criteria, criterion_parameters);
+        insta::assert_snapshot!(result, @r###"
+        CriterionResult { query_tree: None, candidates: None, filtered_candidates: None, bucket_candidates: None }
+
+        "###);
     }
 
     #[test]
@@ -390,78 +401,32 @@ mod test {
 
         let facet_candidates = None;
 
-        let mut criterion_parameters = CriterionParameters {
+        let criterion_parameters = CriterionParameters {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
         let parent = Initial::new(Some(query_tree), facet_candidates);
-        let mut criteria = Typo::new(&context, Box::new(parent));
+        let criteria = Typo::new(&context, Box::new(parent));
 
-        let candidates_1 = context.word_docids("split").unwrap().unwrap()
-            & context.word_docids("this").unwrap().unwrap()
-            & context.word_docids("world").unwrap().unwrap();
-        let expected_1 = CriterionResult {
-            query_tree: Some(Operation::Or(
-                false,
-                vec![Operation::And(vec![
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("split".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("this".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("world".to_string()),
-                    }),
-                ])],
-            )),
-            candidates: Some(candidates_1.clone()),
-            bucket_candidates: Some(candidates_1),
-            filtered_candidates: None,
-        };
+        let result = display_criteria(criteria, criterion_parameters);
+        insta::assert_snapshot!(result, @r###"
+        CriterionResult { query_tree: Some(OR
+          AND
+            Exact { word: "split" }
+            Exact { word: "this" }
+            Exact { word: "world" }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
 
-        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
+        CriterionResult { query_tree: Some(OR
+          AND
+            Exact { word: "split" }
+            Exact { word: "this" }
+            OR
+              Exact { word: "word" }
+              Exact { word: "world" }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
 
-        let candidates_2 = (context.word_docids("split").unwrap().unwrap()
-            & context.word_docids("this").unwrap().unwrap()
-            & context.word_docids("word").unwrap().unwrap())
-            - context.word_docids("world").unwrap().unwrap();
-        let expected_2 = CriterionResult {
-            query_tree: Some(Operation::Or(
-                false,
-                vec![Operation::And(vec![
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("split".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("this".to_string()),
-                    }),
-                    Operation::Or(
-                        false,
-                        vec![
-                            Operation::Query(Query {
-                                prefix: false,
-                                kind: QueryKind::exact_with_typo(1, "word".to_string()),
-                            }),
-                            Operation::Query(Query {
-                                prefix: false,
-                                kind: QueryKind::exact("world".to_string()),
-                            }),
-                        ],
-                    ),
-                ])],
-            )),
-            candidates: Some(candidates_2.clone()),
-            bucket_candidates: Some(candidates_2),
-            filtered_candidates: None,
-        };
-
-        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
+        "###);
     }
 
     #[test]
@@ -470,25 +435,18 @@ mod test {
         let query_tree = None;
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut criterion_parameters = CriterionParameters {
+        let criterion_parameters = CriterionParameters {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
         let parent = Initial::new(query_tree, Some(facet_candidates.clone()));
-        let mut criteria = Typo::new(&context, Box::new(parent));
+        let criteria = Typo::new(&context, Box::new(parent));
 
-        let expected = CriterionResult {
-            query_tree: None,
-            candidates: None,
-            bucket_candidates: None,
-            filtered_candidates: Some(facet_candidates.clone()),
-        };
+        let result = display_criteria(criteria, criterion_parameters);
+        insta::assert_snapshot!(result, @r###"
+        CriterionResult { query_tree: None, candidates: None, filtered_candidates: Some(RoaringBitmap<8000 values between 986424 and 4294786076>), bucket_candidates: None }
 
-        // first iteration, returns the facet candidates
-        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected));
-
-        // second iteration, returns None because there is no more things to do
-        assert!(criteria.next(&mut criterion_parameters).unwrap().is_none());
+        "###);
     }
 
     #[test]
@@ -514,77 +472,31 @@ mod test {
 
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut criterion_parameters = CriterionParameters {
+        let criterion_parameters = CriterionParameters {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
         let parent = Initial::new(Some(query_tree), Some(facet_candidates.clone()));
-        let mut criteria = Typo::new(&context, Box::new(parent));
+        let criteria = Typo::new(&context, Box::new(parent));
 
-        let candidates_1 = context.word_docids("split").unwrap().unwrap()
-            & context.word_docids("this").unwrap().unwrap()
-            & context.word_docids("world").unwrap().unwrap();
-        let expected_1 = CriterionResult {
-            query_tree: Some(Operation::Or(
-                false,
-                vec![Operation::And(vec![
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("split".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("this".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("world".to_string()),
-                    }),
-                ])],
-            )),
-            candidates: Some(&candidates_1 & &facet_candidates),
-            bucket_candidates: Some(&candidates_1 & &facet_candidates),
-            filtered_candidates: None,
-        };
+        let result = display_criteria(criteria, criterion_parameters);
+        insta::assert_snapshot!(result, @r###"
+        CriterionResult { query_tree: Some(OR
+          AND
+            Exact { word: "split" }
+            Exact { word: "this" }
+            Exact { word: "world" }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
 
-        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_1));
+        CriterionResult { query_tree: Some(OR
+          AND
+            Exact { word: "split" }
+            Exact { word: "this" }
+            OR
+              Exact { word: "word" }
+              Exact { word: "world" }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
 
-        let candidates_2 = (context.word_docids("split").unwrap().unwrap()
-            & context.word_docids("this").unwrap().unwrap()
-            & context.word_docids("word").unwrap().unwrap())
-            - context.word_docids("world").unwrap().unwrap();
-        let expected_2 = CriterionResult {
-            query_tree: Some(Operation::Or(
-                false,
-                vec![Operation::And(vec![
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("split".to_string()),
-                    }),
-                    Operation::Query(Query {
-                        prefix: false,
-                        kind: QueryKind::exact("this".to_string()),
-                    }),
-                    Operation::Or(
-                        false,
-                        vec![
-                            Operation::Query(Query {
-                                prefix: false,
-                                kind: QueryKind::exact_with_typo(1, "word".to_string()),
-                            }),
-                            Operation::Query(Query {
-                                prefix: false,
-                                kind: QueryKind::exact("world".to_string()),
-                            }),
-                        ],
-                    ),
-                ])],
-            )),
-            candidates: Some(&candidates_2 & &facet_candidates),
-            bucket_candidates: Some(&candidates_2 & &facet_candidates),
-            filtered_candidates: None,
-        };
-
-        assert_eq!(criteria.next(&mut criterion_parameters).unwrap(), Some(expected_2));
+        "###);
     }
 }
