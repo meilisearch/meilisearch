@@ -99,7 +99,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     )]
     InvalidDocumentId { document_id: Value },
     #[error("Invalid facet distribution, the fields `{}` are not set as filterable.",
-        .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ")
+        .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
      )]
     InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
     #[error(transparent)]
@@ -111,7 +111,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         match .valid_fields.is_empty() {
             true => "This index does not have configured sortable attributes.".to_string(),
             false => format!("Available sortable attributes are: `{}`.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(", ")
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
                 ),
         }
     )]

@@ -45,7 +45,7 @@ impl<'a> Display for FilterError<'a> {
                         attribute,
                     )
                 } else {
-                    let filterables_list = filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(" ");
+                    let filterables_list = filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(" ");
 
                     write!(
                         f,
