@@ -31,10 +31,10 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, Serialize, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Unchecked;
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

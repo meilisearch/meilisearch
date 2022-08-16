@@ -22,11 +22,13 @@ pub use store::test::MockStore as Store;
 #[cfg(not(test))]
 pub use store::Store;
 
+type FilterFn = Box<dyn Fn(&Task) -> bool + Sync + Send + 'static>;
+
 /// Defines constraints to be applied when querying for Tasks from the store.
 #[derive(Default)]
 pub struct TaskFilter {
     indexes: Option<HashSet<String>>,
-    filter_fn: Option<Box<dyn Fn(&Task) -> bool + Sync + Send + 'static>>,
+    filter_fn: Option<FilterFn>,
 }
 
 impl TaskFilter {
@@ -51,8 +53,8 @@ impl TaskFilter {
             .insert(index);
     }
 
-    pub fn filter_fn(&mut self, f: impl Fn(&Task) -> bool + Sync + Send + 'static) {
-        self.filter_fn.replace(Box::new(f));
+    pub fn filter_fn(&mut self, f: FilterFn) {
+        self.filter_fn.replace(f);
     }
 }
 
