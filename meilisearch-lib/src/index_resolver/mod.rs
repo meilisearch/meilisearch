@@ -150,25 +150,34 @@ mod real {
                     })
                     .await;
 
-                    let event = match result {
-                        Ok(Ok(result)) => TaskEvent::Succeeded {
-                            timestamp: OffsetDateTime::now_utc(),
-                            result: TaskResult::DocumentAddition {
-                                indexed_documents: result.indexed_documents,
-                            },
-                        },
-                        Ok(Err(e)) => TaskEvent::Failed {
-                            timestamp: OffsetDateTime::now_utc(),
-                            error: e.into(),
-                        },
-                        Err(e) => TaskEvent::Failed {
-                            timestamp: OffsetDateTime::now_utc(),
-                            error: IndexResolverError::from(e).into(),
-                        },
-                    };
-
-                    for task in tasks.iter_mut() {
-                        task.events.push(event.clone());
+                    match result {
+                        Ok(Ok(results)) => {
+                            for (task, result) in tasks.iter_mut().zip(results) {
+                                let event = match result {
+                                    Ok(addition) => {
+                                        TaskEvent::succeeded(TaskResult::DocumentAddition {
+                                            indexed_documents: addition.indexed_documents,
+                                        })
+                                    }
+                                    Err(error) => {
+                                        TaskEvent::failed(IndexResolverError::from(error))
+                                    }
+                                };
+                                task.events.push(event);
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            let event = TaskEvent::failed(e);
+                            for task in tasks.iter_mut() {
+                                task.events.push(event.clone());
+                            }
+                        }
+                        Err(e) => {
+                            let event = TaskEvent::failed(IndexResolverError::from(e));
+                            for task in tasks.iter_mut() {
+                                task.events.push(event.clone());
+                            }
+                        }
                     }
                 }
                 _ => panic!("invalid batch!"),

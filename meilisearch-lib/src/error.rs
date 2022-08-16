@@ -25,6 +25,7 @@ impl ErrorCode for MilliError<'_> {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
                     | UserError::DocumentLimitReached
+                    | UserError::AccessingSoftDeletedDocument { .. }
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::InvalidStoreFile => Code::InvalidStore,
                     UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
@@ -32,7 +33,9 @@ impl ErrorCode for MilliError<'_> {
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::Filter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::InvalidDocumentId { .. } => Code::InvalidDocumentId,
+                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                        Code::InvalidDocumentId
+                    }
                     UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
                     UserError::SortRankingRuleMissing => Code::Sort,

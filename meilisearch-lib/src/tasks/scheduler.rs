@@ -3,7 +3,6 @@ use std::collections::{hash_map::Entry, BinaryHeap, HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
 use std::slice;
 use std::sync::Arc;
-use std::time::Duration;
 
 use atomic_refcell::AtomicRefCell;
 use milli::update::IndexDocumentsMethod;
@@ -248,16 +247,9 @@ impl Scheduler {
     pub fn new(
         store: TaskStore,
         performers: Vec<Arc<dyn BatchHandler + Sync + Send + 'static>>,
-        mut config: SchedulerConfig,
+        config: SchedulerConfig,
     ) -> Result<Arc<RwLock<Self>>> {
         let (notifier, rcv) = watch::channel(());
-
-        let debounce_time = config.debounce_duration_sec;
-
-        // Disable autobatching
-        if !config.enable_auto_batching {
-            config.max_batch_size = Some(1);
-        }
 
         let this = Self {
             snapshots: VecDeque::new(),
@@ -275,12 +267,7 @@ impl Scheduler {
 
         let this = Arc::new(RwLock::new(this));
 
-        let update_loop = UpdateLoop::new(
-            this.clone(),
-            performers,
-            debounce_time.filter(|&v| v > 0).map(Duration::from_secs),
-            rcv,
-        );
+        let update_loop = UpdateLoop::new(this.clone(), performers, rcv);
 
         tokio::task::spawn_local(update_loop.run());
 
@@ -497,27 +484,17 @@ fn make_batch(tasks: &mut TaskQueue, config: &SchedulerConfig) -> Processing {
                     match list.peek() {
                         Some(pending) if pending.kind == kind => {
                             // We always need to process at least one task for the scheduler to make progress.
-                            if task_list.len() >= config.max_batch_size.unwrap_or(usize::MAX).max(1)
-                            {
+                            if config.disable_auto_batching && !task_list.is_empty() {
                                 break;
                             }
                             let pending = list.pop().unwrap();
                             task_list.push(pending.id);
 
-                            // We add the number of documents to the count if we are scheduling document additions and
-                            // stop adding if we already have enough.
-                            //
-                            // We check that bound only after adding the current task to the batch, so that a batch contains at least one task.
+                            // We add the number of documents to the count if we are scheduling document additions.
                             match pending.kind {
                                 TaskType::DocumentUpdate { number }
                                 | TaskType::DocumentAddition { number } => {
                                     doc_count += number;
-
-                                    if doc_count
-                                        >= config.max_documents_per_batch.unwrap_or(usize::MAX)
-                                    {
-                                        break;
-                                    }
                                 }
                                 _ => (),
                             }

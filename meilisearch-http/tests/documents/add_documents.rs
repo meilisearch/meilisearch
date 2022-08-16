@@ -1,5 +1,6 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
+
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -326,7 +327,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789", expected a documents, or a sequence of documents. at line 1 column 102`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789012345678901234567890123456789", expected a sequence at line 1 column 102`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -349,9 +350,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...90123456789m", expected a documents, or a sequence of documents. at line 1 column 103`."#
-        )
+        json!("The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string \"0123456789012345678901234567...90123456789012345678901234567890123456789m\", expected a sequence at line 1 column 103`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
@@ -388,7 +387,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -411,9 +410,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 2`."#
-        )
+        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
@@ -1020,7 +1017,7 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(2).await;
     let (response, code) = index.get_task(2).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["status"], "failed");
 }
 
 #[actix_rt::test]
@@ -1098,4 +1095,63 @@ async fn add_documents_with_primary_key_twice() {
     index.wait_task(1).await;
     let (response, _code) = index.get_task(1).await;
     assert_eq!(response["status"], "succeeded");
+}
+
+#[actix_rt::test]
+async fn batch_several_documents_addition() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let mut documents: Vec<_> = (0..150usize)
+        .into_iter()
+        .map(|id| {
+            json!(
+                {
+                    "id": id,
+                    "title": "foo",
+                    "desc": "bar"
+                }
+            )
+        })
+        .collect();
+
+    documents[100] = json!({"title": "error", "desc": "error"});
+
+    // enqueue batch of documents
+    let mut waiter = Vec::new();
+    for chunk in documents.chunks(30) {
+        waiter.push(index.add_documents(json!(chunk), Some("id")));
+    }
+
+    // wait first batch of documents to finish
+    futures::future::join_all(waiter).await;
+    index.wait_task(4).await;
+
+    // run a second completely failing batch
+    documents[40] = json!({"title": "error", "desc": "error"});
+    documents[70] = json!({"title": "error", "desc": "error"});
+    documents[130] = json!({"title": "error", "desc": "error"});
+    let mut waiter = Vec::new();
+    for chunk in documents.chunks(30) {
+        waiter.push(index.add_documents(json!(chunk), Some("id")));
+    }
+    // wait second batch of documents to finish
+    futures::future::join_all(waiter).await;
+    index.wait_task(9).await;
+
+    let (response, _code) = index.filtered_tasks(&[], &["failed"]).await;
+
+    // Check if only the 6th task failed
+    println!("{}", &response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 5);
+
+    // Check if there are exactly 120 documents (150 - 30) in the index;
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            limit: Some(200),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 120);
 }

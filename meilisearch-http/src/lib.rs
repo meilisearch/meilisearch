@@ -5,7 +5,6 @@ pub mod analytics;
 pub mod task;
 #[macro_use]
 pub mod extractors;
-pub mod helpers;
 pub mod option;
 pub mod routes;
 
@@ -30,9 +29,9 @@ pub static AUTOBATCHING_ENABLED: AtomicBool = AtomicBool::new(false);
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<MeiliSearch> {
     let mut meilisearch = MeiliSearch::builder();
 
-    // enable autobatching?
+    // disable autobatching?
     AUTOBATCHING_ENABLED.store(
-        opt.scheduler_options.enable_auto_batching,
+        !opt.scheduler_options.disable_auto_batching,
         std::sync::atomic::Ordering::Relaxed,
     );
 

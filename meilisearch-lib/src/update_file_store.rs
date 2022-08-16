@@ -3,7 +3,7 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
-use milli::documents::DocumentBatchReader;
+use milli::documents::DocumentsBatchReader;
 use serde_json::Map;
 use tempfile::{NamedTempFile, PersistError};
 use uuid::Uuid;
@@ -44,7 +44,8 @@ into_update_store_error!(
     PersistError,
     io::Error,
     serde_json::Error,
-    milli::documents::Error
+    milli::documents::Error,
+    milli::documents::DocumentsBatchCursorError
 );
 
 impl UpdateFile {
@@ -149,12 +150,13 @@ mod store {
 
             let update_file = File::open(update_file_path)?;
             let mut dst_file = NamedTempFile::new_in(&dump_path)?;
-            let mut document_reader = DocumentBatchReader::from_reader(update_file)?;
+            let (mut document_cursor, index) =
+                DocumentsBatchReader::from_reader(update_file)?.into_cursor_and_fields_index();
 
             let mut document_buffer = Map::new();
             // TODO: we need to find a way to do this more efficiently. (create a custom serializer
             // for jsonl for example...)
-            while let Some((index, document)) = document_reader.next_document_with_index()? {
+            while let Some(document) = document_cursor.next_document()? {
                 for (field_id, content) in document.iter() {
                     if let Some(field_name) = index.name(field_id) {
                         let content = serde_json::from_slice(content)?;

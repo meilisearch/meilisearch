@@ -40,6 +40,12 @@ impl ErrorCode for IndexError {
     }
 }
 
+impl From<milli::UserError> for IndexError {
+    fn from(error: milli::UserError) -> IndexError {
+        IndexError::Milli(error.into())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum FacetError {
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]

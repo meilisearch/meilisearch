@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
 use log::{debug, info, trace};
-use milli::documents::DocumentBatchReader;
+use milli::documents::DocumentsBatchReader;
 use milli::update::{
     DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
     Setting,
@@ -11,7 +11,7 @@ use milli::update::{
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
-use super::error::Result;
+use super::error::{IndexError, Result};
 use super::index::{Index, IndexMeta};
 use crate::update_file_store::UpdateFileStore;
 
@@ -299,7 +299,7 @@ impl Index {
         primary_key: Option<String>,
         file_store: UpdateFileStore,
         contents: impl IntoIterator<Item = Uuid>,
-    ) -> Result<DocumentAdditionResult> {
+    ) -> Result<Vec<Result<DocumentAdditionResult>>> {
         trace!("performing document addition");
         let mut txn = self.write_txn()?;
 
@@ -323,19 +323,34 @@ impl Index {
             indexing_callback,
         )?;
 
+        let mut results = Vec::new();
         for content_uuid in contents.into_iter() {
             let content_file = file_store.get_update(content_uuid)?;
-            let reader = DocumentBatchReader::from_reader(content_file)?;
-            builder.add_documents(reader)?;
+            let reader = DocumentsBatchReader::from_reader(content_file)?;
+            let (new_builder, user_result) = builder.add_documents(reader)?;
+            builder = new_builder;
+
+            let user_result = match user_result {
+                Ok(count) => {
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: count,
+                        number_of_documents: count,
+                    };
+                    info!("document addition done: {:?}", addition);
+                    Ok(addition)
+                }
+                Err(e) => Err(IndexError::from(e)),
+            };
+
+            results.push(user_result);
         }
 
-        let addition = builder.execute()?;
+        if results.iter().any(Result::is_ok) {
+            let _addition = builder.execute()?;
+            txn.commit()?;
+        }
 
-        txn.commit()?;
-
-        info!("document addition done: {:?}", addition);
-
-        Ok(addition)
+        Ok(results)
     }
 
     pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
