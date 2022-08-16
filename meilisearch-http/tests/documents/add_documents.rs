@@ -1,6 +1,6 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
-use assert_json_diff::assert_json_include;
+
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -1118,53 +1118,32 @@ async fn batch_several_documents_addition() {
     documents[100] = json!({"title": "error", "desc": "error"});
 
     // enqueue batch of documents
+    let mut waiter = Vec::new();
     for chunk in documents.chunks(30) {
-        index.add_documents(json!(chunk), Some("id")).await;
+        waiter.push(index.add_documents(json!(chunk), Some("id")));
     }
 
     // wait first batch of documents to finish
+    futures::future::join_all(waiter).await;
     index.wait_task(4).await;
 
     // run a second completely failing batch
     documents[40] = json!({"title": "error", "desc": "error"});
     documents[70] = json!({"title": "error", "desc": "error"});
     documents[130] = json!({"title": "error", "desc": "error"});
+    let mut waiter = Vec::new();
     for chunk in documents.chunks(30) {
-        index.add_documents(json!(chunk), Some("id")).await;
+        waiter.push(index.add_documents(json!(chunk), Some("id")));
     }
     // wait second batch of documents to finish
+    futures::future::join_all(waiter).await;
     index.wait_task(9).await;
 
-    let (response, _code) = index.list_tasks().await;
+    let (response, _code) = index.filtered_tasks(&[], &["failed"]).await;
 
     // Check if only the 6th task failed
-    assert_json_include!(
-        actual: response,
-        expected:
-            json!(
-                {
-                    "results": [
-                        // Completelly failing batch
-                        {"uid": 9, "status": "failed", "batchUid": 6},
-                        {"uid": 8, "status": "failed", "batchUid": 6},
-                        {"uid": 7, "status": "failed", "batchUid": 6},
-                        {"uid": 6, "status": "failed", "batchUid": 6},
-
-                        // Inter-batch
-                        {"uid": 5, "status": "succeeded", "batchUid": 5},
-
-                        // 1 fail in an succeded batch
-                        {"uid": 4, "status": "succeeded", "batchUid": 1},
-                        {"uid": 3, "status": "failed", "batchUid": 1},
-                        {"uid": 2, "status": "succeeded", "batchUid": 1},
-                        {"uid": 1, "status": "succeeded", "batchUid": 1},
-
-                        // Inter-batch
-                        {"uid": 0, "status": "succeeded", "batchUid": 0},
-                    ]
-                }
-            )
-    );
+    println!("{}", &response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 5);
 
     // Check if there are exactly 120 documents (150 - 30) in the index;
     let (response, code) = index
